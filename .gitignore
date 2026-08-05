@@ -1,0 +1,28 @@
+# Dependencies and generated output
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+apps/api/openapi.json
+
+# Local environment and credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Local service data
+.data/
+infrastructure/docker/data/
+
+# Logs and editor/OS files
+*.log
+.idea/
+.vscode/
+.DS_Store
+
+# POS local/offline development state
+*.sqlite
+*.sqlite-journal
+*.sqlite-wal

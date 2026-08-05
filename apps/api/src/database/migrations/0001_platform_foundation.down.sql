@@ -1,0 +1,28 @@
+DROP TRIGGER IF EXISTS backup_approval_four_eyes ON backup.approvals;
+DROP FUNCTION IF EXISTS backup.reject_self_approval();
+DROP TABLE IF EXISTS backup.approvals;
+DROP TABLE IF EXISTS backup.approval_requests;
+DROP TABLE IF EXISTS integration.inbox_receipts;
+DROP TABLE IF EXISTS integration.outbox_events;
+DROP TABLE IF EXISTS platform.idempotency_keys;
+DROP TABLE IF EXISTS notifications.messages;
+DROP TABLE IF EXISTS files.objects;
+DROP TRIGGER IF EXISTS audit_events_append_only ON audit.events;
+DROP FUNCTION IF EXISTS audit.reject_event_mutation();
+DROP TABLE IF EXISTS audit.events;
+DROP TABLE IF EXISTS iam.account_roles;
+DROP TABLE IF EXISTS iam.role_permissions;
+DROP TABLE IF EXISTS iam.permissions;
+DROP TABLE IF EXISTS iam.roles;
+DROP TABLE IF EXISTS identity.session_records;
+DROP TABLE IF EXISTS identity.authentication_factors;
+DROP TABLE IF EXISTS identity.user_accounts;
+DROP TABLE IF EXISTS identity.employees;
+
+DROP SCHEMA IF EXISTS backup;
+DROP SCHEMA IF EXISTS integration;
+DROP SCHEMA IF EXISTS notifications;
+DROP SCHEMA IF EXISTS files;
+DROP SCHEMA IF EXISTS audit;
+DROP SCHEMA IF EXISTS iam;
+DROP SCHEMA IF EXISTS identity;
