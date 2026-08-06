@@ -1,6 +1,6 @@
 # Vista Integrated Information System — Implementation Plan
 
-Status date: 2026-08-05  
+Status date: 2026-08-06
 Authoritative specification: [`AGENTS.md`](AGENTS.md)  
 Project: `BG16RFPR001-1.012-1324-C01`
 
@@ -38,8 +38,8 @@ Current delivery status:
 | Phase                                     | Status      | Current milestone                                                          |
 | ----------------------------------------- | ----------- | -------------------------------------------------------------------------- |
 | 0. Discovery and decisions                | in progress | Plan, decision register, and traceability baseline                         |
-| 1. Platform foundation                    | in progress | P1.1 implemented; P1.2/P1.3 foundation slice verified                      |
-| 2. ERP master data and warehouse          | not started | Depends on Phase 1 identity, audit, persistence, and contracts             |
+| 1. Platform foundation                    | in progress | P1.4 authenticated UI and first domain workflow verified                   |
+| 2. ERP master data and warehouse          | in progress | Canonical partner registry vertical slice implemented and verified         |
 | 3. Procurement, sales, finance, logistics | not started | Depends on Phase 2 master data and stock integrity                         |
 | 4. Service                                | not started | Depends on partners, equipment, warehouse, finance, and notifications      |
 | 5. CRM                                    | not started | Depends on shared master data, identity, service correlation, and outbox   |
@@ -136,13 +136,17 @@ Acceptance criteria:
 
 Status: `in progress`.
 
-Implemented in the current slice: fail-fast shared environment validation;
+Implemented in the current slices: fail-fast shared environment validation;
 versioned API routes; runtime and build-time OpenAPI generation; correlation IDs;
-stable error envelopes; CORS and development/production HSTS behavior; separate
-liveness and PostgreSQL/Redis readiness; checksummed advisory-lock migration
-runner; tested up/down migration; and initial platform schemas. Still required:
-structured redacted logging, rate limiting, object-storage readiness, queue worker
-abstraction/telemetry, generated contract clients, and broader API controls.
+stable error envelopes; CORS and development/production HSTS behavior; structured
+redacted request/event logging; configuration-driven in-process rate limiting;
+separate liveness and PostgreSQL/Redis/private-bucket readiness; checksummed
+advisory-lock migration runner with tested rollback; initial platform schemas;
+and a lazy Redis queue abstraction with stable idempotent job IDs, bounded retry,
+exponential backoff, retained results, safe event logs, and state telemetry. Still
+required before this milestone is complete: worker execution/handler lifecycle,
+protected operations metrics, a deployment-selected distributed throttling store,
+generated contract clients, and broader endpoint-specific controls.
 
 - Versioned `/api/v1` endpoints and generated OpenAPI documentation.
 - Configuration validation, correlation IDs, stable error envelopes, structured
@@ -166,14 +170,23 @@ Acceptance criteria:
 
 Status: `in progress`.
 
-Implemented in the current slice: controlled module/action permission vocabulary
-and wildcard evaluation tests; initial employee/account/factor/session metadata,
-role/permission, append-only audit, and critical backup approval schemas; database
-tests for audit mutation rejection and requester self-approval rejection. Still
-required: authentication endpoints, secure password implementation, Redis session
-lifecycle, factor enrollment/challenge, mandatory admin 2FA, backend permission
-guards, audit writer/query services and hash-chain implementation, role seeds after
-approval, and full authorization/audit integration coverage.
+Implemented in the current slices: controlled module/action permission vocabulary
+and wildcard evaluation tests; configurable complexity/expiration policy;
+versioned salted scrypt password hashes; failed-login lockout; Redis-backed opaque
+sessions with digest-only PostgreSQL metadata and revocation; login/logout/current
+account/effective-permission endpoints; a Redis-backed sensitive-login limiter;
+default-deny backend session and permission enforcement; encrypted TOTP factor
+verification with mandatory administrative 2FA; initial identity/RBAC/factor/
+session/four-eyes schemas; and a serialized append-only SHA-256 audit writer and
+chain-enforcement trigger. Integration tests cover failed/successful login,
+lockout, expiration, session revocation, permission denial, administrative TOTP,
+audit capture, chain linkage, mutation rejection, and requester self-approval
+rejection. Still required: protected factor enrollment/provisioning and recovery,
+password change/reset, account/role administration and approved role seeds,
+session-administration/revoke-all behavior, audit query/integrity-verification
+services, central identity adapters, and factor/account administration UI after
+`IAM-001`/`IAM-002` decisions. API-backed login, TOTP challenge, session, and
+effective-access views are implemented.
 
 - One employee account; secure password hashing; configurable complexity and
   expiration; login sessions in Redis; 2FA mandatory for administrator roles and
@@ -196,12 +209,18 @@ Acceptance criteria:
 
 Status: `in progress`.
 
-Implemented in the current slice: responsive shared application shell/status-card
-primitives; externalized application-shell text; separate ERP/CRM, POS, and backup
-control builds; initial versioned/quarantined file metadata and idempotent
-notification schema; local MinIO and Mailpit services. No storage, scanning, email,
-SMS, worker, parent-authorization, metrics, or production monitoring adapter is yet
-implemented or claimed complete.
+Implemented in the current slices: a restrained responsive design-token and control
+system; externalized application text; an API-backed ERP/CRM login and focused TOTP
+challenge; opaque-session restore, expiry, revocation, and safe error states;
+protected client routing; permission-aware navigation; workspace, effective-access,
+not-found, and honest module-empty pages; mobile navigation; keyboard focus and skip
+navigation; separate ERP/CRM, POS, and backup-control builds; initial versioned/
+quarantined file metadata and idempotent notification schema; local Mailpit; and
+deterministic creation/readiness validation of a private local MinIO bucket. No file
+upload/download adapter, scanning, email, SMS, job handler, parent-authorization,
+metrics exporter, production monitoring adapter, POS operational UI, or backup
+operational UI is yet claimed complete. The first domain-backed ERP/CRM workflow,
+the shared partner registry, is implemented under Phase 2.
 
 - S3-compatible file adapter with type/size validation, quarantine/scan hook,
   versioned metadata, and inherited parent authorization.
@@ -220,7 +239,21 @@ Acceptance criteria:
 
 ### Phase 2 — ERP master data and warehouse
 
-Status: `not started`
+Status: `in progress`
+
+Implemented in the current vertical slice: ERP-owned canonical partner records
+with immutable UUIDs; legal-entity and individual types; simultaneous customer,
+supplier, and business-partner roles; normalized UIC/VAT data; exact normalized
+legal-name/UIC duplicate blocking without silent merge; searchable, filterable,
+sortable pagination; `crm:view`/`crm:create` backend authorization; stable
+idempotent creation; transactional audit-chain and outbox events; schema scaffolds
+for partner addresses, contacts, and bank accounts; and a responsive registry,
+detail drawer, create workflow, empty/loading/failure states, and controlled
+duplicate warning. Remaining Phase 2 scope includes the full partner detail
+relationships, locations, branches, products, equipment, warehouses, inventory,
+costing, reservations, alerts, recommendations, and serial traceability. Partner
+edit/delete/merge behavior remains unimplemented pending controlled-resolution
+policy; the current API cannot silently merge or delete records.
 
 Scope: unified partners/customers/suppliers, legal entities and individuals,
 contacts, addresses, bank accounts, customer locations, branches, products,
@@ -482,6 +515,8 @@ reversible foundation scaffold:
   company logo/signature, currencies, and BNB-rate operating policy;
 - initial role assignments, password policy values, identity provider(s), 2FA
   mechanism, backup group mapping, and emergency-access policy;
+- partner duplicate-resolution authority, evidence, merge precedence, linked-data
+  migration, and source-record retention;
 - customer/contract SLA values, escalation rules, warranty/inspection rules,
   subscription rules, and analytics formula windows/status filters;
 - accounting export products/formats and Bulgarian bank statement formats;
@@ -495,13 +530,30 @@ reversible foundation scaffold:
 
 ## 8. Milestone evidence log
 
-| Date       | Milestone             | Evidence                                                                                  | Result                    |
-| ---------- | --------------------- | ----------------------------------------------------------------------------------------- | ------------------------- |
-| 2026-08-05 | Repository baseline   | Only `AGENTS.md`; no usable Git worktree or implementation files                          | confirmed                 |
-| 2026-08-05 | Specification read    | All 1,320 lines of `AGENTS.md` reviewed before implementation                             | confirmed                 |
-| 2026-08-05 | Phase 0 baseline      | Living plan, decision register, ADR-0001, and full section-level traceability             | implemented               |
-| 2026-08-05 | P1.1 monorepo         | Lockfile, NestJS, three Vite apps, five shared packages, Compose, CI, and foundation docs | implemented, not accepted |
-| 2026-08-05 | P1.2 API slice        | Live readiness reported PostgreSQL/Redis up; OpenAPI emitted; API E2E passed              | implemented, incomplete   |
-| 2026-08-05 | P1.2 migration        | Foundation migration applied; invariants passed; down succeeded; up reapplied             | verified                  |
-| 2026-08-05 | Repository validation | Format, lint, all typechecks, 18 tests, and all production builds passed                  | passed                    |
-| 2026-08-05 | Dependency audit      | `js-yaml` advisory remediated with 5.2.3 override; production audit reports zero findings | passed                    |
+| Date       | Milestone                | Evidence                                                                                                                                   | Result                             |
+| ---------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------- |
+| 2026-08-05 | Repository baseline      | Only `AGENTS.md`; no usable Git worktree or implementation files                                                                           | confirmed                          |
+| 2026-08-05 | Specification read       | All 1,320 lines of `AGENTS.md` reviewed before implementation                                                                              | confirmed                          |
+| 2026-08-05 | Phase 0 baseline         | Living plan, decision register, ADR-0001, and full section-level traceability                                                              | implemented                        |
+| 2026-08-05 | P1.1 monorepo            | Lockfile, NestJS, three Vite apps, five shared packages, Compose, CI, and foundation docs                                                  | implemented, not accepted          |
+| 2026-08-05 | P1.2 API slice           | Live readiness reported PostgreSQL/Redis up; OpenAPI emitted; API E2E passed                                                               | implemented, incomplete            |
+| 2026-08-05 | P1.2 migration           | Foundation migration applied; invariants passed; down succeeded; up reapplied                                                              | verified                           |
+| 2026-08-05 | Repository validation    | Format, lint, all typechecks, 18 tests, and all production builds passed                                                                   | passed                             |
+| 2026-08-05 | Dependency audit         | `js-yaml` advisory remediated with 5.2.3 override; production audit reports zero findings                                                  | passed                             |
+| 2026-08-06 | P1.2 runtime controls    | Redaction unit test, request logging, throttling E2E, safe 429 envelope                                                                    | verified                           |
+| 2026-08-06 | P1.2 storage/jobs        | Private MinIO bucket probe and Redis stable-ID replay/deduplication integration tests                                                      | verified, worker pending           |
+| 2026-08-06 | P1.2 dependency health   | Live readiness reported PostgreSQL, Redis, and private object storage up                                                                   | verified                           |
+| 2026-08-06 | Repository validation    | Format, lint, all typechecks, 25 tests including infrastructure, and all builds passed                                                     | passed                             |
+| 2026-08-06 | Reproducibility checks   | OpenAPI emitted; migration down/up passed; production dependency audit found zero issues                                                   | passed                             |
+| 2026-08-06 | P1.3 authentication      | Scrypt, lockout/expiry, Redis sessions, RBAC denial, admin TOTP, and logout E2E                                                            | verified, admin APIs pending       |
+| 2026-08-06 | P1.3 audit chain         | Serialized writer, chain-head trigger, linked-event and append-only integration tests                                                      | verified, query service pending    |
+| 2026-08-06 | P1.3 validation          | Format, lint, all typechecks, 44 tests including live infrastructure, and all builds                                                       | passed                             |
+| 2026-08-06 | P1.3 reproducibility     | Opaque-bearer OpenAPI emitted; migration 0002 down/up passed; production audit found zero                                                  | passed                             |
+| 2026-08-06 | P1.4 ERP/CRM UI          | Login/TOTP, session restore/logout, protected routes, permission navigation, responsive QA                                                 | verified, domain pages next        |
+| 2026-08-06 | P1.4 validation          | Format, lint, all typechecks/builds, 48 tests with infrastructure, and zero production audit findings                                      | passed                             |
+| 2026-08-06 | P2 partner API           | Migration 0003; authorized list/get/create; duplicate blocking; idempotency; atomic audit/outbox; 7 live integration tests                 | verified, detail relations pending |
+| 2026-08-06 | P2 partner UI            | Real `/partners` registry, filters, responsive table/cards, detail/create drawers, duplicate and recovery states; 8 browser-behavior tests | verified                           |
+| 2026-08-06 | P2 responsive QA         | Chromium screenshots at 1440×1000 and 390×844 using isolated non-persistent API fixtures                                                   | passed                             |
+| 2026-08-06 | P2 reproducibility       | Migration 0003 rollback/reapply passed; OpenAPI includes filters, create body, retry header, and response schemas                          | passed                             |
+| 2026-08-06 | P2 repository validation | Format, lint, all typechecks, 58 tests including live infrastructure/database invariants, and all production builds                        | passed                             |
+| 2026-08-06 | P2 dependency audit      | Production dependency audit reported zero vulnerabilities                                                                                  | passed                             |

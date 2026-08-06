@@ -15,6 +15,7 @@ async function bootstrap(): Promise<void> {
 
   configureHttpApplication(application, environment);
   configureOpenApi(application);
+  application.flushLogs();
   await application.listen(environment.API_PORT, environment.API_HOST);
 }
 

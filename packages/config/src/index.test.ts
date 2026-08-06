@@ -24,9 +24,20 @@ describe('parseEnvironment', () => {
     const environment = parseEnvironment(validEnvironment);
 
     expect(environment.API_PORT).toBe(3000);
+    expect(environment.API_RATE_LIMIT_MAX).toBe(120);
+    expect(environment.API_RATE_LIMIT_TTL_MS).toBe(60_000);
+    expect(environment.AUTH_LOGIN_RATE_LIMIT_MAX).toBe(5);
     expect(environment.CORS_ORIGINS).toEqual(['http://localhost:5173', 'http://localhost:5174']);
+    expect(environment.DEPENDENCY_HEALTH_TIMEOUT_MS).toBe(2_000);
     expect(environment.FEATURE_CUSTOMER_PORTAL).toBe(false);
     expect(environment.FEATURE_FIFO_COSTING).toBe(false);
+    expect(environment.IDEMPOTENCY_TTL_SECONDS).toBe(86_400);
+    expect(environment.JOB_DEFAULT_ATTEMPTS).toBe(5);
+    expect(environment.JOB_QUEUE_NAME).toBe('platform');
+    expect(environment.PASSWORD_EXPIRY_DAYS).toBe(0);
+    expect(environment.PASSWORD_MIN_LENGTH).toBe(12);
+    expect(environment.REQUEST_LOGGING_ENABLED).toBe(true);
+    expect(environment.SESSION_TTL_SECONDS).toBe(28_800);
   });
 
   it('fails fast when required configuration is missing', () => {
@@ -37,5 +48,17 @@ describe('parseEnvironment', () => {
     expect(() =>
       parseEnvironment({ ...validEnvironment, DATABASE_URL: 'mysql://localhost/vista' }),
     ).toThrow('DATABASE_URL must use the postgresql scheme');
+  });
+
+  it('rejects unsafe or unbounded operational settings', () => {
+    expect(() => parseEnvironment({ ...validEnvironment, API_RATE_LIMIT_MAX: '0' })).toThrow(
+      'API_RATE_LIMIT_MAX',
+    );
+    expect(() => parseEnvironment({ ...validEnvironment, JOB_DEFAULT_ATTEMPTS: '21' })).toThrow(
+      'JOB_DEFAULT_ATTEMPTS',
+    );
+    expect(() => parseEnvironment({ ...validEnvironment, PASSWORD_MIN_LENGTH: '7' })).toThrow(
+      'PASSWORD_MIN_LENGTH',
+    );
   });
 });

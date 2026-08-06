@@ -6,7 +6,12 @@ export function configureOpenApi(application: INestApplication): OpenAPIObject {
     .setTitle('Vista Integrated Information System API')
     .setDescription('Versioned API for Vista Service ERP, CRM, POS, and backup/DR modules.')
     .setVersion('0.1.0')
-    .addBearerAuth()
+    .addBearerAuth({
+      type: 'http',
+      scheme: 'bearer',
+      bearerFormat: 'opaque',
+      description: 'Opaque Vista session token returned by POST /api/v1/auth/login.',
+    })
     .build();
   const document = SwaggerModule.createDocument(application, configuration);
   SwaggerModule.setup('api/docs', application, document);

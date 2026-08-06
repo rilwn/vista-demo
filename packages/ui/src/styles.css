@@ -1,6 +1,33 @@
 :root {
-  color: #19231c;
-  background: #f4f6ef;
+  color: #1d2922;
+  background: #f2f3ee;
+  --vista-ink: #17241d;
+  --vista-ink-soft: #33423a;
+  --vista-forest: #173d2a;
+  --vista-forest-dark: #102c1e;
+  --vista-accent: #347355;
+  --vista-accent-strong: #255f43;
+  --vista-accent-soft: #e4eee7;
+  --vista-canvas: #f2f3ee;
+  --vista-surface: #ffffff;
+  --vista-surface-muted: #f7f8f4;
+  --vista-line: #d7ddd5;
+  --vista-line-strong: #bcc7be;
+  --vista-muted: #657269;
+  --vista-danger: #a13d32;
+  --vista-danger-soft: #f9e9e6;
+  --vista-warning: #9a641d;
+  --vista-warning-soft: #faefd8;
+  --vista-success: #2b6848;
+  --vista-success-soft: #e3f0e7;
+  --vista-info: #315e80;
+  --vista-info-soft: #e6eef4;
+  --vista-focus: #2f7b57;
+  --vista-shadow-sm: 0 1px 2px rgb(19 37 26 / 6%);
+  --vista-shadow-md: 0 16px 40px rgb(23 42 30 / 10%);
+  --vista-radius-sm: 0.5rem;
+  --vista-radius-md: 0.8rem;
+  --vista-radius-lg: 1.15rem;
   font-family:
     Inter,
     ui-sans-serif,
@@ -21,6 +48,23 @@ body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
+}
+
+a {
+  color: inherit;
+}
+
+button,
+a,
+input,
+select,
+textarea {
+  -webkit-tap-highlight-color: transparent;
+}
+
+:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--vista-focus) 38%, transparent);
+  outline-offset: 2px;
 }
 
 button,
@@ -90,6 +134,268 @@ textarea {
   border-radius: 1rem;
   background: #ffffff;
   box-shadow: 0 12px 36px rgb(29 45 32 / 7%);
+}
+
+.vista-mark {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.vista-mark-symbol {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  width: 2.35rem;
+  height: 2.35rem;
+  overflow: hidden;
+  border: 1px solid rgb(255 255 255 / 24%);
+  border-radius: 0.65rem;
+  color: #f6f8f3;
+  background: rgb(255 255 255 / 8%);
+  font-size: 0.67rem;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+}
+
+.vista-mark-symbol span {
+  display: grid;
+  place-items: center;
+}
+
+.vista-mark-symbol span + span {
+  border-left: 1px solid rgb(255 255 255 / 18%);
+  color: #b9d69e;
+}
+
+.vista-mark-copy {
+  display: grid;
+  gap: 0.08rem;
+  line-height: 1.1;
+}
+
+.vista-mark-copy strong {
+  font-size: 0.93rem;
+  letter-spacing: -0.01em;
+}
+
+.vista-mark-copy small {
+  color: inherit;
+  font-size: 0.68rem;
+  opacity: 0.66;
+}
+
+.vista-button {
+  display: inline-flex;
+  min-height: 2.75rem;
+  align-items: center;
+  justify-content: center;
+  gap: 0.58rem;
+  padding: 0.66rem 1rem;
+  border: 1px solid transparent;
+  border-radius: var(--vista-radius-sm);
+  font-size: 0.88rem;
+  font-weight: 680;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    border-color 140ms ease,
+    background-color 140ms ease,
+    color 140ms ease,
+    transform 140ms ease;
+}
+
+.vista-button:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.vista-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+.vista-button--primary {
+  color: #ffffff;
+  background: var(--vista-accent-strong);
+  box-shadow: var(--vista-shadow-sm);
+}
+
+.vista-button--primary:hover:not(:disabled) {
+  background: var(--vista-forest);
+}
+
+.vista-button--secondary {
+  border-color: var(--vista-line);
+  color: var(--vista-ink);
+  background: var(--vista-surface);
+}
+
+.vista-button--secondary:hover:not(:disabled),
+.vista-button--quiet:hover:not(:disabled) {
+  background: var(--vista-surface-muted);
+}
+
+.vista-button--quiet {
+  color: var(--vista-ink-soft);
+  background: transparent;
+}
+
+.vista-button--danger {
+  color: var(--vista-danger);
+  background: var(--vista-danger-soft);
+}
+
+.vista-button--full {
+  width: 100%;
+}
+
+.vista-spinner {
+  width: 0.95rem;
+  height: 0.95rem;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: vista-spin 650ms linear infinite;
+}
+
+.vista-field {
+  display: grid;
+  gap: 0.46rem;
+}
+
+.vista-field > label {
+  color: var(--vista-ink-soft);
+  font-size: 0.81rem;
+  font-weight: 680;
+}
+
+.vista-field-control {
+  position: relative;
+}
+
+.vista-field-input {
+  width: 100%;
+  min-height: 3rem;
+  padding: 0.72rem 0.82rem;
+  border: 1px solid var(--vista-line-strong);
+  border-radius: var(--vista-radius-sm);
+  color: var(--vista-ink);
+  background: var(--vista-surface);
+  box-shadow: inset 0 1px 1px rgb(20 38 27 / 3%);
+  transition:
+    border-color 140ms ease,
+    box-shadow 140ms ease;
+}
+
+.vista-field-input::placeholder {
+  color: #929d96;
+}
+
+.vista-field-input:hover:not(:disabled) {
+  border-color: #94a299;
+}
+
+.vista-field-input:focus {
+  border-color: var(--vista-focus);
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--vista-focus) 14%, transparent);
+}
+
+.vista-field-input--action {
+  padding-right: 4.3rem;
+}
+
+.vista-field-action {
+  position: absolute;
+  top: 50%;
+  right: 0.45rem;
+  transform: translateY(-50%);
+}
+
+.vista-field-action button {
+  min-height: 2rem;
+  padding: 0.3rem 0.45rem;
+  border: 0;
+  border-radius: 0.35rem;
+  color: var(--vista-accent-strong);
+  background: transparent;
+  font-size: 0.76rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.vista-field-action button:hover {
+  background: var(--vista-accent-soft);
+}
+
+.vista-field--error .vista-field-input {
+  border-color: var(--vista-danger);
+}
+
+.vista-field-message {
+  margin: 0;
+  color: var(--vista-muted);
+  font-size: 0.75rem;
+  line-height: 1.45;
+}
+
+.vista-field--error .vista-field-message {
+  color: var(--vista-danger);
+}
+
+.vista-alert {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.75rem;
+  padding: 0.85rem 0.95rem;
+  border: 1px solid var(--vista-line);
+  border-radius: var(--vista-radius-sm);
+  color: var(--vista-ink-soft);
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
+.vista-alert strong {
+  display: block;
+  margin-bottom: 0.1rem;
+  color: var(--vista-ink);
+}
+
+.vista-alert-marker {
+  width: 0.48rem;
+  height: 0.48rem;
+  margin-top: 0.35rem;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.vista-alert--error {
+  border-color: #e8c4bd;
+  color: var(--vista-danger);
+  background: var(--vista-danger-soft);
+}
+
+.vista-alert--warning {
+  border-color: #ead09d;
+  color: var(--vista-warning);
+  background: var(--vista-warning-soft);
+}
+
+.vista-alert--success {
+  border-color: #bad5c4;
+  color: var(--vista-success);
+  background: var(--vista-success-soft);
+}
+
+.vista-alert--info {
+  border-color: #c5d8e4;
+  color: var(--vista-info);
+  background: var(--vista-info-soft);
+}
+
+@keyframes vista-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .vista-card--positive {

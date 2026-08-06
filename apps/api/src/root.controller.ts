@@ -1,7 +1,10 @@
 import { Controller, Get } from '@nestjs/common';
 import { ApiOkResponse, ApiTags } from '@nestjs/swagger';
 
+import { Public } from './auth/auth.decorators.js';
+
 @ApiTags('platform')
+@Public()
 @Controller()
 export class RootController {
   @Get()

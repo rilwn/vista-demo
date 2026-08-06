@@ -9,6 +9,7 @@ import type { ApiErrorDetail, ApiErrorResponse } from '@vista/contracts';
 import type { Response } from 'express';
 
 import type { CorrelatedRequest } from './correlation-id.middleware.js';
+import { StructuredLogger } from '../logging/structured-logger.service.js';
 
 const errorCodes: Record<number, string> = {
   [HttpStatus.BAD_REQUEST]: 'REQUEST_INVALID',
@@ -22,6 +23,8 @@ const errorCodes: Record<number, string> = {
 
 @Catch()
 export class ApiExceptionFilter implements ExceptionFilter {
+  constructor(private readonly logger: StructuredLogger) {}
+
   catch(exception: unknown, host: ArgumentsHost): void {
     const context = host.switchToHttp();
     const request = context.getRequest<CorrelatedRequest>();
@@ -30,13 +33,21 @@ export class ApiExceptionFilter implements ExceptionFilter {
     const parsed = parseException(exception, status);
     const body: ApiErrorResponse = {
       error: {
-        code: errorCodes[status] ?? 'INTERNAL_ERROR',
+        code: parsed.code ?? errorCodes[status] ?? 'INTERNAL_ERROR',
         correlationId: request.correlationId,
         message: parsed.message,
         timestamp: new Date().toISOString(),
         ...(parsed.details.length > 0 ? { details: parsed.details } : {}),
       },
     };
+
+    this.logger.event(status >= 500 ? 'error' : 'warn', 'http.request.failed', {
+      correlationId: request.correlationId,
+      exceptionType: exception instanceof Error ? exception.constructor.name : typeof exception,
+      method: request.method,
+      path: request.path,
+      statusCode: status,
+    });
 
     response.status(status).json(body);
   }
@@ -45,7 +56,7 @@ export class ApiExceptionFilter implements ExceptionFilter {
 function parseException(
   exception: unknown,
   status: number,
-): { details: ApiErrorDetail[]; message: string } {
+): { code?: string; details: ApiErrorDetail[]; message: string } {
   if (!(exception instanceof HttpException)) {
     return { details: [], message: 'An unexpected error occurred' };
   }
@@ -56,6 +67,8 @@ function parseException(
   }
 
   const message = isRecord(exceptionResponse) ? exceptionResponse['message'] : undefined;
+  const code = isRecord(exceptionResponse) ? exceptionResponse['code'] : undefined;
+  const details = isRecord(exceptionResponse) ? exceptionResponse['details'] : undefined;
   if (Array.isArray(message)) {
     return {
       details: message.map((entry) => ({ message: String(entry) })),
@@ -64,13 +77,26 @@ function parseException(
   }
 
   if (typeof message === 'string') {
-    return { details: [], message };
+    return {
+      ...(typeof code === 'string' ? { code } : {}),
+      details: Array.isArray(details)
+        ? details.filter(isApiErrorDetail).map((detail) => ({
+            ...(typeof detail['field'] === 'string' ? { field: detail['field'] } : {}),
+            message: String(detail['message']),
+          }))
+        : [],
+      message,
+    };
   }
 
   return {
     details: [],
     message: status >= 500 ? 'A service dependency is unavailable' : 'Request failed',
   };
+}
+
+function isApiErrorDetail(value: unknown): value is Record<string, unknown> {
+  return isRecord(value) && typeof value['message'] === 'string';
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

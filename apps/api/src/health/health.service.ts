@@ -3,6 +3,7 @@ import type { HealthCheck, HealthResponse } from '@vista/contracts';
 
 import { DatabaseService } from '../database/database.service.js';
 import { RedisService } from '../database/redis.service.js';
+import { ObjectStorageService } from '../storage/object-storage.service.js';
 
 interface Probe {
   ping(): Promise<number>;
@@ -13,6 +14,7 @@ export class HealthService {
   constructor(
     @Inject(DatabaseService) private readonly database: DatabaseService,
     @Inject(RedisService) private readonly redis: RedisService,
+    @Inject(ObjectStorageService) private readonly objectStorage: ObjectStorageService,
   ) {}
 
   liveness(): HealthResponse {
@@ -20,9 +22,13 @@ export class HealthService {
   }
 
   async readiness(): Promise<HealthResponse> {
-    const [database, redis] = await Promise.all([runProbe(this.database), runProbe(this.redis)]);
+    const [database, redis, objectStorage] = await Promise.all([
+      runProbe(this.database),
+      runProbe(this.redis),
+      runProbe(this.objectStorage),
+    ]);
 
-    return createResponse({ database, redis });
+    return createResponse({ database, objectStorage, redis });
   }
 }
 

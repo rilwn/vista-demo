@@ -2,8 +2,11 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 
 import '@vista/ui/styles.css';
+import './styles.css';
 
 import { App } from './App';
+import { AuthProvider } from './auth/AuthProvider';
+import { RouterProvider } from './routing/Router';
 
 const root = document.querySelector<HTMLDivElement>('#root');
 
@@ -13,6 +16,10 @@ if (!root) {
 
 createRoot(root).render(
   <StrictMode>
-    <App />
+    <RouterProvider>
+      <AuthProvider>
+        <App />
+      </AuthProvider>
+    </RouterProvider>
   </StrictMode>,
 );

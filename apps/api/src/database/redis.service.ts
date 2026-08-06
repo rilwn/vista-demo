@@ -19,11 +19,19 @@ export class RedisService implements OnApplicationShutdown {
 
   async ping(): Promise<number> {
     const start = performance.now();
+    await this.ensureConnected();
+    await this.client.ping();
+    return Math.round(performance.now() - start);
+  }
+
+  async ensureConnected(): Promise<Redis> {
     if (this.client.status === 'wait') {
       await this.client.connect();
     }
-    await this.client.ping();
-    return Math.round(performance.now() - start);
+    if (this.client.status !== 'ready') {
+      throw new Error('Redis is not ready');
+    }
+    return this.client;
   }
 
   getClient(): Redis {

@@ -1,11 +1,15 @@
 import { Controller, Get, HttpStatus, Inject, Res } from '@nestjs/common';
 import { ApiOkResponse, ApiServiceUnavailableResponse, ApiTags } from '@nestjs/swagger';
+import { SkipThrottle } from '@nestjs/throttler';
 import type { HealthResponse } from '@vista/contracts';
 import type { Response } from 'express';
 
+import { Public } from '../auth/auth.decorators.js';
 import { HealthService } from './health.service.js';
 
 @ApiTags('health')
+@SkipThrottle()
+@Public()
 @Controller('health')
 export class HealthController {
   constructor(@Inject(HealthService) private readonly health: HealthService) {}

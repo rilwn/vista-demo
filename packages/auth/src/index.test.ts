@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
-import { assertKnownPermission, hasPermission, type Permission } from './index';
+import {
+  assertKnownPermission,
+  hasPermission,
+  validatePasswordPolicy,
+  type PasswordPolicy,
+  type Permission,
+} from './index';
 
 describe('hasPermission', () => {
   it('matches the exact module and action', () => {
@@ -32,5 +38,31 @@ describe('assertKnownPermission', () => {
         action: 'view',
       }),
     ).toThrow('Unknown permission');
+  });
+});
+
+describe('validatePasswordPolicy', () => {
+  const policy: PasswordPolicy = {
+    minimumLength: 12,
+    requireLowercase: true,
+    requireNumber: true,
+    requireSymbol: true,
+    requireUppercase: true,
+  };
+
+  it('accepts a password satisfying every configured control', () => {
+    expect(validatePasswordPolicy('Correct-Horse-7', policy)).toEqual([]);
+  });
+
+  it('reports every unmet configured control without exposing the password', () => {
+    const violations = validatePasswordPolicy('short', policy);
+
+    expect(violations.map(({ code }) => code)).toEqual([
+      'minimum_length',
+      'uppercase_required',
+      'number_required',
+      'symbol_required',
+    ]);
+    expect(JSON.stringify(violations)).not.toContain('short');
   });
 });

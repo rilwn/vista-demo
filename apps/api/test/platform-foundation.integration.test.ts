@@ -33,12 +33,23 @@ describe.skipIf(!runDatabaseTests)('platform foundation database guarantees', ()
 
   it('rejects mutation of an audit event', async () => {
     const eventId = randomUUID();
+    await client.query("SELECT pg_advisory_xact_lock(hashtext('vista.audit.events.chain'))");
+    const previous = await client.query<{ event_hash: string }>(
+      'SELECT event_hash FROM audit.events ORDER BY occurred_at DESC, id DESC LIMIT 1',
+    );
     await client.query(
       `INSERT INTO audit.events (
          id, actor_account_id, action, target_type, target_id,
-         correlation_id, event_hash
-       ) VALUES ($1, $2, 'test.create', 'test_target', $3, $4, $5)`,
-      [eventId, requesterId, randomUUID(), randomUUID(), 'a'.repeat(64)],
+         correlation_id, previous_event_hash, event_hash
+       ) VALUES ($1, $2, 'test.create', 'test_target', $3, $4, $5, $6)`,
+      [
+        eventId,
+        requesterId,
+        randomUUID(),
+        randomUUID(),
+        previous.rows[0]?.event_hash ?? null,
+        randomUUID().replaceAll('-', '').padEnd(64, '0'),
+      ],
     );
 
     await client.query('SAVEPOINT audit_mutation_check');
