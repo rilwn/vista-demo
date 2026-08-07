@@ -14,8 +14,10 @@ import type {
   PartnerAddress,
   PartnerBankAccount,
   PartnerContact,
+  ProductSummary,
   ProductCategory,
   PartnerSummary,
+  Unit,
 } from '@vista/contracts';
 import { Pool } from 'pg';
 import request from 'supertest';
@@ -474,6 +476,166 @@ describe.skipIf(!runInfrastructureTests)('partner master-data vertical slice', (
       [root.id, child.id],
     );
     expect(evidence.rows[0]).toEqual({ audit_count: '2', outbox_count: '2' });
+  });
+
+  it('creates units and products with real barcode identities, retry safety, audit, and outbox evidence', async () => {
+    await request(application.getHttpServer()).get('/api/v1/master-data/catalog/units').expect(401);
+
+    const categoryResponse = await request(application.getHttpServer())
+      .post('/api/v1/master-data/product-categories')
+      .set('authorization', `Bearer ${categoryCreatorToken}`)
+      .set('idempotency-key', `catalog-category-${runId}`)
+      .send({ name: 'Catalog test category', trackingMode: 'serial' })
+      .expect(201);
+    const category = categoryResponse.body as ProductCategory;
+
+    const unitInput = { code: ' pcs ', name: ' Pieces ' };
+    const unitResponse = await request(application.getHttpServer())
+      .post('/api/v1/master-data/catalog/units')
+      .set('authorization', `Bearer ${categoryCreatorToken}`)
+      .set('idempotency-key', `catalog-unit-${runId}`)
+      .send(unitInput)
+      .expect(201);
+    const unit = unitResponse.body as Unit;
+    expect(unit).toMatchObject({ code: 'PCS', name: 'Pieces', version: 1 });
+
+    const unitReplay = await request(application.getHttpServer())
+      .post('/api/v1/master-data/catalog/units')
+      .set('authorization', `Bearer ${categoryCreatorToken}`)
+      .set('idempotency-key', `catalog-unit-${runId}`)
+      .send(unitInput)
+      .expect(201);
+    expect(unitReplay.body).toEqual(unit);
+
+    const unitKeyConflict = await request(application.getHttpServer())
+      .post('/api/v1/master-data/catalog/units')
+      .set('authorization', `Bearer ${categoryCreatorToken}`)
+      .set('idempotency-key', `catalog-unit-${runId}`)
+      .send({ ...unitInput, name: 'Different unit' })
+      .expect(409);
+    expect(unitKeyConflict.body).toMatchObject({ error: { code: 'IDEMPOTENCY_KEY_CONFLICT' } });
+
+    const duplicateUnit = await request(application.getHttpServer())
+      .post('/api/v1/master-data/catalog/units')
+      .set('authorization', `Bearer ${categoryCreatorToken}`)
+      .set('idempotency-key', `catalog-unit-duplicate-${runId}`)
+      .send({ code: 'PCS', name: 'Other name' })
+      .expect(409);
+    expect(duplicateUnit.body).toMatchObject({ error: { code: 'UNIT_DUPLICATE' } });
+
+    const productInput = {
+      barcodes: [{ barcode: ` 123456${runId.slice(0, 6)} `, barcodeType: 'code128' as const }],
+      categoryId: category.id,
+      name: '  Catalog   test product ',
+      productCode: ' catalog-001 ',
+      unitId: unit.id,
+    };
+    const productResponse = await request(application.getHttpServer())
+      .post('/api/v1/master-data/catalog/products')
+      .set('authorization', `Bearer ${categoryCreatorToken}`)
+      .set('idempotency-key', `catalog-product-${runId}`)
+      .send(productInput)
+      .expect(201);
+    const product = productResponse.body as ProductSummary;
+    expect(product).toMatchObject({
+      categoryId: category.id,
+      name: 'Catalog test product',
+      productCode: 'CATALOG-001',
+      trackingMode: 'serial',
+      unitId: unit.id,
+      version: 1,
+    });
+    expect(product.barcodes).toEqual([
+      expect.objectContaining({ barcode: `123456${runId.slice(0, 6)}`, barcodeType: 'code128' }),
+    ]);
+    expect(product.barcodes[0]?.id).not.toMatch(/^pending-/u);
+
+    const productReplay = await request(application.getHttpServer())
+      .post('/api/v1/master-data/catalog/products')
+      .set('authorization', `Bearer ${categoryCreatorToken}`)
+      .set('idempotency-key', `catalog-product-${runId}`)
+      .send(productInput)
+      .expect(201);
+    expect(productReplay.body).toEqual(product);
+
+    const barcodeDuplicate = await request(application.getHttpServer())
+      .post('/api/v1/master-data/catalog/products')
+      .set('authorization', `Bearer ${categoryCreatorToken}`)
+      .set('idempotency-key', `catalog-barcode-duplicate-${runId}`)
+      .send({ ...productInput, name: 'Another catalog product', productCode: 'CATALOG-002' })
+      .expect(409);
+    expect(barcodeDuplicate.body).toMatchObject({ error: { code: 'PRODUCT_BARCODE_DUPLICATE' } });
+
+    const products = await request(application.getHttpServer())
+      .get('/api/v1/master-data/catalog/products')
+      .set('authorization', `Bearer ${categoryCreatorToken}`)
+      .expect(200);
+    expect(products.body).toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: product.id })]),
+    );
+
+    const evidence = await database.query<{ audit_count: string; outbox_count: string }>(
+      `SELECT
+         (SELECT count(*)::text FROM audit.events
+          WHERE action IN ('master_data.unit.created', 'master_data.product.created')
+            AND target_id IN ($1, $2)) AS audit_count,
+         (SELECT count(*)::text FROM integration.outbox_events
+          WHERE event_type IN ('master_data.unit.created', 'master_data.product.created')
+            AND aggregate_id IN ($1, $2)) AS outbox_count`,
+      [unit.id, product.id],
+    );
+    expect(evidence.rows[0]).toEqual({ audit_count: '2', outbox_count: '2' });
+
+    const warehouseResponse = await request(application.getHttpServer())
+      .post('/api/v1/warehouse/warehouses')
+      .set('authorization', `Bearer ${categoryCreatorToken}`)
+      .set('idempotency-key', `warehouse-${runId}`)
+      .send({ code: ' main ', name: ' Main warehouse ', type: 'standard' })
+      .expect(201);
+    expect(warehouseResponse.body).toMatchObject({ code: 'MAIN', name: 'Main warehouse' });
+    const warehouse = warehouseResponse.body as { id: string };
+    const receiptInput = {
+      productId: product.id,
+      quantity: '2',
+      referenceId: `opening-${runId}`,
+      serialNumbers: [`device-${runId}-01`, `device-${runId}-02`],
+      warehouseId: warehouse.id,
+    };
+    const receiptResponse = await request(application.getHttpServer())
+      .post('/api/v1/warehouse/stock-receipts')
+      .set('authorization', `Bearer ${categoryCreatorToken}`)
+      .set('idempotency-key', `receipt-${runId}`)
+      .send(receiptInput)
+      .expect(201);
+    expect(receiptResponse.body).toMatchObject({ productId: product.id, quantity: '2.0000' });
+    expect(receiptResponse.body.serialItemIds).toHaveLength(2);
+    const receiptReplay = await request(application.getHttpServer())
+      .post('/api/v1/warehouse/stock-receipts')
+      .set('authorization', `Bearer ${categoryCreatorToken}`)
+      .set('idempotency-key', `receipt-${runId}`)
+      .send(receiptInput)
+      .expect(201);
+    expect(receiptReplay.body).toEqual(receiptResponse.body);
+    const missingSerials = await request(application.getHttpServer())
+      .post('/api/v1/warehouse/stock-receipts')
+      .set('authorization', `Bearer ${categoryCreatorToken}`)
+      .set('idempotency-key', `receipt-missing-serial-${runId}`)
+      .send({ ...receiptInput, referenceId: `missing-${runId}`, serialNumbers: [] })
+      .expect(400);
+    expect(missingSerials.body).toMatchObject({ error: { code: 'SERIAL_TRACKING_REQUIRED' } });
+    const balances = await request(application.getHttpServer())
+      .get('/api/v1/warehouse/stock-balances')
+      .set('authorization', `Bearer ${categoryCreatorToken}`)
+      .expect(200);
+    expect(balances.body).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          productId: product.id,
+          quantity: '2.0000',
+          warehouseId: warehouse.id,
+        }),
+      ]),
+    );
   });
 });
 

@@ -71,5 +71,17 @@ that an example category is an approved Vista catalog value.
 Employees with `erp.warehouse:create` can select **Add category**, give it a name,
 and optionally choose an existing parent to form the hierarchy. A retry of an
 unchanged save is safe; duplicate normalized names under the same parent are
-blocked. Products, units, barcodes, tracking, and stock are not available yet
-because their policy and initial data require `CAT-001` and `BUS-001`.
+blocked.
+
+## Product catalog
+
+Employees with `erp.warehouse:view` can open **Warehouse → Product catalog** to
+view the shared product and unit registers. The screen uses actual API data and
+starts empty until the business configures its own records.
+
+Employees with `erp.warehouse:create` can add units and products. A product needs
+a unique code, a configured category, and a configured unit; optional typed
+barcodes must be unique across the catalog. If a network save is retried unchanged,
+the original command is reused rather than creating another record. Inventory,
+prices, serialised items, batches, expiry records, and stock movements are not
+available in this screen yet.

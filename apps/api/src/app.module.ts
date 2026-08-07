@@ -8,6 +8,7 @@ import { LoggingModule } from './logging/logging.module.js';
 import { PartnersModule } from './partners/partners.module.js';
 import { ProductCategoriesModule } from './product-categories/product-categories.module.js';
 import { CatalogModule } from './catalog/catalog.module.js';
+import { InventoryModule } from './inventory/inventory.module.js';
 import { RootController } from './root.controller.js';
 import { RateLimitModule } from './security/rate-limit.module.js';
 
@@ -23,6 +24,7 @@ import { RateLimitModule } from './security/rate-limit.module.js';
     PartnersModule,
     ProductCategoriesModule,
     CatalogModule,
+    InventoryModule,
   ],
 })
 export class AppModule {}

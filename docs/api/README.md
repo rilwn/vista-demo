@@ -92,11 +92,30 @@ The catalog hierarchy currently exposes:
 
 Names are whitespace-normalized and unique within the selected parent. The command
 is transactionally paired with an audit event and
-`master_data.product_category.created` outbox event. It is deliberately a
-configuration-only hierarchy: the system does not seed categories, products,
-units, barcodes, or serial/batch/expiry policies before `CAT-001` is approved.
+`master_data.product_category.created` outbox event. It is deliberately an empty
+configuration hierarchy: the system does not seed assumed Vista categories
+or stock data.
 
-The product identity migration is present as the next API boundary: immutable
-product code/name with required category and unit references, plus globally unique
-typed barcodes. Product and barcode commands are not exposed until their
-authorization, tracking-policy validation, and audit/outbox workflow are covered.
+## Product and unit master data
+
+The authorized catalog routes are:
+
+- `GET /api/v1/master-data/catalog/units`, requiring `erp.warehouse:view`.
+- `POST /api/v1/master-data/catalog/units`, requiring `erp.warehouse:create` and an
+  `Idempotency-Key`.
+- `GET /api/v1/master-data/catalog/products`, requiring `erp.warehouse:view`.
+- `POST /api/v1/master-data/catalog/products`, requiring `erp.warehouse:create` and an
+  `Idempotency-Key`.
+
+Unit codes and product codes are whitespace-normalized and uppercased. A product
+requires an active category and unit; its category policy is returned on reads.
+Each supplied barcode has an explicit type and is globally unique. A successful
+unit or product command writes its audit event and respective
+`master_data.unit.created` or `master_data.product.created` outbox event in the
+same transaction, and an identical retry returns the original resource without
+duplicating those side effects. Duplicate unit/product codes and barcode values
+return stable conflict codes.
+
+The available routes establish product identity only. Pricing, serialised items,
+batches, expiry dates, warehouse balances, and stock posting are not exposed yet;
+their enforcement belongs to the next warehouse vertical slice.

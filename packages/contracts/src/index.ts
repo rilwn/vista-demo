@@ -245,3 +245,46 @@ export interface CreateProductRequest {
   productCode: string;
   unitId: string;
 }
+
+export const warehouseTypes = ['standard', 'technician'] as const;
+export type WarehouseType = (typeof warehouseTypes)[number];
+
+export interface Warehouse {
+  active: boolean;
+  code: string;
+  id: string;
+  name: string;
+  type: WarehouseType;
+  version: number;
+}
+
+export interface CreateWarehouseRequest {
+  code: string;
+  name: string;
+  type?: WarehouseType;
+}
+
+export interface StockBalance {
+  productId: string;
+  quantity: string;
+  warehouseId: string;
+}
+
+export interface ReceiveStockRequest {
+  batchNumber?: string;
+  expiresAt?: string;
+  productId: string;
+  quantity: string;
+  referenceId: string;
+  serialNumbers?: string[];
+  warehouseId: string;
+}
+
+export interface StockReceipt {
+  batchId?: string;
+  id: string;
+  productId: string;
+  quantity: string;
+  serialItemIds: string[];
+  warehouseId: string;
+}

@@ -3,6 +3,7 @@ import { LoginPage } from './auth/LoginPage';
 import { WorkspaceLayout } from './layout/WorkspaceLayout';
 import { messages } from './messages';
 import { AccessPage } from './pages/AccessPage';
+import { CatalogPage } from './pages/CatalogPage';
 import { HomePage } from './pages/HomePage';
 import { ModulePage } from './pages/ModulePage';
 import { NotFoundPage } from './pages/NotFoundPage';
@@ -37,6 +38,9 @@ function pageForPath(
   if (pathname === '/access') return <AccessPage />;
   if (pathname === '/partners') {
     return hasPermission('crm') ? <PartnersPage /> : <NotFoundPage />;
+  }
+  if (pathname === '/catalog') {
+    return hasPermission('erp.warehouse') ? <CatalogPage /> : <NotFoundPage />;
   }
   if (pathname === '/catalog/categories') {
     return hasPermission('erp.warehouse') ? <ProductCategoriesPage /> : <NotFoundPage />;

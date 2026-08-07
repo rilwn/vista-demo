@@ -57,6 +57,20 @@ export function ModulePage({ moduleKey }: { moduleKey: string }) {
               </Link>
             ) : null}
             {moduleKey === 'erp.warehouse' ? (
+              <Link className="workflow-hub-card" to="/catalog">
+                <span className="module-card-icon">
+                  <Icon name="warehouse" />
+                </span>
+                <span>
+                  <strong>Product catalog</strong>
+                  <small>
+                    Use the live shared product, unit, and barcode master-data workflow.
+                  </small>
+                </span>
+                <Icon name="arrow" />
+              </Link>
+            ) : null}
+            {moduleKey === 'erp.warehouse' ? (
               <Link className="workflow-hub-card" to="/catalog/categories">
                 <span className="module-card-icon">
                   <Icon name="warehouse" />

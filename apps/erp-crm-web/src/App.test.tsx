@@ -340,6 +340,84 @@ describe('ERP and CRM authenticated workspace', () => {
     expect(JSON.parse(requestOptions.body as string)).toEqual({ name: 'Electronic scales' });
   });
 
+  it('loads the product catalog and submits a retry-safe product command', async () => {
+    const contextWithCatalogCreate = {
+      ...authenticationContext,
+      permissions: [
+        ...authenticationContext.permissions,
+        { action: 'create', module: 'erp.warehouse' },
+      ],
+    };
+    const unit = {
+      active: true,
+      code: 'PCS',
+      id: '73b41a0e-9a9d-49c1-90df-0c0c7792c26a',
+      name: 'Pieces',
+      version: 1,
+    };
+    const createdProduct = {
+      active: true,
+      barcodes: [],
+      categoryId: productCategories[0]!.id,
+      createdAt: '2026-08-07T12:00:00.000Z',
+      id: 'df51474c-3955-4f85-b9d0-26e4e5f2b5c5',
+      name: 'Receipt printer',
+      productCode: 'PRINTER-01',
+      trackingMode: 'serial',
+      unitId: unit.id,
+      updatedAt: '2026-08-07T12:00:00.000Z',
+      version: 1,
+    };
+    const fetchMock = vi.fn((input: string, options?: RequestInit) => {
+      if (input.endsWith('/auth/me'))
+        return Promise.resolve(jsonResponse(contextWithCatalogCreate));
+      if (input.endsWith('/master-data/catalog/products') && options?.method === 'POST') {
+        return Promise.resolve(jsonResponse(createdProduct, 201));
+      }
+      if (input.endsWith('/master-data/catalog/products')) return Promise.resolve(jsonResponse([]));
+      if (input.endsWith('/master-data/catalog/units'))
+        return Promise.resolve(jsonResponse([unit]));
+      if (input.endsWith('/master-data/product-categories'))
+        return Promise.resolve(jsonResponse(productCategories));
+      return Promise.resolve(jsonResponse({}));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    storeAuthenticatedSession(contextWithCatalogCreate);
+
+    renderApplication(['/catalog']);
+
+    expect(await screen.findByRole('heading', { name: 'Product catalog' })).toBeTruthy();
+    expect(await screen.findByText('No products configured')).toBeTruthy();
+    fireEvent.click(screen.getAllByRole('button', { name: 'Add product' })[0]!);
+    const dialog = screen.getByRole('dialog', { name: 'Add product' });
+    fireEvent.change(screen.getByLabelText('Product code'), { target: { value: 'printer-01' } });
+    fireEvent.change(screen.getByLabelText('Product name'), {
+      target: { value: 'Receipt printer' },
+    });
+    fireEvent.submit(within(dialog).getByRole('button', { name: 'Add product' }).closest('form')!);
+
+    await waitFor(() => {
+      expect(
+        fetchMock.mock.calls.some(
+          ([url, options]) =>
+            url.endsWith('/master-data/catalog/products') && options?.method === 'POST',
+        ),
+      ).toBe(true);
+    });
+    const request = fetchMock.mock.calls.find(
+      ([url, options]) =>
+        url.endsWith('/master-data/catalog/products') && options?.method === 'POST',
+    );
+    const requestOptions = request?.[1] as RequestInit;
+    expect(new Headers(requestOptions.headers).get('Idempotency-Key')).toMatch(/^[0-9a-f-]{36}$/u);
+    expect(JSON.parse(requestOptions.body as string)).toMatchObject({
+      categoryId: productCategories[0]!.id,
+      name: 'Receipt printer',
+      productCode: 'printer-01',
+      unitId: unit.id,
+    });
+  });
+
   it('creates a partner with a stable retry key and refreshes the shared registry', async () => {
     const contextWithCreate = {
       ...authenticationContext,

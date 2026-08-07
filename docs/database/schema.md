@@ -62,19 +62,21 @@ Migration `0004_product_category_master_data` adds an empty, ERP-owned,
 immutable-identifier product-category hierarchy. A category can only refer to an
 existing parent and parent deletion is restrictive; normalized names are unique
 within each parent. The API currently supports authorized read/create only, so a
-cycle cannot be introduced through the available workflow. Product records, units,
-barcodes, serial/batch/expiry policy, and initial category values remain pending
-`CAT-001`; no production catalog seed data is embedded in the migration.
+cycle cannot be introduced through the available workflow. No production catalog
+seed data is embedded in the migration. Units, product identity, and typed
+barcodes are available through authorized master-data commands; client-specific
+initial values remain configurable.
 
 Migration `0005_catalog_tracking_policy` makes traceability a configurable
 category-level policy (`none`, `serial`, or `batch`) and permits expiry only for a
 batch-tracked category. It also creates independent unit master data rather than
 embedding an irreversible unit enum. Existing category rows retain the compatible
 `none`/no-expiry default; client-specific policies can be changed through a later,
-audited configuration workflow before product and inventory posting is enabled.
+audited configuration workflow before inventory posting is enabled.
 
 Migration `0006_product_master` adds ERP-owned products with immutable product
 codes, required category/unit references, and restrictive deletion. Barcode values
 are globally unique and retain their type (`ean13`, `ean8`, `upca`, `code128`, or
-`other`). The schema intentionally separates product identity from future stock,
-serial, and batch ledgers.
+`other`). The authorized unit/product read-create API is backed by this migration;
+the schema intentionally separates product identity from future stock, serial, and
+batch ledgers.

@@ -291,18 +291,21 @@ child creation, authorization denial, normalized duplicate blocking, replay, and
 audit/outbox evidence; browser tests prove the hierarchy and create command.
 
 Following the project direction to keep unspecified details configurable, catalog
-tracking is now represented as an explicit category policy: `none`, `serial`, or
+tracking is represented as an explicit category policy: `none`, `serial`, or
 `batch`, with expiry only permitted for batch tracking. The policy defaults to
-`none` so existing categories remain compatible, but serial/batch enforcement can
-be activated per approved category without a schema redesign. Units are now a
-separate master-data table rather than an enum, so client terminology and future
-conversions do not alter posted data. Product, barcode, serialised-item, batch,
-expiry, and stock commands remain the next vertical slice.
+`none` so existing categories remain compatible. Units are separate master data
+rather than an enum, so client terminology and future conversions do not alter
+posted data.
 
-Migration `0006_product_master` now establishes immutable product identity and
-globally unique barcode records, with restrictive category/unit references. No
-product seed data is inserted; product creation remains the next API/UI command
-slice so category tracking policy can be validated before stock posting.
+The product catalog vertical slice is implemented: authorized list/create
+operations for units, products, and globally unique typed barcodes; immutable
+product identity; category/unit reference validation; idempotent retries; and
+atomic audit/outbox records. The ERP Warehouse hub now exposes an API-backed
+product catalog with real empty, error, and prerequisite states plus retry-safe
+unit/product creation drawers. No product or category seed data is inserted.
+Serialised items, batches, expiry records, pricing, warehouse balances, stock
+movements, valuation, reservations, and traceability enforcement remain the next
+warehouse vertical slice.
 
 Scope: unified partners/customers/suppliers, legal entities and individuals,
 contacts, addresses, bank accounts, customer locations, branches, products,
@@ -610,3 +613,5 @@ reversible foundation scaffold:
 | 2026-08-07 | Development browser access | `npm run db:seed:dev` provisioned `dev@vista.local` with non-administrative CRM/warehouse permissions; API seed completed successfully; password is supplied by the operator and is not stored in the repository              | verified                           |
 | 2026-08-07 | UI architecture pass       | 40+ navigable ERP/CRM workflow designs; task-first POS terminal and POS registers; backup/DR control screens; no fabricated operational data; frontend typechecks, tests, and production builds passed                        | verified, API wiring pending       |
 | 2026-08-07 | Workspace shell refinement | ERP/CRM uses the available dashboard canvas with a leaner navigation rail and secured-session topbar; backup/DR has a refined recovery-control header and rail; both frontend typechecks, tests, and builds passed            | verified                           |
+| 2026-08-07 | P2 catalog master data     | Migration 0006-backed units/products/typed barcode API with authorization, normalization, idempotency, audit/outbox; API integration suite (10 tests), ERP catalog browser suite (11 tests), typechecks and production build  | verified, inventory slice pending  |
+| 2026-08-07 | P2 catalog validation      | OpenAPI generated with the four catalog routes; full repository `npm run validate` passed; live PostgreSQL integration suite passed all 10 catalog/partner tests                                                              | passed                             |
