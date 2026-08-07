@@ -31,8 +31,11 @@ export function WorkspaceLayout({ children }: PropsWithChildren) {
   const currentTitle =
     location.pathname === '/access'
       ? messages.navigation.access
-      : (allModuleItems.find((item) => item.path === location.pathname)?.label ??
-        messages.navigation.overview);
+      : (allModuleItems.find(
+          (item) =>
+            location.pathname === item.path ||
+            (item.path.startsWith('/modules/') && location.pathname.startsWith(`${item.path}/`)),
+        )?.label ?? messages.navigation.overview);
   const initials = getInitials(session.context.displayName);
 
   async function signOut() {
@@ -123,11 +126,17 @@ export function WorkspaceLayout({ children }: PropsWithChildren) {
             <span>{messages.product.suite}</span>
             <strong>{currentTitle}</strong>
           </div>
-          <div className="topbar-account">
-            <span className="account-avatar" aria-hidden="true">
-              {initials}
+          <div className="topbar-actions">
+            <span className="topbar-session-state">
+              <Icon name="shield" size={15} />
+              Secure session
             </span>
-            <span>{session.context.displayName}</span>
+            <Link aria-label="Open my access" className="topbar-account" to="/access">
+              <span className="account-avatar" aria-hidden="true">
+                {initials}
+              </span>
+              <span>{session.context.displayName}</span>
+            </Link>
           </div>
         </header>
         <main className="workspace-content" id="workspace-content" tabIndex={-1}>

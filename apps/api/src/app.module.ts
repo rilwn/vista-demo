@@ -6,6 +6,8 @@ import { HealthModule } from './health/health.module.js';
 import { JobsModule } from './jobs/jobs.module.js';
 import { LoggingModule } from './logging/logging.module.js';
 import { PartnersModule } from './partners/partners.module.js';
+import { ProductCategoriesModule } from './product-categories/product-categories.module.js';
+import { CatalogModule } from './catalog/catalog.module.js';
 import { RootController } from './root.controller.js';
 import { RateLimitModule } from './security/rate-limit.module.js';
 
@@ -19,6 +21,8 @@ import { RateLimitModule } from './security/rate-limit.module.js';
     JobsModule,
     AuthModule,
     PartnersModule,
+    ProductCategoriesModule,
+    CatalogModule,
   ],
 })
 export class AppModule {}

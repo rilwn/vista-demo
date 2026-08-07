@@ -53,6 +53,62 @@ const partnerPage = {
   totalPages: 1,
 };
 
+const partnerProfile = {
+  addresses: [
+    {
+      active: true,
+      addressLine1: '12 Hristo Botev Blvd.',
+      city: 'Vratsa',
+      countryCode: 'BG',
+      id: 'd4cf3191-8f1c-443a-86b1-6e4a0b032c50',
+      postalCode: '3000',
+      type: 'billing',
+    },
+  ],
+  bankAccounts: [
+    {
+      active: true,
+      bankName: 'Example Bank',
+      bic: 'WESTGB22',
+      currencyCode: 'BGN',
+      iban: 'GB82WEST12345698765432',
+      id: 'f8912828-81dd-491e-a12c-377d5bc97b68',
+    },
+  ],
+  contacts: [
+    {
+      active: true,
+      contactRole: 'accountant',
+      displayName: 'Maria Petrova',
+      email: 'maria.petrova@example.invalid',
+      id: 'ab283413-55f5-4ee6-b2b3-6e19d9a2a905',
+      jobTitle: 'Chief accountant',
+      telephone: '+359 88 123 4567',
+    },
+  ],
+  partner: { ...partner, version: 4 },
+};
+
+const productCategories = [
+  {
+    active: true,
+    createdAt: '2026-08-07T10:00:00.000Z',
+    id: 'bfa1dd2b-d7df-4e52-958a-5ad30dbf6c3c',
+    name: 'Fiscal devices',
+    updatedAt: '2026-08-07T10:00:00.000Z',
+    version: 1,
+  },
+  {
+    active: true,
+    createdAt: '2026-08-07T10:01:00.000Z',
+    id: 'a7d398ab-d4ae-43ea-9288-6141ac9db646',
+    name: 'Cash registers',
+    parentId: 'bfa1dd2b-d7df-4e52-958a-5ad30dbf6c3c',
+    updatedAt: '2026-08-07T10:01:00.000Z',
+    version: 1,
+  },
+];
+
 describe('ERP and CRM authenticated workspace', () => {
   beforeEach(() => {
     sessionStorage.clear();
@@ -211,7 +267,8 @@ describe('ERP and CRM authenticated workspace', () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(jsonResponse(authenticationContext))
-      .mockResolvedValueOnce(jsonResponse(partnerPage));
+      .mockResolvedValueOnce(jsonResponse(partnerPage))
+      .mockResolvedValueOnce(jsonResponse(partnerProfile));
     vi.stubGlobal('fetch', fetchMock);
 
     renderApplication(['/partners']);
@@ -224,12 +281,63 @@ describe('ERP and CRM authenticated workspace', () => {
     fireEvent.click(partnerButton);
     expect(screen.getByRole('dialog', { name: messages.partners.detailsTitle })).toBeTruthy();
     expect(screen.getAllByText(partner.uic).length).toBeGreaterThan(0);
+    expect(await screen.findByText('Maria Petrova')).toBeTruthy();
+    expect(screen.getByText('GB82WEST12345698765432')).toBeTruthy();
 
     const listRequest = fetchMock.mock.calls[1];
     expect(listRequest?.[0]).toContain('/api/v1/master-data/partners?');
     expect(new Headers((listRequest?.[1] as RequestInit).headers).get('Authorization')).toBe(
       `Bearer ${loginResponse.sessionToken}`,
     );
+  });
+
+  it('shows the warehouse catalog hierarchy and makes category creation permission-aware', async () => {
+    const contextWithCatalogCreate = {
+      ...authenticationContext,
+      permissions: [
+        ...authenticationContext.permissions,
+        { action: 'create', module: 'erp.warehouse' },
+      ],
+    };
+    storeAuthenticatedSession(contextWithCatalogCreate);
+    const fetchMock = vi.fn((input: string, options?: RequestInit) => {
+      if (input.endsWith('/auth/me'))
+        return Promise.resolve(jsonResponse(contextWithCatalogCreate));
+      if (input.endsWith('/master-data/product-categories') && options?.method === 'POST') {
+        return Promise.resolve(jsonResponse(productCategories[1], 201));
+      }
+      return Promise.resolve(jsonResponse(productCategories));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderApplication(['/catalog/categories']);
+    expect(await screen.findByRole('heading', { name: messages.categories.title })).toBeTruthy();
+    expect(await screen.findByText('Fiscal devices')).toBeTruthy();
+    expect(screen.getByText('Cash registers')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: messages.categories.create }));
+    const dialog = screen.getByRole('dialog', { name: messages.categories.createTitle });
+    fireEvent.change(screen.getByLabelText(messages.categories.name), {
+      target: { value: 'Electronic scales' },
+    });
+    fireEvent.submit(
+      within(dialog).getByRole('button', { name: messages.categories.save }).closest('form')!,
+    );
+
+    await waitFor(() => {
+      expect(
+        fetchMock.mock.calls.some(
+          ([url, options]) =>
+            url.endsWith('/master-data/product-categories') && options?.method === 'POST',
+        ),
+      ).toBe(true);
+    });
+    const request = fetchMock.mock.calls.find(
+      ([url, options]) =>
+        url.endsWith('/master-data/product-categories') && options?.method === 'POST',
+    );
+    const requestOptions = request?.[1] as RequestInit;
+    expect(new Headers(requestOptions.headers).get('Idempotency-Key')).toMatch(/^[0-9a-f-]{36}$/u);
+    expect(JSON.parse(requestOptions.body as string)).toEqual({ name: 'Electronic scales' });
   });
 
   it('creates a partner with a stable retry key and refreshes the shared registry', async () => {
@@ -244,6 +352,9 @@ describe('ERP and CRM authenticated workspace', () => {
       const url = input;
       if (url.endsWith('/auth/me')) return Promise.resolve(jsonResponse(contextWithCreate));
       if (options?.method === 'POST') return Promise.resolve(jsonResponse(partner, 201));
+      if (url.endsWith(`/partners/${partner.id}/profile`)) {
+        return Promise.resolve(jsonResponse(partnerProfile));
+      }
       listCalls += 1;
       return Promise.resolve(jsonResponse(listCalls === 1 ? emptyPage : partnerPage));
     });
@@ -328,6 +439,63 @@ describe('ERP and CRM authenticated workspace', () => {
     expect(await screen.findByText(messages.partners.duplicateTitle)).toBeTruthy();
     expect(screen.getByText(`${partner.displayName} (${partner.id})`)).toBeTruthy();
     expect(screen.getByRole('dialog', { name: messages.partners.createTitle })).toBeTruthy();
+  });
+
+  it('lets employees with crm edit add a profile contact using an idempotent command', async () => {
+    const contextWithEdit = {
+      ...authenticationContext,
+      permissions: [...authenticationContext.permissions, { action: 'edit', module: 'crm' }],
+    };
+    storeAuthenticatedSession(contextWithEdit);
+    const fetchMock = vi.fn((input: string, options?: RequestInit) => {
+      const url = input;
+      if (url.endsWith('/auth/me')) return Promise.resolve(jsonResponse(contextWithEdit));
+      if (
+        url.endsWith('/master-data/partners?direction=asc&page=1&pageSize=25&sortBy=displayName')
+      ) {
+        return Promise.resolve(jsonResponse(partnerPage));
+      }
+      if (url.endsWith(`/partners/${partner.id}/profile`))
+        return Promise.resolve(jsonResponse(partnerProfile));
+      if (url.endsWith(`/partners/${partner.id}/contacts`) && options?.method === 'POST') {
+        return Promise.resolve(jsonResponse(partnerProfile.contacts[0], 201));
+      }
+      return Promise.resolve(jsonResponse({}));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderApplication(['/partners']);
+    fireEvent.click(await screen.findByRole('button', { name: /Vista Retail Partner Ltd\./u }));
+    expect(await screen.findByText('Maria Petrova')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: messages.partners.addContact }));
+    fireEvent.change(screen.getByLabelText(messages.partners.contactName), {
+      target: { value: 'New contact' },
+    });
+    fireEvent.change(screen.getByLabelText(messages.partners.email), {
+      target: { value: 'new.contact@example.invalid' },
+    });
+    fireEvent.submit(
+      screen.getByRole('button', { name: messages.partners.saveContact }).closest('form')!,
+    );
+
+    await waitFor(() => {
+      expect(
+        fetchMock.mock.calls.some(
+          ([url, options]) =>
+            url.endsWith(`/partners/${partner.id}/contacts`) && options?.method === 'POST',
+        ),
+      ).toBe(true);
+    });
+    const createRequest = fetchMock.mock.calls.find(
+      ([url, options]) =>
+        url.endsWith(`/partners/${partner.id}/contacts`) && options?.method === 'POST',
+    );
+    const createOptions = createRequest?.[1] as RequestInit;
+    expect(new Headers(createOptions.headers).get('Idempotency-Key')).toMatch(/^[0-9a-f-]{36}$/u);
+    expect(JSON.parse(createOptions.body as string)).toMatchObject({
+      displayName: 'New contact',
+      email: 'new.contact@example.invalid',
+    });
   });
 });
 

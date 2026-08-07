@@ -43,7 +43,7 @@ export const navigationGroups: NavigationGroup[] = [
   },
   {
     label: messages.navigation.crm,
-    modules: [moduleItem('crm', 'customers', '/partners')],
+    modules: [moduleItem('crm', 'customers')],
   },
   {
     label: messages.navigation.reports,

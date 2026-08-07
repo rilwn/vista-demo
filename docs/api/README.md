@@ -53,11 +53,17 @@ The ERP-owned canonical partner registry currently exposes:
   sort-field, and direction parameters. It requires `crm:view`.
 - `GET /api/v1/master-data/partners/:id` for one immutable partner identifier. It
   requires `crm:view`.
+- `GET /api/v1/master-data/partners/:id/profile` for the canonical partner plus
+  its active addresses, contacts, and bank accounts. It requires `crm:view`.
 - `GET /api/v1/master-data/partners/duplicates` for exact normalized legal-name
   or UIC candidates. It warns only and never merges records.
 - `POST /api/v1/master-data/partners` for legal entities or individuals with one
   or more customer/supplier/business-partner roles. It requires `crm:create` and
   an `Idempotency-Key` header of 8–128 safe characters.
+- `POST /api/v1/master-data/partners/:id/addresses`, `/contacts`, and
+  `/bank-accounts` to add profile records. Each requires `crm:edit` and the same
+  idempotency-header contract. Contacts require an email or telephone; bank
+  accounts validate IBAN, optional BIC, and globally reject a duplicate IBAN.
 
 Create replays return the original response when the same normalized command and
 key are retried. Reusing a key for a different command returns
@@ -66,3 +72,31 @@ key are retried. Reusing a key for a different command returns
 override, merge, edit, or delete endpoint in this slice. Successful creation,
 its audit event, and `master_data.partner.created` outbox event commit in one
 PostgreSQL transaction.
+
+The profile child commands use a partner-and-resource-specific idempotency scope,
+so a retry returns the original child record without creating another audit or
+outbox event. Each successful command increments the parent partner version and
+commits its `master_data.partner.address.created`, `.contact.created`, or
+`.bank_account.created` event with the audit record. These routes only create new
+profile records. Update, deactivation, deletion, duplicate resolution, and merge
+remain unavailable until their controlling policy is approved.
+
+## Product category master data
+
+The catalog hierarchy currently exposes:
+
+- `GET /api/v1/master-data/product-categories`, requiring `erp.warehouse:view`.
+- `POST /api/v1/master-data/product-categories`, requiring `erp.warehouse:create`
+  and an `Idempotency-Key`. A category has a name and optional existing active
+  parent UUID.
+
+Names are whitespace-normalized and unique within the selected parent. The command
+is transactionally paired with an audit event and
+`master_data.product_category.created` outbox event. It is deliberately a
+configuration-only hierarchy: the system does not seed categories, products,
+units, barcodes, or serial/batch/expiry policies before `CAT-001` is approved.
+
+The product identity migration is present as the next API boundary: immutable
+product code/name with required category and unit references, plus globally unique
+typed barcodes. Product and barcode commands are not exposed until their
+authorization, tracking-policy validation, and audit/outbox workflow are covered.

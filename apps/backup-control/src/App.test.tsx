@@ -5,11 +5,12 @@ import { App } from './App';
 import { messages } from './messages';
 
 describe('backup-control application shell', () => {
-  it('reports missing inventory, hardware, and restore evidence', () => {
+  it('presents a controlled backup and disaster-recovery workspace', () => {
     render(<App />);
 
-    expect(screen.getByText(messages.inventoryValue)).toBeTruthy();
-    expect(screen.getByText(messages.hardwareValue)).toBeTruthy();
-    expect(screen.getByText(messages.restoreValue)).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Backup operations' })).toBeTruthy();
+    expect(screen.getByText(messages.status)).toBeTruthy();
+    expect(screen.getByText('Source inventory')).toBeTruthy();
+    expect(screen.getByText('No approved records')).toBeTruthy();
   });
 });

@@ -5,14 +5,15 @@
   "type": "module",
   "scripts": {
     "build": "nest build",
-    "start": "node dist/main.js",
-    "start:dev": "nest start --watch",
+    "start": "DOTENV_CONFIG_PATH=../../.env node dist/main.js",
+    "start:dev": "DOTENV_CONFIG_PATH=../../.env nest start --watch",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
-    "db:migrate": "tsx src/database/migrate.ts up",
-    "db:rollback": "tsx src/database/migrate.ts down",
-    "openapi:generate": "tsx src/generate-openapi.ts"
+    "db:migrate": "DOTENV_CONFIG_PATH=../../.env tsx src/database/migrate.ts up",
+    "db:rollback": "DOTENV_CONFIG_PATH=../../.env tsx src/database/migrate.ts down",
+    "db:seed:dev": "DOTENV_CONFIG_PATH=../../.env tsx src/database/seed-dev.ts",
+    "openapi:generate": "DOTENV_CONFIG_PATH=../../.env tsx src/generate-openapi.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.1.6",

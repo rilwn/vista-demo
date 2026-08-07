@@ -32,10 +32,17 @@ import type {
 import type { CorrelatedRequest } from '../common/correlation-id.middleware.js';
 import {
   CreatePartnerDto,
+  CreatePartnerAddressDto,
+  CreatePartnerBankAccountDto,
+  CreatePartnerContactDto,
+  PartnerAddressDto,
+  PartnerBankAccountDto,
+  PartnerContactDto,
   PartnerDuplicateQueryDto,
   PartnerDuplicateResponseDto,
   PartnerListQueryDto,
   PartnerPageDto,
+  PartnerProfileDto,
   PartnerSummaryDto,
 } from './partners.dto.js';
 import { PartnersService } from './partners.service.js';
@@ -76,6 +83,15 @@ export class PartnersController {
     return this.partners.findDuplicates(query);
   }
 
+  @Get(':id/profile')
+  @RequirePermissions({ action: 'view', module: 'crm' })
+  @ApiOkResponse({ type: PartnerProfileDto })
+  profile(
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+  ): Promise<PartnerProfileDto> {
+    return this.partners.getProfile(id);
+  }
+
   @Get(':id')
   @RequirePermissions({ action: 'view', module: 'crm' })
   @ApiOkResponse({ type: PartnerSummaryDto })
@@ -102,6 +118,81 @@ export class PartnersController {
     @Req() request: AuthenticatedRequest,
   ): Promise<PartnerSummaryDto> {
     return this.partners.create(
+      input,
+      idempotencyKey,
+      request.authentication,
+      requestMetadata(request),
+    );
+  }
+
+  @Post(':id/addresses')
+  @HttpCode(HttpStatus.CREATED)
+  @RequirePermissions({ action: 'edit', module: 'crm' })
+  @ApiBody({ type: CreatePartnerAddressDto })
+  @ApiCreatedResponse({ type: PartnerAddressDto })
+  @ApiHeader({
+    description: 'Stable 8-128 character retry key. Replays return the original result.',
+    name: 'Idempotency-Key',
+    required: true,
+  })
+  createAddress(
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Body() input: CreatePartnerAddressDto,
+    @Headers('idempotency-key') idempotencyKey: string | undefined,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<PartnerAddressDto> {
+    return this.partners.createAddress(
+      id,
+      input,
+      idempotencyKey,
+      request.authentication,
+      requestMetadata(request),
+    );
+  }
+
+  @Post(':id/contacts')
+  @HttpCode(HttpStatus.CREATED)
+  @RequirePermissions({ action: 'edit', module: 'crm' })
+  @ApiBody({ type: CreatePartnerContactDto })
+  @ApiCreatedResponse({ type: PartnerContactDto })
+  @ApiHeader({
+    description: 'Stable 8-128 character retry key. Replays return the original result.',
+    name: 'Idempotency-Key',
+    required: true,
+  })
+  createContact(
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Body() input: CreatePartnerContactDto,
+    @Headers('idempotency-key') idempotencyKey: string | undefined,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<PartnerContactDto> {
+    return this.partners.createContact(
+      id,
+      input,
+      idempotencyKey,
+      request.authentication,
+      requestMetadata(request),
+    );
+  }
+
+  @Post(':id/bank-accounts')
+  @HttpCode(HttpStatus.CREATED)
+  @RequirePermissions({ action: 'edit', module: 'crm' })
+  @ApiBody({ type: CreatePartnerBankAccountDto })
+  @ApiCreatedResponse({ type: PartnerBankAccountDto })
+  @ApiHeader({
+    description: 'Stable 8-128 character retry key. Replays return the original result.',
+    name: 'Idempotency-Key',
+    required: true,
+  })
+  createBankAccount(
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Body() input: CreatePartnerBankAccountDto,
+    @Headers('idempotency-key') idempotencyKey: string | undefined,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<PartnerBankAccountDto> {
+    return this.partners.createBankAccount(
+      id,
       input,
       idempotencyKey,
       request.authentication,

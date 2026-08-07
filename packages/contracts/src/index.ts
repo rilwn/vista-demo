@@ -114,3 +114,134 @@ export interface PartnerDuplicateCandidate {
 export interface PartnerDuplicateResponse {
   candidates: PartnerDuplicateCandidate[];
 }
+
+export const partnerAddressTypes = ['registered', 'billing', 'delivery', 'other'] as const;
+export type PartnerAddressType = (typeof partnerAddressTypes)[number];
+
+export interface PartnerAddress {
+  active: boolean;
+  addressLine1: string;
+  addressLine2?: string;
+  city: string;
+  countryCode: string;
+  id: string;
+  postalCode?: string;
+  type: PartnerAddressType;
+}
+
+export interface CreatePartnerAddressRequest {
+  addressLine1: string;
+  addressLine2?: string;
+  city: string;
+  countryCode?: string;
+  postalCode?: string;
+  type: PartnerAddressType;
+}
+
+export interface PartnerContact {
+  active: boolean;
+  contactRole?: string;
+  displayName: string;
+  email?: string;
+  id: string;
+  jobTitle?: string;
+  telephone?: string;
+}
+
+export interface CreatePartnerContactRequest {
+  contactRole?: string;
+  displayName: string;
+  email?: string;
+  jobTitle?: string;
+  telephone?: string;
+}
+
+export interface PartnerBankAccount {
+  active: boolean;
+  bankName?: string;
+  bic?: string;
+  currencyCode: string;
+  iban: string;
+  id: string;
+}
+
+export interface CreatePartnerBankAccountRequest {
+  bankName?: string;
+  bic?: string;
+  currencyCode?: string;
+  iban: string;
+}
+
+export interface PartnerProfile {
+  addresses: PartnerAddress[];
+  bankAccounts: PartnerBankAccount[];
+  contacts: PartnerContact[];
+  partner: PartnerSummary;
+}
+
+export interface ProductCategory {
+  active: boolean;
+  createdAt: string;
+  id: string;
+  name: string;
+  parentId?: string;
+  requiresExpiry: boolean;
+  trackingMode: ProductTrackingMode;
+  updatedAt: string;
+  version: number;
+}
+
+export const productTrackingModes = ['none', 'serial', 'batch'] as const;
+export type ProductTrackingMode = (typeof productTrackingModes)[number];
+
+export interface CreateProductCategoryRequest {
+  name: string;
+  parentId?: string;
+  requiresExpiry?: boolean;
+  trackingMode?: ProductTrackingMode;
+}
+
+export const barcodeTypes = ['ean13', 'ean8', 'upca', 'code128', 'other'] as const;
+export type BarcodeType = (typeof barcodeTypes)[number];
+
+export interface ProductBarcode {
+  active: boolean;
+  barcode: string;
+  barcodeType: BarcodeType;
+  id: string;
+}
+
+export interface ProductSummary {
+  active: boolean;
+  barcodes: ProductBarcode[];
+  categoryId: string;
+  createdAt: string;
+  id: string;
+  name: string;
+  productCode: string;
+  unitId: string;
+  updatedAt: string;
+  version: number;
+  trackingMode: ProductTrackingMode;
+}
+
+export interface Unit {
+  active: boolean;
+  code: string;
+  id: string;
+  name: string;
+  version: number;
+}
+
+export interface CreateUnitRequest {
+  code: string;
+  name: string;
+}
+
+export interface CreateProductRequest {
+  barcodes?: Array<{ barcode: string; barcodeType?: BarcodeType }>;
+  categoryId: string;
+  name: string;
+  productCode: string;
+  unitId: string;
+}

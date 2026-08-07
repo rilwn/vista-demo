@@ -3,6 +3,8 @@ import { createRoot } from 'react-dom/client';
 
 import '@vista/ui/styles.css';
 
+import './styles.css';
+
 import { App } from './App';
 
 const root = document.querySelector<HTMLDivElement>('#root');

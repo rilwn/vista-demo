@@ -245,7 +245,7 @@ body {
 
 .workspace-shell {
   display: grid;
-  grid-template-columns: 16.5rem minmax(0, 1fr);
+  grid-template-columns: 14.25rem minmax(0, 1fr);
   min-height: 100vh;
   background: var(--vista-canvas);
 }
@@ -275,7 +275,9 @@ body {
   min-height: 35rem;
   flex-direction: column;
   color: #e8eee9;
-  background: var(--vista-forest-dark);
+  background:
+    radial-gradient(circle at 0 0, rgb(101 149 103 / 16%), transparent 12rem),
+    var(--vista-forest-dark);
 }
 
 .sidebar-brand {
@@ -283,12 +285,13 @@ body {
   min-height: 5rem;
   align-items: center;
   justify-content: space-between;
-  padding: 1.15rem 1.15rem 1rem;
+  min-height: 4.7rem;
+  padding: 1rem 0.9rem 0.9rem;
   border-bottom: 1px solid rgb(255 255 255 / 8%);
 }
 
 .sidebar-brand .vista-mark-copy strong {
-  font-size: 0.87rem;
+  font-size: 0.8rem;
 }
 
 .sidebar-close,
@@ -312,18 +315,18 @@ body {
 .sidebar-navigation {
   flex: 1;
   overflow-y: auto;
-  padding: 1.2rem 0.75rem;
+  padding: 1rem 0.55rem;
   scrollbar-color: rgb(255 255 255 / 16%) transparent;
   scrollbar-width: thin;
 }
 
 .navigation-section + .navigation-section {
-  margin-top: 1.35rem;
+  margin-top: 1.1rem;
 }
 
 .navigation-section > p {
   margin: 0 0 0.42rem;
-  padding: 0 0.65rem;
+  padding: 0 0.55rem;
   color: #809289;
   font-size: 0.62rem;
   font-weight: 770;
@@ -340,11 +343,11 @@ body {
   display: flex;
   min-height: 2.55rem;
   align-items: center;
-  gap: 0.78rem;
-  padding: 0.58rem 0.7rem;
+  gap: 0.62rem;
+  padding: 0.55rem 0.58rem;
   border-radius: 0.5rem;
   color: #aebdb3;
-  font-size: 0.79rem;
+  font-size: 0.74rem;
   font-weight: 570;
   text-decoration: none;
   transition:
@@ -371,7 +374,7 @@ body {
   display: flex;
   align-items: center;
   gap: 0.45rem;
-  padding: 0.8rem;
+  padding: 0.65rem;
   border-top: 1px solid rgb(255 255 255 / 8%);
 }
 
@@ -447,13 +450,13 @@ body {
   top: 0;
   z-index: 10;
   display: flex;
-  min-height: 5rem;
+  min-height: 4.5rem;
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  padding: 0 2rem;
+  padding: 0 2.2rem;
   border-bottom: 1px solid var(--vista-line);
-  background: rgb(255 255 255 / 92%);
+  background: rgb(255 255 255 / 94%);
   backdrop-filter: blur(14px);
 }
 
@@ -471,6 +474,16 @@ body {
   gap: 0.16rem;
 }
 
+.topbar-context::before {
+  width: 0.42rem;
+  height: 0.42rem;
+  margin-right: 0.05rem;
+  border-radius: 50%;
+  background: #73a57e;
+  box-shadow: 0 0 0 4px rgb(115 165 126 / 12%);
+  content: '';
+}
+
 .topbar-context span {
   color: var(--vista-muted);
   font-size: 0.65rem;
@@ -478,16 +491,44 @@ body {
 }
 
 .topbar-context strong {
-  font-size: 0.86rem;
+  font-size: 0.84rem;
+}
+
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.topbar-session-state {
+  display: inline-flex;
+  min-height: 1.9rem;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.3rem 0.5rem;
+  border: 1px solid #d6e4d8;
+  border-radius: 999px;
+  color: #4b7358;
+  background: #f3f8f3;
+  font-size: 0.65rem;
+  font-weight: 690;
 }
 
 .topbar-account {
   display: flex;
   align-items: center;
   gap: 0.55rem;
+  min-height: 2.25rem;
+  padding: 0.18rem 0.3rem;
+  border-radius: 0.5rem;
   color: var(--vista-ink-soft);
-  font-size: 0.75rem;
+  font-size: 0.72rem;
   font-weight: 650;
+  text-decoration: none;
+}
+
+.topbar-account:hover {
+  background: var(--vista-surface-muted);
 }
 
 .topbar-account .account-avatar {
@@ -497,9 +538,10 @@ body {
 }
 
 .workspace-content {
-  width: min(100%, 90rem);
+  width: 100%;
+  max-width: none;
   margin: 0 auto;
-  padding: clamp(1.5rem, 3vw, 2.6rem);
+  padding: clamp(1.35rem, 2.4vw, 2.35rem);
 }
 
 .page-stack {
@@ -676,6 +718,251 @@ body {
   line-height: 1.45;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
+}
+
+/* Workflow blueprints */
+
+.prototype-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.85rem;
+  padding: 0.32rem 0.58rem;
+  border: 1px solid #ccd9d1;
+  border-radius: 999px;
+  color: #426a52;
+  background: #f1f7f2;
+  font-size: 0.64rem;
+  font-weight: 720;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.workflow-hub-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.7rem;
+}
+
+.workflow-hub-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  min-height: 6.85rem;
+  align-items: center;
+  gap: 0.85rem;
+  padding: 1rem;
+  border: 1px solid var(--vista-line);
+  border-radius: var(--vista-radius-sm);
+  color: var(--vista-ink);
+  background: var(--vista-surface-muted);
+  text-decoration: none;
+  transition:
+    border-color 140ms ease,
+    background-color 140ms ease,
+    transform 140ms ease;
+}
+
+.workflow-hub-card:hover {
+  border-color: #aebdb3;
+  background: #fff;
+  transform: translateY(-1px);
+}
+.workflow-hub-card > span:nth-child(2) {
+  display: grid;
+  min-width: 0;
+  gap: 0.28rem;
+}
+.workflow-hub-card strong {
+  font-size: 0.84rem;
+}
+.workflow-hub-card small {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--vista-muted);
+  font-size: 0.7rem;
+  line-height: 1.45;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+.workflow-hub-card > .app-icon {
+  color: #8e9b93;
+}
+
+.workflow-header {
+  align-items: flex-end;
+}
+.workflow-header-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.65rem;
+}
+.workflow-tabs {
+  display: flex;
+  gap: 0.32rem;
+  overflow-x: auto;
+  padding-bottom: 0.15rem;
+  scrollbar-width: thin;
+}
+.workflow-tabs a {
+  display: inline-flex;
+  width: max-content;
+  min-height: 2.25rem;
+  align-items: center;
+  padding: 0.4rem 0.65rem;
+  border: 1px solid transparent;
+  border-radius: 0.43rem;
+  color: var(--vista-muted);
+  background: transparent;
+  font-size: 0.71rem;
+  font-weight: 650;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.workflow-tabs a:hover {
+  color: var(--vista-ink);
+  background: var(--vista-surface-muted);
+}
+.workflow-tabs a.is-active {
+  border-color: #cbdace;
+  color: var(--vista-accent-strong);
+  background: #eef6ef;
+}
+.workflow-command-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.85rem;
+  padding: 0.7rem;
+  border: 1px solid var(--vista-line);
+  border-radius: var(--vista-radius-md);
+  background: var(--vista-surface);
+  box-shadow: var(--vista-shadow-sm);
+}
+.workflow-command-bar label {
+  display: flex;
+  min-width: min(100%, 22rem);
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0 0.6rem;
+  border: 1px solid var(--vista-line-strong);
+  border-radius: 0.42rem;
+  color: var(--vista-muted);
+  background: var(--vista-surface-muted);
+}
+.workflow-command-bar input {
+  width: 100%;
+  min-height: 2.25rem;
+  border: 0;
+  color: var(--vista-ink);
+  background: transparent;
+  font-size: 0.74rem;
+  outline: 0;
+}
+.workflow-command-bar > div {
+  display: flex;
+  gap: 0.4rem;
+}
+.workflow-command-bar button {
+  min-height: 2.25rem;
+  padding: 0.38rem 0.56rem;
+  border: 1px solid var(--vista-line);
+  border-radius: 0.42rem;
+  color: var(--vista-ink-soft);
+  background: var(--vista-surface);
+  font-size: 0.68rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+.workflow-record-panel {
+  overflow: hidden;
+  border: 1px solid var(--vista-line);
+  border-radius: var(--vista-radius-md);
+  background: var(--vista-surface);
+  box-shadow: var(--vista-shadow-sm);
+}
+.workflow-table-head {
+  display: grid;
+  grid-template-columns: 1.1fr 0.8fr 1.2fr 0.8fr 0.8fr;
+  gap: 0.8rem;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--vista-line);
+  color: var(--vista-muted);
+  background: var(--vista-surface-muted);
+  font-size: 0.61rem;
+  font-weight: 750;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+.workflow-empty {
+  display: grid;
+  min-height: 12.8rem;
+  place-items: center;
+  padding: 1.4rem;
+}
+.workflow-empty > div {
+  display: flex;
+  max-width: 30rem;
+  align-items: flex-start;
+  gap: 0.85rem;
+}
+.workflow-empty-icon {
+  display: grid;
+  width: 2.4rem;
+  height: 2.4rem;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 0.65rem;
+  color: var(--vista-accent-strong);
+  background: var(--vista-accent-soft);
+}
+.workflow-empty strong {
+  font-size: 0.82rem;
+}
+.workflow-empty p {
+  margin: 0.3rem 0 0;
+  color: var(--vista-muted);
+  font-size: 0.72rem;
+  line-height: 1.5;
+}
+.workflow-sections {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.85rem;
+}
+.workflow-section-card {
+  padding: 1rem;
+  border: 1px solid var(--vista-line);
+  border-radius: var(--vista-radius-md);
+  background: var(--vista-surface);
+  box-shadow: var(--vista-shadow-sm);
+}
+.workflow-section-card h2 {
+  margin: 0;
+  font-size: 0.85rem;
+}
+.workflow-section-card ul {
+  display: grid;
+  gap: 0.4rem;
+  margin: 0.75rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+.workflow-section-card li {
+  position: relative;
+  padding-left: 0.85rem;
+  color: var(--vista-muted);
+  font-size: 0.71rem;
+  line-height: 1.45;
+}
+.workflow-section-card li::before {
+  position: absolute;
+  top: 0.42rem;
+  left: 0;
+  width: 0.32rem;
+  height: 0.32rem;
+  border-radius: 50%;
+  background: #77a681;
+  content: '';
 }
 
 .security-pill,
@@ -871,7 +1158,7 @@ body {
   }
 
   .workspace-shell {
-    grid-template-columns: 14.5rem minmax(0, 1fr);
+    grid-template-columns: 13.75rem minmax(0, 1fr);
   }
 
   .module-card-grid {
@@ -967,6 +1254,10 @@ body {
 
   .topbar-account {
     margin-left: auto;
+  }
+
+  .topbar-session-state {
+    display: none;
   }
 
   .topbar-account span:last-child {
@@ -1619,6 +1910,257 @@ body {
   overflow-wrap: anywhere;
   color: var(--vista-ink-soft);
   font-size: 0.64rem;
+}
+
+.partner-profile {
+  margin-top: 1.65rem;
+  padding-top: 1.45rem;
+  border-top: 1px solid var(--vista-line);
+}
+
+.partner-profile-heading,
+.partner-profile-section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.partner-profile-heading .page-eyebrow {
+  margin-bottom: 0.25rem;
+}
+
+.partner-profile-heading h3,
+.partner-profile-section h4,
+.partner-profile-form-shell h4 {
+  margin: 0;
+  color: var(--vista-ink);
+  font-size: 0.9rem;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+}
+
+.partner-profile-version {
+  padding: 0.28rem 0.45rem;
+  border: 1px solid var(--vista-line);
+  border-radius: 999px;
+  color: var(--vista-muted);
+  font:
+    650 0.62rem ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    monospace;
+}
+
+.partner-profile-sections {
+  display: grid;
+  gap: 0.9rem;
+  margin-top: 1rem;
+}
+
+.partner-profile-section {
+  padding: 0.95rem;
+  border: 1px solid var(--vista-line);
+  border-radius: 0.7rem;
+  background: #fcfdfb;
+}
+
+.partner-profile-section-heading h4 {
+  font-size: 0.76rem;
+  text-transform: uppercase;
+  letter-spacing: 0.055em;
+}
+
+.partner-profile-add.vista-button {
+  min-height: auto;
+  padding: 0.28rem 0.4rem;
+  color: var(--vista-forest);
+  font-size: 0.66rem;
+}
+
+.partner-profile-section > p {
+  margin: 0.65rem 0 0;
+  color: var(--vista-muted);
+  font-size: 0.7rem;
+}
+
+.partner-profile-list {
+  display: grid;
+  gap: 0.45rem;
+  margin-top: 0.7rem;
+}
+
+.partner-profile-item {
+  display: grid;
+  gap: 0.18rem;
+  padding: 0.62rem 0;
+  border-top: 1px solid var(--vista-line);
+}
+
+.partner-profile-item strong {
+  font-size: 0.74rem;
+  font-weight: 700;
+}
+
+.partner-profile-item span,
+.partner-profile-item small {
+  color: var(--vista-ink-soft);
+  font-size: 0.68rem;
+  line-height: 1.45;
+}
+
+.partner-profile-item small {
+  color: var(--vista-muted);
+}
+
+.partner-profile-skeleton {
+  display: grid;
+  gap: 0.65rem;
+  margin-top: 1rem;
+}
+
+.partner-profile-skeleton span {
+  height: 4.5rem;
+  border-radius: 0.7rem;
+  background: linear-gradient(90deg, #fafbf9 20%, #f1f4f0 50%, #fafbf9 80%);
+  background-size: 220% 100%;
+  animation: partner-skeleton 1.35s ease-in-out infinite;
+}
+
+.partner-profile-form-shell {
+  margin-top: 1rem;
+  padding: 1rem;
+  border: 1px solid #b9cdbd;
+  border-radius: 0.7rem;
+  background: #f7faf6;
+}
+
+.profile-form-close {
+  display: grid;
+  width: 1.75rem;
+  height: 1.75rem;
+  padding: 0;
+  border: 1px solid var(--vista-line);
+  border-radius: 0.4rem;
+  place-items: center;
+  color: var(--vista-muted);
+  background: var(--vista-surface);
+  cursor: pointer;
+}
+
+.partner-profile-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin-top: 0.9rem;
+}
+
+.partner-profile-form label {
+  display: grid;
+  gap: 0.33rem;
+  color: var(--vista-ink-soft);
+  font-size: 0.68rem;
+  font-weight: 650;
+}
+
+.partner-profile-form label.is-wide,
+.partner-profile-form .vista-alert,
+.partner-profile-form .drawer-actions {
+  grid-column: 1 / -1;
+}
+
+.partner-profile-form input,
+.partner-profile-form select {
+  width: 100%;
+  min-height: 2.35rem;
+  padding: 0.48rem 0.55rem;
+  border: 1px solid var(--vista-line);
+  border-radius: 0.48rem;
+  color: var(--vista-ink);
+  background: var(--vista-surface);
+  font: inherit;
+}
+
+.partner-profile-form input:focus,
+.partner-profile-form select:focus {
+  border-color: var(--vista-focus);
+  outline: 2px solid color-mix(in srgb, var(--vista-focus) 22%, transparent);
+}
+
+.partner-profile-form .vista-alert p {
+  margin: 0;
+}
+
+.category-registry {
+  overflow: hidden;
+  border: 1px solid var(--vista-line);
+  border-radius: 0.85rem;
+  background: var(--vista-surface);
+  box-shadow: 0 0.65rem 1.7rem rgb(20 38 25 / 4%);
+}
+
+.category-registry .registry-meta {
+  margin: 0;
+  padding: 1rem 1.1rem;
+  border-bottom: 1px solid var(--vista-line);
+}
+
+.category-tree {
+  padding: 0.5rem;
+}
+
+.category-node {
+  display: flex;
+  min-height: 3rem;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.58rem 0.7rem 0.58rem calc(0.7rem + var(--category-depth) * 1.2rem);
+  border-radius: 0.55rem;
+  color: var(--vista-ink);
+  font-size: 0.78rem;
+  font-weight: 660;
+}
+
+.category-node:hover {
+  background: var(--vista-surface-muted);
+}
+
+.category-node-mark {
+  display: grid;
+  flex: 0 0 auto;
+  width: 1.65rem;
+  height: 1.65rem;
+  border: 1px solid #c8d8cb;
+  border-radius: 0.45rem;
+  place-items: center;
+  color: var(--vista-forest);
+  background: var(--vista-accent-soft);
+}
+
+.category-node small {
+  margin-left: auto;
+  color: var(--vista-muted);
+  font-size: 0.64rem;
+  font-weight: 560;
+}
+
+.category-parent-select {
+  display: grid;
+  gap: 0.36rem;
+  color: var(--vista-ink-soft);
+  font-size: 0.73rem;
+  font-weight: 650;
+}
+
+.category-parent-select select {
+  width: 100%;
+  min-height: 2.55rem;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--vista-line);
+  border-radius: 0.5rem;
+  color: var(--vista-ink);
+  background: var(--vista-surface);
+  font: inherit;
 }
 
 @keyframes partner-skeleton {

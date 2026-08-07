@@ -31,7 +31,8 @@
     "validate": "npm run format:check && npm run lint && npm run typecheck && npm run test && npm run build",
     "db:migrate": "npm run db:migrate -w @vista/api",
     "db:rollback": "npm run db:rollback -w @vista/api",
-    "infra:up": "docker compose --env-file .env -f infrastructure/docker/compose.yml up -d --wait",
+    "db:seed:dev": "npm run db:seed:dev -w @vista/api",
+    "infra:up": "docker compose --env-file .env -f infrastructure/docker/compose.yml up -d --wait postgres redis minio mailpit && docker compose --env-file .env -f infrastructure/docker/compose.yml run --rm minio-init",
     "infra:down": "docker compose --env-file .env -f infrastructure/docker/compose.yml down"
   },
   "devDependencies": {

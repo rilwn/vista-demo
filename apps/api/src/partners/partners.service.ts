@@ -3,11 +3,18 @@ import { createHash, randomUUID } from 'node:crypto';
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
 import type { AppEnvironment } from '@vista/config';
 import type {
+  CreatePartnerAddressRequest,
+  CreatePartnerBankAccountRequest,
+  CreatePartnerContactRequest,
   CreatePartnerRequest,
+  PartnerAddress,
+  PartnerBankAccount,
+  PartnerContact,
   PartnerDuplicateCandidate,
   PartnerDuplicateResponse,
   PartnerKind,
   PartnerPage,
+  PartnerProfile,
   PartnerRole,
   PartnerSummary,
 } from '@vista/contracts';
@@ -42,6 +49,36 @@ interface CountRow {
   total: string;
 }
 
+interface PartnerAddressRow {
+  active: boolean;
+  address_line_1: string;
+  address_line_2: string | null;
+  address_type: PartnerAddress['type'];
+  city: string;
+  country_code: string;
+  id: string;
+  postal_code: string | null;
+}
+
+interface PartnerContactRow {
+  active: boolean;
+  contact_role: string | null;
+  display_name: string;
+  email: string | null;
+  id: string;
+  job_title: string | null;
+  telephone: string | null;
+}
+
+interface PartnerBankAccountRow {
+  active: boolean;
+  bank_name: string | null;
+  bic: string | null;
+  currency_code: string;
+  iban: string;
+  id: string;
+}
+
 interface IdempotencyRow {
   request_hash: string;
   response_body: unknown;
@@ -55,6 +92,30 @@ interface NormalizedPartnerInput {
   roles: PartnerRole[];
   uic?: string;
   vatNumber?: string;
+}
+
+interface NormalizedAddressInput {
+  addressLine1: string;
+  addressLine2?: string;
+  city: string;
+  countryCode: string;
+  postalCode?: string;
+  type: PartnerAddress['type'];
+}
+
+interface NormalizedContactInput {
+  contactRole?: string;
+  displayName: string;
+  email?: string;
+  jobTitle?: string;
+  telephone?: string;
+}
+
+interface NormalizedBankAccountInput {
+  bankName?: string;
+  bic?: string;
+  currencyCode: string;
+  iban: string;
 }
 
 const partnerSelect = `
@@ -155,6 +216,160 @@ export class PartnersService {
     return mapPartner(partner);
   }
 
+  async getProfile(id: string): Promise<PartnerProfile> {
+    const pool = this.database.getPool();
+    const [partner, addresses, contacts, bankAccounts] = await Promise.all([
+      findPartner(pool, id),
+      pool.query<PartnerAddressRow>(
+        `SELECT id, address_type, address_line_1, address_line_2, city,
+                postal_code, country_code, active
+         FROM master_data.partner_addresses
+         WHERE partner_id = $1 AND active = true
+         ORDER BY address_type, city, address_line_1, id`,
+        [id],
+      ),
+      pool.query<PartnerContactRow>(
+        `SELECT id, display_name, job_title, telephone, email, contact_role, active
+         FROM master_data.partner_contacts
+         WHERE partner_id = $1 AND active = true
+         ORDER BY display_name, id`,
+        [id],
+      ),
+      pool.query<PartnerBankAccountRow>(
+        `SELECT id, iban, bic, bank_name, currency_code, active
+         FROM master_data.partner_bank_accounts
+         WHERE partner_id = $1 AND active = true
+         ORDER BY currency_code, iban, id`,
+        [id],
+      ),
+    ]);
+    if (!partner) {
+      throw partnerNotFoundError();
+    }
+    return {
+      addresses: addresses.rows.map(mapAddress),
+      bankAccounts: bankAccounts.rows.map(mapBankAccount),
+      contacts: contacts.rows.map(mapContact),
+      partner: mapPartner(partner),
+    };
+  }
+
+  async createAddress(
+    partnerId: string,
+    input: CreatePartnerAddressRequest,
+    idempotencyKey: string | undefined,
+    authentication: AuthenticationContext,
+    metadata: RequestSecurityMetadata,
+  ): Promise<PartnerAddress> {
+    const normalized = normalizeAddressInput(input);
+    return this.createProfileChild(
+      partnerId,
+      'address',
+      normalized,
+      idempotencyKey,
+      authentication,
+      metadata,
+      isPartnerAddress,
+      async (client) => {
+        const result = await client.query<PartnerAddressRow>(
+          `INSERT INTO master_data.partner_addresses (
+             partner_id, address_type, address_line_1, address_line_2, city,
+             postal_code, country_code
+           ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+           RETURNING id, address_type, address_line_1, address_line_2, city,
+                     postal_code, country_code, active`,
+          [
+            partnerId,
+            normalized.type,
+            normalized.addressLine1,
+            normalized.addressLine2 ?? null,
+            normalized.city,
+            normalized.postalCode ?? null,
+            normalized.countryCode,
+          ],
+        );
+        const row = result.rows[0];
+        if (!row) throw new Error('Partner address insert did not return a row');
+        return mapAddress(row);
+      },
+    );
+  }
+
+  async createContact(
+    partnerId: string,
+    input: CreatePartnerContactRequest,
+    idempotencyKey: string | undefined,
+    authentication: AuthenticationContext,
+    metadata: RequestSecurityMetadata,
+  ): Promise<PartnerContact> {
+    const normalized = normalizeContactInput(input);
+    return this.createProfileChild(
+      partnerId,
+      'contact',
+      normalized,
+      idempotencyKey,
+      authentication,
+      metadata,
+      isPartnerContact,
+      async (client) => {
+        const result = await client.query<PartnerContactRow>(
+          `INSERT INTO master_data.partner_contacts (
+             partner_id, display_name, job_title, telephone, email, contact_role
+           ) VALUES ($1, $2, $3, $4, $5, $6)
+           RETURNING id, display_name, job_title, telephone, email, contact_role, active`,
+          [
+            partnerId,
+            normalized.displayName,
+            normalized.jobTitle ?? null,
+            normalized.telephone ?? null,
+            normalized.email ?? null,
+            normalized.contactRole ?? null,
+          ],
+        );
+        const row = result.rows[0];
+        if (!row) throw new Error('Partner contact insert did not return a row');
+        return mapContact(row);
+      },
+    );
+  }
+
+  async createBankAccount(
+    partnerId: string,
+    input: CreatePartnerBankAccountRequest,
+    idempotencyKey: string | undefined,
+    authentication: AuthenticationContext,
+    metadata: RequestSecurityMetadata,
+  ): Promise<PartnerBankAccount> {
+    const normalized = normalizeBankAccountInput(input);
+    return this.createProfileChild(
+      partnerId,
+      'bank_account',
+      normalized,
+      idempotencyKey,
+      authentication,
+      metadata,
+      isPartnerBankAccount,
+      async (client) => {
+        const result = await client.query<PartnerBankAccountRow>(
+          `INSERT INTO master_data.partner_bank_accounts (
+             partner_id, iban, bic, bank_name, currency_code
+           ) VALUES ($1, $2, $3, $4, $5)
+           RETURNING id, iban, bic, bank_name, currency_code, active`,
+          [
+            partnerId,
+            normalized.iban,
+            normalized.bic ?? null,
+            normalized.bankName ?? null,
+            normalized.currencyCode,
+          ],
+        );
+        const row = result.rows[0];
+        if (!row) throw new Error('Partner bank-account insert did not return a row');
+        return mapBankAccount(row);
+      },
+    );
+  }
+
   async findDuplicates(query: PartnerDuplicateQueryDto): Promise<PartnerDuplicateResponse> {
     const normalizedName = normalizeOptionalName(query.name);
     const uic = normalizeOptionalIdentifier(query.uic);
@@ -183,9 +398,11 @@ export class PartnersService {
       await client.query('BEGIN');
       const replay = await claimIdempotency(
         client,
+        'master-data.partners.create',
         key,
         requestHash,
         this.environment.IDEMPOTENCY_TTL_SECONDS,
+        isPartnerSummary,
       );
       if (replay) {
         await client.query('COMMIT');
@@ -257,12 +474,7 @@ export class PartnersService {
         },
         client,
       );
-      await client.query(
-        `UPDATE platform.idempotency_keys
-         SET status = 'completed', response_status = 201, response_body = $3
-         WHERE scope = $1 AND idempotency_key = $2`,
-        ['master-data.partners.create', key, partner],
-      );
+      await completeIdempotency(client, 'master-data.partners.create', key, partner);
       await client.query('COMMIT');
       return partner;
     } catch (error) {
@@ -280,21 +492,108 @@ export class PartnersService {
       client.release();
     }
   }
+
+  private async createProfileChild<T extends { id: string }>(
+    partnerId: string,
+    kind: 'address' | 'bank_account' | 'contact',
+    normalizedInput: object,
+    idempotencyKey: string | undefined,
+    authentication: AuthenticationContext,
+    metadata: RequestSecurityMetadata,
+    isResponse: (value: unknown) => value is T,
+    insert: (client: PoolClient) => Promise<T>,
+  ): Promise<T> {
+    const key = validateIdempotencyKey(idempotencyKey);
+    const requestHash = createHash('sha256').update(JSON.stringify(normalizedInput)).digest('hex');
+    const scope = `master-data.partners.${kind}.create:${partnerId}`;
+    const client = await this.database.getPool().connect();
+    try {
+      await client.query('BEGIN');
+      const replay = await claimIdempotency(
+        client,
+        scope,
+        key,
+        requestHash,
+        this.environment.IDEMPOTENCY_TTL_SECONDS,
+        isResponse,
+      );
+      if (replay) {
+        await client.query('COMMIT');
+        return replay;
+      }
+      if (!(await findPartner(client, partnerId))) {
+        throw partnerNotFoundError();
+      }
+
+      const record = await insert(client);
+      await client.query(
+        `UPDATE master_data.partners
+         SET updated_at = now(), updated_by = $2, version = version + 1
+         WHERE id = $1`,
+        [partnerId, authentication.accountId],
+      );
+      const eventType = `master_data.partner.${kind}.created`;
+      await client.query(
+        `INSERT INTO integration.outbox_events (
+           id, aggregate_type, aggregate_id, event_type, event_version,
+           correlation_id, idempotency_key, payload
+         ) VALUES ($1, 'partner', $2, $3, 1, $4, $5, $6)`,
+        [
+          randomUUID(),
+          partnerId,
+          eventType,
+          metadata.correlationId,
+          `partner.${kind}.created:${partnerId}:${key}`,
+          { partnerId, record },
+        ],
+      );
+      await this.audit.append(
+        {
+          action: eventType,
+          actorAccountId: authentication.accountId,
+          after: { partnerId, record },
+          correlationId: metadata.correlationId,
+          ...(metadata.sourceIp ? { sourceIp: metadata.sourceIp } : {}),
+          targetId: record.id,
+          targetType: `partner_${kind}`,
+          ...(metadata.userAgent ? { userAgent: metadata.userAgent } : {}),
+        },
+        client,
+      );
+      await completeIdempotency(client, scope, key, record);
+      await client.query('COMMIT');
+      return record;
+    } catch (error) {
+      await client.query('ROLLBACK');
+      if (kind === 'bank_account' && isUniqueBankAccountViolation(error)) {
+        throw new ApiErrorException(
+          'BANK_ACCOUNT_DUPLICATE',
+          'This bank account already belongs to a partner record',
+          HttpStatus.CONFLICT,
+        );
+      }
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
 }
 
-async function claimIdempotency(
+async function claimIdempotency<T>(
   client: PoolClient,
+  scope: string,
   key: string,
   requestHash: string,
   ttlSeconds: number,
-): Promise<PartnerSummary | undefined> {
+  isResponse: (value: unknown) => value is T,
+): Promise<T | undefined> {
   const inserted = await client.query(
     `INSERT INTO platform.idempotency_keys (
        scope, idempotency_key, request_hash, status, expires_at
      ) VALUES ($1, $2, $3, 'processing', now() + ($4 * interval '1 second'))
      ON CONFLICT DO NOTHING
      RETURNING idempotency_key`,
-    ['master-data.partners.create', key, requestHash, ttlSeconds],
+    [scope, key, requestHash, ttlSeconds],
   );
   if (inserted.rowCount === 1) return undefined;
 
@@ -303,7 +602,7 @@ async function claimIdempotency(
      FROM platform.idempotency_keys
      WHERE scope = $1 AND idempotency_key = $2
      FOR UPDATE`,
-    ['master-data.partners.create', key],
+    [scope, key],
   );
   const row = existing.rows[0];
   if (!row || row.request_hash !== requestHash) {
@@ -313,13 +612,27 @@ async function claimIdempotency(
       HttpStatus.CONFLICT,
     );
   }
-  if (row.status === 'completed' && isPartnerSummary(row.response_body)) {
+  if (row.status === 'completed' && isResponse(row.response_body)) {
     return row.response_body;
   }
   throw new ApiErrorException(
     'IDEMPOTENCY_REQUEST_IN_PROGRESS',
     'The original request is still being processed',
     HttpStatus.CONFLICT,
+  );
+}
+
+async function completeIdempotency(
+  client: PoolClient,
+  scope: string,
+  key: string,
+  response: unknown,
+): Promise<void> {
+  await client.query(
+    `UPDATE platform.idempotency_keys
+     SET status = 'completed', response_status = 201, response_body = $3
+     WHERE scope = $1 AND idempotency_key = $2`,
+    [scope, key, response],
   );
 }
 
@@ -358,6 +671,42 @@ function mapPartner(row: PartnerRow): PartnerSummary {
     updatedAt: new Date(row.updated_at).toISOString(),
     ...(row.vat_number ? { vatNumber: row.vat_number } : {}),
     version: row.version,
+  };
+}
+
+function mapAddress(row: PartnerAddressRow): PartnerAddress {
+  return {
+    active: row.active,
+    addressLine1: row.address_line_1,
+    ...(row.address_line_2 ? { addressLine2: row.address_line_2 } : {}),
+    city: row.city,
+    countryCode: row.country_code,
+    id: row.id,
+    ...(row.postal_code ? { postalCode: row.postal_code } : {}),
+    type: row.address_type,
+  };
+}
+
+function mapContact(row: PartnerContactRow): PartnerContact {
+  return {
+    active: row.active,
+    ...(row.contact_role ? { contactRole: row.contact_role } : {}),
+    displayName: row.display_name,
+    ...(row.email ? { email: row.email } : {}),
+    id: row.id,
+    ...(row.job_title ? { jobTitle: row.job_title } : {}),
+    ...(row.telephone ? { telephone: row.telephone } : {}),
+  };
+}
+
+function mapBankAccount(row: PartnerBankAccountRow): PartnerBankAccount {
+  return {
+    active: row.active,
+    ...(row.bank_name ? { bankName: row.bank_name } : {}),
+    ...(row.bic ? { bic: row.bic } : {}),
+    currencyCode: row.currency_code,
+    iban: row.iban,
+    id: row.id,
   };
 }
 
@@ -419,6 +768,86 @@ function normalizePartnerInput(input: CreatePartnerRequest): NormalizedPartnerIn
   };
 }
 
+function normalizeAddressInput(input: CreatePartnerAddressRequest): NormalizedAddressInput {
+  const addressLine1 = normalizeRequiredText(input.addressLine1, 'PARTNER_ADDRESS_LINE_REQUIRED');
+  const city = normalizeRequiredText(input.city, 'PARTNER_ADDRESS_CITY_REQUIRED');
+  const countryCode = (normalizeOptionalText(input.countryCode) ?? 'BG').toUpperCase();
+  const addressLine2 = normalizeOptionalText(input.addressLine2);
+  const postalCode = normalizeOptionalText(input.postalCode);
+  if (!/^[A-Z]{2}$/u.test(countryCode)) {
+    throw new ApiErrorException(
+      'PARTNER_ADDRESS_COUNTRY_INVALID',
+      'The country code must use two letters',
+      HttpStatus.BAD_REQUEST,
+    );
+  }
+  return {
+    addressLine1,
+    ...(addressLine2 ? { addressLine2 } : {}),
+    city,
+    countryCode,
+    ...(postalCode ? { postalCode } : {}),
+    type: input.type,
+  };
+}
+
+function normalizeContactInput(input: CreatePartnerContactRequest): NormalizedContactInput {
+  const telephone = normalizeOptionalText(input.telephone);
+  const email = normalizeOptionalText(input.email)?.toLowerCase();
+  const contactRole = normalizeOptionalText(input.contactRole);
+  const jobTitle = normalizeOptionalText(input.jobTitle);
+  if (!telephone && !email) {
+    throw new ApiErrorException(
+      'PARTNER_CONTACT_CHANNEL_REQUIRED',
+      'A telephone number or email address is required',
+      HttpStatus.BAD_REQUEST,
+    );
+  }
+  return {
+    ...(contactRole ? { contactRole } : {}),
+    displayName: normalizeRequiredText(input.displayName, 'PARTNER_CONTACT_NAME_REQUIRED'),
+    ...(email ? { email } : {}),
+    ...(jobTitle ? { jobTitle } : {}),
+    ...(telephone ? { telephone } : {}),
+  };
+}
+
+function normalizeBankAccountInput(
+  input: CreatePartnerBankAccountRequest,
+): NormalizedBankAccountInput {
+  const iban = input.iban.replace(/\s+/gu, '').toUpperCase();
+  if (!isValidIban(iban)) {
+    throw new ApiErrorException(
+      'PARTNER_BANK_IBAN_INVALID',
+      'The IBAN is not valid',
+      HttpStatus.BAD_REQUEST,
+    );
+  }
+  const bic = normalizeOptionalText(input.bic)?.replace(/\s+/gu, '').toUpperCase();
+  const bankName = normalizeOptionalText(input.bankName);
+  if (bic && !/^[A-Z0-9]{8}(?:[A-Z0-9]{3})?$/u.test(bic)) {
+    throw new ApiErrorException(
+      'PARTNER_BANK_BIC_INVALID',
+      'The BIC must contain 8 or 11 letters and digits',
+      HttpStatus.BAD_REQUEST,
+    );
+  }
+  const currencyCode = (normalizeOptionalText(input.currencyCode) ?? 'BGN').toUpperCase();
+  if (!/^[A-Z]{3}$/u.test(currencyCode)) {
+    throw new ApiErrorException(
+      'PARTNER_BANK_CURRENCY_INVALID',
+      'The currency code must use three letters',
+      HttpStatus.BAD_REQUEST,
+    );
+  }
+  return {
+    ...(bankName ? { bankName } : {}),
+    ...(bic ? { bic } : {}),
+    currencyCode,
+    iban,
+  };
+}
+
 function normalizeDisplayName(value: string): string {
   const normalized = value.trim().replace(/\s+/gu, ' ');
   if (!normalized) {
@@ -427,6 +856,14 @@ function normalizeDisplayName(value: string): string {
       'The partner name is required',
       HttpStatus.BAD_REQUEST,
     );
+  }
+  return normalized;
+}
+
+function normalizeRequiredText(value: string, code: string): string {
+  const normalized = normalizeOptionalText(value);
+  if (!normalized) {
+    throw new ApiErrorException(code, 'This field is required', HttpStatus.BAD_REQUEST);
   }
   return normalized;
 }
@@ -493,6 +930,73 @@ function isUniqueUicViolation(error: unknown): boolean {
     'constraint' in error &&
     error.constraint === 'partners_uic_unique'
   );
+}
+
+function isUniqueBankAccountViolation(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    error.code === '23505' &&
+    'constraint' in error &&
+    error.constraint === 'partner_bank_accounts_iban_unique'
+  );
+}
+
+function partnerNotFoundError(): ApiErrorException {
+  return new ApiErrorException(
+    'PARTNER_NOT_FOUND',
+    'The partner record was not found',
+    HttpStatus.NOT_FOUND,
+  );
+}
+
+function isPartnerAddress(value: unknown): value is PartnerAddress {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'id' in value &&
+    typeof value.id === 'string' &&
+    'addressLine1' in value &&
+    typeof value.addressLine1 === 'string' &&
+    'type' in value &&
+    typeof value.type === 'string'
+  );
+}
+
+function isPartnerContact(value: unknown): value is PartnerContact {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'id' in value &&
+    typeof value.id === 'string' &&
+    'displayName' in value &&
+    typeof value.displayName === 'string'
+  );
+}
+
+function isPartnerBankAccount(value: unknown): value is PartnerBankAccount {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'id' in value &&
+    typeof value.id === 'string' &&
+    'iban' in value &&
+    typeof value.iban === 'string'
+  );
+}
+
+function isValidIban(iban: string): boolean {
+  if (!/^[A-Z]{2}\d{2}[A-Z0-9]{11,30}$/u.test(iban)) return false;
+  const rearranged = `${iban.slice(4)}${iban.slice(0, 4)}`;
+  let remainder = 0;
+  for (const character of rearranged) {
+    const encoded = /[A-Z]/u.test(character) ? String(character.charCodeAt(0) - 55) : character;
+    for (const digit of encoded) {
+      remainder = (remainder * 10 + Number(digit)) % 97;
+    }
+  }
+  return remainder === 1;
 }
 
 function isPartnerSummary(value: unknown): value is PartnerSummary {

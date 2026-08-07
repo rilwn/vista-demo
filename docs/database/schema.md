@@ -51,6 +51,30 @@ creates cannot bypass the pre-insert duplicate check, then writes the partner,
 roles, audit-chain event, outbox event, and idempotency result atomically.
 
 Addresses, contacts, and bank-account tables establish the required explicit
-relationships but are not exposed as completed workflows yet. The migration
-uses restrictive parent deletion; partner merge/delete semantics remain absent
-until `CRM-002` is approved.
+relationships and are exposed through canonical profile read/create operations.
+They preserve parent deletion restrictions; child records are active-state scoped
+for future controlled deactivation, not direct deletion. Profile writes update the
+parent version and commit an audit-chain event, an outbox event, and idempotency
+record in the same transaction. Partner/child update, deactivation, merge, and
+delete semantics remain absent until `CRM-002` is approved.
+
+Migration `0004_product_category_master_data` adds an empty, ERP-owned,
+immutable-identifier product-category hierarchy. A category can only refer to an
+existing parent and parent deletion is restrictive; normalized names are unique
+within each parent. The API currently supports authorized read/create only, so a
+cycle cannot be introduced through the available workflow. Product records, units,
+barcodes, serial/batch/expiry policy, and initial category values remain pending
+`CAT-001`; no production catalog seed data is embedded in the migration.
+
+Migration `0005_catalog_tracking_policy` makes traceability a configurable
+category-level policy (`none`, `serial`, or `batch`) and permits expiry only for a
+batch-tracked category. It also creates independent unit master data rather than
+embedding an irreversible unit enum. Existing category rows retain the compatible
+`none`/no-expiry default; client-specific policies can be changed through a later,
+audited configuration workflow before product and inventory posting is enabled.
+
+Migration `0006_product_master` adds ERP-owned products with immutable product
+codes, required category/unit references, and restrictive deletion. Barcode values
+are globally unique and retain their type (`ean13`, `ean8`, `upca`, `code128`, or
+`other`). The schema intentionally separates product identity from future stock,
+serial, and batch ledgers.

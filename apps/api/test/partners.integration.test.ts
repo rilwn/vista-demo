@@ -6,7 +6,17 @@ import { fileURLToPath } from 'node:url';
 import type { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import type { AppEnvironment } from '@vista/config';
-import type { CreatePartnerRequest, PartnerSummary } from '@vista/contracts';
+import type {
+  CreatePartnerAddressRequest,
+  CreatePartnerBankAccountRequest,
+  CreatePartnerContactRequest,
+  CreatePartnerRequest,
+  PartnerAddress,
+  PartnerBankAccount,
+  PartnerContact,
+  ProductCategory,
+  PartnerSummary,
+} from '@vista/contracts';
 import { Pool } from 'pg';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -24,6 +34,7 @@ describe.skipIf(!runInfrastructureTests)('partner master-data vertical slice', (
   let adminDatabase: Pool;
   let application: INestApplication;
   let creatorToken: string;
+  let categoryCreatorToken: string;
   let database: Pool;
   let databaseName: string;
   let primaryPartner: PartnerSummary;
@@ -85,18 +96,27 @@ describe.skipIf(!runInfrastructureTests)('partner master-data vertical slice', (
 
     const passwordHash = await application.get(PasswordService).hash(password);
     const creatorEmail = `partner-creator-${runId}@example.invalid`;
+    const categoryCreatorEmail = `category-creator-${runId}@example.invalid`;
     const viewerEmail = `partner-viewer-${runId}@example.invalid`;
     const creatorId = await createAccount(database, 'creator', creatorEmail, passwordHash);
+    const categoryCreatorId = await createAccount(
+      database,
+      'category-creator',
+      categoryCreatorEmail,
+      passwordHash,
+    );
     const viewerId = await createAccount(database, 'viewer', viewerEmail, passwordHash);
-    await grantCrmPermissions(database, creatorId, ['view', 'create']);
-    await grantCrmPermissions(database, viewerId, ['view']);
+    await grantPermissions(database, creatorId, 'crm', ['view', 'create', 'edit']);
+    await grantPermissions(database, categoryCreatorId, 'erp.warehouse', ['view', 'create']);
+    await grantPermissions(database, viewerId, 'crm', ['view']);
     creatorToken = await login(application, creatorEmail);
+    categoryCreatorToken = await login(application, categoryCreatorEmail);
     viewerToken = await login(application, viewerEmail);
   }, 30_000);
 
   afterAll(async () => {
     if (application) {
-      for (const token of [creatorToken, viewerToken]) {
+      for (const token of [creatorToken, categoryCreatorToken, viewerToken]) {
         if (token) {
           await request(application.getHttpServer())
             .post('/api/v1/auth/logout')
@@ -108,7 +128,7 @@ describe.skipIf(!runInfrastructureTests)('partner master-data vertical slice', (
     if (database) await database.end();
     if (adminDatabase && databaseName) {
       assertTemporaryDatabaseName(databaseName);
-      await adminDatabase.query(`DROP DATABASE IF EXISTS ${databaseName} WITH (FORCE)`);
+      await adminDatabase.query(`DROP DATABASE IF EXISTS ${databaseName}`);
       await adminDatabase.end();
     }
   });
@@ -237,6 +257,129 @@ describe.skipIf(!runInfrastructureTests)('partner master-data vertical slice', (
     expect(first.id).not.toBe(second.id);
   });
 
+  it('keeps contacts, addresses, and bank accounts in the canonical profile with auditable idempotent writes', async () => {
+    const address: CreatePartnerAddressRequest = {
+      addressLine1: '  12   Hristo Botev Blvd. ',
+      addressLine2: ' Floor 2 ',
+      city: '  Vratsa ',
+      countryCode: 'bg',
+      postalCode: ' 3000 ',
+      type: 'billing',
+    };
+    const contact: CreatePartnerContactRequest = {
+      contactRole: ' accountant ',
+      displayName: '  Maria   Petrova ',
+      email: ' MARIA.PETROVA@EXAMPLE.INVALID ',
+      jobTitle: ' Chief accountant ',
+      telephone: ' +359 88 123 4567 ',
+    };
+    const bankAccount: CreatePartnerBankAccountRequest = {
+      bankName: '  Example Bank ',
+      bic: ' westgb22 ',
+      currencyCode: 'bgn',
+      iban: 'GB82 WEST 1234 5698 7654 32',
+    };
+
+    const denied = await request(application.getHttpServer())
+      .post(`/api/v1/master-data/partners/${primaryPartner.id}/addresses`)
+      .set('authorization', `Bearer ${viewerToken}`)
+      .set('idempotency-key', `address-denied-${runId}`)
+      .send(address)
+      .expect(403);
+    expect(denied.body).toMatchObject({ error: { code: 'PERMISSION_DENIED' } });
+
+    const addressResponse = await request(application.getHttpServer())
+      .post(`/api/v1/master-data/partners/${primaryPartner.id}/addresses`)
+      .set('authorization', `Bearer ${creatorToken}`)
+      .set('idempotency-key', `address-create-${runId}`)
+      .send(address)
+      .expect(201);
+    expect(addressResponse.body).toMatchObject({
+      addressLine1: '12 Hristo Botev Blvd.',
+      addressLine2: 'Floor 2',
+      city: 'Vratsa',
+      countryCode: 'BG',
+      postalCode: '3000',
+      type: 'billing',
+    });
+    const createdAddress = addressResponse.body as PartnerAddress;
+
+    const addressReplay = await request(application.getHttpServer())
+      .post(`/api/v1/master-data/partners/${primaryPartner.id}/addresses`)
+      .set('authorization', `Bearer ${creatorToken}`)
+      .set('idempotency-key', `address-create-${runId}`)
+      .send(address)
+      .expect(201);
+    expect(addressReplay.body).toEqual(addressResponse.body);
+
+    const contactResponse = await request(application.getHttpServer())
+      .post(`/api/v1/master-data/partners/${primaryPartner.id}/contacts`)
+      .set('authorization', `Bearer ${creatorToken}`)
+      .set('idempotency-key', `contact-create-${runId}`)
+      .send(contact)
+      .expect(201);
+    expect(contactResponse.body).toMatchObject({
+      contactRole: 'accountant',
+      displayName: 'Maria Petrova',
+      email: 'maria.petrova@example.invalid',
+      jobTitle: 'Chief accountant',
+      telephone: '+359 88 123 4567',
+    });
+    const createdContact = contactResponse.body as PartnerContact;
+
+    const bankResponse = await request(application.getHttpServer())
+      .post(`/api/v1/master-data/partners/${primaryPartner.id}/bank-accounts`)
+      .set('authorization', `Bearer ${creatorToken}`)
+      .set('idempotency-key', `bank-create-${runId}`)
+      .send(bankAccount)
+      .expect(201);
+    expect(bankResponse.body).toMatchObject({
+      bankName: 'Example Bank',
+      bic: 'WESTGB22',
+      currencyCode: 'BGN',
+      iban: 'GB82WEST12345698765432',
+    });
+    const createdBankAccount = bankResponse.body as PartnerBankAccount;
+
+    const profile = await request(application.getHttpServer())
+      .get(`/api/v1/master-data/partners/${primaryPartner.id}/profile`)
+      .set('authorization', `Bearer ${viewerToken}`)
+      .expect(200);
+    expect(profile.body).toMatchObject({
+      addresses: [expect.objectContaining({ id: createdAddress.id })],
+      bankAccounts: [expect.objectContaining({ id: createdBankAccount.id })],
+      contacts: [expect.objectContaining({ id: createdContact.id })],
+      partner: { id: primaryPartner.id, version: 4 },
+    });
+
+    const duplicateBank = await request(application.getHttpServer())
+      .post(`/api/v1/master-data/partners/${primaryPartner.id}/bank-accounts`)
+      .set('authorization', `Bearer ${creatorToken}`)
+      .set('idempotency-key', `bank-duplicate-${runId}`)
+      .send(bankAccount)
+      .expect(409);
+    expect(duplicateBank.body).toMatchObject({ error: { code: 'BANK_ACCOUNT_DUPLICATE' } });
+
+    const evidence = await database.query<{ audit_count: string; outbox_count: string }>(
+      `SELECT
+         (SELECT count(*)::text FROM audit.events
+          WHERE action IN (
+            'master_data.partner.address.created',
+            'master_data.partner.contact.created',
+            'master_data.partner.bank_account.created'
+          )) AS audit_count,
+         (SELECT count(*)::text FROM integration.outbox_events
+          WHERE aggregate_id = $1
+            AND event_type IN (
+              'master_data.partner.address.created',
+              'master_data.partner.contact.created',
+              'master_data.partner.bank_account.created'
+            )) AS outbox_count`,
+      [primaryPartner.id],
+    );
+    expect(evidence.rows[0]).toEqual({ audit_count: '3', outbox_count: '3' });
+  });
+
   it('supports server-side search, role filtering, pagination, and deterministic sorting', async () => {
     const response = await request(application.getHttpServer())
       .get('/api/v1/master-data/partners')
@@ -250,6 +393,87 @@ describe.skipIf(!runInfrastructureTests)('partner master-data vertical slice', (
       .get(`/api/v1/master-data/partners/${primaryPartner.id}`)
       .set('authorization', `Bearer ${viewerToken}`)
       .expect(200);
+  });
+
+  it('creates a controlled category hierarchy without production seed data', async () => {
+    await request(application.getHttpServer())
+      .get('/api/v1/master-data/product-categories')
+      .expect(401);
+
+    const denied = await request(application.getHttpServer())
+      .post('/api/v1/master-data/product-categories')
+      .set('authorization', `Bearer ${viewerToken}`)
+      .set('idempotency-key', `category-denied-${runId}`)
+      .send({ name: 'Fiscal devices' })
+      .expect(403);
+    expect(denied.body).toMatchObject({ error: { code: 'PERMISSION_DENIED' } });
+
+    const rootResponse = await request(application.getHttpServer())
+      .post('/api/v1/master-data/product-categories')
+      .set('authorization', `Bearer ${categoryCreatorToken}`)
+      .set('idempotency-key', `category-root-${runId}`)
+      .send({ name: '  Fiscal   devices ', trackingMode: 'serial' })
+      .expect(201);
+    const root = rootResponse.body as ProductCategory;
+    expect(root).toMatchObject({ name: 'Fiscal devices', trackingMode: 'serial', version: 1 });
+
+    const childResponse = await request(application.getHttpServer())
+      .post('/api/v1/master-data/product-categories')
+      .set('authorization', `Bearer ${categoryCreatorToken}`)
+      .set('idempotency-key', `category-child-${runId}`)
+      .send({ name: ' Cash registers ', parentId: root.id })
+      .expect(201);
+    const child = childResponse.body as ProductCategory;
+    expect(child).toMatchObject({ name: 'Cash registers', parentId: root.id, version: 1 });
+
+    const replay = await request(application.getHttpServer())
+      .post('/api/v1/master-data/product-categories')
+      .set('authorization', `Bearer ${categoryCreatorToken}`)
+      .set('idempotency-key', `category-child-${runId}`)
+      .send({ name: ' Cash registers ', parentId: root.id })
+      .expect(201);
+    expect(replay.body).toEqual(child);
+
+    const duplicate = await request(application.getHttpServer())
+      .post('/api/v1/master-data/product-categories')
+      .set('authorization', `Bearer ${categoryCreatorToken}`)
+      .set('idempotency-key', `category-duplicate-${runId}`)
+      .send({ name: 'cash   registers', parentId: root.id })
+      .expect(409);
+    expect(duplicate.body).toMatchObject({ error: { code: 'PRODUCT_CATEGORY_DUPLICATE' } });
+
+    const invalidExpiryPolicy = await request(application.getHttpServer())
+      .post('/api/v1/master-data/product-categories')
+      .set('authorization', `Bearer ${categoryCreatorToken}`)
+      .set('idempotency-key', `category-invalid-expiry-${runId}`)
+      .send({ name: 'Invalid policy', requiresExpiry: true, trackingMode: 'none' })
+      .expect(400);
+    expect(invalidExpiryPolicy.body).toMatchObject({
+      error: { code: 'PRODUCT_CATEGORY_EXPIRY_REQUIRES_BATCH' },
+    });
+
+    const categories = await request(application.getHttpServer())
+      .get('/api/v1/master-data/product-categories')
+      .set('authorization', `Bearer ${categoryCreatorToken}`)
+      .expect(200);
+    expect(categories.body).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: root.id, name: root.name }),
+        expect.objectContaining({ id: child.id, parentId: root.id }),
+      ]),
+    );
+
+    const evidence = await database.query<{ audit_count: string; outbox_count: string }>(
+      `SELECT
+         (SELECT count(*)::text FROM audit.events
+          WHERE action = 'master_data.product_category.created'
+            AND target_id IN ($1, $2)) AS audit_count,
+         (SELECT count(*)::text FROM integration.outbox_events
+          WHERE event_type = 'master_data.product_category.created'
+            AND aggregate_id IN ($1, $2)) AS outbox_count`,
+      [root.id, child.id],
+    );
+    expect(evidence.rows[0]).toEqual({ audit_count: '2', outbox_count: '2' });
   });
 });
 
@@ -297,10 +521,11 @@ async function createAccount(
   return accountId;
 }
 
-async function grantCrmPermissions(
+async function grantPermissions(
   pool: Pool,
   accountId: string,
-  actions: Array<'create' | 'view'>,
+  module: 'crm' | 'erp.warehouse',
+  actions: Array<'create' | 'edit' | 'view'>,
 ): Promise<void> {
   const roleId = randomUUID();
   await pool.query(
@@ -311,10 +536,10 @@ async function grantCrmPermissions(
   for (const action of actions) {
     const permission = await pool.query<{ id: string }>(
       `INSERT INTO iam.permissions (id, module, action)
-       VALUES ($1, 'crm', $2)
+       VALUES ($1, $2, $3)
        ON CONFLICT (module, action) DO UPDATE SET module = EXCLUDED.module
        RETURNING id`,
-      [randomUUID(), action],
+      [randomUUID(), module, action],
     );
     await pool.query('INSERT INTO iam.role_permissions (role_id, permission_id) VALUES ($1, $2)', [
       roleId,

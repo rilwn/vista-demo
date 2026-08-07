@@ -1,14 +1,25 @@
 import { Button, InlineAlert, TextField } from '@vista/ui';
 import type {
+  CreatePartnerAddressRequest,
+  CreatePartnerBankAccountRequest,
+  CreatePartnerContactRequest,
   CreatePartnerRequest,
   PartnerKind,
   PartnerPage,
+  PartnerProfile,
   PartnerRole,
   PartnerSummary,
 } from '@vista/contracts';
 import { type FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 
-import { createPartner, listPartners } from '../api/partners';
+import {
+  createPartner,
+  createPartnerAddress,
+  createPartnerBankAccount,
+  createPartnerContact,
+  getPartnerProfile,
+  listPartners,
+} from '../api/partners';
 import { ApiClientError } from '../api/client';
 import { useAuth } from '../auth/AuthProvider';
 import { Icon } from '../components/Icon';
@@ -228,7 +239,12 @@ export function PartnersPage() {
         />
       ) : null}
       {selected ? (
-        <PartnerDetailDrawer onClose={() => setSelected(null)} partner={selected} />
+        <PartnerDetailDrawer
+          canEdit={hasPermission('crm', 'edit')}
+          onClose={() => setSelected(null)}
+          partner={selected}
+          token={token}
+        />
       ) : null}
     </div>
   );
@@ -491,13 +507,43 @@ function CreatePartnerDrawer({
 }
 
 function PartnerDetailDrawer({
+  canEdit,
   onClose,
   partner,
+  token,
 }: {
+  canEdit: boolean;
   onClose: () => void;
   partner: PartnerSummary;
+  token: string | undefined;
 }) {
   useDrawerEscape(onClose);
+  const [profile, setProfile] = useState<PartnerProfile | null>(null);
+  const [profileError, setProfileError] = useState(false);
+  const [profileLoading, setProfileLoading] = useState(true);
+  const [refresh, setRefresh] = useState(0);
+  const [adding, setAdding] = useState<'address' | 'bank' | 'contact' | null>(null);
+
+  useEffect(() => {
+    if (!token) return;
+    let active = true;
+    setProfileLoading(true);
+    setProfileError(false);
+    void getPartnerProfile(token, partner.id)
+      .then((result) => {
+        if (active) setProfile(result);
+      })
+      .catch(() => {
+        if (active) setProfileError(true);
+      })
+      .finally(() => {
+        if (active) setProfileLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [partner.id, refresh, token]);
+
   const details = useMemo(
     () => [
       [messages.partners.type, kindLabel(partner.kind)],
@@ -535,12 +581,398 @@ function PartnerDetailDrawer({
           </div>
         ))}
       </dl>
+      <section className="partner-profile" aria-label={messages.partners.profileTitle}>
+        <div className="partner-profile-heading">
+          <div>
+            <p className="page-eyebrow">{messages.partners.profileEyebrow}</p>
+            <h3>{messages.partners.profileTitle}</h3>
+          </div>
+          {profile?.partner.version ? (
+            <span className="partner-profile-version">v{profile.partner.version}</span>
+          ) : null}
+        </div>
+        {profileLoading ? <ProfileSkeleton /> : null}
+        {profileError ? (
+          <InlineAlert tone="error">
+            <div className="partners-inline-message">
+              <span>{messages.partners.profileError}</span>
+              <button onClick={() => setRefresh((value) => value + 1)} type="button">
+                {messages.partners.retry}
+              </button>
+            </div>
+          </InlineAlert>
+        ) : null}
+        {!profileLoading && !profileError && profile ? (
+          <div className="partner-profile-sections">
+            <ProfileSection
+              {...(canEdit ? { action: () => setAdding('address') } : {})}
+              actionLabel={messages.partners.addAddress}
+              empty={messages.partners.noAddresses}
+              hasRecords={profile.addresses.length > 0}
+              title={messages.partners.addresses}
+            >
+              {profile.addresses.map((address) => (
+                <article className="partner-profile-item" key={address.id}>
+                  <strong>{addressTypeLabel(address.type)}</strong>
+                  <span>
+                    {[address.addressLine1, address.addressLine2].filter(Boolean).join(', ')}
+                  </span>
+                  <small>
+                    {[address.postalCode, address.city, address.countryCode]
+                      .filter(Boolean)
+                      .join(' · ')}
+                  </small>
+                </article>
+              ))}
+            </ProfileSection>
+            <ProfileSection
+              {...(canEdit ? { action: () => setAdding('contact') } : {})}
+              actionLabel={messages.partners.addContact}
+              empty={messages.partners.noContacts}
+              hasRecords={profile.contacts.length > 0}
+              title={messages.partners.contacts}
+            >
+              {profile.contacts.map((contact) => (
+                <article className="partner-profile-item" key={contact.id}>
+                  <strong>{contact.displayName}</strong>
+                  <span>{[contact.jobTitle, contact.contactRole].filter(Boolean).join(' · ')}</span>
+                  <small>{[contact.telephone, contact.email].filter(Boolean).join(' · ')}</small>
+                </article>
+              ))}
+            </ProfileSection>
+            <ProfileSection
+              {...(canEdit ? { action: () => setAdding('bank') } : {})}
+              actionLabel={messages.partners.addBankAccount}
+              empty={messages.partners.noBankAccounts}
+              hasRecords={profile.bankAccounts.length > 0}
+              title={messages.partners.bankAccounts}
+            >
+              {profile.bankAccounts.map((bankAccount) => (
+                <article className="partner-profile-item" key={bankAccount.id}>
+                  <strong>{bankAccount.iban}</strong>
+                  <span>{bankAccount.bankName ?? '—'}</span>
+                  <small>
+                    {[bankAccount.currencyCode, bankAccount.bic].filter(Boolean).join(' · ')}
+                  </small>
+                </article>
+              ))}
+            </ProfileSection>
+          </div>
+        ) : null}
+      </section>
       <div className="partner-record-reference">
         <span>{messages.partners.reference}</span>
         <code>{partner.id}</code>
       </div>
+      {adding && token ? (
+        <ProfileRecordForm
+          kind={adding}
+          onClose={() => setAdding(null)}
+          onCreated={() => {
+            setAdding(null);
+            setRefresh((value) => value + 1);
+          }}
+          partnerId={partner.id}
+          token={token}
+        />
+      ) : null}
     </Drawer>
   );
+}
+
+function ProfileSection({
+  action,
+  actionLabel,
+  children,
+  empty,
+  hasRecords,
+  title,
+}: {
+  action?: () => void;
+  actionLabel: string;
+  children: React.ReactNode;
+  empty: string;
+  hasRecords: boolean;
+  title: string;
+}) {
+  return (
+    <section className="partner-profile-section">
+      <div className="partner-profile-section-heading">
+        <h4>{title}</h4>
+        {action ? (
+          <Button className="partner-profile-add" onClick={action} variant="quiet">
+            <Icon name="plus" size={14} />
+            {actionLabel}
+          </Button>
+        ) : null}
+      </div>
+      {hasRecords ? <div className="partner-profile-list">{children}</div> : <p>{empty}</p>}
+    </section>
+  );
+}
+
+function ProfileSkeleton() {
+  return (
+    <div aria-label={messages.states.loading} className="partner-profile-skeleton" role="status">
+      <span />
+      <span />
+      <span />
+    </div>
+  );
+}
+
+type ProfileRecordKind = 'address' | 'bank' | 'contact';
+
+interface ProfileFormField {
+  autoFocus?: boolean;
+  label: string;
+  maxLength?: number;
+  name: string;
+  options?: ReadonlyArray<readonly [string, string]>;
+  required?: boolean;
+  type?: 'email' | 'text';
+  wide?: boolean;
+}
+
+interface ProfileFormContent {
+  fields: ProfileFormField[];
+  submit: string;
+  title: string;
+}
+
+function ProfileRecordForm({
+  kind,
+  onClose,
+  onCreated,
+  partnerId,
+  token,
+}: {
+  kind: ProfileRecordKind;
+  onClose: () => void;
+  onCreated: () => void;
+  partnerId: string;
+  token: string;
+}) {
+  const [error, setError] = useState<ApiClientError | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [values, setValues] = useState<Record<string, string>>({
+    countryCode: 'BG',
+    currencyCode: 'BGN',
+    type: 'registered',
+  });
+  const lastAttempt = useRef<{ fingerprint: string; key: string } | null>(null);
+  const content = profileFormContent(kind);
+
+  function update(name: string, value: string) {
+    setValues((current) => ({ ...current, [name]: value }));
+    setError(null);
+  }
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const input = profileInput(kind, values);
+    const fingerprint = JSON.stringify(input);
+    const attempt =
+      lastAttempt.current?.fingerprint === fingerprint
+        ? lastAttempt.current
+        : { fingerprint, key: crypto.randomUUID() };
+    lastAttempt.current = attempt;
+    setSaving(true);
+    setError(null);
+    try {
+      if (kind === 'address') {
+        await createPartnerAddress(
+          token,
+          partnerId,
+          attempt.key,
+          input as CreatePartnerAddressRequest,
+        );
+      } else if (kind === 'contact') {
+        await createPartnerContact(
+          token,
+          partnerId,
+          attempt.key,
+          input as CreatePartnerContactRequest,
+        );
+      } else {
+        await createPartnerBankAccount(
+          token,
+          partnerId,
+          attempt.key,
+          input as CreatePartnerBankAccountRequest,
+        );
+      }
+      onCreated();
+    } catch (caught) {
+      setError(
+        caught instanceof ApiClientError
+          ? caught
+          : new ApiClientError(messages.partners.profileSaveError, 'UNKNOWN', 0),
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <section aria-label={content.title} className="partner-profile-form-shell">
+      <div className="partner-profile-section-heading">
+        <h4>{content.title}</h4>
+        <button
+          aria-label={messages.partners.close}
+          className="profile-form-close"
+          onClick={onClose}
+          type="button"
+        >
+          <Icon name="close" size={16} />
+        </button>
+      </div>
+      <form className="partner-profile-form" onSubmit={(event) => void submit(event)}>
+        {content.fields.map((field) => (
+          <label className={field.wide ? 'is-wide' : ''} key={field.name}>
+            <span>{field.label}</span>
+            {field.options ? (
+              <select
+                name={field.name}
+                onChange={(event) => update(field.name, event.target.value)}
+                value={values[field.name] ?? ''}
+              >
+                {field.options.map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <input
+                autoFocus={field.autoFocus}
+                maxLength={field.maxLength}
+                name={field.name}
+                onChange={(event) => update(field.name, event.target.value)}
+                required={field.required}
+                type={field.type ?? 'text'}
+                value={values[field.name] ?? ''}
+              />
+            )}
+          </label>
+        ))}
+        {error ? (
+          <InlineAlert title={messages.partners.profileSaveError} tone="error">
+            <p>{error.message}</p>
+          </InlineAlert>
+        ) : null}
+        <div className="drawer-actions">
+          <Button disabled={saving} onClick={onClose} variant="quiet">
+            {messages.partners.close}
+          </Button>
+          <Button busy={saving} busyLabel={messages.partners.savingProfile} type="submit">
+            {content.submit}
+          </Button>
+        </div>
+      </form>
+    </section>
+  );
+}
+
+function profileFormContent(kind: ProfileRecordKind): ProfileFormContent {
+  if (kind === 'address') {
+    return {
+      fields: [
+        { label: messages.partners.addressType, name: 'type', options: addressTypeOptions },
+        {
+          autoFocus: true,
+          label: messages.partners.addressLine1,
+          maxLength: 255,
+          name: 'addressLine1',
+          required: true,
+          wide: true,
+        },
+        { label: messages.partners.addressLine2, maxLength: 255, name: 'addressLine2', wide: true },
+        { label: messages.partners.postalCode, maxLength: 30, name: 'postalCode' },
+        { label: messages.partners.city, maxLength: 150, name: 'city', required: true },
+        { label: messages.partners.countryCode, maxLength: 2, name: 'countryCode', required: true },
+      ],
+      submit: messages.partners.saveAddress,
+      title: messages.partners.addAddress,
+    };
+  }
+  if (kind === 'contact') {
+    return {
+      fields: [
+        {
+          autoFocus: true,
+          label: messages.partners.contactName,
+          maxLength: 255,
+          name: 'displayName',
+          required: true,
+          wide: true,
+        },
+        { label: messages.partners.jobTitle, maxLength: 150, name: 'jobTitle' },
+        { label: messages.partners.contactRole, maxLength: 100, name: 'contactRole' },
+        { label: messages.partners.telephone, maxLength: 100, name: 'telephone' },
+        { label: messages.partners.email, maxLength: 320, name: 'email', type: 'email' },
+      ],
+      submit: messages.partners.saveContact,
+      title: messages.partners.addContact,
+    };
+  }
+  return {
+    fields: [
+      {
+        autoFocus: true,
+        label: messages.partners.iban,
+        maxLength: 64,
+        name: 'iban',
+        required: true,
+        wide: true,
+      },
+      { label: messages.partners.bankName, maxLength: 255, name: 'bankName' },
+      { label: messages.partners.bic, maxLength: 11, name: 'bic' },
+      { label: messages.partners.currencyCode, maxLength: 3, name: 'currencyCode', required: true },
+    ],
+    submit: messages.partners.saveBankAccount,
+    title: messages.partners.addBankAccount,
+  };
+}
+
+function profileInput(kind: ProfileRecordKind, values: Record<string, string>) {
+  const withOptional = (name: string) => (values[name]?.trim() ? { [name]: values[name] } : {});
+  if (kind === 'address') {
+    return {
+      addressLine1: values['addressLine1'] ?? '',
+      city: values['city'] ?? '',
+      countryCode: values['countryCode'] ?? 'BG',
+      type: (values['type'] ?? 'registered') as CreatePartnerAddressRequest['type'],
+      ...withOptional('addressLine2'),
+      ...withOptional('postalCode'),
+    };
+  }
+  if (kind === 'contact') {
+    return {
+      displayName: values['displayName'] ?? '',
+      ...withOptional('contactRole'),
+      ...withOptional('email'),
+      ...withOptional('jobTitle'),
+      ...withOptional('telephone'),
+    };
+  }
+  return {
+    currencyCode: values['currencyCode'] ?? 'BGN',
+    iban: values['iban'] ?? '',
+    ...withOptional('bankName'),
+    ...withOptional('bic'),
+  };
+}
+
+const addressTypeOptions = [
+  ['registered', messages.partners.addressTypeRegistered],
+  ['billing', messages.partners.addressTypeBilling],
+  ['delivery', messages.partners.addressTypeDelivery],
+  ['other', messages.partners.addressTypeOther],
+] as const;
+
+function addressTypeLabel(type: CreatePartnerAddressRequest['type']): string {
+  return Object.fromEntries(addressTypeOptions)[type] ?? type;
 }
 
 function Drawer({

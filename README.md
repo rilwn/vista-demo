@@ -17,8 +17,17 @@ acceptance criteria, dependencies, and unresolved decisions are maintained in
 
 1. Copy `.env.example` to `.env` and replace all `change-me` values.
 2. Install dependencies with `npm install`.
-3. Start infrastructure and all applications with `npm run dev`.
-4. Apply database migrations with `npm run db:migrate`.
+3. Apply database migrations with `npm run db:migrate`.
+4. Create a local-only browser account by supplying a password:
+
+   ```sh
+   DEV_SEED_EMAIL='dev@vista.local' DEV_SEED_PASSWORD='choose-a-strong-local-password' npm run db:seed:dev
+   ```
+
+   This command is disabled when `NODE_ENV=production` and grants local-only
+   permissions for the current UI workflows.
+
+5. Start infrastructure and all applications with `npm run dev`.
 
 Default development endpoints:
 

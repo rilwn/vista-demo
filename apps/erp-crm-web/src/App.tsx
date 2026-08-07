@@ -7,6 +7,9 @@ import { HomePage } from './pages/HomePage';
 import { ModulePage } from './pages/ModulePage';
 import { NotFoundPage } from './pages/NotFoundPage';
 import { PartnersPage } from './pages/PartnersPage';
+import { ProductCategoriesPage } from './pages/ProductCategoriesPage';
+import { WorkflowPage } from './pages/WorkflowPage';
+import { findWorkflowPage } from './pages/workflow-pages';
 import { Navigate, useRouter } from './routing/Router';
 
 export function App() {
@@ -26,10 +29,17 @@ function pageForPath(
   pathname: string,
   hasPermission: (module: string, action?: string) => boolean,
 ) {
+  const workflow = findWorkflowPage(pathname);
+  if (workflow) {
+    return hasPermission(workflow.module) ? <WorkflowPage page={workflow} /> : <NotFoundPage />;
+  }
   if (pathname === '/') return <HomePage />;
   if (pathname === '/access') return <AccessPage />;
   if (pathname === '/partners') {
     return hasPermission('crm') ? <PartnersPage /> : <NotFoundPage />;
+  }
+  if (pathname === '/catalog/categories') {
+    return hasPermission('erp.warehouse') ? <ProductCategoriesPage /> : <NotFoundPage />;
   }
   if (pathname === '/not-found') return <NotFoundPage />;
   const moduleMatch = /^\/modules\/(.+)$/u.exec(pathname);

@@ -3,6 +3,7 @@ import {
   ArrayMinSize,
   IsArray,
   IsBoolean,
+  IsEmail,
   IsIn,
   IsInt,
   IsOptional,
@@ -12,16 +13,26 @@ import {
   MaxLength,
   Min,
   MinLength,
+  Matches,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   partnerKinds,
+  partnerAddressTypes,
   partnerRoles,
+  type CreatePartnerAddressRequest,
+  type CreatePartnerBankAccountRequest,
+  type CreatePartnerContactRequest,
   type CreatePartnerRequest,
+  type PartnerAddress,
+  type PartnerAddressType,
+  type PartnerBankAccount,
+  type PartnerContact,
   type PartnerDuplicateCandidate,
   type PartnerDuplicateResponse,
   type PartnerKind,
   type PartnerPage,
+  type PartnerProfile,
   type PartnerRole,
   type PartnerSummary,
 } from '@vista/contracts';
@@ -194,4 +205,181 @@ export class PartnerDuplicateCandidateDto implements PartnerDuplicateCandidate {
 export class PartnerDuplicateResponseDto implements PartnerDuplicateResponse {
   @ApiProperty({ isArray: true, type: PartnerDuplicateCandidateDto })
   candidates!: PartnerDuplicateCandidateDto[];
+}
+
+export class CreatePartnerAddressDto implements CreatePartnerAddressRequest {
+  @ApiProperty({ maxLength: 255, minLength: 1, type: String })
+  @IsString()
+  @MinLength(1)
+  @MaxLength(255)
+  addressLine1!: string;
+
+  @ApiPropertyOptional({ maxLength: 255, type: String })
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  addressLine2?: string;
+
+  @ApiProperty({ maxLength: 150, minLength: 1, type: String })
+  @IsString()
+  @MinLength(1)
+  @MaxLength(150)
+  city!: string;
+
+  @ApiPropertyOptional({ default: 'BG', maxLength: 2, minLength: 2, type: String })
+  @IsOptional()
+  @IsString()
+  @Matches(/^[A-Za-z]{2}$/u)
+  countryCode?: string;
+
+  @ApiPropertyOptional({ maxLength: 30, type: String })
+  @IsOptional()
+  @IsString()
+  @MaxLength(30)
+  postalCode?: string;
+
+  @ApiProperty({ enum: partnerAddressTypes })
+  @IsIn(partnerAddressTypes)
+  type!: PartnerAddressType;
+}
+
+export class CreatePartnerContactDto implements CreatePartnerContactRequest {
+  @ApiPropertyOptional({ maxLength: 100, type: String })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  contactRole?: string;
+
+  @ApiProperty({ maxLength: 255, minLength: 1, type: String })
+  @IsString()
+  @MinLength(1)
+  @MaxLength(255)
+  displayName!: string;
+
+  @ApiPropertyOptional({ maxLength: 320, type: String })
+  @IsOptional()
+  @IsEmail()
+  @MaxLength(320)
+  email?: string;
+
+  @ApiPropertyOptional({ maxLength: 150, type: String })
+  @IsOptional()
+  @IsString()
+  @MaxLength(150)
+  jobTitle?: string;
+
+  @ApiPropertyOptional({ maxLength: 100, type: String })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  telephone?: string;
+}
+
+export class CreatePartnerBankAccountDto implements CreatePartnerBankAccountRequest {
+  @ApiPropertyOptional({ maxLength: 255, type: String })
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  bankName?: string;
+
+  @ApiPropertyOptional({ maxLength: 20, type: String })
+  @IsOptional()
+  @IsString()
+  @MaxLength(20)
+  bic?: string;
+
+  @ApiPropertyOptional({ default: 'BGN', maxLength: 3, minLength: 3, type: String })
+  @IsOptional()
+  @IsString()
+  @Matches(/^[A-Za-z]{3}$/u)
+  currencyCode?: string;
+
+  @ApiProperty({ maxLength: 34, minLength: 15, type: String })
+  @IsString()
+  @MinLength(15)
+  @MaxLength(34)
+  iban!: string;
+}
+
+export class PartnerAddressDto implements PartnerAddress {
+  @ApiProperty({ type: Boolean })
+  active!: boolean;
+
+  @ApiProperty({ type: String })
+  addressLine1!: string;
+
+  @ApiPropertyOptional({ type: String })
+  addressLine2?: string;
+
+  @ApiProperty({ type: String })
+  city!: string;
+
+  @ApiProperty({ type: String })
+  countryCode!: string;
+
+  @ApiProperty({ format: 'uuid', type: String })
+  id!: string;
+
+  @ApiPropertyOptional({ type: String })
+  postalCode?: string;
+
+  @ApiProperty({ enum: partnerAddressTypes })
+  type!: PartnerAddressType;
+}
+
+export class PartnerContactDto implements PartnerContact {
+  @ApiProperty({ type: Boolean })
+  active!: boolean;
+
+  @ApiPropertyOptional({ type: String })
+  contactRole?: string;
+
+  @ApiProperty({ type: String })
+  displayName!: string;
+
+  @ApiPropertyOptional({ type: String })
+  email?: string;
+
+  @ApiProperty({ format: 'uuid', type: String })
+  id!: string;
+
+  @ApiPropertyOptional({ type: String })
+  jobTitle?: string;
+
+  @ApiPropertyOptional({ type: String })
+  telephone?: string;
+}
+
+export class PartnerBankAccountDto implements PartnerBankAccount {
+  @ApiProperty({ type: Boolean })
+  active!: boolean;
+
+  @ApiPropertyOptional({ type: String })
+  bankName?: string;
+
+  @ApiPropertyOptional({ type: String })
+  bic?: string;
+
+  @ApiProperty({ type: String })
+  currencyCode!: string;
+
+  @ApiProperty({ type: String })
+  iban!: string;
+
+  @ApiProperty({ format: 'uuid', type: String })
+  id!: string;
+}
+
+export class PartnerProfileDto implements PartnerProfile {
+  @ApiProperty({ isArray: true, type: PartnerAddressDto })
+  addresses!: PartnerAddressDto[];
+
+  @ApiProperty({ isArray: true, type: PartnerBankAccountDto })
+  bankAccounts!: PartnerBankAccountDto[];
+
+  @ApiProperty({ isArray: true, type: PartnerContactDto })
+  contacts!: PartnerContactDto[];
+
+  @ApiProperty({ type: PartnerSummaryDto })
+  partner!: PartnerSummaryDto;
 }
