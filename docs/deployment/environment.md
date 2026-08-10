@@ -7,7 +7,9 @@ environment and injected by an approved secret manager; never commit `.env`.
 | ------------------------------------------ | ------------------------------------------------- | -------------------------------------------- |
 | `NODE_ENV`                                 | development, test, or production behavior         | yes; development default                     |
 | `API_HOST`, `API_PORT`, `API_PREFIX`       | API listener and versioned route prefix           | yes; local defaults                          |
-| `API_RATE_LIMIT_MAX`, `*_TTL_MS`           | Per-process request limit and window              | yes; conservative local defaults             |
+| `API_RATE_LIMIT_*_MAX`, `*_TTL_MS`         | Public/read/write/sensitive limits and window     | yes; conservative local defaults             |
+| `API_RATE_LIMIT_STORE`, `*_REDIS_PREFIX`   | Memory/Redis counter store and deployment scope   | yes; Redis is mandatory in production        |
+| `API_TRUST_PROXY_HOPS`                     | Exact trusted reverse-proxy hop count             | yes; zero unless deployment requires it      |
 | `AUTH_LOGIN_RATE_LIMIT_MAX`, `*_TTL_MS`    | Redis login limit per client/account pair         | yes; conservative local defaults             |
 | `AUTH_MAX_FAILED_ATTEMPTS`, `*_LOCKOUT_*`  | Failed-login threshold and lock duration          | yes; production values require IAM-001       |
 | `BUSINESS_TIMEZONE`                        | presentation and business-date calculations       | yes; production value requires approval      |
@@ -22,6 +24,7 @@ environment and injected by an approved secret manager; never commit `.env`.
 | `IDEMPOTENCY_TTL_SECONDS`                  | Retried-command result replay window              | yes; 24-hour development default             |
 | `JOB_QUEUE_NAME`, `JOB_QUEUE_PREFIX`       | Stable BullMQ queue namespace                     | yes; environment-specific in deployment      |
 | `JOB_DEFAULT_ATTEMPTS`, `*_BACKOFF_*`      | Retry count and exponential backoff base          | yes; bounded defaults                        |
+| `NOTIFICATION_*_MS`                        | Dispatcher poll and stale-claim recovery windows  | yes; bounded development defaults            |
 | `S3_ENDPOINT`, `S3_REGION`, `S3_BUCKET`    | S3-compatible storage destination                 | yes for current foundation configuration     |
 | `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | storage credentials                               | yes; secret manager in deployed environments |
 | `S3_FORCE_PATH_STYLE`                      | enables MinIO-compatible addressing               | yes; true by default                         |
@@ -36,9 +39,13 @@ The example uses `Europe/Sofia` because it is a development candidate for the
 Bulgarian business timezone, not an approved production setting. Decision
 `FIN-002` records the required confirmation.
 
-The current throttler stores counters in the API process. A shared store must be
-selected with the deployment topology before running multiple API replicas. Job
-payloads should contain stable record identifiers, not credentials or full
+Request limiting has explicit public, read, write, and sensitive endpoint tiers.
+The selected Redis store shares counters across replicas and fails closed when it
+is unavailable; production configuration cannot select process memory. Use a
+deployment-specific Redis prefix. If a reverse proxy is present, configure only
+the exact trusted hop count. See
+[`../architecture/rate-limiting.md`](../architecture/rate-limiting.md). Job payloads
+should contain stable record identifiers, not credentials or full
 financial/customer records; completed and failed jobs are retained until an
 approved operational retention policy is implemented.
 

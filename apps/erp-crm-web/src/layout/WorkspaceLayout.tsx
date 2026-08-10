@@ -3,6 +3,7 @@ import { type PropsWithChildren, useEffect, useMemo, useState } from 'react';
 
 import { useAuth } from '../auth/AuthProvider';
 import { Icon } from '../components/Icon';
+import { NotificationCenter } from '../components/NotificationCenter';
 import { allModuleItems, navigationGroups } from '../navigation';
 import { messages } from '../messages';
 import { Link, useRouter } from '../routing/Router';
@@ -127,10 +128,7 @@ export function WorkspaceLayout({ children }: PropsWithChildren) {
             <strong>{currentTitle}</strong>
           </div>
           <div className="topbar-actions">
-            <span className="topbar-session-state">
-              <Icon name="shield" size={15} />
-              Secure session
-            </span>
+            <NotificationCenter />
             <Link aria-label="Open my access" className="topbar-account" to="/access">
               <span className="account-avatar" aria-hidden="true">
                 {initials}

@@ -7,6 +7,7 @@ import type {
   CreatePartnerBankAccountRequest,
   CreatePartnerContactRequest,
   CreatePartnerRequest,
+  RecordVersionRequest,
   PartnerAddress,
   PartnerBankAccount,
   PartnerContact,
@@ -17,6 +18,7 @@ import type {
   PartnerProfile,
   PartnerRole,
   PartnerSummary,
+  UpdatePartnerRequest,
 } from '@vista/contracts';
 import type { Pool, PoolClient } from 'pg';
 
@@ -384,6 +386,165 @@ export class PartnersService {
     return { candidates: rows.map((row) => mapDuplicate(row, normalizedName, uic)) };
   }
 
+  async update(
+    partnerId: string,
+    input: UpdatePartnerRequest,
+    idempotencyKey: string | undefined,
+    authentication: AuthenticationContext,
+    metadata: RequestSecurityMetadata,
+  ): Promise<PartnerSummary> {
+    const key = validateIdempotencyKey(idempotencyKey);
+    const normalized = normalizePartnerInput(input);
+    const payload = { ...normalized, expectedVersion: input.expectedVersion, partnerId };
+    const scope = `master-data.partners.update:${partnerId}`;
+    const client = await this.database.getPool().connect();
+    try {
+      await client.query('BEGIN');
+      const replay = await claimIdempotency(
+        client,
+        scope,
+        key,
+        createHash('sha256').update(JSON.stringify(payload)).digest('hex'),
+        this.environment.IDEMPOTENCY_TTL_SECONDS,
+        isPartnerSummary,
+      );
+      if (replay) {
+        await client.query('COMMIT');
+        return replay;
+      }
+      const before = mapPartner(await lockPartner(client, partnerId));
+      requireVersion(before.version, input.expectedVersion, 'PARTNER_VERSION_CONFLICT');
+      const duplicateName =
+        normalized.kind === 'legal_entity' ? normalizedName(normalized.displayName) : undefined;
+      const lockKeys = [
+        ...(duplicateName ? [`partner:name:${duplicateName}`] : []),
+        ...(normalized.uic ? [`partner:uic:${normalized.uic}`] : []),
+      ].sort();
+      for (const lockKey of lockKeys)
+        await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [lockKey]);
+      const duplicates = await findDuplicateRows(client, duplicateName, normalized.uic, partnerId);
+      if (duplicates.length)
+        throw duplicateCandidateError(duplicates, duplicateName, normalized.uic);
+      await client.query(
+        `UPDATE master_data.partners SET kind = $2, display_name = $3, uic = $4,
+           vat_number = $5, company_representative = $6, version = version + 1,
+           updated_by = $7, updated_at = now() WHERE id = $1`,
+        [
+          partnerId,
+          normalized.kind,
+          normalized.displayName,
+          normalized.uic ?? null,
+          normalized.vatNumber ?? null,
+          normalized.companyRepresentative ?? null,
+          authentication.accountId,
+        ],
+      );
+      await client.query('DELETE FROM master_data.partner_roles WHERE partner_id = $1', [
+        partnerId,
+      ]);
+      await client.query(
+        `INSERT INTO master_data.partner_roles (partner_id, role, assigned_by)
+         SELECT $1, role, $3 FROM unnest($2::text[]) AS role`,
+        [partnerId, normalized.roles, authentication.accountId],
+      );
+      const after = mapPartner(await lockPartner(client, partnerId));
+      await this.recordPartnerChange(
+        client,
+        'master_data.partner.updated',
+        key,
+        before,
+        after,
+        authentication,
+        metadata,
+      );
+      await completeIdempotency(client, scope, key, after, 200);
+      await client.query('COMMIT');
+      return after;
+    } catch (error) {
+      await client.query('ROLLBACK');
+      if (isUniqueUicViolation(error))
+        throw new ApiErrorException(
+          'PARTNER_DUPLICATE_CANDIDATE',
+          'A partner with this UIC already exists',
+          HttpStatus.CONFLICT,
+        );
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async setActive(
+    partnerId: string,
+    active: boolean,
+    input: RecordVersionRequest,
+    idempotencyKey: string | undefined,
+    authentication: AuthenticationContext,
+    metadata: RequestSecurityMetadata,
+  ): Promise<PartnerSummary> {
+    const key = validateIdempotencyKey(idempotencyKey);
+    const payload = { active, expectedVersion: input.expectedVersion, partnerId };
+    const scope = `master-data.partners.${active ? 'reactivate' : 'deactivate'}:${partnerId}`;
+    const client = await this.database.getPool().connect();
+    try {
+      await client.query('BEGIN');
+      const replay = await claimIdempotency(
+        client,
+        scope,
+        key,
+        createHash('sha256').update(JSON.stringify(payload)).digest('hex'),
+        this.environment.IDEMPOTENCY_TTL_SECONDS,
+        isPartnerSummary,
+      );
+      if (replay) {
+        await client.query('COMMIT');
+        return replay;
+      }
+      const before = mapPartner(await lockPartner(client, partnerId));
+      requireVersion(before.version, input.expectedVersion, 'PARTNER_VERSION_CONFLICT');
+      if (!active) {
+        const dependent = await client.query(
+          'SELECT id FROM master_data.customer_locations WHERE partner_id = $1 AND active LIMIT 1',
+          [partnerId],
+        );
+        if (dependent.rowCount)
+          throw new ApiErrorException(
+            'PARTNER_HAS_ACTIVE_LOCATIONS',
+            'Deactivate customer locations before deactivating this partner',
+            HttpStatus.CONFLICT,
+          );
+      }
+      if (before.active === active) {
+        await completeIdempotency(client, scope, key, before, 200);
+        await client.query('COMMIT');
+        return before;
+      }
+      await client.query(
+        `UPDATE master_data.partners SET active = $2, version = version + 1,
+           updated_by = $3, updated_at = now() WHERE id = $1`,
+        [partnerId, active, authentication.accountId],
+      );
+      const after = mapPartner(await lockPartner(client, partnerId));
+      await this.recordPartnerChange(
+        client,
+        `master_data.partner.${active ? 'reactivated' : 'deactivated'}`,
+        key,
+        before,
+        after,
+        authentication,
+        metadata,
+      );
+      await completeIdempotency(client, scope, key, after, 200);
+      await client.query('COMMIT');
+      return after;
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
   async create(
     input: CreatePartnerRequest,
     idempotencyKey: string | undefined,
@@ -577,6 +738,44 @@ export class PartnersService {
       client.release();
     }
   }
+
+  private async recordPartnerChange(
+    client: PoolClient,
+    eventType: string,
+    key: string,
+    before: PartnerSummary,
+    after: PartnerSummary,
+    authentication: AuthenticationContext,
+    metadata: RequestSecurityMetadata,
+  ): Promise<void> {
+    await client.query(
+      `INSERT INTO integration.outbox_events (id, aggregate_type, aggregate_id, event_type,
+         event_version, correlation_id, idempotency_key, payload)
+       VALUES ($1, 'partner', $2, $3, 1, $4, $5, $6)`,
+      [
+        randomUUID(),
+        after.id,
+        eventType,
+        metadata.correlationId,
+        `${eventType}:${key}`,
+        { before, after },
+      ],
+    );
+    await this.audit.append(
+      {
+        action: eventType,
+        actorAccountId: authentication.accountId,
+        after: partnerAuditData(after),
+        before: partnerAuditData(before),
+        correlationId: metadata.correlationId,
+        ...(metadata.sourceIp ? { sourceIp: metadata.sourceIp } : {}),
+        targetId: after.id,
+        targetType: 'partner',
+        ...(metadata.userAgent ? { userAgent: metadata.userAgent } : {}),
+      },
+      client,
+    );
+  }
 }
 
 async function claimIdempotency<T>(
@@ -627,12 +826,13 @@ async function completeIdempotency(
   scope: string,
   key: string,
   response: unknown,
+  responseStatus = 201,
 ): Promise<void> {
   await client.query(
     `UPDATE platform.idempotency_keys
-     SET status = 'completed', response_status = 201, response_body = $3
+     SET status = 'completed', response_status = $4, response_body = $3
      WHERE scope = $1 AND idempotency_key = $2`,
-    [scope, key, response],
+    [scope, key, response, responseStatus],
   );
 }
 
@@ -641,19 +841,30 @@ async function findPartner(client: Pool | PoolClient, id: string): Promise<Partn
   return result.rows[0];
 }
 
+async function lockPartner(client: PoolClient, id: string): Promise<PartnerRow> {
+  const exists = await client.query(
+    'SELECT id FROM master_data.partners WHERE id = $1 FOR UPDATE',
+    [id],
+  );
+  if (!exists.rowCount) throw partnerNotFoundError();
+  return required(await findPartner(client, id), 'Locked partner disappeared');
+}
+
 async function findDuplicateRows(
   client: Pool | PoolClient,
   name: string | undefined,
   uic: string | undefined,
+  excludedId?: string,
 ): Promise<PartnerRow[]> {
   if (!name && !uic) return [];
   const result = await client.query<PartnerRow>(
     `${partnerSelect}
-     WHERE ($1::text IS NOT NULL AND partner.kind = 'legal_entity' AND partner.normalized_name = $1)
-        OR ($2::text IS NOT NULL AND upper(btrim(partner.uic)) = $2)
+     WHERE partner.id <> COALESCE($3::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
+       AND (($1::text IS NOT NULL AND partner.kind = 'legal_entity' AND partner.normalized_name = $1)
+        OR ($2::text IS NOT NULL AND upper(btrim(partner.uic)) = $2))
      ORDER BY partner.normalized_name, partner.id
      LIMIT 20`,
-    [name ?? null, uic ?? null],
+    [name ?? null, uic ?? null, excludedId ?? null],
   );
   return result.rows;
 }
@@ -949,6 +1160,20 @@ function partnerNotFoundError(): ApiErrorException {
     'The partner record was not found',
     HttpStatus.NOT_FOUND,
   );
+}
+
+function requireVersion(actual: number, expected: number, code: string): void {
+  if (actual !== expected)
+    throw new ApiErrorException(
+      code,
+      'The record changed after it was loaded. Refresh and try again.',
+      HttpStatus.CONFLICT,
+    );
+}
+
+function required<T>(value: T | undefined, message: string): T {
+  if (value === undefined) throw new Error(message);
+  return value;
 }
 
 function isPartnerAddress(value: unknown): value is PartnerAddress {

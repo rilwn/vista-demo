@@ -25,7 +25,13 @@ describe('parseEnvironment', () => {
 
     expect(environment.API_PORT).toBe(3000);
     expect(environment.API_RATE_LIMIT_MAX).toBe(120);
+    expect(environment.API_RATE_LIMIT_PUBLIC_MAX).toBe(60);
+    expect(environment.API_RATE_LIMIT_READ_MAX).toBe(240);
+    expect(environment.API_RATE_LIMIT_SENSITIVE_MAX).toBe(20);
+    expect(environment.API_RATE_LIMIT_STORE).toBe('memory');
     expect(environment.API_RATE_LIMIT_TTL_MS).toBe(60_000);
+    expect(environment.API_RATE_LIMIT_WRITE_MAX).toBe(60);
+    expect(environment.API_TRUST_PROXY_HOPS).toBe(0);
     expect(environment.AUTH_LOGIN_RATE_LIMIT_MAX).toBe(5);
     expect(environment.CORS_ORIGINS).toEqual(['http://localhost:5173', 'http://localhost:5174']);
     expect(environment.DEPENDENCY_HEALTH_TIMEOUT_MS).toBe(2_000);
@@ -54,11 +60,31 @@ describe('parseEnvironment', () => {
     expect(() => parseEnvironment({ ...validEnvironment, API_RATE_LIMIT_MAX: '0' })).toThrow(
       'API_RATE_LIMIT_MAX',
     );
+    expect(() => parseEnvironment({ ...validEnvironment, API_TRUST_PROXY_HOPS: '11' })).toThrow(
+      'API_TRUST_PROXY_HOPS',
+    );
     expect(() => parseEnvironment({ ...validEnvironment, JOB_DEFAULT_ATTEMPTS: '21' })).toThrow(
       'JOB_DEFAULT_ATTEMPTS',
     );
     expect(() => parseEnvironment({ ...validEnvironment, PASSWORD_MIN_LENGTH: '7' })).toThrow(
       'PASSWORD_MIN_LENGTH',
     );
+  });
+
+  it('requires the distributed Redis limiter in production', () => {
+    expect(() =>
+      parseEnvironment({
+        ...validEnvironment,
+        API_RATE_LIMIT_STORE: 'memory',
+        NODE_ENV: 'production',
+      }),
+    ).toThrow('Production deployments must use the Redis rate-limit store');
+    expect(
+      parseEnvironment({
+        ...validEnvironment,
+        API_RATE_LIMIT_STORE: 'redis',
+        NODE_ENV: 'production',
+      }).API_RATE_LIMIT_STORE,
+    ).toBe('redis');
   });
 });

@@ -23,15 +23,18 @@ import type {
   RequestSecurityMetadata,
 } from '../auth/authentication.types.js';
 import type { CorrelatedRequest } from '../common/correlation-id.middleware.js';
+import { RateLimitPolicy } from '../security/rate-limit.decorator.js';
 import { CreateProductDto, CreateUnitDto, ProductSummaryDto, UnitDto } from './catalog.dto.js';
 import { CatalogService } from './catalog.service.js';
 
 @ApiTags('catalog master data')
 @ApiBearerAuth()
+@RateLimitPolicy('write')
 @Controller('master-data/catalog')
 export class CatalogController {
   constructor(@Inject(CatalogService) private readonly catalog: CatalogService) {}
   @Get('units')
+  @RateLimitPolicy('read')
   @RequirePermissions({ action: 'view', module: 'erp.warehouse' })
   @ApiOkResponse({ isArray: true, type: UnitDto })
   units(): Promise<UnitDto[]> {
@@ -51,6 +54,7 @@ export class CatalogController {
     return this.catalog.createUnit(input, key, request.authentication, metadata(request));
   }
   @Get('products')
+  @RateLimitPolicy('read')
   @RequirePermissions({ action: 'view', module: 'erp.warehouse' })
   @ApiOkResponse({ isArray: true, type: ProductSummaryDto })
   products(): Promise<ProductSummaryDto[]> {

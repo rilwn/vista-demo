@@ -22,6 +22,7 @@ import type { Permission } from '@vista/auth';
 import type { Request } from 'express';
 
 import type { CorrelatedRequest } from '../common/correlation-id.middleware.js';
+import { RateLimitPolicy } from '../security/rate-limit.decorator.js';
 import { Public, RequirePermissions } from './auth.decorators.js';
 import { LoginRequestDto, LoginResponseDto } from './auth.dto.js';
 import { AuthService } from './auth.service.js';
@@ -30,6 +31,7 @@ import { LoginRateLimitGuard } from './login-rate-limit.guard.js';
 import { SessionService } from './session.service.js';
 
 @ApiTags('authentication')
+@RateLimitPolicy('read')
 @Controller('auth')
 export class AuthController {
   constructor(
@@ -38,6 +40,7 @@ export class AuthController {
   ) {}
 
   @Public()
+  @RateLimitPolicy('public')
   @Post('login')
   @UseGuards(LoginRateLimitGuard)
   @HttpCode(HttpStatus.OK)
@@ -50,6 +53,7 @@ export class AuthController {
   }
 
   @Post('logout')
+  @RateLimitPolicy('sensitive')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiBearerAuth()
   @ApiNoContentResponse({ description: 'The current session was revoked.' })

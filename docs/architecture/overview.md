@@ -32,6 +32,9 @@ integrate through versioned APIs and reliable outbox/inbox processing.
   workflows.
 - Redis stores live sessions, POS baskets, and other transient state. PostgreSQL
   may retain security lifecycle metadata, not live session content.
+- Request throttling assigns every non-health endpoint a configurable risk tier.
+  Production uses atomic Redis counters shared by all API replicas and fails
+  closed if that protection is unavailable.
 - Authentication uses opaque random bearer tokens, digest-only PostgreSQL
   metadata, Redis TTL state, current database-backed role evaluation, and a
   default-deny backend guard. Administrative sessions require verified TOTP.
@@ -41,7 +44,11 @@ integrate through versioned APIs and reliable outbox/inbox processing.
   would require explicit CSRF controls and an approved authentication change.
 - Redis-backed jobs use stable hashed identifiers derived from the command name
   and idempotency key. Retry attempts use bounded exponential backoff, job state
-  is queryable, and records are retained pending an approved retention policy.
+  is queryable, and records are retained pending an approved retention policy. A
+  single worker registry routes the complete named job inventory; scheduled
+  domain triggers cross the transactional outbox once per logical run. The
+  detailed ownership and replay rules are in
+  [`background-jobs.md`](background-jobs.md).
 - Cross-module and external changes use transactional outbox, idempotency keys,
   inbox receipts, retries, and reconciliation.
 - ERP-owned partner master data uses immutable UUIDs and one canonical record for

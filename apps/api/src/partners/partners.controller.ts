@@ -9,6 +9,7 @@ import {
   Param,
   ParseUUIDPipe,
   Post,
+  Put,
   Query,
   Req,
 } from '@nestjs/common';
@@ -30,6 +31,7 @@ import type {
   RequestSecurityMetadata,
 } from '../auth/authentication.types.js';
 import type { CorrelatedRequest } from '../common/correlation-id.middleware.js';
+import { RateLimitPolicy } from '../security/rate-limit.decorator.js';
 import {
   CreatePartnerDto,
   CreatePartnerAddressDto,
@@ -44,16 +46,20 @@ import {
   PartnerPageDto,
   PartnerProfileDto,
   PartnerSummaryDto,
+  RecordVersionDto,
+  UpdatePartnerDto,
 } from './partners.dto.js';
 import { PartnersService } from './partners.service.js';
 
 @ApiTags('partner master data')
 @ApiBearerAuth()
+@RateLimitPolicy('write')
 @Controller('master-data/partners')
 export class PartnersController {
   constructor(@Inject(PartnersService) private readonly partners: PartnersService) {}
 
   @Get()
+  @RateLimitPolicy('read')
   @RequirePermissions({ action: 'view', module: 'crm' })
   @ApiQuery({ enum: ['asc', 'desc'], name: 'direction', required: false })
   @ApiQuery({ enum: ['legal_entity', 'individual'], name: 'kind', required: false })
@@ -72,6 +78,7 @@ export class PartnersController {
   }
 
   @Get('duplicates')
+  @RateLimitPolicy('read')
   @RequirePermissions({ action: 'view', module: 'crm' })
   @ApiOperation({
     description: 'Warns about exact normalized-name or UIC candidates. It never merges records.',
@@ -84,6 +91,7 @@ export class PartnersController {
   }
 
   @Get(':id/profile')
+  @RateLimitPolicy('read')
   @RequirePermissions({ action: 'view', module: 'crm' })
   @ApiOkResponse({ type: PartnerProfileDto })
   profile(
@@ -93,6 +101,7 @@ export class PartnersController {
   }
 
   @Get(':id')
+  @RateLimitPolicy('read')
   @RequirePermissions({ action: 'view', module: 'crm' })
   @ApiOkResponse({ type: PartnerSummaryDto })
   get(@Param('id', new ParseUUIDPipe({ version: '4' })) id: string): Promise<PartnerSummaryDto> {
@@ -120,6 +129,64 @@ export class PartnersController {
     return this.partners.create(
       input,
       idempotencyKey,
+      request.authentication,
+      requestMetadata(request),
+    );
+  }
+
+  @Put(':id')
+  @RequirePermissions({ action: 'edit', module: 'crm' })
+  @ApiBody({ type: UpdatePartnerDto })
+  @ApiOkResponse({ type: PartnerSummaryDto })
+  @ApiHeader({ name: 'Idempotency-Key', required: true })
+  update(
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Body() input: UpdatePartnerDto,
+    @Headers('idempotency-key') key: string | undefined,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<PartnerSummaryDto> {
+    return this.partners.update(id, input, key, request.authentication, requestMetadata(request));
+  }
+
+  @Post(':id/deactivate')
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissions({ action: 'delete', module: 'crm' })
+  @ApiBody({ type: RecordVersionDto })
+  @ApiOkResponse({ type: PartnerSummaryDto })
+  @ApiHeader({ name: 'Idempotency-Key', required: true })
+  deactivate(
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Body() input: RecordVersionDto,
+    @Headers('idempotency-key') key: string | undefined,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<PartnerSummaryDto> {
+    return this.partners.setActive(
+      id,
+      false,
+      input,
+      key,
+      request.authentication,
+      requestMetadata(request),
+    );
+  }
+
+  @Post(':id/reactivate')
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissions({ action: 'edit', module: 'crm' })
+  @ApiBody({ type: RecordVersionDto })
+  @ApiOkResponse({ type: PartnerSummaryDto })
+  @ApiHeader({ name: 'Idempotency-Key', required: true })
+  reactivate(
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Body() input: RecordVersionDto,
+    @Headers('idempotency-key') key: string | undefined,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<PartnerSummaryDto> {
+    return this.partners.setActive(
+      id,
+      true,
+      input,
+      key,
       request.authentication,
       requestMetadata(request),
     );

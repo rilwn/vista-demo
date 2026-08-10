@@ -13,7 +13,9 @@ The Phase 1 baseline creates these schemas:
   fields. Application database roles must not own this schema in production.
 - `files`: versioned file metadata, quarantine state, checksum, issuer, and parent
   authorization reference.
-- `notifications`: idempotent in-system, email, and SMS delivery work.
+- `notifications`: idempotent in-system, email, and SMS delivery work, including
+  processing claims, retry/failure state, delivery timestamp, and in-system read
+  timestamp.
 - `integration`: reliable outbox events and consumer inbox receipts.
 - `backup`: four-eyes approval primitives for destructive critical actions.
 - `platform`: migration history and cross-cutting idempotency keys.
@@ -80,3 +82,102 @@ are globally unique and retain their type (`ean13`, `ean8`, `upca`, `code128`, o
 `other`). The authorized unit/product read-create API is backed by this migration;
 the schema intentionally separates product identity from future stock, serial, and
 batch ledgers.
+
+Migration `0007_warehouse_inventory_foundation` adds empty, configurable
+warehouses (`standard` or `technician`) plus an append-only receipt movement
+ledger, aggregate stock balances, batch balances, and globally unique serialised
+items. Positive quantities and restrictive references are database constraints.
+The currently available command is a receipt only: it atomically writes the
+movement and all resulting balances/serial or batch records. The schema does not
+seed locations, warehouses, products, or inventory, and it intentionally defers
+issues, transfers, stocktake, reservations, costing, and later traceability links.
+
+Migration `0008_inventory_stock_issues` adds the issue movement type and an
+issued-movement reference/state to serialised items. The issue command locks and
+decrements aggregate stock (and the selected batch stock where applicable), so a
+negative balance cannot be posted. A serial changes from `available` to `issued`
+only inside that same transaction.
+
+Migration `0009_inventory_transfers` adds paired `transfer_out` and
+`transfer_in` movements plus a serial-item transfer history table. Transfers move
+both balance and available serial ownership atomically; they do not reuse a
+receipt or issue command.
+
+Migration `0010_inventory_stocktakes` adds one open count per warehouse and
+fixed-precision product counts. Migration `0011_inventory_stocktake_adjustments`
+adds explicit inbound/outbound adjustment movement types. Migration
+`0012_stocktake_tracking_evidence` adds normalized serial and batch evidence and
+an explicit missing-serial state. Warehouse-scoped advisory locks serialize
+opening a count with receipts, issues, transfers, and reservations, preventing a
+moving target while physical evidence is captured.
+
+Migration `0013_inventory_reservations` adds durable sales-order, quotation, and
+service-request reservations with initial and remaining quantity, lifecycle
+state, actor/timestamps, and version. Active serial assignments have a partial
+unique index, so one available serial cannot be reserved twice. Balance-row locks
+serialize availability checks; release and issue consumption retain reservation
+and serial-assignment history rather than deleting it.
+
+Migration `0014_inventory_valuation_replenishment` adds fixed-precision BGN unit
+and generated total cost to every stock movement plus weighted-average unit cost
+to each warehouse/product balance. Existing rows receive an explicit zero-cost
+baseline because no historical acquisition cost can be inferred safely. It also
+adds versioned minimum/target settings and a live replenishment view that derives
+physical, reserved, and available quantity, low-stock state, and recommended
+purchase quantity without a stale cached total.
+
+Migration `0015_serial_traceability_parties` adds restrictive supplier, customer,
+and technician references to immutable stock movements. These combine with the
+serialized-item movement links and transfer ledger to produce chronological
+custody without rewriting inventory history.
+
+Migration `0016_customer_locations_equipment` adds explicit customer locations
+and installed equipment to the ERP-owned master-data schema. Active location
+names are normalized and unique per customer, while location type remains
+configurable. An optional responsible contact is protected by a composite foreign
+key so it cannot cross customer boundaries. Equipment records retain purchase and
+warranty dates, one of the required active/under-repair/retired states, and a
+globally unique normalized serial. Optional product and inventory-serialized-item
+references are restrictive; the API links an existing inventory serial when one
+is known and leaves legitimate legacy equipment unlinked instead of constructing
+false custody history. Both entities use immutable UUIDs, active state, version,
+actor, and timestamp metadata.
+
+Migration `0017_organization_topology` adds the configurable internal operating
+hierarchy separately from external customer/supplier partner records. The new
+`organization` schema contains legal business entities, branches, physical
+business locations, cash registers, employee-backed operators, and same-location
+register/operator assignments. Composite foreign keys prevent an operator from
+being assigned to a register or technician warehouse at another location.
+Warehouses gain optional business-location and technician-operator ownership
+without rewriting existing custody or requiring fabricated defaults. Codes and
+UICs are normalized/uniquely constrained at their documented scopes; all entities
+retain immutable UUIDs, active state, version, actor, and timestamps. The
+migration seeds no legal entity, branch, location, register, operator, or
+warehouse.
+
+Migration `0018_inventory_returns` adds inbound return movements linked to one
+immutable original issue. Cumulative returned quantity cannot exceed the issued
+quantity. The return retains the original batch and fixed-precision BGN cost;
+serial items must still be issued by that exact movement before their custody can
+be restored. Immutable serial-return events preserve the issue/return chain even
+after a serial becomes available for a later sale. The disposition records
+whether stock returns to ordinary or service custody; fiscal, invoice, payment,
+and POS reversals remain separate linked workflows.
+
+Migration `0019_low_stock_alert_queue` adds explicit employee subscriptions and
+transition state per configured warehouse/product. Inventory commands reconcile
+reservation-aware availability in the same database transaction. Entering low
+stock creates one pending `inventory.low_stock` in-system message per active
+recipient and cycle; remaining low is idempotent, recovery resets the state, and
+a later shortage starts a new cycle. Delivery workers and additional provider
+channels can consume the existing retryable `notifications.messages` queue.
+
+Migration `0021_security_administration` adds optimistic versions to employee
+accounts and roles, records whether each persisted session verified a second
+factor, and indexes account-status and reverse-chronological audit queries. The
+API uses these fields for version-checked access changes, administrative 2FA
+enforcement, session review/revocation, and audit exploration without exposing
+credential material. Audit writes remain serialized and now allocate strictly
+monotonic event timestamps under the same advisory lock, keeping chronological
+integrity verification deterministic even during concurrent requests.

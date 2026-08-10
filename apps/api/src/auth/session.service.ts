@@ -75,8 +75,9 @@ export class SessionService {
       );
       await client.query(
         `INSERT INTO identity.session_records (
-           id, account_id, redis_key_digest, expires_at, ip_address, user_agent
-         ) VALUES ($1, $2, $3, $4, $5, $6)`,
+           id, account_id, redis_key_digest, expires_at, ip_address, user_agent,
+           two_factor_verified
+         ) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
         [
           sessionId,
           accountId,
@@ -84,6 +85,7 @@ export class SessionService {
           expiresAt,
           metadata.sourceIp ?? null,
           metadata.userAgent ?? null,
+          twoFactorVerified,
         ],
       );
       await this.audit.append(
@@ -216,6 +218,110 @@ export class SessionService {
       const redis = await this.redis.ensureConnected();
       await redis.del(sessionKey(digest));
     }
+  }
+
+  async revokeByAdministrator(
+    sessionId: string,
+    actor: AuthenticationContext,
+    metadata: RequestSecurityMetadata,
+  ): Promise<boolean> {
+    const client = await this.database.getPool().connect();
+    let digest: string | undefined;
+    try {
+      await client.query('BEGIN');
+      const existing = await client.query<{
+        account_id: string;
+        redis_key_digest: string;
+        revoked_at: Date | null;
+      }>(
+        `SELECT account_id, redis_key_digest, revoked_at
+         FROM identity.session_records
+         WHERE id = $1
+         FOR UPDATE`,
+        [sessionId],
+      );
+      const session = existing.rows[0];
+      if (!session) {
+        await client.query('COMMIT');
+        return false;
+      }
+      if (!session.revoked_at) {
+        await client.query('UPDATE identity.session_records SET revoked_at = now() WHERE id = $1', [
+          sessionId,
+        ]);
+        digest = session.redis_key_digest;
+        await this.audit.append(
+          {
+            action: 'auth.session.revoked_by_administrator',
+            actorAccountId: actor.accountId,
+            after: { accountId: session.account_id, revoked: true },
+            correlationId: metadata.correlationId,
+            targetId: sessionId,
+            targetType: 'login_session',
+            ...(metadata.sourceIp ? { sourceIp: metadata.sourceIp } : {}),
+            ...(metadata.userAgent ? { userAgent: metadata.userAgent } : {}),
+          },
+          client,
+        );
+      }
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+    if (digest) {
+      const redis = await this.redis.ensureConnected();
+      await redis.del(sessionKey(digest));
+    }
+    return true;
+  }
+
+  async revokeAllForAccount(
+    accountId: string,
+    actor: AuthenticationContext,
+    metadata: RequestSecurityMetadata,
+  ): Promise<number> {
+    const client = await this.database.getPool().connect();
+    let digests: string[] = [];
+    try {
+      await client.query('BEGIN');
+      const result = await client.query<{ redis_key_digest: string }>(
+        `UPDATE identity.session_records
+         SET revoked_at = now()
+         WHERE account_id = $1 AND revoked_at IS NULL
+         RETURNING redis_key_digest`,
+        [accountId],
+      );
+      digests = result.rows.map((row) => row.redis_key_digest);
+      if (digests.length > 0) {
+        await this.audit.append(
+          {
+            action: 'auth.account_sessions.revoked',
+            actorAccountId: actor.accountId,
+            after: { revokedSessionCount: digests.length },
+            correlationId: metadata.correlationId,
+            targetId: accountId,
+            targetType: 'user_account',
+            ...(metadata.sourceIp ? { sourceIp: metadata.sourceIp } : {}),
+            ...(metadata.userAgent ? { userAgent: metadata.userAgent } : {}),
+          },
+          client,
+        );
+      }
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+    if (digests.length > 0) {
+      const redis = await this.redis.ensureConnected();
+      await Promise.all(digests.map((digest) => redis.del(sessionKey(digest))));
+    }
+    return digests.length;
   }
 
   private async loadPermissions(accountId: string): Promise<Permission[]> {

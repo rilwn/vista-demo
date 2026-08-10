@@ -2,8 +2,10 @@ import { Controller, Get } from '@nestjs/common';
 import { ApiOkResponse, ApiTags } from '@nestjs/swagger';
 
 import { Public } from './auth/auth.decorators.js';
+import { RateLimitPolicy } from './security/rate-limit.decorator.js';
 
 @ApiTags('platform')
+@RateLimitPolicy('public')
 @Public()
 @Controller()
 export class RootController {

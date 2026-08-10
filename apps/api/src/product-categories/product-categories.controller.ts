@@ -25,11 +25,13 @@ import type {
   RequestSecurityMetadata,
 } from '../auth/authentication.types.js';
 import type { CorrelatedRequest } from '../common/correlation-id.middleware.js';
+import { RateLimitPolicy } from '../security/rate-limit.decorator.js';
 import { CreateProductCategoryDto, ProductCategoryDto } from './product-categories.dto.js';
 import { ProductCategoriesService } from './product-categories.service.js';
 
 @ApiTags('product category master data')
 @ApiBearerAuth()
+@RateLimitPolicy('write')
 @Controller('master-data/product-categories')
 export class ProductCategoriesController {
   constructor(
@@ -37,6 +39,7 @@ export class ProductCategoriesController {
   ) {}
 
   @Get()
+  @RateLimitPolicy('read')
   @RequirePermissions({ action: 'view', module: 'erp.warehouse' })
   @ApiOkResponse({ isArray: true, type: ProductCategoryDto })
   list(): Promise<ProductCategoryDto[]> {

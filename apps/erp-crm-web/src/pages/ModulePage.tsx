@@ -31,13 +31,9 @@ export function ModulePage({ moduleKey }: { moduleKey: string }) {
       <section className="content-panel workflow-hub">
         <div className="panel-heading">
           <div>
-            <h2>Operational workspace</h2>
-            <p>
-              Choose a workflow. Every screen has been designed for its documented process; live
-              records appear when its API slice is connected.
-            </p>
+            <h2>Choose an area</h2>
+            <p>Open a section to view its records and actions.</p>
           </div>
-          <span className="prototype-badge">UI complete · integration pending</span>
         </div>
         {pages.length > 0 ? (
           <div className="workflow-hub-grid">
@@ -48,10 +44,7 @@ export function ModulePage({ moduleKey }: { moduleKey: string }) {
                 </span>
                 <span>
                   <strong>Partner registry</strong>
-                  <small>
-                    Use the live shared customer, supplier, and business-partner master-data
-                    workflow.
-                  </small>
+                  <small>Manage customers, suppliers, contacts, locations, and equipment.</small>
                 </span>
                 <Icon name="arrow" />
               </Link>
@@ -63,9 +56,7 @@ export function ModulePage({ moduleKey }: { moduleKey: string }) {
                 </span>
                 <span>
                   <strong>Product catalog</strong>
-                  <small>
-                    Use the live shared product, unit, and barcode master-data workflow.
-                  </small>
+                  <small>Manage products, units, barcodes, and tracking rules.</small>
                 </span>
                 <Icon name="arrow" />
               </Link>
@@ -77,10 +68,7 @@ export function ModulePage({ moduleKey }: { moduleKey: string }) {
                 </span>
                 <span>
                   <strong>Product categories</strong>
-                  <small>
-                    Maintain the actual shared product-category hierarchy, including its category
-                    tracking policy.
-                  </small>
+                  <small>Organise products and set serial, batch, or expiry tracking.</small>
                 </span>
                 <Icon name="arrow" />
               </Link>

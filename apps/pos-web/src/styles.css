@@ -7,6 +7,26 @@
   font-family: Inter, ui-sans-serif, system-ui, sans-serif;
 }
 
+.pos-terminal button,
+.pos-terminal input {
+  font: inherit;
+}
+
+.pos-terminal :focus-visible {
+  outline: 3px solid rgb(86 143 99 / 24%);
+  outline-offset: 2px;
+}
+
+.pos-icon {
+  width: 1.1rem;
+  height: 1.1rem;
+  flex: 0 0 auto;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
 .pos-topbar {
   display: flex;
   min-height: 4.4rem;
@@ -46,7 +66,7 @@
 .pos-brand small,
 .pos-context-label {
   color: #9bb09f;
-  font-size: 0.65rem;
+  font-size: 0.7rem;
 }
 .pos-terminal-context {
   display: grid;
@@ -56,14 +76,14 @@
   border-left: 1px solid rgb(255 255 255 / 0.1);
 }
 .pos-terminal-context strong {
-  font-size: 0.77rem;
+  font-size: 0.82rem;
   font-weight: 620;
 }
 .pos-system-status {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  font-size: 0.72rem;
+  font-size: 0.77rem;
 }
 .pos-status-dot,
 .pos-footer i {
@@ -92,7 +112,7 @@
 .pos-workspace {
   display: grid;
   min-height: 0;
-  grid-template-columns: 12rem minmax(0, 1fr);
+  grid-template-columns: 13rem minmax(0, 1fr);
 }
 .pos-nav {
   display: flex;
@@ -112,7 +132,7 @@
   border-radius: 0.48rem;
   color: #647269;
   background: transparent;
-  font-size: 0.75rem;
+  font-size: 0.81rem;
   font-weight: 620;
   text-align: left;
   cursor: pointer;
@@ -125,21 +145,6 @@
   color: #173d2a;
   background: #e0ecdf;
   box-shadow: inset 2px 0 #4e835d;
-}
-.pos-nav-symbol {
-  width: 1rem;
-  height: 1rem;
-  border: 1.55px solid currentColor;
-  border-radius: 0.27rem;
-  opacity: 0.82;
-}
-.pos-nav-symbol--sell {
-  border-radius: 50%;
-  box-shadow: inset 0 0 0 3px #f8f9f6;
-}
-.pos-nav-symbol--sync {
-  border-radius: 50%;
-  border-style: dashed;
 }
 .pos-main {
   min-width: 0;
@@ -156,7 +161,7 @@
   border-radius: 0.5rem;
   color: #315e80;
   background: #eaf2f7;
-  font-size: 0.76rem;
+  font-size: 0.8rem;
   line-height: 1.45;
 }
 .pos-notice > span {
@@ -172,6 +177,10 @@
   margin: 0;
 }
 .pos-notice button {
+  display: grid;
+  width: 1.8rem;
+  height: 1.8rem;
+  place-items: center;
   border: 0;
   color: inherit;
   background: transparent;
@@ -189,7 +198,7 @@
   border: 1px solid #d4dbd4;
   border-radius: 0.8rem;
   background: #fff;
-  box-shadow: 0 12px 30px rgb(24 43 31 / 0.07);
+  box-shadow: 0 8px 24px rgb(24 43 31 / 0.06);
 }
 .pos-catalog-panel {
   display: flex;
@@ -206,7 +215,7 @@
 .pos-page-heading p {
   margin: 0 0 0.32rem;
   color: #4c7659;
-  font-size: 0.66rem;
+  font-size: 0.7rem;
   font-weight: 760;
   letter-spacing: 0.11em;
   text-transform: uppercase;
@@ -222,7 +231,7 @@
   max-width: 43rem;
   margin-top: 0.6rem;
   color: #68766d;
-  font-size: 0.78rem;
+  font-size: 0.84rem;
   line-height: 1.55;
 }
 .pos-quiet-button,
@@ -230,7 +239,7 @@
   border: 0;
   color: #316341;
   background: transparent;
-  font-size: 0.75rem;
+  font-size: 0.79rem;
   font-weight: 690;
   cursor: pointer;
 }
@@ -269,7 +278,7 @@
   color: #18271d;
   background: #fbfcfa;
   font: inherit;
-  font-size: 0.88rem;
+  font-size: 0.94rem;
 }
 .pos-search-shell input:focus {
   border-color: #4b8059;
@@ -302,7 +311,7 @@
   border-radius: 0.35rem;
   color: #617067;
   background: transparent;
-  font-size: 0.72rem;
+  font-size: 0.78rem;
   font-weight: 650;
   cursor: pointer;
 }
@@ -340,23 +349,8 @@
 .pos-catalog-empty p {
   max-width: 34rem;
   margin: 0;
-  font-size: 0.76rem;
+  font-size: 0.82rem;
   line-height: 1.55;
-}
-.pos-catalog-empty > div {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 0.35rem;
-  margin-top: 1.25rem;
-}
-.pos-catalog-empty > div span {
-  padding: 0.32rem 0.48rem;
-  border: 1px solid #d8dfd7;
-  border-radius: 999px;
-  color: #617067;
-  background: #fff;
-  font-size: 0.65rem;
 }
 .pos-action-strip {
   display: grid;
@@ -371,7 +365,7 @@
   border-radius: 0.45rem;
   color: #536259;
   background: #fafbf9;
-  font-size: 0.68rem;
+  font-size: 0.76rem;
   font-weight: 650;
   cursor: pointer;
 }
@@ -379,10 +373,13 @@
   border-color: #b7c7b8;
   background: #f1f5f0;
 }
-.pos-action-strip b {
+.pos-action-strip kbd {
   margin-right: 0.26rem;
+  border: 0;
   color: #235f3b;
-  font-size: 0.61rem;
+  background: transparent;
+  font-size: 0.66rem;
+  font-weight: 760;
 }
 
 .pos-basket {
@@ -410,7 +407,7 @@
 }
 .pos-basket-header strong {
   color: #26342a;
-  font-size: 0.78rem;
+  font-size: 0.82rem;
 }
 .pos-basket-header button {
   padding: 0.38rem 0.48rem;
@@ -418,7 +415,7 @@
   border-radius: 0.35rem;
   color: #306840;
   background: #fff;
-  font-size: 0.65rem;
+  font-size: 0.72rem;
   font-weight: 680;
   cursor: pointer;
 }
@@ -445,11 +442,11 @@
 .pos-basket-empty p {
   margin: 0.75rem 0 0.25rem;
   color: #4a584e;
-  font-size: 0.79rem;
+  font-size: 0.84rem;
   font-weight: 680;
 }
 .pos-basket-empty small {
-  font-size: 0.68rem;
+  font-size: 0.73rem;
 }
 .pos-totals {
   padding: 0.85rem 1.2rem;
@@ -460,7 +457,7 @@
   justify-content: space-between;
   padding: 0.27rem 0;
   color: #69776e;
-  font-size: 0.71rem;
+  font-size: 0.77rem;
 }
 .pos-totals strong {
   color: #334238;
@@ -491,7 +488,7 @@
   border-radius: 0.42rem;
   color: #9aa49c;
   background: #f5f6f3;
-  font-size: 0.69rem;
+  font-size: 0.75rem;
   font-weight: 660;
 }
 .pos-pay-button {
@@ -508,7 +505,7 @@
 .pos-basket-disclaimer {
   margin: 0.7rem 1.2rem 1.15rem;
   color: #7b867d;
-  font-size: 0.62rem;
+  font-size: 0.7rem;
   line-height: 1.45;
   text-align: center;
 }
@@ -523,9 +520,14 @@
   border-radius: 0.45rem;
   color: #fff;
   background: #266140;
-  font-size: 0.73rem;
+  font-size: 0.78rem;
   font-weight: 700;
   cursor: pointer;
+}
+
+.pos-primary-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 .pos-register-controls {
   display: flex;
@@ -542,7 +544,7 @@
   flex: 1;
   gap: 0.28rem;
   color: #68766c;
-  font-size: 0.65rem;
+  font-size: 0.72rem;
   font-weight: 700;
 }
 .pos-register-controls input {
@@ -558,7 +560,13 @@
   border-radius: 0.35rem;
   color: #58675d;
   background: #f9faf8;
-  font-size: 0.68rem;
+  font-size: 0.74rem;
+}
+
+.pos-register-controls button:disabled,
+.pos-register-controls input:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
 }
 .pos-register-empty {
   display: grid;
@@ -575,8 +583,14 @@
   padding: 2rem;
 }
 .pos-register-empty span {
+  display: grid;
+  place-items: center;
   color: #477b55;
-  font-size: 2rem;
+}
+
+.pos-register-empty span .pos-icon {
+  width: 1.8rem;
+  height: 1.8rem;
 }
 .pos-register-empty h2 {
   margin: 0.4rem 0;
@@ -586,37 +600,9 @@
 .pos-register-empty p {
   margin: 0;
   color: #68766e;
-  font-size: 0.75rem;
+  font-size: 0.8rem;
   line-height: 1.55;
 }
-.pos-requirement-cards {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 0.65rem;
-  margin-top: 0.85rem;
-}
-.pos-requirement-cards article {
-  display: grid;
-  gap: 0.4rem;
-  min-height: 5.7rem;
-  padding: 0.8rem;
-  border: 1px solid #d6ded5;
-  border-radius: 0.5rem;
-  background: #fff;
-}
-.pos-requirement-cards span {
-  color: #68806d;
-  font-size: 0.61rem;
-  font-weight: 720;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-.pos-requirement-cards strong {
-  color: #35463a;
-  font-size: 0.75rem;
-  line-height: 1.35;
-}
-
 .pos-footer {
   display: flex;
   flex-wrap: wrap;
@@ -626,20 +612,13 @@
   border-top: 1px solid #d6ddd5;
   color: #6e7a71;
   background: #f7f8f5;
-  font-size: 0.63rem;
+  font-size: 0.7rem;
 }
 .pos-footer span {
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
 }
-.pos-footer-end {
-  margin-left: auto;
-  max-width: 38rem;
-  color: #89938b;
-  text-align: right;
-}
-
 @media (max-width: 900px) {
   .pos-workspace {
     grid-template-columns: 1fr;
@@ -666,11 +645,6 @@
   .pos-catalog-empty {
     min-height: 15rem;
   }
-  .pos-footer-end {
-    width: 100%;
-    margin-left: 0;
-    text-align: left;
-  }
 }
 @media (max-width: 580px) {
   .pos-topbar {
@@ -695,8 +669,7 @@
   .pos-catalog-panel {
     padding: 1rem;
   }
-  .pos-action-strip,
-  .pos-requirement-cards {
+  .pos-action-strip {
     grid-template-columns: repeat(2, 1fr);
   }
   .pos-register-controls {

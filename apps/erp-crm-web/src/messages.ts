@@ -16,7 +16,7 @@ export const messages = {
     errorTitle: 'Sign-in unsuccessful',
     hidePassword: 'Hide',
     passwordLabel: 'Password',
-    securityNote: 'Encrypted session · Permission controlled · Material actions audited',
+    securityNote: 'Secure sign-in · Access based on your role',
     showPassword: 'Show',
     signIn: 'Sign in',
     signingIn: 'Signing in',
@@ -32,9 +32,8 @@ export const messages = {
   authContext: {
     eyebrow: 'Vista Service · Vratsa',
     modules: ['Finance and inventory', 'Sales and customer service', 'Field service operations'],
-    subtitle:
-      'One calm workspace for the operational details that keep customers, equipment, and service moving.',
-    title: 'Work with the full picture.',
+    subtitle: 'Finance, stock, customers, sales, and service in one secure workspace.',
+    title: 'Vista Service workspace',
   },
   errors: {
     ACCOUNT_TEMPORARILY_LOCKED:
@@ -50,6 +49,7 @@ export const messages = {
   },
   navigation: {
     access: 'My access',
+    administration: 'Administration',
     close: 'Close navigation',
     crm: 'CRM',
     erp: 'ERP',
@@ -64,11 +64,11 @@ export const messages = {
   home: {
     accessCard: 'Effective permissions',
     adminAccess: 'Administrative',
-    areasSubtitle: 'Access follows your assigned role and is enforced by the API.',
-    areasTitle: 'Your operational areas',
+    areasSubtitle: 'Only the areas assigned to your account are shown.',
+    areasTitle: 'Your work areas',
     eyebrow: 'Workspace overview',
     moduleCard: 'Available areas',
-    noModules: 'No operational modules have been assigned to this account yet.',
+    noModules: 'No work areas have been assigned to this account yet.',
     passwordOnly: 'Password verified',
     protectionCard: 'Session protection',
     standardAccess: 'Standard employee',
@@ -84,22 +84,21 @@ export const messages = {
     empty: 'No explicit permissions are assigned to this account.',
     eyebrow: 'Account security',
     module: 'Module',
-    subtitle: 'This is the access the server grants to your current session.',
+    subtitle: 'Review the areas and actions assigned to your account.',
     title: 'My access',
     wildcard: 'All',
   },
   states: {
     loading: 'Preparing your workspace',
-    loadingDetail: 'Validating the current session and permissions.',
+    loadingDetail: 'Checking your sign-in.',
     notFound: 'This page does not exist or is not available to your account.',
     notFoundAction: 'Return to overview',
   },
   module: {
-    alert: 'This page intentionally contains no sample financial, customer, or inventory data.',
-    emptyDescription:
-      'Navigation and access control are active. Business records will appear here as this module’s API slice is implemented and validated.',
-    emptyTitle: 'Workspace ready for its first workflow',
-    eyebrow: 'Operational module',
+    alert: 'There are no records in this area yet.',
+    emptyDescription: 'Records and actions for this area will appear here.',
+    emptyTitle: 'Nothing here yet',
+    eyebrow: 'Workspace',
   },
   partners: {
     active: 'Active',
@@ -129,8 +128,8 @@ export const messages = {
     currencyCode: 'Currency',
     create: 'Add partner',
     createDescription:
-      'Create one shared record for ERP, CRM, and POS. You can assign more than one role.',
-    createEyebrow: 'New master record',
+      'Add a customer, supplier, or other business partner. A record can have more than one role.',
+    createEyebrow: 'New partner',
     createTitle: 'Add a partner',
     created: 'Partner added to the shared registry.',
     detailsEyebrow: 'Partner record',
@@ -143,7 +142,7 @@ export const messages = {
       'No partner matches the current view. Clear a filter or add the first shared record.',
     emptyTitle: 'No partners found',
     email: 'Email',
-    eyebrow: 'Shared master data',
+    eyebrow: 'Customers and suppliers',
     filterKind: 'Partner type',
     filterRole: 'Business role',
     individual: 'Individual',
@@ -161,7 +160,7 @@ export const messages = {
     previous: 'Previous',
     postalCode: 'Postal code',
     profileError: 'The partner profile could not be loaded.',
-    profileEyebrow: 'Shared profile',
+    profileEyebrow: 'Partner profile',
     profileSaveError: 'The record could not be saved. Review the details and try again.',
     profileTitle: 'Contact and payment details',
     reference: 'Reference',
@@ -181,8 +180,7 @@ export const messages = {
     search: 'Search partners',
     searchPlaceholder: 'Name, UIC, or VAT number',
     status: 'Status',
-    subtitle:
-      'One canonical registry for customers, suppliers, and business partners across the platform.',
+    subtitle: 'Customers, suppliers, and business partners in one shared list.',
     title: 'Partners',
     type: 'Type',
     telephone: 'Telephone',
@@ -193,16 +191,15 @@ export const messages = {
   categories: {
     childCount: (count: number) => `${count} ${count === 1 ? 'subcategory' : 'subcategories'}`,
     create: 'Add category',
-    createDescription:
-      'Build the shared catalog hierarchy before products and stock are configured. No Vista categories are preloaded.',
-    createEyebrow: 'Catalog configuration',
+    createDescription: 'Add the categories your team uses to organise products.',
+    createEyebrow: 'New category',
     createTitle: 'Add a category',
     created: 'Category added to the shared catalog hierarchy.',
     emptyAction: 'Add the first category',
     emptyDescription:
       'Start with a top-level category, then add subcategories as the approved catalog is prepared.',
     emptyTitle: 'No categories configured',
-    eyebrow: 'Catalog foundation',
+    eyebrow: 'Product catalogue',
     hierarchyTitle: 'Product category hierarchy',
     loadError: 'The category hierarchy could not be loaded.',
     name: 'Category name',
@@ -212,13 +209,21 @@ export const messages = {
     save: 'Add category',
     saveError: 'The category could not be saved. Review the details and try again.',
     saving: 'Adding category',
-    subtitle:
-      'A controlled shared hierarchy for products, inventory, sales, service, CRM, and POS—without assumed seed data.',
+    subtitle: 'Organise products into categories and subcategories.',
     title: 'Product categories',
   },
 } as const;
 
 export const moduleMessages = {
+  platform: {
+    description: 'Employee accounts, roles, two-factor authentication, sign-ins, and activity.',
+    label: 'Security',
+  },
+  'platform.organization': {
+    description:
+      'Legal entities, branches, operating locations, cash registers, operators, and warehouse ownership.',
+    label: 'Business structure',
+  },
   'erp.finance': {
     description: 'Invoices, payments, cash and bank activity, registers, and VAT reporting.',
     label: 'Finance',
@@ -248,7 +253,7 @@ export const moduleMessages = {
     label: 'Customers & CRM',
   },
   reports: {
-    description: 'Controlled reports, dashboards, scheduled exports, and downloads.',
+    description: 'Reports, dashboards, scheduled exports, and downloads.',
     label: 'Reports',
   },
 } as const;

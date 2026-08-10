@@ -28,6 +28,15 @@
   --vista-radius-sm: 0.5rem;
   --vista-radius-md: 0.8rem;
   --vista-radius-lg: 1.15rem;
+  /* Compatibility aliases used by the connected domain screens. */
+  --border-strong: var(--vista-line-strong);
+  --border-subtle: var(--vista-line);
+  --color-accent: var(--vista-accent-strong);
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  --surface: var(--vista-surface);
+  --surface-subtle: var(--vista-surface-muted);
+  --text-primary: var(--vista-ink);
+  --text-secondary: var(--vista-muted);
   font-family:
     Inter,
     ui-sans-serif,
@@ -208,9 +217,22 @@ textarea {
   transform: translateY(1px);
 }
 
+.vista-button > span:last-child {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
 .vista-button:disabled {
   cursor: not-allowed;
   opacity: 0.58;
+}
+
+.vista-button--primary:disabled {
+  color: var(--vista-ink-soft);
+  background: var(--vista-line-strong);
+  box-shadow: none;
 }
 
 .vista-button--primary {

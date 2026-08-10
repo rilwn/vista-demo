@@ -1,12 +1,10 @@
-import { Button, InlineAlert } from '@vista/ui';
-import { useState } from 'react';
+import { Button } from '@vista/ui';
 
 import { Icon } from '../components/Icon';
 import { Link } from '../routing/Router';
 import { type WorkflowPageDefinition, pagesForModule, workflowPath } from './workflow-pages';
 
 export function WorkflowPage({ page }: { page: WorkflowPageDefinition }) {
-  const [previewNotice, setPreviewNotice] = useState<string | null>(null);
   const relatedPages = pagesForModule(page.module);
 
   return (
@@ -18,18 +16,11 @@ export function WorkflowPage({ page }: { page: WorkflowPageDefinition }) {
           <p>{page.description}</p>
         </div>
         <div className="workflow-header-actions">
-          <span className="prototype-badge">Interface ready · data connection pending</span>
-          <Button
-            onClick={() =>
-              setPreviewNotice(`${page.action} will open when this workflow API is connected.`)
-            }
-          >
+          <Button disabled title="Unavailable">
             {page.action}
           </Button>
         </div>
       </header>
-
-      {previewNotice ? <InlineAlert tone="info">{previewNotice}</InlineAlert> : null}
 
       <nav aria-label={`${page.title} workflow pages`} className="workflow-tabs">
         {relatedPages.map((item) => (
@@ -48,13 +39,20 @@ export function WorkflowPage({ page }: { page: WorkflowPageDefinition }) {
           <Icon name="search" size={17} />
           <input
             aria-label={`Search ${page.title}`}
+            disabled
             placeholder={`Search ${page.title.toLowerCase()}`}
           />
         </label>
         <div>
-          <button type="button">All statuses</button>
-          <button type="button">Current period</button>
-          <button type="button">Filter</button>
+          <button disabled type="button">
+            All statuses
+          </button>
+          <button disabled type="button">
+            Current period
+          </button>
+          <button disabled type="button">
+            Filter
+          </button>
         </div>
       </section>
 
@@ -73,28 +71,12 @@ export function WorkflowPage({ page }: { page: WorkflowPageDefinition }) {
                 <Icon name={page.icon} size={22} />
               </span>
               <div>
-                <strong>No live records yet</strong>
-                <p>
-                  This screen is ready for its API and database slice. No representative business
-                  records are fabricated.
-                </p>
+                <strong>No records yet</strong>
+                <p>Records added to this area will appear here.</p>
               </div>
             </div>
           </div>
         </div>
-      </section>
-
-      <section className="workflow-sections" aria-label={`${page.title} capabilities`}>
-        {page.sections.map((section) => (
-          <article className="workflow-section-card" key={section.title}>
-            <h2>{section.title}</h2>
-            <ul>
-              {section.items.map((item) => (
-                <li key={item}>{item}</li>
-              ))}
-            </ul>
-          </article>
-        ))}
       </section>
     </div>
   );

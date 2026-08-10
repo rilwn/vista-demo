@@ -2,7 +2,6 @@ import 'reflect-metadata';
 
 import { Controller, Get, type INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
-import { Throttle } from '@nestjs/throttler';
 import type { AppEnvironment } from '@vista/config';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -11,9 +10,11 @@ import { AppModule } from '../src/app.module.js';
 import { Public } from '../src/auth/auth.decorators.js';
 import { configureHttpApplication } from '../src/common/http-application.js';
 import { APP_ENVIRONMENT } from '../src/config/config.module.js';
+import { RateLimitPolicy } from '../src/security/rate-limit.decorator.js';
 
 const runInfrastructureTests = process.env['RUN_INFRASTRUCTURE_TESTS'] === 'true';
 const testEnvironment: NodeJS.ProcessEnv = {
+  API_RATE_LIMIT_SENSITIVE_MAX: '1',
   BUSINESS_TIMEZONE: 'Europe/Sofia',
   CORS_ORIGINS: 'http://localhost:5173',
   DATABASE_URL:
@@ -33,10 +34,10 @@ const testEnvironment: NodeJS.ProcessEnv = {
 };
 
 @Controller('_test/rate-limit')
+@RateLimitPolicy('sensitive')
 @Public()
 class RateLimitTestController {
   @Get()
-  @Throttle({ default: { limit: 1, ttl: 60_000 } })
   response(): { status: string } {
     return { status: 'ok' };
   }
@@ -116,7 +117,10 @@ describe('platform API', () => {
   });
 
   it('rate limits protected routes and preserves the stable error envelope', async () => {
-    await request(application.getHttpServer()).get('/api/v1/_test/rate-limit').expect(200);
+    const accepted = await request(application.getHttpServer())
+      .get('/api/v1/_test/rate-limit')
+      .expect(200);
+    expect(accepted.headers['x-ratelimit-limit']).toBe('1');
     const response = await request(application.getHttpServer())
       .get('/api/v1/_test/rate-limit')
       .expect(429);

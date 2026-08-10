@@ -1,6 +1,6 @@
 # Vista Integrated Information System — Implementation Plan
 
-Status date: 2026-08-07
+Status date: 2026-08-10
 Authoritative specification: [`AGENTS.md`](AGENTS.md)  
 Project: `BG16RFPR001-1.012-1324-C01`
 
@@ -38,8 +38,8 @@ Current delivery status:
 | Phase                                     | Status      | Current milestone                                                          |
 | ----------------------------------------- | ----------- | -------------------------------------------------------------------------- |
 | 0. Discovery and decisions                | in progress | Plan, decision register, and traceability baseline                         |
-| 1. Platform foundation                    | in progress | P1.4 authenticated UI and first domain workflow verified                   |
-| 2. ERP master data and warehouse          | in progress | Canonical partner profile detail slice implemented and verified            |
+| 1. Platform foundation                    | in progress | Notification delivery and protected job operations verified                |
+| 2. ERP master data and warehouse          | in progress | Inventory operations and customer asset registers implemented and verified |
 | 3. Procurement, sales, finance, logistics | not started | Depends on Phase 2 master data and stock integrity                         |
 | 4. Service                                | not started | Depends on partners, equipment, warehouse, finance, and notifications      |
 | 5. CRM                                    | not started | Depends on shared master data, identity, service correlation, and outbox   |
@@ -143,14 +143,20 @@ Status: `in progress`.
 Implemented in the current slices: fail-fast shared environment validation;
 versioned API routes; runtime and build-time OpenAPI generation; correlation IDs;
 stable error envelopes; CORS and development/production HSTS behavior; structured
-redacted request/event logging; configuration-driven in-process rate limiting;
+redacted request/event logging; configurable public/read/write/sensitive endpoint
+limits with atomic Redis counters shared across production replicas;
 separate liveness and PostgreSQL/Redis/private-bucket readiness; checksummed
 advisory-lock migration runner with tested rollback; initial platform schemas;
-and a lazy Redis queue abstraction with stable idempotent job IDs, bounded retry,
-exponential backoff, retained results, safe event logs, and state telemetry. Still
-required before this milestone is complete: worker execution/handler lifecycle,
-protected operations metrics, a deployment-selected distributed throttling store,
-generated contract clients, and broader endpoint-specific controls.
+and a Redis queue abstraction with stable idempotent job IDs, bounded retry,
+exponential backoff, retained results, safe event logs, and state telemetry. The
+first real worker lifecycle now transactionally claims and delivers in-system
+notifications, recovers stale claims, records terminal failures, and exposes
+recipient-safe notification reads. A unified worker now routes the complete named
+job inventory, exposes retry state to handlers, rejects unknown work terminally,
+and hands later-domain responsibilities to one deterministic transactional-outbox
+event per logical run. Platform operators can inspect payload-free queue metrics
+and known job lifecycle state. Still required before this milestone is complete:
+generated contract clients.
 
 - Versioned `/api/v1` endpoints and generated OpenAPI documentation.
 - Configuration validation, correlation IDs, stable error envelopes, structured
@@ -182,18 +188,22 @@ account/effective-permission endpoints; a Redis-backed sensitive-login limiter;
 default-deny backend session and permission enforcement; encrypted TOTP factor
 verification with mandatory administrative 2FA; initial identity/RBAC/factor/
 session/four-eyes schemas; and a serialized append-only SHA-256 audit writer and
-chain-enforcement trigger. Integration tests cover failed/successful login,
-lockout, expiration, session revocation, permission denial, administrative TOTP,
-audit capture, chain linkage, mutation rejection, and requester self-approval
-rejection. Still required: protected factor enrollment/provisioning and recovery,
-password change/reset, account/role administration and approved role seeds,
-session-administration/revoke-all behavior, audit query/integrity-verification
-services, central identity adapters, and factor/account administration UI after
-`IAM-001`/`IAM-002` decisions. API-backed login, TOTP challenge, session, and
-effective-access views are implemented. A development-only, non-administrative
-seed command now provisions a local employee account and the UI-workflow
-permissions needed to exercise the current browser slices; it requires the
-operator to supply the password and refuses `NODE_ENV=production`.
+chain-enforcement trigger. Protected account creation and reversible status
+control, role creation/assignment, session administration/revoke-all behavior,
+filtered audit querying, and recomputed integrity verification are now connected
+to the ERP/CRM security page. Administrative-role operations require an
+administrative actor with a 2FA-verified session and an enrolled target; the last
+active administrator and self-disable paths are protected. Integration tests
+cover failed/successful login, lockout, expiration, targeted and account-wide
+session revocation, permission denial, administrative TOTP, access administration,
+audit capture/query/integrity, chain linkage, mutation rejection, and requester
+self-approval rejection. Still required: protected factor enrollment/provisioning
+and recovery, password change/reset, approved role seeds and policy values, and
+approved central identity adapters after `IAM-001`/`IAM-002` decisions. A
+development-only, non-administrative seed command provisions a local employee
+account and the UI-workflow permissions needed to exercise the current browser
+slices; it requires the operator to supply the password and refuses
+`NODE_ENV=production`.
 
 - One employee account; secure password hashing; configurable complexity and
   expiration; login sessions in Redis; 2FA mandatory for administrator roles and
@@ -223,23 +233,39 @@ protected client routing; permission-aware navigation; workspace, effective-acce
 not-found, and honest module-empty pages; mobile navigation; keyboard focus and skip
 navigation; separate ERP/CRM, POS, and backup-control builds; initial versioned/
 quarantined file metadata and idempotent notification schema; local Mailpit; and
-deterministic creation/readiness validation of a private local MinIO bucket. No file
-upload/download adapter, scanning, email, SMS, job handler, parent-authorization,
-metrics exporter, production monitoring adapter, or backend-integrated POS/backup
-operational UI is yet claimed complete. The first domain-backed ERP/CRM workflow,
-the shared partner registry, is implemented under Phase 2.
+deterministic creation/readiness validation of a private local MinIO bucket. The
+in-system notification worker and recipient notification-centre UI are now
+connected, with retry/backoff, stale-claim recovery, visible terminal failures,
+and read acknowledgement. No file upload/download adapter, scanning, approved
+email/SMS adapter, parent-authorization, metrics exporter, production monitoring
+adapter, or backend-integrated POS/backup operational UI is yet claimed complete.
+The responsive security page now connects employee accounts, role and
+permission composition, account lifecycle, session revocation, 2FA posture, and
+audit integrity with permission-aware commands and explicit loading, empty,
+failure, and success states. Password and factor self-service states remain tied
+to their pending backend workflows.
+The first domain-backed ERP/CRM workflow, the shared partner registry, is
+implemented under Phase 2.
 
 The UI-only architecture pass now also provides complete navigable screen designs
 for the documented ERP/CRM workflows, a task-first POS terminal, and a separate
 backup/DR control console. These screens deliberately display no invented business
-records and keep commands as integration-pending affordances until their APIs,
-database schemas, hardware adapters, audit behavior, and acceptance tests are
-implemented in the corresponding phases.
+records. Actions remain unavailable until their APIs, database schemas, hardware
+adapters, audit behavior, and acceptance tests are implemented in the corresponding
+phases.
+
+The project authority explicitly reprioritized a cross-application UI quality pass
+on 2026-08-10. It simplified the security page while retaining its right-side
+drawer, corrected shared token compatibility, aligned controls and icons, removed
+implementation language from visible content, and checked ERP/CRM, POS, and backup
+layouts at desktop and narrow viewport sizes. `GOALS.md` was also corrected to an
+atomic pending-only queue: completed bullets are removed individually, and work
+returns to the earliest actionable Phase 1 item after this requested exception.
 
 - S3-compatible file adapter with type/size validation, quarantine/scan hook,
   versioned metadata, and inherited parent authorization.
-- Queued, retryable, observable, idempotent in-system and email notifications;
-  SMS capability is included for backup alerts behind an adapter.
+- Queued, retryable, observable, idempotent in-system notifications; email and
+  backup SMS remain behind approved provider adapters.
 - Shared accessible, responsive UI primitives, externalized UI text, loading,
   empty, success, validation, and failure states.
 - Metrics, logs, alert hooks, and operational runbooks.
@@ -247,7 +273,6 @@ implemented in the corresponding phases.
 Acceptance criteria:
 
 - Adapter contract tests cover failures, retries, and idempotent replay.
-- Unauthorized attachment reads fail in the backend.
 - Notification duplicate delivery is prevented by idempotency key.
 - Accessibility checks cover labels, focus order, and keyboard navigation.
 
@@ -265,19 +290,44 @@ for partner addresses, contacts, and bank accounts; and a responsive registry,
 profile drawer, create workflow, empty/loading/failure states, and controlled
 duplicate warning. Address, contact, and bank-account creation requires
 `crm:edit`, has scoped idempotent replay, and atomically updates the canonical
-partner version with its audit-chain and outbox event. Remaining Phase 2 scope
-includes partner update/deactivation and controlled duplicate resolution;
-customer locations, branches, products, equipment, warehouses, inventory, costing,
-reservations, alerts, recommendations, and serial traceability. Partner
-edit/delete/merge behavior remains unimplemented pending controlled-resolution
-policy; the current API cannot silently merge or delete records.
+partner version with its audit-chain and outbox event. Customer locations and
+their installed-equipment registers are also connected end to end: configurable
+location type/address/responsible contact, globally unique equipment serial,
+purchase and warranty dates, active/under-repair/retired status, optional catalog
+product, and safe linking to an existing inventory serial without fabricating
+legacy custody. Both commands are `crm:edit` protected, retry-safe, audited, and
+outbox-backed. Partner, customer-location, and installed-equipment maintenance is
+now connected end to end with optimistic version checks, stable retry keys,
+before/after audit evidence, and outbox events. Deactivation is reversible rather
+than destructive: active locations block partner deactivation and active
+equipment blocks location deactivation. Equipment serial/product identity is
+immutable. In-system low-stock alerts now dispatch through the Phase 1 worker and
+appear in each recipient's notification centre. Remaining Phase 2 scope is
+controlled duplicate resolution; provider-backed notification channels remain
+under Phase 1. Optional FIFO remains disabled until selected. Hard
+delete and merge behavior remain unimplemented pending the controlled-resolution
+policy, so records cannot be silently merged or erased.
 
 Current executable evidence: API integration test proves authorization,
 normalization, idempotent replay, shared-profile read, duplicate IBAN rejection,
 and exactly-once audit/outbox writes for all three profile child types. Browser
-tests prove profile loading and the `crm:edit` contact command flow; API and web
-typechecks plus the production web build pass. Final phase acceptance still awaits
-the remaining Phase 2 requirements and project-authority review.
+tests prove profile loading, the `crm:edit` contact command flow, customer
+location/equipment creation, versioned edits, and reversible lifecycle controls.
+The live customer-assets test additionally proves same-customer contact
+enforcement, exact date preservation, serial uniqueness, safe retry, stale-write
+rejection, dependency guards, and exactly-once audit/outbox evidence. Final phase
+acceptance still awaits the remaining Phase 2 requirements and project-authority
+review.
+
+The internal organization topology is now also implemented without client data:
+legal business entities, branches, addressed operating locations, employee-backed
+operators, cash registers, and same-location register/operator assignments.
+`platform.organization:view/create` is enforced in the backend; every create is
+idempotent, audited, and outbox-backed. Warehouse setup can reference a business
+location and a same-location technician operator. The connected Administration
+page guides users through parent dependencies and retains explicit empty/error
+states. Client-specific values and document/fiscal numbering remain unresolved
+under `BUS-001`, `BUS-002`, and `POS-001`; no values were inferred or seeded.
 
 The next safe catalog increment is also implemented: an empty ERP-owned
 product-category hierarchy with immutable UUIDs, parent restrictions,
@@ -303,9 +353,69 @@ product identity; category/unit reference validation; idempotent retries; and
 atomic audit/outbox records. The ERP Warehouse hub now exposes an API-backed
 product catalog with real empty, error, and prerequisite states plus retry-safe
 unit/product creation drawers. No product or category seed data is inserted.
-Serialised items, batches, expiry records, pricing, warehouse balances, stock
-movements, valuation, reservations, and traceability enforcement remain the next
-warehouse vertical slice.
+Pricing remains a later commercial increment; valuation, replenishment, and the
+inventory-controlled portion of serial traceability are now implemented.
+
+The first warehouse-inventory increment is now verified: empty configurable
+standard/technician warehouses, append-only receipt movements, aggregate stock
+balances, batch balances, and globally unique serialised items. The receipt
+command is authorized, retry-safe, audited, and outbox-backed in one transaction.
+It enforces category-driven serial, batch, and expiry requirements and returns
+four-decimal quantities. No client warehouse, location, product, or stock balance
+is seeded. Stock issues are now a distinct protected ledger command for sale,
+repair, or write-off. It atomically prevents a negative aggregate or batch balance
+and moves selected serials from available to issued, blocking a second issue of
+the same serial. Linked returns now restore batch/serial custody and original BGN
+valuation only through the immutable source issue, while preventing cumulative
+over-return. Fiscal, invoice, payment, and source-document orchestration remain
+separate pending workflows.
+
+Warehouse transfers are now paired outbound/inbound movements in one atomic,
+idempotent, audited, outbox-backed command. Source balance, batch balance, and
+available serials are protected; balance locks use a deterministic order to avoid
+opposing-transfer deadlocks.
+
+Stocktake is now an approval-controlled workflow for ordinary, serial, and batch
+stock. Opening a count transactionally freezes warehouse movements; every stocked
+product and batch needs physical evidence; serial evidence quarantines missing
+items; completion creates adjustment movements, updates balances, and records
+audit/outbox evidence. Active reservations cannot be invalidated by a count.
+
+Quantity reservations are now concurrency-protected for sales orders, quotations,
+and service requests. They distinguish physical from available stock, support
+partial issue consumption and explicit release, protect reserved stock from
+unrelated issues/transfers, and require specific serials for serial-tracked
+products. Optional FIFO, notification dispatch, and full source-document
+orchestration remain pending.
+
+Automatic weighted-average valuation is now implemented in fixed-precision BGN.
+Receipts blend their unit cost into the warehouse/product average; issues and
+stocktake adjustments preserve the current average; transfers carry source cost
+and blend it into the destination. Existing pre-valuation stock is explicitly
+initialized at BGN 0.0000 rather than assigned a fabricated historical cost.
+Per-warehouse/product minimum and target quantities now drive a live
+reservation-aware low-stock register and purchase recommendation quantity.
+Explicit employee subscriptions now queue one idempotent in-system message per
+low-stock transition cycle; stock recovery resets the cycle without deleting its
+history. Optional FIFO, queue dispatch, and source-document orchestration remain
+pending.
+
+Serial traceability now exposes one chronological custody timeline from supplier
+receipt through warehouse transfers to customer sale/repair issue and linked return, including the
+recording employee, linked technician, reference, cost, current warehouse, and
+available/issued/missing state. Party links are validated against active roles
+and accounts. The ERP Reservations & serial trace route now provides a connected
+scan/search experience. Source workflows must supply party links; missing legacy
+evidence remains visibly absent and is never inferred.
+
+The warehouse operator workspace is now connected to the inventory APIs rather
+than presentation-only workflow cards. Permission-aware screens cover warehouse
+creation; physical/reserved/available balances and weighted-average valuation;
+minimum/target settings and purchase recommendations; serial/batch-aware receipt,
+issue, and transfer commands; count evidence and separate stocktake approval;
+sales-order/quotation/service reservations with release; and embedded serial
+traceability. Every mutation sends a stable idempotency key, and the UI renders
+server errors instead of predicting or bypassing inventory rules.
 
 Scope: unified partners/customers/suppliers, legal entities and individuals,
 contacts, addresses, bank accounts, customer locations, branches, products,
@@ -328,7 +438,8 @@ Acceptance criteria:
 - Reservations for orders, quotations, and service requests are concurrency-safe.
 - Traceability reports show supplier, receipt date, customer sale, and repair
   technician; all material changes are authorized and audited.
-- Weighted-average behavior and optional FIFO behavior have executable tests.
+- Weighted-average behavior has executable tests; FIFO behavior must have tests
+  before the optional costing mode can be enabled.
 
 ### Phase 3 — Procurement, sales, finance, and logistics
 
@@ -542,6 +653,13 @@ produce audit or operational telemetry as applicable:
 - backup execution, verification, and missed-backup detection;
 - annual backup-plan review and DR-test reminders.
 
+The Phase 1 worker and named-handler registry cover the complete inventory. The
+active notification handler owns its full PostgreSQL delivery lifecycle. Other
+handlers publish one deterministic transactional-outbox trigger for their later
+domain owner; their business effects and configurable schedules remain acceptance
+work in Phases 3–8 and are not represented as completed results. See
+`docs/architecture/background-jobs.md`.
+
 ## 6. Required test inventory
 
 - Unit: tax/totals, currency, outstanding balance, aging, discounts, loyalty,
@@ -582,36 +700,74 @@ reversible foundation scaffold:
 
 ## 8. Milestone evidence log
 
-| Date       | Milestone                  | Evidence                                                                                                                                                                                                                      | Result                             |
-| ---------- | -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------- |
-| 2026-08-05 | Repository baseline        | Only `AGENTS.md`; no usable Git worktree or implementation files                                                                                                                                                              | confirmed                          |
-| 2026-08-05 | Specification read         | All 1,320 lines of `AGENTS.md` reviewed before implementation                                                                                                                                                                 | confirmed                          |
-| 2026-08-05 | Phase 0 baseline           | Living plan, decision register, ADR-0001, and full section-level traceability                                                                                                                                                 | implemented                        |
-| 2026-08-05 | P1.1 monorepo              | Lockfile, NestJS, three Vite apps, five shared packages, Compose, CI, and foundation docs                                                                                                                                     | implemented, not accepted          |
-| 2026-08-05 | P1.2 API slice             | Live readiness reported PostgreSQL/Redis up; OpenAPI emitted; API E2E passed                                                                                                                                                  | implemented, incomplete            |
-| 2026-08-05 | P1.2 migration             | Foundation migration applied; invariants passed; down succeeded; up reapplied                                                                                                                                                 | verified                           |
-| 2026-08-05 | Repository validation      | Format, lint, all typechecks, 18 tests, and all production builds passed                                                                                                                                                      | passed                             |
-| 2026-08-05 | Dependency audit           | `js-yaml` advisory remediated with 5.2.3 override; production audit reports zero findings                                                                                                                                     | passed                             |
-| 2026-08-06 | P1.2 runtime controls      | Redaction unit test, request logging, throttling E2E, safe 429 envelope                                                                                                                                                       | verified                           |
-| 2026-08-06 | P1.2 storage/jobs          | Private MinIO bucket probe and Redis stable-ID replay/deduplication integration tests                                                                                                                                         | verified, worker pending           |
-| 2026-08-06 | P1.2 dependency health     | Live readiness reported PostgreSQL, Redis, and private object storage up                                                                                                                                                      | verified                           |
-| 2026-08-06 | Repository validation      | Format, lint, all typechecks, 25 tests including infrastructure, and all builds passed                                                                                                                                        | passed                             |
-| 2026-08-06 | Reproducibility checks     | OpenAPI emitted; migration down/up passed; production dependency audit found zero issues                                                                                                                                      | passed                             |
-| 2026-08-06 | P1.3 authentication        | Scrypt, lockout/expiry, Redis sessions, RBAC denial, admin TOTP, and logout E2E                                                                                                                                               | verified, admin APIs pending       |
-| 2026-08-06 | P1.3 audit chain           | Serialized writer, chain-head trigger, linked-event and append-only integration tests                                                                                                                                         | verified, query service pending    |
-| 2026-08-06 | P1.3 validation            | Format, lint, all typechecks, 44 tests including live infrastructure, and all builds                                                                                                                                          | passed                             |
-| 2026-08-06 | P1.3 reproducibility       | Opaque-bearer OpenAPI emitted; migration 0002 down/up passed; production audit found zero                                                                                                                                     | passed                             |
-| 2026-08-06 | P1.4 ERP/CRM UI            | Login/TOTP, session restore/logout, protected routes, permission navigation, responsive QA                                                                                                                                    | verified, domain pages next        |
-| 2026-08-06 | P1.4 validation            | Format, lint, all typechecks/builds, 48 tests with infrastructure, and zero production audit findings                                                                                                                         | passed                             |
-| 2026-08-06 | P2 partner API             | Migration 0003; authorized list/get/create; duplicate blocking; idempotency; atomic audit/outbox; 7 live integration tests                                                                                                    | verified, detail relations pending |
-| 2026-08-06 | P2 partner UI              | Real `/partners` registry, filters, responsive table/cards, detail/create drawers, duplicate and recovery states; 8 browser-behavior tests                                                                                    | verified                           |
-| 2026-08-06 | P2 responsive QA           | Chromium screenshots at 1440×1000 and 390×844 using isolated non-persistent API fixtures                                                                                                                                      | passed                             |
-| 2026-08-06 | P2 reproducibility         | Migration 0003 rollback/reapply passed; OpenAPI includes filters, create body, retry header, and response schemas                                                                                                             | passed                             |
-| 2026-08-06 | P2 repository validation   | Format, lint, all typechecks, 58 tests including live infrastructure/database invariants, and all production builds                                                                                                           | passed                             |
-| 2026-08-06 | P2 dependency audit        | Production dependency audit reported zero vulnerabilities                                                                                                                                                                     | passed                             |
-| 2026-08-07 | Local startup reliability  | `npm run infra:up` returned 0 after healthy PostgreSQL/Redis/MinIO/Mailpit and successful MinIO initialization; `npm run dev` started all four apps; curls returned 200 for ports 5173, 5174, 5175, API liveness, and OpenAPI | passed                             |
-| 2026-08-07 | Development browser access | `npm run db:seed:dev` provisioned `dev@vista.local` with non-administrative CRM/warehouse permissions; API seed completed successfully; password is supplied by the operator and is not stored in the repository              | verified                           |
-| 2026-08-07 | UI architecture pass       | 40+ navigable ERP/CRM workflow designs; task-first POS terminal and POS registers; backup/DR control screens; no fabricated operational data; frontend typechecks, tests, and production builds passed                        | verified, API wiring pending       |
-| 2026-08-07 | Workspace shell refinement | ERP/CRM uses the available dashboard canvas with a leaner navigation rail and secured-session topbar; backup/DR has a refined recovery-control header and rail; both frontend typechecks, tests, and builds passed            | verified                           |
-| 2026-08-07 | P2 catalog master data     | Migration 0006-backed units/products/typed barcode API with authorization, normalization, idempotency, audit/outbox; API integration suite (10 tests), ERP catalog browser suite (11 tests), typechecks and production build  | verified, inventory slice pending  |
-| 2026-08-07 | P2 catalog validation      | OpenAPI generated with the four catalog routes; full repository `npm run validate` passed; live PostgreSQL integration suite passed all 10 catalog/partner tests                                                              | passed                             |
+| Date       | Milestone                     | Evidence                                                                                                                                                                                                                                                    | Result                                |
+| ---------- | ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------- |
+| 2026-08-05 | Repository baseline           | Only `AGENTS.md`; no usable Git worktree or implementation files                                                                                                                                                                                            | confirmed                             |
+| 2026-08-05 | Specification read            | All 1,320 lines of `AGENTS.md` reviewed before implementation                                                                                                                                                                                               | confirmed                             |
+| 2026-08-05 | Phase 0 baseline              | Living plan, decision register, ADR-0001, and full section-level traceability                                                                                                                                                                               | implemented                           |
+| 2026-08-05 | P1.1 monorepo                 | Lockfile, NestJS, three Vite apps, five shared packages, Compose, CI, and foundation docs                                                                                                                                                                   | implemented, not accepted             |
+| 2026-08-05 | P1.2 API slice                | Live readiness reported PostgreSQL/Redis up; OpenAPI emitted; API E2E passed                                                                                                                                                                                | implemented, incomplete               |
+| 2026-08-05 | P1.2 migration                | Foundation migration applied; invariants passed; down succeeded; up reapplied                                                                                                                                                                               | verified                              |
+| 2026-08-05 | Repository validation         | Format, lint, all typechecks, 18 tests, and all production builds passed                                                                                                                                                                                    | passed                                |
+| 2026-08-05 | Dependency audit              | `js-yaml` advisory remediated with 5.2.3 override; production audit reports zero findings                                                                                                                                                                   | passed                                |
+| 2026-08-06 | P1.2 runtime controls         | Redaction unit test, request logging, throttling E2E, safe 429 envelope                                                                                                                                                                                     | verified                              |
+| 2026-08-06 | P1.2 storage/jobs             | Private MinIO bucket probe and Redis stable-ID replay/deduplication integration tests                                                                                                                                                                       | verified, worker pending              |
+| 2026-08-06 | P1.2 dependency health        | Live readiness reported PostgreSQL, Redis, and private object storage up                                                                                                                                                                                    | verified                              |
+| 2026-08-06 | Repository validation         | Format, lint, all typechecks, 25 tests including infrastructure, and all builds passed                                                                                                                                                                      | passed                                |
+| 2026-08-06 | Reproducibility checks        | OpenAPI emitted; migration down/up passed; production dependency audit found zero issues                                                                                                                                                                    | passed                                |
+| 2026-08-06 | P1.3 authentication           | Scrypt, lockout/expiry, Redis sessions, RBAC denial, admin TOTP, and logout E2E                                                                                                                                                                             | verified, admin APIs pending          |
+| 2026-08-06 | P1.3 audit chain              | Serialized writer, chain-head trigger, linked-event and append-only integration tests                                                                                                                                                                       | verified, query service pending       |
+| 2026-08-06 | P1.3 validation               | Format, lint, all typechecks, 44 tests including live infrastructure, and all builds                                                                                                                                                                        | passed                                |
+| 2026-08-06 | P1.3 reproducibility          | Opaque-bearer OpenAPI emitted; migration 0002 down/up passed; production audit found zero                                                                                                                                                                   | passed                                |
+| 2026-08-06 | P1.4 ERP/CRM UI               | Login/TOTP, session restore/logout, protected routes, permission navigation, responsive QA                                                                                                                                                                  | verified, domain pages next           |
+| 2026-08-06 | P1.4 validation               | Format, lint, all typechecks/builds, 48 tests with infrastructure, and zero production audit findings                                                                                                                                                       | passed                                |
+| 2026-08-06 | P2 partner API                | Migration 0003; authorized list/get/create; duplicate blocking; idempotency; atomic audit/outbox; 7 live integration tests                                                                                                                                  | verified, detail relations pending    |
+| 2026-08-06 | P2 partner UI                 | Real `/partners` registry, filters, responsive table/cards, detail/create drawers, duplicate and recovery states; 8 browser-behavior tests                                                                                                                  | verified                              |
+| 2026-08-06 | P2 responsive QA              | Chromium screenshots at 1440×1000 and 390×844 using isolated non-persistent API fixtures                                                                                                                                                                    | passed                                |
+| 2026-08-06 | P2 reproducibility            | Migration 0003 rollback/reapply passed; OpenAPI includes filters, create body, retry header, and response schemas                                                                                                                                           | passed                                |
+| 2026-08-06 | P2 repository validation      | Format, lint, all typechecks, 58 tests including live infrastructure/database invariants, and all production builds                                                                                                                                         | passed                                |
+| 2026-08-06 | P2 dependency audit           | Production dependency audit reported zero vulnerabilities                                                                                                                                                                                                   | passed                                |
+| 2026-08-07 | Local startup reliability     | `npm run infra:up` returned 0 after healthy PostgreSQL/Redis/MinIO/Mailpit and successful MinIO initialization; `npm run dev` started all four apps; curls returned 200 for ports 5173, 5174, 5175, API liveness, and OpenAPI                               | passed                                |
+| 2026-08-07 | Development browser access    | `npm run db:seed:dev` provisioned `dev@vista.local` with non-administrative CRM/warehouse permissions; API seed completed successfully; password is supplied by the operator and is not stored in the repository                                            | verified                              |
+| 2026-08-07 | UI architecture pass          | 40+ navigable ERP/CRM workflow designs; task-first POS terminal and POS registers; backup/DR control screens; no fabricated operational data; frontend typechecks, tests, and production builds passed                                                      | verified, API wiring pending          |
+| 2026-08-07 | Workspace shell refinement    | ERP/CRM uses the available dashboard canvas with a leaner navigation rail and secured-session topbar; backup/DR has a refined recovery-control header and rail; both frontend typechecks, tests, and builds passed                                          | verified                              |
+| 2026-08-07 | P2 catalog master data        | Migration 0006-backed units/products/typed barcode API with authorization, normalization, idempotency, audit/outbox; API integration suite (10 tests), ERP catalog browser suite (11 tests), typechecks and production build                                | verified, inventory slice pending     |
+| 2026-08-07 | P2 catalog validation         | OpenAPI generated with the four catalog routes; full repository `npm run validate` passed; live PostgreSQL integration suite passed all 10 catalog/partner tests                                                                                            | passed                                |
+| 2026-08-10 | P2 receipt foundation         | Migration 0007 applied locally; warehouse/receipt/balance APIs enforce normalized topology, idempotency, atomic audit/outbox, serial-per-unit validation, and fixed-scale quantities; live PostgreSQL integration suite passed                              | verified, inventory workflows pending |
+| 2026-08-10 | P2 stock-issue control        | Migration 0008 applied locally; protected sale/repair/write-off issues reject insufficient aggregate/batch stock and double-issued serials; live PostgreSQL integration suite passed                                                                        | verified, transfer/stocktake pending  |
+| 2026-08-10 | P2 transfer control           | Migration 0009 applied locally; paired transfer movements relocate stock, batches, and available serials transactionally with deterministic locking; live PostgreSQL integration suite passed                                                               | verified, stocktake pending           |
+| 2026-08-10 | P2 stocktake control          | Migrations 0010–0012 applied locally; warehouse freeze, ordinary/serial/batch evidence, approve-only adjustments, missing-serial quarantine, reservation safeguard, audit/outbox, and replay passed live PostgreSQL tests                                   | verified                              |
+| 2026-08-10 | P2 reservation control        | Migration 0013 applied locally; sales-order/quotation/service reservations support partial consumption, release, specific serial protection, and available-stock enforcement; live PostgreSQL integration suite passed                                      | verified, valuation/alerts next       |
+| 2026-08-10 | P2 inventory validation       | OpenAPI regenerated; live PostgreSQL suite passed all 10 combined partner/catalog/inventory scenarios; repository-wide format, lint, typechecks, unit/E2E tests, and all production builds passed                                                           | passed                                |
+| 2026-08-10 | P2 valuation/replenishment    | Migration 0014 applied locally; fixed-precision BGN weighted average flows through receipts/issues/transfers/stocktake; reservation-aware thresholds, low-stock state, and purchase recommendations passed live PostgreSQL tests                            | verified, FIFO/notifications pending  |
+| 2026-08-10 | P2 valuation validation       | OpenAPI regenerated; repository-wide format, lint, every workspace typecheck/test, NestJS build, and all three Vite production builds passed after the valuation and replenishment changes                                                                  | passed                                |
+| 2026-08-10 | P2 serial traceability        | Migration 0015 applied locally; supplier receipt, transfer custody, customer repair issue, technician identity, status, unknown-serial handling, and chronological API passed live PostgreSQL tests; connected ERP UI passed                                | verified                              |
+| 2026-08-10 | P2 traceability validation    | OpenAPI regenerated; repository-wide formatting, lint, every workspace typecheck/test, NestJS build, and all three Vite production builds passed after the serial-traceability API and connected ERP workflow were added                                    | passed                                |
+| 2026-08-10 | P2 warehouse operations UI    | Five permission-aware connected workflows cover warehouses, stock/valuation/replenishment, serial/batch movements, approval-separated stocktakes, reservations/releases, and serial trace; 15 ERP browser tests pass                                        | verified                              |
+| 2026-08-10 | P2 warehouse UI validation    | Repository-wide format, lint, every workspace typecheck/test, NestJS build, and all three Vite production builds passed with the connected warehouse operator workspace                                                                                     | passed                                |
+| 2026-08-10 | P2 customer assets            | Migration 0016, three protected APIs, shared contracts, and connected customer-profile UI cover multiple locations, responsible contacts, installed devices, status, purchase/warranty dates, unique serials, and inventory serial links                    | verified                              |
+| 2026-08-10 | P2 customer-assets tests      | Live PostgreSQL partner/master-data suite passed all 11 scenarios, including authorization, date fidelity, idempotent replay, global serial uniqueness, audit/outbox evidence; ERP browser suite passed all 16 tests                                        | passed                                |
+| 2026-08-10 | P2 customer-assets validation | OpenAPI regenerated with all three routes; repository-wide formatting, strict lint, every workspace typecheck/test, NestJS build, and all three Vite production builds passed                                                                               | passed                                |
+| 2026-08-10 | P2 organization topology      | Migration 0017 and seven protected endpoints cover internal legal entities, branches, addressed locations, employee operators, registers, same-location assignments, and optional warehouse/operator ownership without seed data                            | verified                              |
+| 2026-08-10 | P2 organization tests         | Live PostgreSQL suite passed all 12 master-data scenarios; connected dependency-aware Administration workflow brought the ERP browser suite to 17 passing tests                                                                                             | passed                                |
+| 2026-08-10 | P2 organization validation    | OpenAPI regenerated with all seven topology routes and extended warehouse schemas; repository-wide format, lint, typechecks, unit/E2E tests, NestJS build, and all Vite production builds passed                                                            | passed                                |
+| 2026-08-10 | P2 linked inventory returns   | Migration 0018 and protected return API/UI require an immutable original issue, prevent cumulative over-return, restore batch/serial custody and original BGN cost, append serial trace events, and retain fiscal/POS reversal boundaries                   | verified                              |
+| 2026-08-10 | P2 low-stock alert queue      | Migration 0019 adds explicit active-account subscriptions and transactional transition state; live PostgreSQL proves one message per recipient/cycle, no duplicates while low, recovery reset, a second shortage cycle, and later dispatch                  | verified                              |
+| 2026-08-10 | P2 returns/alerts validation  | Migrations 0019 down/up passed; OpenAPI regenerated; live API suite passed all 12 scenarios; ERP browser suite passed 18 tests; full repository validation passed 44 standard tests, lint, typechecks, NestJS and all Vite production builds                | passed                                |
+| 2026-08-10 | P2 partner/assets maintenance | Nine protected update/lifecycle routes, shared versioned contracts, and connected profile controls provide retry-safe edits and reversible deactivation for partners, customer locations, and equipment without hard delete or identity mutation            | verified                              |
+| 2026-08-10 | P2 maintenance tests          | Live PostgreSQL/Redis suite passed all 13 partner/master-data scenarios including stale versions, dependency guards, idempotent replay, reactivation, and audit/outbox evidence; ERP browser suite passed all 19 workflows                                  | passed                                |
+| 2026-08-10 | P2 maintenance validation     | OpenAPI regenerated with all nine maintenance routes; repository-wide formatting, strict lint, every workspace typecheck, 45 standard tests, NestJS build, and all three Vite production builds passed                                                      | passed                                |
+| 2026-08-10 | P1 notification dispatch      | Migration 0020; Redis worker/poller, transactional claim, bounded retry, stale-claim recovery, terminal errors, recipient-safe list/read APIs, and ERP/CRM notification centre deliver low-stock alerts without pretending email/SMS succeeded              | verified                              |
+| 2026-08-10 | P1 notification tests         | Live PostgreSQL/Redis suite passed all 13 scenarios including delivered/read low-stock evidence; ERP browser suite passed all 20 workflows                                                                                                                  | passed                                |
+| 2026-08-10 | P1 notification validation    | Migration 0020 applied locally; OpenAPI regenerated; full repository validation passed format, lint, strict typechecks, 46 standard tests, NestJS, and every Vite production build                                                                          | passed                                |
+| 2026-08-10 | P1 protected job operations   | `platform:view` queue metrics and payload-free job lifecycle APIs; OpenAPI emitted; live PostgreSQL/Redis suite passed all 14 scenarios including authorization, non-disclosure, lifecycle, and missing-job behavior                                        | verified                              |
+| 2026-08-10 | P1 operations validation      | Full repository validation passed formatting, lint, strict typechecks, 46 standard tests, NestJS, and every Vite production build                                                                                                                           | passed                                |
+| 2026-08-10 | P1 security administration    | Migration 0021 and eleven protected endpoints connect account creation/lifecycle, controlled roles and grants, active-session revocation, filtered activity history, and recomputed integrity to the responsive ERP/CRM security page                       | verified, recovery flows pending      |
+| 2026-08-10 | P1 security controls/tests    | Live PostgreSQL/Redis authentication suite passed all 13 scenarios, including idempotent account/role commands, administrative 2FA boundaries, session revocation, login denial, self/last-admin protection, non-disclosure, and audit integrity            | passed                                |
+| 2026-08-10 | P1 security validation        | Migration 0021 down/up passed; OpenAPI emitted all security routes; ERP browser suite passed 21 workflows; full validation passed formatting, lint, strict typechecks, 47 standard tests and all builds; production dependency audit found zero             | passed                                |
+| 2026-08-10 | Cross-app UI quality pass     | Simplified security structure and drawer, shared token repair, icon/control alignment, plain business-facing copy, Chromium checks at 1440×1000 and 390×844, and full validation with 49 standard tests and all production builds                           | passed                                |
+| 2026-08-10 | Temporary-goals governance    | `GOALS.md` now contains atomic pending-only bullets, requires strict earliest-actionable execution, records explicit reprioritization, and removes each accepted item rather than waiting for an entire phase                                               | corrected                             |
+| 2026-08-10 | P1 named job handlers         | Unified BullMQ worker registry; corrected nested-payload routing; bounded retry context; terminal unknown-handler behavior; all 13 remaining named responsibilities registered with deterministic transactional-outbox handoff and explicit P3–P8 ownership | verified                              |
+| 2026-08-10 | P1 named-job tests            | Eight focused lifecycle tests passed; live PostgreSQL/Redis suite passed all 15 scenarios and proved one durable event after two executions of each named handler; full validation passed 56 standard tests and all production builds                       | passed                                |
+| 2026-08-10 | P1 distributed rate limits    | All 68 non-health endpoints have configurable public/read/write/sensitive policies; atomic Redis counters span replicas, production rejects memory storage, dependency failure is closed/stable, and trusted proxy hops are explicit                        | verified                              |
+| 2026-08-10 | P1 rate-limit validation      | Six focused policy/storage/coverage tests, configuration tests, stable-header/429 API E2E, and live two-instance Redis sharing/expiry passed; OpenAPI regenerated; full validation passed 63 standard tests and all production builds                       | passed                                |

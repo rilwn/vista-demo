@@ -74,11 +74,11 @@ export function CatalogPage() {
     <div className="page-stack catalog-page">
       <header className="page-header catalog-header">
         <div>
-          <p className="page-eyebrow">ERP · shared master data</p>
+          <p className="page-eyebrow">ERP · Warehouse</p>
           <h1>Product catalog</h1>
           <p>
             Maintain reusable product identity, barcodes, and units. Inventory, pricing, serials,
-            batches, and stock posting remain separate controlled workflows.
+            batches, and stock movements are managed separately.
           </p>
         </div>
         {canCreate ? (
@@ -206,10 +206,7 @@ function ProductsPanel({
   if (products.length === 0)
     return (
       <CatalogState title="No products configured">
-        <p>
-          Start with a product code, category, unit, and any known barcode. There are no sample
-          products in this environment.
-        </p>
+        <p>Add the first product with its code, category, unit, and any known barcode.</p>
         {canCreate && productPrerequisitesReady ? (
           <Button onClick={onCreate} variant="secondary">
             Add the first product
@@ -262,8 +259,8 @@ function UnitsPanel({
     return (
       <CatalogState title="No units configured">
         <p>
-          Units are controlled master data, so terminology can be configured without changing
-          historical product records.
+          Add the units your team uses for product quantities. Existing product history is kept when
+          a unit name changes.
         </p>
         {canCreate ? (
           <Button onClick={onCreate} variant="secondary">

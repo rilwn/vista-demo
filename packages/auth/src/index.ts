@@ -4,6 +4,7 @@ export type PermissionAction = (typeof permissionActions)[number];
 
 export const permissionModules = [
   'platform',
+  'platform.organization',
   'erp.finance',
   'erp.procurement',
   'erp.warehouse',

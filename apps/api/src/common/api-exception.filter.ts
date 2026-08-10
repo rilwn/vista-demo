@@ -43,6 +43,12 @@ export class ApiExceptionFilter implements ExceptionFilter {
 
     this.logger.event(status >= 500 ? 'error' : 'warn', 'http.request.failed', {
       correlationId: request.correlationId,
+      ...(databaseErrorCode(exception)
+        ? { dependencyErrorCode: databaseErrorCode(exception) }
+        : {}),
+      ...(databaseErrorRoutine(exception)
+        ? { dependencyErrorRoutine: databaseErrorRoutine(exception) }
+        : {}),
       exceptionType: exception instanceof Error ? exception.constructor.name : typeof exception,
       method: request.method,
       path: request.path,
@@ -51,6 +57,20 @@ export class ApiExceptionFilter implements ExceptionFilter {
 
     response.status(status).json(body);
   }
+}
+
+function databaseErrorCode(exception: unknown): string | undefined {
+  if (!isRecord(exception)) return undefined;
+  const code = exception['code'];
+  return typeof code === 'string' && /^[A-Z0-9]{5}$/u.test(code) ? code : undefined;
+}
+
+function databaseErrorRoutine(exception: unknown): string | undefined {
+  if (!isRecord(exception)) return undefined;
+  const routine = exception['routine'];
+  return typeof routine === 'string' && /^[a-zA-Z0-9_]{1,100}$/u.test(routine)
+    ? routine
+    : undefined;
 }
 
 function parseException(

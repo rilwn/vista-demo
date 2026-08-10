@@ -14,6 +14,16 @@ const screenLabels: Record<PosScreen, string> = {
   sync: 'Sync & devices',
 };
 
+const screenIcons: Record<PosScreen, PosIconName> = {
+  customers: 'customers',
+  reports: 'reports',
+  returns: 'returns',
+  sales: 'sales',
+  sell: 'sell',
+  shifts: 'shifts',
+  sync: 'devices',
+};
+
 export function App() {
   const [screen, setScreen] = useState<PosScreen>('sell');
   const [notice, setNotice] = useState<string | null>(null);
@@ -27,7 +37,7 @@ export function App() {
           </span>
           <div>
             <strong>Vista POS</strong>
-            <small>Terminal workspace</small>
+            <small>Cashier terminal</small>
           </div>
         </div>
         <div className="pos-terminal-context">
@@ -40,7 +50,7 @@ export function App() {
           <button
             onClick={() =>
               setNotice(
-                'Terminal, fiscal-device, and ERP configuration will be connected in the POS integration phase.',
+                'This terminal has not been set up. Assign a register and devices before taking a payment.',
               )
             }
             type="button"
@@ -62,7 +72,7 @@ export function App() {
               }}
               type="button"
             >
-              <span className={`pos-nav-symbol pos-nav-symbol--${item}`} aria-hidden="true" />
+              <PosIcon name={screenIcons[item]} />
               {screenLabels[item]}
             </button>
           ))}
@@ -74,31 +84,27 @@ export function App() {
               <span />
               <p>{notice}</p>
               <button aria-label="Dismiss notice" onClick={() => setNotice(null)} type="button">
-                ×
+                <PosIcon name="close" />
               </button>
             </div>
           ) : null}
           {screen === 'sell' ? (
             <SellScreen onNotice={setNotice} />
           ) : (
-            <RegisterScreen onNotice={setNotice} screen={screen} />
+            <RegisterScreen screen={screen} />
           )}
         </main>
       </div>
 
       <footer className="pos-footer">
         <span>
-          <i className="is-warning" /> ERP catalog unavailable
+          <i className="is-warning" /> Product catalog unavailable
         </span>
         <span>
-          <i className="is-warning" /> Fiscal device unassigned
+          <i className="is-warning" /> Fiscal device not assigned
         </span>
         <span>
-          <i className="is-muted" /> Offline queue not enabled
-        </span>
-        <span className="pos-footer-end">
-          All payment, fiscalization, stock, and sync actions remain disabled until verified
-          integrations are connected.
+          <i className="is-muted" /> Offline mode unavailable
         </span>
       </footer>
     </div>
@@ -118,9 +124,7 @@ function SellScreen({ onNotice }: { onNotice: (message: string) => void }) {
           </div>
           <button
             className="pos-quiet-button"
-            onClick={() =>
-              onNotice('A cashier must open a verified shift before sales can be enabled.')
-            }
+            onClick={() => onNotice('Open a cashier shift before starting a sale.')}
             type="button"
           >
             Open shift
@@ -149,7 +153,7 @@ function SellScreen({ onNotice }: { onNotice: (message: string) => void }) {
           </div>
           <button
             className="pos-text-button"
-            onClick={() => onNotice('ERP catalog synchronization is not connected yet.')}
+            onClick={() => onNotice('The product catalog is not available on this terminal.')}
             type="button"
           >
             Catalog status
@@ -158,52 +162,33 @@ function SellScreen({ onNotice }: { onNotice: (message: string) => void }) {
 
         <div className="pos-catalog-empty">
           <span className="pos-empty-mark" aria-hidden="true">
-            ⌁
+            <PosIcon name="scan" />
           </span>
-          <h2>Ready for a scanned item</h2>
-          <p>
-            The product grid will show real-time ERP stock, prices, promotions, and serial
-            requirements once the catalog integration is enabled.
-          </p>
-          <div>
-            <span>Barcode scanning</span>
-            <span>Product / code search</span>
-            <span>Quick-access panel</span>
-          </div>
+          <h2>Scan a product to begin</h2>
+          <p>Use the scanner or search by product name or code.</p>
         </div>
 
         <section className="pos-action-strip" aria-label="Sale shortcuts">
-          <button
-            onClick={() =>
-              onNotice('Customer lookup will use the shared CRM profile when connected.')
-            }
-            type="button"
-          >
-            <b>F4</b> Customer
+          <button onClick={() => onNotice('Customer search is unavailable.')} type="button">
+            <kbd>F4</kbd> Customer
           </button>
           <button
-            onClick={() => onNotice('Discounts require an eligible line and role permission.')}
+            onClick={() => onNotice('Add a product before applying a discount.')}
             type="button"
           >
-            <b>F6</b> Discount
+            <kbd>F6</kbd> Discount
           </button>
           <button
-            onClick={() =>
-              onNotice('Suspended baskets will be stored through the POS basket service.')
-            }
+            onClick={() => onNotice('Add a product before suspending the sale.')}
             type="button"
           >
-            <b>F8</b> Suspend
+            <kbd>F8</kbd> Suspend
           </button>
           <button
-            onClick={() =>
-              onNotice(
-                'A sale can only be completed after products, a shift, a payment, and fiscal-device rules are available.',
-              )
-            }
+            onClick={() => onNotice('Add a product and open a shift before taking payment.')}
             type="button"
           >
-            <b>F12</b> Pay
+            <kbd>F12</kbd> Pay
           </button>
         </section>
       </section>
@@ -214,14 +199,7 @@ function SellScreen({ onNotice }: { onNotice: (message: string) => void }) {
             <p>Current sale</p>
             <strong>No customer selected</strong>
           </div>
-          <button
-            onClick={() =>
-              onNotice(
-                'Customer identification and loyalty lookup will use the shared CRM profile.',
-              )
-            }
-            type="button"
-          >
+          <button onClick={() => onNotice('Customer search is unavailable.')} type="button">
             Add customer
           </button>
         </header>
@@ -265,86 +243,53 @@ function SellScreen({ onNotice }: { onNotice: (message: string) => void }) {
           Pay · F12
         </button>
         <p className="pos-basket-disclaimer">
-          Payment remains unavailable until a cashier shift, fiscal setup, pricing, and stock
-          synchronization are connected.
+          Open a cashier shift and assign a fiscal device to take payment.
         </p>
       </aside>
     </div>
   );
 }
 
-function RegisterScreen({
-  onNotice,
-  screen,
-}: {
-  onNotice: (message: string) => void;
-  screen: Exclude<PosScreen, 'sell'>;
-}) {
+function RegisterScreen({ screen }: { screen: Exclude<PosScreen, 'sell'> }) {
   const content: Record<
     Exclude<PosScreen, 'sell'>,
-    { action: string; description: string; sections: string[]; title: string }
+    { action: string; description: string; title: string }
   > = {
     customers: {
       title: 'Customers & loyalty',
       action: 'Find customer',
       description:
         'Identify customers, apply contract pricing, and maintain an auditable loyalty-points ledger.',
-      sections: [
-        'Unified CRM profile',
-        'Loyalty card and points ledger',
-        'Corporate on-account eligibility',
-      ],
     },
     reports: {
       title: 'POS reports',
       action: 'Create report',
       description:
         'Run shift, cashier, X/Z, product, category, payment, location, and comparative reports.',
-      sections: [
-        'Configurable time and location filters',
-        'Export to Excel, CSV, and PDF',
-        'Access-controlled report history',
-      ],
     },
     returns: {
       title: 'Returns & warranty claims',
       action: 'Start return',
       description:
         'Link returns to the original fiscal document and route eligible goods to inventory or service.',
-      sections: [
-        'Original receipt/invoice reference',
-        'Fiscal reversal workflow',
-        'Repairable-item service warehouse handoff',
-      ],
     },
     sales: {
       title: 'Sale history',
       action: 'Find sale',
       description:
         'Find fiscal sales, invoices, payments, linked returns, and recoverable processing status.',
-      sections: [
-        'Fiscal receipt and invoice linkage',
-        'Split-payment visibility',
-        'Idempotent transaction and reconciliation trail',
-      ],
     },
     shifts: {
       title: 'Cashier shifts',
       action: 'Open shift',
       description:
         'Manage terminal/register/operator context, opening cash, closeout, and X/Z reporting.',
-      sections: ['Register and operator assignment', 'Cash reconciliation', 'Shift audit trail'],
     },
     sync: {
       title: 'Sync & devices',
-      action: 'Configure integration',
+      action: 'Set up devices',
       description:
-        'Monitor ERP synchronization, fiscal device, PIN pad, barcode scanner, and offline queue readiness.',
-      sections: [
-        'Vendor-neutral hardware adapters',
-        'Retry and reconciliation log',
-        'Offline status and unsynchronized count',
-      ],
+        'Check product updates, the fiscal device, PIN pad, barcode scanner, and offline status.',
     },
   };
   const page = content[screen];
@@ -356,44 +301,59 @@ function RegisterScreen({
           <h1>{page.title}</h1>
           <span>{page.description}</span>
         </div>
-        <button
-          className="pos-primary-button"
-          onClick={() =>
-            onNotice(
-              `${page.action} will be enabled with the POS API and hardware integration phase.`,
-            )
-          }
-          type="button"
-        >
+        <button className="pos-primary-button" disabled title="Unavailable" type="button">
           {page.action}
         </button>
       </header>
       <div className="pos-register-controls">
         <label>
           <span>Search</span>
-          <input placeholder={`Search ${page.title.toLowerCase()}`} />
+          <input disabled placeholder={`Search ${page.title.toLowerCase()}`} />
         </label>
-        <button type="button">All statuses</button>
-        <button type="button">Today</button>
+        <button disabled type="button">
+          All statuses
+        </button>
+        <button disabled type="button">
+          Today
+        </button>
       </div>
       <section className="pos-register-empty">
         <div>
-          <span aria-hidden="true">—</span>
-          <h2>No live records</h2>
-          <p>
-            This operational screen is designed and ready for its POS APIs. No sale, customer,
-            fiscal, or hardware data is simulated.
-          </p>
+          <span aria-hidden="true">
+            <PosIcon name={screenIcons[screen]} />
+          </span>
+          <h2>No records yet</h2>
+          <p>Records for this area will appear here.</p>
         </div>
-      </section>
-      <section className="pos-requirement-cards">
-        {page.sections.map((section) => (
-          <article key={section}>
-            <span>Included workflow</span>
-            <strong>{section}</strong>
-          </article>
-        ))}
       </section>
     </div>
   );
 }
+
+type PosIconName =
+  'close' | 'customers' | 'devices' | 'reports' | 'returns' | 'sales' | 'scan' | 'sell' | 'shifts';
+
+function PosIcon({ name }: { name: PosIconName }) {
+  return (
+    <svg aria-hidden="true" className="pos-icon" fill="none" viewBox="0 0 24 24">
+      {posIconPaths[name]}
+    </svg>
+  );
+}
+
+const posIconPaths: Record<PosIconName, React.ReactNode> = {
+  close: <path d="m6 6 12 12M18 6 6 18" />,
+  customers: (
+    <>
+      <circle cx="9" cy="8" r="3" />
+      <path d="M3.5 20v-1.5A3.5 3.5 0 0 1 7 15h4a3.5 3.5 0 0 1 3.5 3.5V20M16 5.5a3 3 0 0 1 0 5.8M17 15a3.5 3.5 0 0 1 3.5 3.5V20" />
+    </>
+  ),
+  devices: <path d="M4 5h16v11H4zM8 20h8M12 16v4M7 9h2m2 0h2" />,
+  reports: <path d="M5 20V10m5 10V5m5 15v-7m5 7V8M3 20h19" />,
+  returns: <path d="M9 7 4 12l5 5M4 12h10a6 6 0 0 1 6 6" />,
+  sales: <path d="M5 4h14v16H5zM8 8h8M8 12h5M8 16h3" />,
+  scan: <path d="M4 8V4h4m8 0h4v4M4 16v4h4m8 0h4v-4M8 8v8m3-8v8m3-8v8m3-8v8" />,
+  sell: <path d="M4 5h16v14H4zM4 10h16M8 15h4" />,
+  shifts: <path d="M5 3v3m14-3v3M4 8h16v12H4zM8 12h3m2 0h3M8 16h3" />,
+};

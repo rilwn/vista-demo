@@ -82,6 +82,10 @@ async function run(): Promise<void> {
 
     const permissions = [
       ['platform', 'view'],
+      ['platform', 'create'],
+      ['platform', 'approve'],
+      ['platform.organization', 'view'],
+      ['platform.organization', 'create'],
       ['crm', 'view'],
       ['crm', 'create'],
       ['crm', 'edit'],

@@ -1,0 +1,5 @@
+DROP TABLE IF EXISTS inventory.serial_item_transfer_events;
+
+ALTER TABLE inventory.stock_movements
+  DROP CONSTRAINT stock_movement_type_valid,
+  ADD CONSTRAINT stock_movement_type_valid CHECK (movement_type IN ('receipt', 'issue'));

@@ -60,7 +60,7 @@ export function VistaMark({ compact = false, product = 'Vista Service' }: VistaM
       {compact ? null : (
         <span className="vista-mark-copy">
           <strong>{product}</strong>
-          <small>Integrated operations</small>
+          <small>Business systems</small>
         </span>
       )}
     </div>

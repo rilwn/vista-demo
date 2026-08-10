@@ -24,6 +24,8 @@ import {
   type CreatePartnerBankAccountRequest,
   type CreatePartnerContactRequest,
   type CreatePartnerRequest,
+  type RecordVersionRequest,
+  type UpdatePartnerRequest,
   type PartnerAddress,
   type PartnerAddressType,
   type PartnerBankAccount,
@@ -71,6 +73,22 @@ export class CreatePartnerDto implements CreatePartnerRequest {
   @IsString()
   @MaxLength(50)
   vatNumber?: string;
+}
+
+export class UpdatePartnerDto extends CreatePartnerDto implements UpdatePartnerRequest {
+  @ApiProperty({ minimum: 1, type: Number })
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  expectedVersion!: number;
+}
+
+export class RecordVersionDto implements RecordVersionRequest {
+  @ApiProperty({ minimum: 1, type: Number })
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  expectedVersion!: number;
 }
 
 export class PartnerListQueryDto {

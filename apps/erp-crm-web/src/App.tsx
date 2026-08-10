@@ -7,8 +7,11 @@ import { CatalogPage } from './pages/CatalogPage';
 import { HomePage } from './pages/HomePage';
 import { ModulePage } from './pages/ModulePage';
 import { NotFoundPage } from './pages/NotFoundPage';
+import { OrganizationPage } from './pages/OrganizationPage';
 import { PartnersPage } from './pages/PartnersPage';
 import { ProductCategoriesPage } from './pages/ProductCategoriesPage';
+import { SecurityAdministrationPage } from './pages/SecurityAdministrationPage';
+import { type WarehouseView, WarehouseOperationsPage } from './pages/WarehouseOperationsPage';
 import { WorkflowPage } from './pages/WorkflowPage';
 import { findWorkflowPage } from './pages/workflow-pages';
 import { Navigate, useRouter } from './routing/Router';
@@ -30,12 +33,29 @@ function pageForPath(
   pathname: string,
   hasPermission: (module: string, action?: string) => boolean,
 ) {
+  const warehousePath =
+    /^\/modules\/erp\.warehouse\/(warehouses|stock|movements|stocktakes|reservations)$/u.exec(
+      pathname,
+    );
+  if (warehousePath?.[1]) {
+    return hasPermission('erp.warehouse') ? (
+      <WarehouseOperationsPage view={warehousePath[1] as WarehouseView} />
+    ) : (
+      <NotFoundPage />
+    );
+  }
   const workflow = findWorkflowPage(pathname);
   if (workflow) {
     return hasPermission(workflow.module) ? <WorkflowPage page={workflow} /> : <NotFoundPage />;
   }
   if (pathname === '/') return <HomePage />;
   if (pathname === '/access') return <AccessPage />;
+  if (pathname === '/organization') {
+    return hasPermission('platform.organization') ? <OrganizationPage /> : <NotFoundPage />;
+  }
+  if (pathname === '/security') {
+    return hasPermission('platform') ? <SecurityAdministrationPage /> : <NotFoundPage />;
+  }
   if (pathname === '/partners') {
     return hasPermission('crm') ? <PartnersPage /> : <NotFoundPage />;
   }

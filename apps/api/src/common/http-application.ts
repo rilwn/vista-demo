@@ -13,6 +13,12 @@ export function configureHttpApplication(
 ): void {
   const correlationIds = new CorrelationIdMiddleware();
   const logger = application.get(StructuredLogger);
+  if (environment.API_TRUST_PROXY_HOPS > 0) {
+    const server = application.getHttpAdapter().getInstance() as {
+      set(setting: string, value: number): void;
+    };
+    server.set('trust proxy', environment.API_TRUST_PROXY_HOPS);
+  }
   application.use(correlationIds.use.bind(correlationIds));
   application.useLogger(logger);
   if (environment.REQUEST_LOGGING_ENABLED) {

@@ -1,5 +1,6 @@
 export type IconName =
   | 'arrow'
+  | 'bell'
   | 'chart'
   | 'close'
   | 'customers'
@@ -9,6 +10,7 @@ export type IconName =
   | 'logistics'
   | 'logout'
   | 'menu'
+  | 'organization'
   | 'plus'
   | 'procurement'
   | 'sales'
@@ -39,6 +41,7 @@ export function Icon({ name, size = 19 }: IconProps) {
 
 const paths: Record<IconName, React.ReactNode> = {
   arrow: <path d="m9 18 6-6-6-6M4 12h11" />,
+  bell: <path d="M18 10a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 22h4" />,
   chart: <path d="M4 19V9m5 10V5m6 14v-7m5 7V8M3 19h18" />,
   close: <path d="m6 6 12 12M18 6 6 18" />,
   customers: (
@@ -70,6 +73,12 @@ const paths: Record<IconName, React.ReactNode> = {
   ),
   logout: <path d="M10 5H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h5m5-4 4-3-4-3m4 3H9" />,
   menu: <path d="M4 7h16M4 12h16M4 17h16" />,
+  organization: (
+    <>
+      <path d="M4 21V8l8-5 8 5v13M8 21v-5h8v5M8 10h2m4 0h2" />
+      <path d="M2 21h20" />
+    </>
+  ),
   procurement: (
     <>
       <path d="M5 7h14l-1 13H6L5 7Z" />

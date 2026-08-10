@@ -9,6 +9,7 @@ import type {
   PartnerProfile,
   PartnerRole,
   PartnerSummary,
+  UpdatePartnerRequest,
 } from '@vista/contracts';
 import { type FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 
@@ -19,11 +20,14 @@ import {
   createPartnerContact,
   getPartnerProfile,
   listPartners,
+  setPartnerActive,
+  updatePartner,
 } from '../api/partners';
 import { ApiClientError } from '../api/client';
 import { useAuth } from '../auth/AuthProvider';
 import { Icon } from '../components/Icon';
 import { messages } from '../messages';
+import { CustomerAssetsPanel } from './CustomerAssetsPanel';
 
 type OptionalKind = '' | PartnerKind;
 type OptionalRole = '' | PartnerRole;
@@ -240,8 +244,14 @@ export function PartnersPage() {
       ) : null}
       {selected ? (
         <PartnerDetailDrawer
+          canDelete={hasPermission('crm', 'delete')}
           canEdit={hasPermission('crm', 'edit')}
           onClose={() => setSelected(null)}
+          onMaintained={(maintained) => {
+            setSelected(maintained);
+            setSuccess(`${maintained.displayName} was updated.`);
+            setRefresh((value) => value + 1);
+          }}
           partner={selected}
           token={token}
         />
@@ -507,13 +517,17 @@ function CreatePartnerDrawer({
 }
 
 function PartnerDetailDrawer({
+  canDelete,
   canEdit,
   onClose,
+  onMaintained,
   partner,
   token,
 }: {
+  canDelete: boolean;
   canEdit: boolean;
   onClose: () => void;
+  onMaintained: (partner: PartnerSummary) => void;
   partner: PartnerSummary;
   token: string | undefined;
 }) {
@@ -523,6 +537,10 @@ function PartnerDetailDrawer({
   const [profileLoading, setProfileLoading] = useState(true);
   const [refresh, setRefresh] = useState(0);
   const [adding, setAdding] = useState<'address' | 'bank' | 'contact' | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [statusBusy, setStatusBusy] = useState(false);
+  const [statusError, setStatusError] = useState<string | null>(null);
+  const statusAttempt = useRef<{ fingerprint: string; key: string } | null>(null);
 
   useEffect(() => {
     if (!token) return;
@@ -544,17 +562,46 @@ function PartnerDetailDrawer({
     };
   }, [partner.id, refresh, token]);
 
+  const current = profile?.partner ?? partner;
   const details = useMemo(
     () => [
-      [messages.partners.type, kindLabel(partner.kind)],
-      [messages.partners.status, partner.active ? messages.partners.active : '—'],
-      [messages.partners.uic, partner.uic ?? '—'],
-      [messages.partners.vatNumber, partner.vatNumber ?? '—'],
-      [messages.partners.companyRepresentative, partner.companyRepresentative ?? '—'],
-      [messages.partners.updated, formatDate(partner.updatedAt)],
+      [messages.partners.type, kindLabel(current.kind)],
+      [messages.partners.status, current.active ? messages.partners.active : 'Inactive'],
+      [messages.partners.uic, current.uic ?? '—'],
+      [messages.partners.vatNumber, current.vatNumber ?? '—'],
+      [messages.partners.companyRepresentative, current.companyRepresentative ?? '—'],
+      [messages.partners.updated, formatDate(current.updatedAt)],
     ],
-    [partner],
+    [current],
   );
+  async function changeStatus() {
+    if (!token) return;
+    const payload = { active: !current.active, expectedVersion: current.version, id: current.id };
+    const fingerprint = JSON.stringify(payload);
+    if (statusAttempt.current?.fingerprint !== fingerprint)
+      statusAttempt.current = { fingerprint, key: crypto.randomUUID() };
+    setStatusBusy(true);
+    setStatusError(null);
+    try {
+      const maintained = await setPartnerActive(
+        token,
+        current.id,
+        !current.active,
+        statusAttempt.current.key,
+        { expectedVersion: current.version },
+      );
+      setProfile((value) => (value ? { ...value, partner: maintained } : value));
+      onMaintained(maintained);
+    } catch (caught) {
+      setStatusError(
+        caught instanceof ApiClientError
+          ? caught.message
+          : 'The partner status could not be changed.',
+      );
+    } finally {
+      setStatusBusy(false);
+    }
+  }
   return (
     <Drawer onClose={onClose} title={messages.partners.detailsTitle}>
       <div className="partner-detail-identity">
@@ -581,15 +628,37 @@ function PartnerDetailDrawer({
           </div>
         ))}
       </dl>
+      <div className="partner-maintenance-actions">
+        {canEdit ? (
+          <Button onClick={() => setEditing((value) => !value)} variant="secondary">
+            {editing ? 'Close editing' : 'Edit partner'}
+          </Button>
+        ) : null}
+        {(current.active ? canDelete : canEdit) ? (
+          <Button busy={statusBusy} onClick={() => void changeStatus()} variant="quiet">
+            {current.active ? 'Deactivate partner' : 'Reactivate partner'}
+          </Button>
+        ) : null}
+      </div>
+      {statusError ? <InlineAlert tone="error">{statusError}</InlineAlert> : null}
+      {editing && token ? (
+        <PartnerMaintenanceForm
+          onCancel={() => setEditing(false)}
+          onSaved={(maintained) => {
+            setEditing(false);
+            setProfile((value) => (value ? { ...value, partner: maintained } : value));
+            onMaintained(maintained);
+          }}
+          partner={current}
+          token={token}
+        />
+      ) : null}
       <section className="partner-profile" aria-label={messages.partners.profileTitle}>
         <div className="partner-profile-heading">
           <div>
             <p className="page-eyebrow">{messages.partners.profileEyebrow}</p>
             <h3>{messages.partners.profileTitle}</h3>
           </div>
-          {profile?.partner.version ? (
-            <span className="partner-profile-version">v{profile.partner.version}</span>
-          ) : null}
         </div>
         {profileLoading ? <ProfileSkeleton /> : null}
         {profileError ? (
@@ -660,9 +729,18 @@ function PartnerDetailDrawer({
           </div>
         ) : null}
       </section>
+      {current.roles.includes('customer') && profile && token ? (
+        <CustomerAssetsPanel
+          canDelete={canDelete}
+          canEdit={canEdit}
+          contacts={profile.contacts}
+          partnerId={current.id}
+          token={token}
+        />
+      ) : null}
       <div className="partner-record-reference">
         <span>{messages.partners.reference}</span>
-        <code>{partner.id}</code>
+        <code>{current.id}</code>
       </div>
       {adding && token ? (
         <ProfileRecordForm
@@ -677,6 +755,147 @@ function PartnerDetailDrawer({
         />
       ) : null}
     </Drawer>
+  );
+}
+
+function PartnerMaintenanceForm({
+  onCancel,
+  onSaved,
+  partner,
+  token,
+}: {
+  onCancel: () => void;
+  onSaved: (partner: PartnerSummary) => void;
+  partner: PartnerSummary;
+  token: string;
+}) {
+  const [draft, setDraft] = useState<PartnerDraft>({
+    companyRepresentative: partner.companyRepresentative ?? '',
+    displayName: partner.displayName,
+    kind: partner.kind,
+    roles: partner.roles,
+    uic: partner.uic ?? '',
+    vatNumber: partner.vatNumber ?? '',
+  });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const attempt = useRef<{ fingerprint: string; key: string } | null>(null);
+  function change<K extends keyof PartnerDraft>(field: K, value: PartnerDraft[K]) {
+    setDraft((current) => ({ ...current, [field]: value }));
+  }
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    const input: UpdatePartnerRequest = {
+      displayName: draft.displayName.trim(),
+      expectedVersion: partner.version,
+      kind: draft.kind,
+      roles: [...draft.roles].sort(),
+      ...(draft.companyRepresentative.trim()
+        ? { companyRepresentative: draft.companyRepresentative.trim() }
+        : {}),
+      ...(draft.uic.trim() ? { uic: draft.uic.trim() } : {}),
+      ...(draft.vatNumber.trim() ? { vatNumber: draft.vatNumber.trim() } : {}),
+    };
+    const fingerprint = JSON.stringify(input);
+    if (attempt.current?.fingerprint !== fingerprint)
+      attempt.current = { fingerprint, key: crypto.randomUUID() };
+    setSaving(true);
+    setError(null);
+    try {
+      onSaved(await updatePartner(token, partner.id, attempt.current.key, input));
+    } catch (caught) {
+      setError(
+        caught instanceof ApiClientError ? caught.message : 'The partner could not be updated.',
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+  return (
+    <form
+      className="partner-form partner-maintenance-form"
+      onSubmit={(event) => void submit(event)}
+    >
+      <div className="partner-form-row">
+        <TextField
+          id="maintain-partner-name"
+          label="Partner name"
+          maxLength={255}
+          onChange={(event) => change('displayName', event.target.value)}
+          required
+          value={draft.displayName}
+        />
+        <label className="customer-asset-select" htmlFor="maintain-partner-kind">
+          <span>Partner type</span>
+          <select
+            id="maintain-partner-kind"
+            onChange={(event) => change('kind', event.target.value as PartnerKind)}
+            value={draft.kind}
+          >
+            <option value="legal_entity">Legal entity</option>
+            <option value="individual">Individual</option>
+          </select>
+        </label>
+      </div>
+      <div className="partner-form-row">
+        <TextField
+          id="maintain-partner-uic"
+          label="UIC"
+          maxLength={50}
+          onChange={(event) => change('uic', event.target.value)}
+          value={draft.uic}
+        />
+        <TextField
+          id="maintain-partner-vat"
+          label="VAT number"
+          maxLength={50}
+          onChange={(event) => change('vatNumber', event.target.value)}
+          value={draft.vatNumber}
+        />
+      </div>
+      <TextField
+        id="maintain-partner-representative"
+        label="Company representative"
+        maxLength={255}
+        onChange={(event) => change('companyRepresentative', event.target.value)}
+        value={draft.companyRepresentative}
+      />
+      <fieldset className="partner-role-fieldset">
+        <legend>Roles</legend>
+        <div>
+          {(['customer', 'supplier', 'partner'] as const).map((role) => (
+            <label key={role}>
+              <input
+                checked={draft.roles.includes(role)}
+                onChange={() =>
+                  change(
+                    'roles',
+                    draft.roles.includes(role)
+                      ? draft.roles.filter((item) => item !== role)
+                      : [...draft.roles, role],
+                  )
+                }
+                type="checkbox"
+              />
+              <span>{roleLabel(role)}</span>
+            </label>
+          ))}
+        </div>
+      </fieldset>
+      {error ? <InlineAlert tone="error">{error}</InlineAlert> : null}
+      <div className="drawer-actions">
+        <Button onClick={onCancel} variant="quiet">
+          Cancel
+        </Button>
+        <Button
+          busy={saving}
+          disabled={!draft.displayName.trim() || draft.roles.length === 0}
+          type="submit"
+        >
+          Save partner changes
+        </Button>
+      </div>
+    </form>
   );
 }
 

@@ -93,7 +93,7 @@ export const workflowPages: WorkflowPageDefinition[] = [
         title: 'Compliance detail',
         items: [
           'VAT 20%, 9%, 0%, exempt, and intra-community treatment',
-          'Currency rate evidence in BGN',
+          'Currency rate and converted BGN amount',
           'PDF, signature, and email delivery',
         ],
       },
@@ -166,7 +166,7 @@ export const workflowPages: WorkflowPageDefinition[] = [
         items: [
           'Collected and deductible VAT by period',
           'Structured accounting formats',
-          'Reproducible filters and rate evidence',
+          'Saved filters and currency-rate details',
         ],
       },
     ],
@@ -199,7 +199,7 @@ export const workflowPages: WorkflowPageDefinition[] = [
   procurement(
     'goods-receipts',
     'Goods receipts',
-    'Receive delivered goods into the selected warehouse with traceability and cost evidence.',
+    'Receive delivered goods into the selected warehouse with serial, batch, expiry, and cost details.',
     'New goods receipt',
     [
       {
@@ -211,7 +211,7 @@ export const workflowPages: WorkflowPageDefinition[] = [
         ],
       },
       {
-        title: 'Quality & evidence',
+        title: 'Quality checks',
         items: [
           'Non-conformance capture',
           'Supplier and delivery references',
@@ -229,7 +229,7 @@ export const workflowPages: WorkflowPageDefinition[] = [
       {
         title: 'Claim file',
         items: [
-          'Affected goods and evidence',
+          'Affected goods and attachments',
           'Supplier communication',
           'Status and resolution chronology',
         ],
@@ -244,11 +244,11 @@ export const workflowPages: WorkflowPageDefinition[] = [
   warehouse(
     'catalog',
     'Products & units',
-    'Configure products, units, barcodes, and category-controlled tracking policy.',
+    'Configure products, units, barcodes, and category tracking rules.',
     'Add product',
     [
       {
-        title: 'Master data',
+        title: 'Product setup',
         items: ['Products and product codes', 'Configurable units', '1D/2D barcode records'],
       },
       {
@@ -276,7 +276,7 @@ export const workflowPages: WorkflowPageDefinition[] = [
         ],
       },
       {
-        title: 'Operational controls',
+        title: 'Warehouse controls',
         items: [
           'Stock responsibility',
           'Transfer eligibility',
@@ -326,9 +326,9 @@ export const workflowPages: WorkflowPageDefinition[] = [
       {
         title: 'Traceability',
         items: [
-          'Actor, time, and warehouse evidence',
+          'User, time, and warehouse history',
           'Serial/batch identity',
-          'Immutable audit history',
+          'Permanent activity history',
         ],
       },
     ],
@@ -336,7 +336,7 @@ export const workflowPages: WorkflowPageDefinition[] = [
   warehouse(
     'stocktakes',
     'Stocktakes',
-    'Run counted inventory sessions, record variances, and submit controlled adjustments.',
+    'Run stock counts, record variances, and submit adjustments for approval.',
     'Start stocktake',
     [
       {
@@ -390,7 +390,7 @@ export const workflowPages: WorkflowPageDefinition[] = [
       },
       {
         title: 'Conversion',
-        items: ['Confirmed-order handoff', 'Acceptance evidence', 'Controlled revision history'],
+        items: ['Confirmed-order handoff', 'Customer acceptance', 'Revision history'],
       },
     ],
   ),
@@ -423,7 +423,7 @@ export const workflowPages: WorkflowPageDefinition[] = [
       },
       {
         title: 'Equipment acceptance',
-        items: ['Serialised equipment', 'Handover certificate', 'Customer acceptance evidence'],
+        items: ['Serialised equipment', 'Handover certificate', 'Customer acceptance'],
       },
     ],
   ),
@@ -483,7 +483,7 @@ export const workflowPages: WorkflowPageDefinition[] = [
         items: [
           'Customer, location, device, serial, and problem description',
           'Warranty, out-of-warranty, and subscription service type',
-          'Stable correlation with CRM ticket',
+          'Linked CRM ticket',
         ],
       },
       {
@@ -499,7 +499,7 @@ export const workflowPages: WorkflowPageDefinition[] = [
   service(
     'work-orders',
     'Work orders',
-    'Execute service work with time, parts, photos, signatures, and billing evidence.',
+    'Complete service work with time, parts, photos, signatures, and billing details.',
     'New work order',
     [
       {
@@ -535,7 +535,7 @@ export const workflowPages: WorkflowPageDefinition[] = [
         items: [
           'Mobile-friendly assigned work',
           'Completed work history',
-          'Offline-safe future API boundary',
+          'Mobile-friendly technician access',
         ],
       },
     ],
@@ -658,7 +658,7 @@ export const workflowPages: WorkflowPageDefinition[] = [
       {
         title: 'Execution',
         items: [
-          'Arrival and completion evidence',
+          'Arrival and completion history',
           'Delay/exception communication',
           'Service and delivery links',
         ],
@@ -728,7 +728,7 @@ export const workflowPages: WorkflowPageDefinition[] = [
         title: 'Pipeline',
         items: [
           'New, qualified, quotation sent, negotiation, won, and lost',
-          'Drag-and-drop with backend validation',
+          'Drag-and-drop with stage validation',
           'Audited stage movement',
         ],
       },
@@ -737,7 +737,7 @@ export const workflowPages: WorkflowPageDefinition[] = [
   crm(
     'tickets',
     'Tickets & SLA',
-    'Manage service tickets, customer/contract SLA timers, escalation, and two-way service correlation.',
+    'Manage service tickets, customer or contract SLA timers, escalations, and linked service requests.',
     'New ticket',
     [
       {
@@ -753,7 +753,7 @@ export const workflowPages: WorkflowPageDefinition[] = [
         items: [
           'Create ERP service request',
           'Receive ERP service request',
-          'Stable correlation and loop prevention',
+          'Linked requests without duplicates',
         ],
       },
     ],
@@ -767,7 +767,7 @@ export const workflowPages: WorkflowPageDefinition[] = [
       {
         title: 'After-sales',
         items: [
-          'Warranty claim evidence',
+          'Warranty claim attachments',
           'Device and serial history',
           'Extended-warranty/service-subscription offer',
         ],
@@ -810,7 +810,7 @@ export const workflowPages: WorkflowPageDefinition[] = [
     'Configure dashboard',
     [
       {
-        title: 'Operational KPIs',
+        title: 'Key figures',
         items: [
           'Revenue',
           'Active service requests',
@@ -823,7 +823,7 @@ export const workflowPages: WorkflowPageDefinition[] = [
         items: [
           'Date range and status filters',
           'Data-source disclosure',
-          'Access-controlled dashboard configuration',
+          'Dashboard settings by user access',
         ],
       },
     ],
@@ -831,7 +831,7 @@ export const workflowPages: WorkflowPageDefinition[] = [
   reports(
     'report-library',
     'Report library',
-    'Browse controlled standard and configurable reports for every module.',
+    'Browse standard and configurable reports for every module.',
     'New report definition',
     [
       {

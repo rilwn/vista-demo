@@ -354,6 +354,151 @@ describe.skipIf(!runInfrastructureTests)(
       expect(profile.body).toMatchObject({ isAdministrative: true, twoFactorVerified: true });
     });
 
+    it('administers employee access, roles, sessions, and audit integrity through protected APIs', async () => {
+      await request(application.getHttpServer())
+        .get('/api/v1/platform/security/accounts')
+        .set('authorization', `Bearer ${deniedToken}`)
+        .expect(403);
+
+      const runId = randomUUID().replaceAll('-', '');
+      const created = await request(application.getHttpServer())
+        .post('/api/v1/platform/security/accounts')
+        .set('authorization', `Bearer ${adminToken}`)
+        .set('idempotency-key', `security-account-${runId}`)
+        .send({
+          displayName: '  Security   Test Employee ',
+          email: `security-${runId}@example.invalid`,
+          employeeNumber: `sec-${runId.slice(0, 12)}`,
+          initialPassword: password,
+        })
+        .expect(201);
+      expect(created.body).toMatchObject({
+        activeSessionCount: 0,
+        displayName: 'Security Test Employee',
+        employeeNumber: `SEC-${runId.slice(0, 12).toUpperCase()}`,
+        roles: [],
+        status: 'active',
+        version: 1,
+      });
+      expect(JSON.stringify(created.body)).not.toContain(password);
+      const accountId = created.body.accountId as string;
+
+      const replay = await request(application.getHttpServer())
+        .post('/api/v1/platform/security/accounts')
+        .set('authorization', `Bearer ${adminToken}`)
+        .set('idempotency-key', `security-account-${runId}`)
+        .send({
+          displayName: '  Security   Test Employee ',
+          email: `security-${runId}@example.invalid`,
+          employeeNumber: `sec-${runId.slice(0, 12)}`,
+          initialPassword: password,
+        })
+        .expect(201);
+      expect(replay.body).toEqual(created.body);
+
+      const role = await request(application.getHttpServer())
+        .post('/api/v1/platform/security/roles')
+        .set('authorization', `Bearer ${adminToken}`)
+        .set('idempotency-key', `security-role-${runId}`)
+        .send({
+          code: `crm-agent-${runId.slice(0, 10)}`,
+          description: 'CRM access used by the security administration integration test.',
+          isAdministrative: false,
+          name: 'CRM agent',
+          permissions: [
+            { action: 'view', module: 'crm' },
+            { action: 'create', module: 'crm' },
+          ],
+        })
+        .expect(201);
+      const roleId = role.body.id as string;
+
+      const assigned = await request(application.getHttpServer())
+        .put(`/api/v1/platform/security/accounts/${accountId}/roles`)
+        .set('authorization', `Bearer ${adminToken}`)
+        .set('idempotency-key', `security-assign-${runId}`)
+        .send({ expectedVersion: 1, roleIds: [roleId] })
+        .expect(200);
+      expect(assigned.body).toMatchObject({
+        roles: [{ code: `crm-agent-${runId.slice(0, 10)}`, id: roleId }],
+        version: 2,
+      });
+
+      const login = await request(application.getHttpServer())
+        .post('/api/v1/auth/login')
+        .send({ email: `security-${runId}@example.invalid`, password })
+        .expect(200);
+      const employeeSessionToken = login.body.sessionToken as string;
+      const employeeSessionId = (
+        await request(application.getHttpServer())
+          .get('/api/v1/auth/me')
+          .set('authorization', `Bearer ${employeeSessionToken}`)
+          .expect(200)
+      ).body.sessionId as string;
+
+      const sessions = await request(application.getHttpServer())
+        .get('/api/v1/platform/security/sessions')
+        .set('authorization', `Bearer ${adminToken}`)
+        .expect(200);
+      expect(sessions.body).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ id: employeeSessionId, twoFactorVerified: false }),
+          expect.objectContaining({ twoFactorVerified: true }),
+        ]),
+      );
+
+      await request(application.getHttpServer())
+        .post(`/api/v1/platform/security/sessions/${employeeSessionId}/revoke`)
+        .set('authorization', `Bearer ${adminToken}`)
+        .expect(204);
+      await request(application.getHttpServer())
+        .get('/api/v1/auth/me')
+        .set('authorization', `Bearer ${employeeSessionToken}`)
+        .expect(401);
+
+      const disabled = await request(application.getHttpServer())
+        .post(`/api/v1/platform/security/accounts/${accountId}/disable`)
+        .set('authorization', `Bearer ${adminToken}`)
+        .set('idempotency-key', `security-disable-${runId}`)
+        .send({ expectedVersion: 2 })
+        .expect(200);
+      expect(disabled.body).toMatchObject({ status: 'disabled', version: 3 });
+      await request(application.getHttpServer())
+        .post('/api/v1/auth/login')
+        .send({ email: `security-${runId}@example.invalid`, password })
+        .expect(401);
+
+      const selfDisable = await request(application.getHttpServer())
+        .post(`/api/v1/platform/security/accounts/${adminAccountId}/disable`)
+        .set('authorization', `Bearer ${adminToken}`)
+        .set('idempotency-key', `security-self-disable-${runId}`)
+        .send({ expectedVersion: 1 })
+        .expect(409);
+      expect(selfDisable.body).toMatchObject({
+        error: { code: 'SELF_ACCOUNT_DISABLE_FORBIDDEN' },
+      });
+
+      const integrity = await request(application.getHttpServer())
+        .get('/api/v1/platform/security/audit-integrity')
+        .set('authorization', `Bearer ${adminToken}`)
+        .expect(200);
+      expect(integrity.body).toMatchObject({ valid: true });
+      expect(integrity.body.checkedEvents).toBeGreaterThan(0);
+
+      const audit = await request(application.getHttpServer())
+        .get('/api/v1/platform/security/audit-events')
+        .query({ action: 'identity.account' })
+        .set('authorization', `Bearer ${adminToken}`)
+        .expect(200);
+      expect(audit.body.items).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ action: 'identity.account.created', targetId: accountId }),
+          expect.objectContaining({ action: 'identity.account.disabled', targetId: accountId }),
+        ]),
+      );
+      expect(JSON.stringify(audit.body)).not.toContain(password);
+    });
+
     it('maintains a linked append-only audit chain for login and revocation events', async () => {
       const events = await database.query<{
         event_hash: string;
@@ -430,6 +575,20 @@ async function grantAdministrativeRole(pool: Pool, accountId: string): Promise<v
     accountId,
     roleId,
   ]);
+  for (const action of ['view', 'create', 'edit', 'approve'] as const) {
+    const permission = await pool.query<{ id: string }>(
+      `INSERT INTO iam.permissions (id, module, action)
+       VALUES ($1, 'platform', $2)
+       ON CONFLICT (module, action) DO UPDATE SET module = EXCLUDED.module
+       RETURNING id`,
+      [randomUUID(), action],
+    );
+    await pool.query(
+      `INSERT INTO iam.role_permissions (role_id, permission_id)
+       VALUES ($1, $2)`,
+      [roleId, permission.rows[0]?.id],
+    );
+  }
 }
 
 function assertTemporaryDatabaseName(value: string): void {

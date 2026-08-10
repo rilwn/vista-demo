@@ -31,6 +31,13 @@ function moduleItem(
 
 export const navigationGroups: NavigationGroup[] = [
   {
+    label: messages.navigation.administration,
+    modules: [
+      moduleItem('platform', 'shield', '/security'),
+      moduleItem('platform.organization', 'organization', '/organization'),
+    ],
+  },
+  {
     label: messages.navigation.erp,
     modules: [
       moduleItem('erp.finance', 'finance'),

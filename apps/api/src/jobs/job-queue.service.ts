@@ -2,6 +2,11 @@ import { createHash } from 'node:crypto';
 
 import { Inject, Injectable, type OnApplicationShutdown } from '@nestjs/common';
 import type { AppEnvironment } from '@vista/config';
+import type {
+  BackgroundJobState,
+  BackgroundJobSummary,
+  BackgroundJobTelemetry,
+} from '@vista/contracts';
 import { Queue, type JobState } from 'bullmq';
 
 import { APP_ENVIRONMENT } from '../config/config.module.js';
@@ -20,17 +25,7 @@ export interface EnqueueJobResult {
   jobId: string;
 }
 
-export interface JobQueueTelemetry {
-  active: number;
-  completed: number;
-  delayed: number;
-  failed: number;
-  paused: boolean;
-  timestamp: string;
-  waiting: number;
-}
-
-interface PlatformJobData {
+export interface PlatformJobData {
   correlationId: string;
   enqueuedAt: string;
   idempotencyKey: string;
@@ -93,7 +88,7 @@ export class JobQueueService implements OnApplicationShutdown {
     return this.getQueue().getJobState(jobId);
   }
 
-  async getTelemetry(): Promise<JobQueueTelemetry> {
+  async getTelemetry(): Promise<BackgroundJobTelemetry> {
     const queue = this.getQueue();
     const [counts, paused] = await Promise.all([
       queue.getJobCounts('active', 'completed', 'delayed', 'failed', 'waiting'),
@@ -119,6 +114,24 @@ export class JobQueueService implements OnApplicationShutdown {
     return true;
   }
 
+  async getSummary(jobId: string): Promise<BackgroundJobSummary | undefined> {
+    const job = await this.getQueue().getJob(jobId);
+    if (!job) return undefined;
+    const state = await job.getState();
+    return {
+      attemptsMade: job.attemptsMade,
+      createdAt: new Date(job.timestamp).toISOString(),
+      ...(job.failedReason && job.finishedOn
+        ? { failedAt: new Date(job.finishedOn).toISOString() }
+        : {}),
+      ...(job.finishedOn ? { finishedAt: new Date(job.finishedOn).toISOString() } : {}),
+      id: job.id ?? jobId,
+      name: job.name,
+      ...(job.processedOn ? { processedAt: new Date(job.processedOn).toISOString() } : {}),
+      state: toBackgroundJobState(state),
+    };
+  }
+
   async onApplicationShutdown(): Promise<void> {
     await this.queue?.close();
   }
@@ -138,6 +151,21 @@ export class JobQueueService implements OnApplicationShutdown {
       });
     }
     return this.queue;
+  }
+}
+
+function toBackgroundJobState(value: JobState | 'unknown'): BackgroundJobState {
+  switch (value) {
+    case 'active':
+    case 'completed':
+    case 'delayed':
+    case 'failed':
+    case 'prioritized':
+    case 'waiting':
+    case 'waiting-children':
+      return value;
+    default:
+      return 'unknown';
   }
 }
 
