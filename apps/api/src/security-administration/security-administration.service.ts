@@ -748,7 +748,7 @@ function assertAdministrativeFactor(actor: AuthenticationContext): void {
 function normalizePermissions(input: ApiPermission[]): ApiPermission[] {
   const unique = new Map<string, ApiPermission>();
   for (const candidate of input) {
-    const permission = { action: candidate.action, module: candidate.module } as Permission;
+    const permission: Permission = { action: candidate.action, module: candidate.module };
     try {
       assertKnownPermission(permission);
     } catch {

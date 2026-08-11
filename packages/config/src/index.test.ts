@@ -41,9 +41,16 @@ describe('parseEnvironment', () => {
     expect(environment.JOB_DEFAULT_ATTEMPTS).toBe(5);
     expect(environment.JOB_QUEUE_NAME).toBe('platform');
     expect(environment.PASSWORD_EXPIRY_DAYS).toBe(0);
+    expect(environment.PASSWORD_HISTORY_COUNT).toBe(5);
     expect(environment.PASSWORD_MIN_LENGTH).toBe(12);
     expect(environment.REQUEST_LOGGING_ENABLED).toBe(true);
     expect(environment.SESSION_TTL_SECONDS).toBe(28_800);
+  });
+
+  it('rejects an unsafe password-history depth', () => {
+    expect(() => parseEnvironment({ ...validEnvironment, PASSWORD_HISTORY_COUNT: '0' })).toThrow(
+      'PASSWORD_HISTORY_COUNT',
+    );
   });
 
   it('fails fast when required configuration is missing', () => {

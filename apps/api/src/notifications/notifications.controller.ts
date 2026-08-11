@@ -10,7 +10,7 @@ import {
   Query,
   Req,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiOkResponse, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOkResponse, ApiParam, ApiQuery, ApiTags } from '@nestjs/swagger';
 import type { NotificationMessage, NotificationPage } from '@vista/contracts';
 
 import type { AuthenticatedRequest } from '../auth/authentication.types.js';
@@ -30,6 +30,8 @@ export class NotificationsController {
   constructor(@Inject(NotificationsService) private readonly notifications: NotificationsService) {}
 
   @Get()
+  @ApiQuery({ minimum: 1, name: 'page', required: false, type: Number })
+  @ApiQuery({ maximum: 100, minimum: 1, name: 'pageSize', required: false, type: Number })
   @ApiOkResponse({ type: NotificationPageDto })
   list(
     @Query() query: NotificationListQueryDto,
@@ -41,6 +43,7 @@ export class NotificationsController {
   @Post(':id/read')
   @RateLimitPolicy('write')
   @HttpCode(HttpStatus.OK)
+  @ApiParam({ format: 'uuid', name: 'id' })
   @ApiOkResponse({ type: NotificationMessageDto })
   markRead(
     @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,

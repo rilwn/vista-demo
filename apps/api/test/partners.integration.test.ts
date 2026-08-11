@@ -42,7 +42,10 @@ import { AppModule } from '../src/app.module.js';
 import { PasswordService } from '../src/auth/password.service.js';
 import { configureHttpApplication } from '../src/common/http-application.js';
 import { APP_ENVIRONMENT } from '../src/config/config.module.js';
-import { migrateUp } from '../src/database/migration-runner.js';
+import { migrateDown, migrateUp } from '../src/database/migration-runner.js';
+import { IntegrationEventDispatcherService } from '../src/integration/integration-event-dispatcher.service.js';
+import { lowStockEventType } from '../src/integration/low-stock-notification.consumer.js';
+import { OutboxPublisherService } from '../src/integration/outbox-publisher.service.js';
 import { NotificationDispatcherService } from '../src/notifications/notification-dispatcher.service.js';
 import { JobHandlerRegistry } from '../src/jobs/job-handler-registry.service.js';
 import { JobQueueService } from '../src/jobs/job-queue.service.js';
@@ -88,10 +91,35 @@ describe.skipIf(!runInfrastructureTests)('partner master-data vertical slice', (
     isolatedRedisUrl.pathname = '/13';
 
     database = new Pool({ connectionString: isolatedDatabaseUrl.toString(), max: 2 });
-    await migrateUp(
-      database,
-      fileURLToPath(new URL('../src/database/migrations', import.meta.url)),
+    const migrationDirectory = fileURLToPath(
+      new URL('../src/database/migrations', import.meta.url),
     );
+    await migrateUp(database, migrationDirectory);
+    const supplierControlsRolledBack = await migrateDown(database, migrationDirectory);
+    if (supplierControlsRolledBack !== '0025_procurement_supplier_controls') {
+      throw new Error('Expected to roll back supplier controls before procurement receiving');
+    }
+    const procurementRolledBack = await migrateDown(database, migrationDirectory);
+    if (procurementRolledBack !== '0024_procurement_purchase_receiving') {
+      throw new Error('The procurement migration was not the latest rollback target');
+    }
+    const passwordRolledBack = await migrateDown(database, migrationDirectory);
+    if (passwordRolledBack !== '0023_employee_password_change') {
+      throw new Error('The password-change migration could not be rolled back before event tests');
+    }
+    const rolledBack = await migrateDown(database, migrationDirectory);
+    if (rolledBack !== '0022_reliable_integration_events') {
+      throw new Error('The reliable integration migration was not the latest rollback target');
+    }
+    const reapplied = await migrateUp(database, migrationDirectory);
+    if (
+      !reapplied.includes('0022_reliable_integration_events') ||
+      !reapplied.includes('0023_employee_password_change') ||
+      !reapplied.includes('0024_procurement_purchase_receiving') ||
+      !reapplied.includes('0025_procurement_supplier_controls')
+    ) {
+      throw new Error('The reliable integration and dependent migrations could not be reapplied');
+    }
     Object.assign(process.env, {
       BUSINESS_TIMEZONE: 'Europe/Sofia',
       CORS_ORIGINS: 'http://localhost:5173',
@@ -139,7 +167,7 @@ describe.skipIf(!runInfrastructureTests)('partner master-data vertical slice', (
       'view',
       'create',
     ]);
-    await grantPermissions(database, categoryCreatorAccountId, 'platform', ['view']);
+    await grantPermissions(database, categoryCreatorAccountId, 'platform', ['view', 'edit']);
     await grantPermissions(database, viewerId, 'crm', ['view']);
     creatorToken = await login(application, creatorEmail);
     categoryCreatorToken = await login(application, categoryCreatorEmail);
@@ -236,7 +264,9 @@ describe.skipIf(!runInfrastructureTests)('partner master-data vertical slice', (
   it('registers every named scheduled handler and deduplicates its durable trigger', async () => {
     const handlers = application.get(JobHandlerRegistry);
     const expectedNames = [...namedBackgroundJobs].sort();
-    expect(handlers.registeredNames()).toEqual([...expectedNames, 'notification.dispatch'].sort());
+    expect(handlers.registeredNames()).toEqual(
+      [...expectedNames, 'integration.event.consume', 'notification.dispatch'].sort(),
+    );
 
     for (const name of expectedNames) {
       const context = {
@@ -261,6 +291,141 @@ describe.skipIf(!runInfrastructureTests)('partner master-data vertical slice', (
       [`scheduled${runId}`],
     );
     expect(evidence.rows[0]?.count).toBe(String(expectedNames.length));
+  });
+
+  it('publishes ordered events, deduplicates consumption, recovers claims, and retains poison messages', async () => {
+    const publisher = application.get(OutboxPublisherService);
+    const dispatcher = application.get(IntegrationEventDispatcherService);
+    const aggregateId = randomUUID();
+    const firstId = randomUUID();
+    const secondId = randomUUID();
+    const validPayload = {
+      availableQuantity: '1.0000',
+      cycleNumber: '1',
+      minimumQuantity: '2.0000',
+      productId: aggregateId,
+      recipientAccountId: categoryCreatorAccountId,
+      recommendedQuantity: '4.0000',
+      targetQuantity: '5.0000',
+      warehouseId: randomUUID(),
+    };
+    await database.query(
+      `INSERT INTO integration.outbox_events (
+         id, aggregate_type, aggregate_id, event_type, event_version,
+         correlation_id, idempotency_key, payload, occurred_at
+       ) VALUES
+         ($1, 'inventory_product', $3, $4, 1, $5, $6, $7, now() - interval '2 seconds'),
+         ($2, 'inventory_product', $3, $4, 1, $5, $8, $9, now() - interval '1 second')`,
+      [
+        firstId,
+        secondId,
+        aggregateId,
+        lowStockEventType,
+        `integration${runId}`,
+        `ordered-first-${runId}`,
+        validPayload,
+        `ordered-second-${runId}`,
+        { ...validPayload, cycleNumber: '2' },
+      ],
+    );
+
+    await publisher.publishAvailable();
+    const orderedBefore = await database.query<{ id: string; status: string }>(
+      `SELECT id, status FROM integration.outbox_events
+       WHERE id = ANY($1::uuid[]) ORDER BY sequence_number`,
+      [[firstId, secondId]],
+    );
+    expect(orderedBefore.rows).toEqual([
+      { id: firstId, status: 'published' },
+      { id: secondId, status: 'pending' },
+    ]);
+    await dispatcher.dispatch(firstId, true);
+    await dispatcher.dispatch(firstId, true);
+    await publisher.publishAvailable();
+    await dispatcher.dispatch(secondId, true);
+    const consumed = await database.query<{ count: string }>(
+      `SELECT count(*)::text AS count FROM notifications.messages
+       WHERE idempotency_key = ANY($1::varchar[])`,
+      [[firstId, secondId]],
+    );
+    expect(consumed.rows[0]?.count).toBe('2');
+
+    const recoveredId = randomUUID();
+    await database.query(
+      `INSERT INTO integration.outbox_events (
+         id, aggregate_type, aggregate_id, event_type, event_version,
+         correlation_id, idempotency_key, payload, status, processing_started_at
+       ) VALUES ($1, 'inventory_product', $2, $3, 1, $4, $5, $6,
+                 'publishing', now() - interval '10 minutes')`,
+      [
+        recoveredId,
+        randomUUID(),
+        lowStockEventType,
+        `integration${runId}`,
+        `recovered-${runId}`,
+        { ...validPayload, cycleNumber: '3', productId: randomUUID() },
+      ],
+    );
+    await publisher.publishAvailable();
+    await dispatcher.dispatch(recoveredId, true);
+    const recovered = await database.query<{ status: string }>(
+      'SELECT status FROM integration.outbox_events WHERE id = $1',
+      [recoveredId],
+    );
+    expect(recovered.rows[0]?.status).toBe('completed');
+
+    const poisonId = randomUUID();
+    await database.query(
+      `INSERT INTO integration.outbox_events (
+         id, aggregate_type, aggregate_id, event_type, event_version,
+         correlation_id, idempotency_key, payload
+       ) VALUES ($1, 'inventory_product', $2, $3, 1, $4, $5, $6)`,
+      [
+        poisonId,
+        randomUUID(),
+        lowStockEventType,
+        `integration${runId}`,
+        `poison-${runId}`,
+        { productId: randomUUID() },
+      ],
+    );
+    await publisher.publishAvailable();
+    await expect(dispatcher.dispatch(poisonId, false)).rejects.toThrow();
+
+    await request(application.getHttpServer())
+      .get('/api/v1/platform/integrations/metrics')
+      .expect(401);
+    const denied = await request(application.getHttpServer())
+      .get('/api/v1/platform/integrations/metrics')
+      .set('authorization', `Bearer ${viewerToken}`)
+      .expect(403);
+    expect(denied.body).toMatchObject({ error: { code: 'PERMISSION_DENIED' } });
+    const detail = await request(application.getHttpServer())
+      .get(`/api/v1/platform/integrations/events/${poisonId}`)
+      .set('authorization', `Bearer ${categoryCreatorToken}`)
+      .expect(200);
+    expect(detail.body).toMatchObject({
+      deliveries: [expect.objectContaining({ status: 'dead_letter' })],
+      id: poisonId,
+      replayCount: 0,
+      status: 'dead_letter',
+    });
+    expect(JSON.stringify(detail.body)).not.toContain('recipientAccountId');
+
+    const replayed = await request(application.getHttpServer())
+      .post(`/api/v1/platform/integrations/events/${poisonId}/replay`)
+      .set('authorization', `Bearer ${categoryCreatorToken}`)
+      .set('idempotency-key', `replay-poison-${runId}`)
+      .send({ expectedReplayCount: 0 })
+      .expect(200);
+    expect(replayed.body).toMatchObject({ id: poisonId, replayCount: 1 });
+    await expect(dispatcher.dispatch(poisonId, false)).rejects.toThrow();
+    const audit = await database.query<{ count: string }>(
+      `SELECT count(*)::text AS count FROM audit.events
+       WHERE action = 'integration.event.replayed' AND target_id = $1`,
+      [poisonId],
+    );
+    expect(audit.rows[0]?.count).toBe('1');
   });
 
   it('creates normalized canonical partner data with roles, audit, and outbox atomically', async () => {
@@ -1733,6 +1898,7 @@ describe.skipIf(!runInfrastructureTests)('partner master-data vertical slice', (
         }),
       ]),
     );
+    await deliverIntegrationEvents(application, database);
     const firstLowStockAlert = await database.query<{
       attempt_count: number;
       cycle_number: string;
@@ -1803,6 +1969,7 @@ describe.skipIf(!runInfrastructureTests)('partner master-data vertical slice', (
         warehouseId: warehouse.id,
       })
       .expect(201);
+    await deliverIntegrationEvents(application, database);
     const alertCycles = await database.query<{ cycle_number: string }>(
       `SELECT message.payload->>'cycleNumber' AS cycle_number
        FROM notifications.messages message
@@ -1830,6 +1997,20 @@ describe.skipIf(!runInfrastructureTests)('partner master-data vertical slice', (
     );
   });
 });
+
+async function deliverIntegrationEvents(
+  application: INestApplication,
+  database: Pool,
+): Promise<void> {
+  await application.get(OutboxPublisherService).publishAvailable();
+  const events = await database.query<{ id: string }>(
+    `SELECT id FROM integration.outbox_events
+     WHERE event_type = $1 AND status = 'published' ORDER BY occurred_at, id`,
+    [lowStockEventType],
+  );
+  const dispatcher = application.get(IntegrationEventDispatcherService);
+  for (const event of events.rows) await dispatcher.dispatch(event.id, true);
+}
 
 async function createPartner(
   application: INestApplication,

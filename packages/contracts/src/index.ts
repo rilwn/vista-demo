@@ -1,5 +1,18 @@
 export const API_VERSION = 'v1' as const;
 
+export {
+  API_V1_PATH_PREFIX,
+  createVistaApiClientV1,
+  normalizeVistaApiBaseUrl,
+  resolveVistaBrowserApiBaseUrl,
+  type VistaApiClientV1,
+} from './client.js';
+export type {
+  components as ApiComponentsV1,
+  operations as ApiOperationsV1,
+  paths as ApiPathsV1,
+} from './generated/v1.js';
+
 export type ApiVersion = typeof API_VERSION;
 
 export interface ApiErrorDetail {
@@ -30,9 +43,29 @@ export interface HealthResponse {
   version: string;
 }
 
+export type ApiPermissionAction = 'approve' | 'create' | 'delete' | 'edit' | 'view';
+export type ApiPermissionModule =
+  | 'backup'
+  | 'crm'
+  | 'erp.finance'
+  | 'erp.logistics'
+  | 'erp.procurement'
+  | 'erp.sales'
+  | 'erp.service'
+  | 'erp.warehouse'
+  | 'platform'
+  | 'platform.organization'
+  | 'pos'
+  | 'reports';
+
 export interface ApiPermission {
-  action: string;
-  module: string;
+  action: '*' | ApiPermissionAction;
+  module: '*' | ApiPermissionModule;
+}
+
+export interface RolePermission {
+  action: ApiPermissionAction;
+  module: ApiPermissionModule;
 }
 
 export interface AuthenticationAccountSummary {
@@ -106,6 +139,70 @@ export interface BackgroundJobTelemetry {
   waiting: number;
 }
 
+export type IntegrationEventStatus =
+  'completed' | 'dead_letter' | 'pending' | 'published' | 'publishing';
+
+export type IntegrationDeliveryStatus =
+  'completed' | 'dead_letter' | 'failed' | 'pending' | 'processing';
+
+export interface IntegrationEventSummary {
+  aggregateId: string;
+  aggregateType: string;
+  attemptCount: number;
+  availableAt: string;
+  completedAt?: string;
+  correlationId: string;
+  deadLetteredAt?: string;
+  eventType: string;
+  id: string;
+  lastErrorCode?: string;
+  occurredAt: string;
+  publicationAttemptCount: number;
+  publishedAt?: string;
+  replayCount: number;
+  sequenceNumber: string;
+  status: IntegrationEventStatus;
+}
+
+export interface IntegrationDeliverySummary {
+  attemptCount: number;
+  completedAt?: string;
+  consumer: string;
+  cycleAttemptCount: number;
+  deadLetteredAt?: string;
+  failedAt?: string;
+  lastErrorCode?: string;
+  replayCount: number;
+  status: IntegrationDeliveryStatus;
+}
+
+export interface IntegrationEventDetail extends IntegrationEventSummary {
+  deliveries: IntegrationDeliverySummary[];
+}
+
+export interface IntegrationEventPage {
+  items: IntegrationEventSummary[];
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+}
+
+export interface IntegrationEventTelemetry {
+  completed: number;
+  deadLetter: number;
+  failedDeliveries: number;
+  oldestPendingAt?: string;
+  pending: number;
+  published: number;
+  publishing: number;
+  timestamp: string;
+}
+
+export interface ReplayIntegrationEventRequest {
+  expectedReplayCount: number;
+}
+
 export type SecurityAccountStatus = 'active' | 'disabled' | 'locked';
 
 export interface SecurityRoleBrief {
@@ -161,7 +258,7 @@ export interface CreateSecurityRoleRequest {
   description?: string;
   isAdministrative: boolean;
   name: string;
-  permissions: ApiPermission[];
+  permissions: RolePermission[];
 }
 
 export interface ReplaceAccountRolesRequest {
@@ -230,6 +327,27 @@ export interface LoginResponse {
   account: AuthenticationAccountSummary;
   expiresAt: string;
   sessionToken: string;
+}
+
+export interface PasswordPolicyResponse {
+  expirationDays: number;
+  historyCount: number;
+  minimumLength: number;
+  requireLowercase: boolean;
+  requireNumber: boolean;
+  requireSymbol: boolean;
+  requireUppercase: boolean;
+}
+
+export interface ChangePasswordRequest {
+  currentPassword: string;
+  newPassword: string;
+}
+
+export interface ChangePasswordResponse {
+  changedAt: string;
+  expiresAt?: string;
+  revokedOtherSessionCount: number;
 }
 
 export const partnerKinds = ['legal_entity', 'individual'] as const;
@@ -587,6 +705,222 @@ export interface CreateProductRequest {
   name: string;
   productCode: string;
   unitId: string;
+}
+
+export const purchaseOrderStatuses = ['open', 'partially_received', 'received'] as const;
+export type PurchaseOrderStatus = (typeof purchaseOrderStatuses)[number];
+
+export interface CreatePurchaseOrderLineRequest {
+  expectedDeliveryDate: string;
+  productId: string;
+  quantity: string;
+  unitPrice: string;
+}
+
+export interface CreatePurchaseOrderRequest {
+  currencyCode: string;
+  lines: CreatePurchaseOrderLineRequest[];
+  supplierPartnerId: string;
+  warehouseId: string;
+}
+
+export interface PurchaseOrderLine {
+  deliveredQuantity: string;
+  expectedDeliveryDate: string;
+  id: string;
+  invoicedQuantity: string;
+  orderedQuantity: string;
+  productId: string;
+  productName: string;
+  unitPrice: string;
+}
+
+export interface GoodsReceiptLine {
+  batchId?: string;
+  id: string;
+  orderLineId: string;
+  productId: string;
+  quantity: string;
+  serialItemIds: string[];
+  stockMovementId: string;
+  totalCostBgn: string;
+  unitCostBgn: string;
+}
+
+export interface GoodsReceipt {
+  id: string;
+  lines: GoodsReceiptLine[];
+  purchaseOrderId: string;
+  receivedAt: string;
+  supplierDeliveryReference?: string;
+  warehouseId: string;
+}
+
+export interface PurchaseOrder {
+  createdAt: string;
+  currencyCode: string;
+  id: string;
+  lines: PurchaseOrderLine[];
+  receipts: GoodsReceipt[];
+  supplierInvoices: SupplierInvoice[];
+  status: PurchaseOrderStatus;
+  supplierName: string;
+  supplierPartnerId: string;
+  updatedAt: string;
+  version: number;
+  warehouseId: string;
+  warehouseName: string;
+}
+
+export interface PurchaseOrderPage {
+  items: PurchaseOrder[];
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+}
+
+export interface ProcurementReferenceData {
+  products: Array<{
+    id: string;
+    name: string;
+    productCode: string;
+    requiresExpiry: boolean;
+    trackingMode: ProductTrackingMode;
+  }>;
+  suppliers: Array<{ id: string; name: string }>;
+  warehouses: Array<{ id: string; name: string }>;
+}
+
+export interface ReceivePurchaseOrderLineRequest {
+  batchNumber?: string;
+  expiresAt?: string;
+  orderLineId: string;
+  quantity: string;
+  serialNumbers?: string[];
+  unitCostBgn?: string;
+}
+
+export interface ReceivePurchaseOrderRequest {
+  lines: ReceivePurchaseOrderLineRequest[];
+  supplierDeliveryReference?: string;
+}
+
+export interface SupplierCommercialProfile {
+  deliveryTerms?: string;
+  paymentTermsDays?: number;
+  supplierName: string;
+  supplierPartnerId: string;
+  updatedAt?: string;
+  version: number;
+}
+
+export interface UpdateSupplierCommercialProfileRequest {
+  deliveryTerms?: string;
+  expectedVersion: number;
+  paymentTermsDays?: number;
+}
+
+export interface SupplierEvaluation {
+  evaluatedAt: string;
+  evaluatedByAccountId: string;
+  id: string;
+  notes?: string;
+  score: number;
+  supplierPartnerId: string;
+}
+
+export interface CreateSupplierEvaluationRequest {
+  notes?: string;
+  score: number;
+}
+
+export interface ProcurementSupplierRecord {
+  contacts: Array<{ email?: string; name: string; role?: string; telephone?: string }>;
+  evaluations: SupplierEvaluation[];
+  profile: SupplierCommercialProfile;
+}
+
+export interface CreateSupplierInvoiceLineRequest {
+  orderLineId: string;
+  quantity: string;
+  unitPrice: string;
+}
+
+export interface CreateSupplierInvoiceRequest {
+  invoiceDate: string;
+  invoiceNumber: string;
+  lines: CreateSupplierInvoiceLineRequest[];
+  purchaseOrderId: string;
+}
+
+export interface SupplierInvoiceLine {
+  id: string;
+  lineTotal: string;
+  orderLineId: string;
+  productId: string;
+  productName: string;
+  quantity: string;
+  unitPrice: string;
+}
+
+export interface SupplierInvoice {
+  currencyCode: string;
+  id: string;
+  invoiceDate: string;
+  invoiceNumber: string;
+  lines: SupplierInvoiceLine[];
+  purchaseOrderId: string;
+  recordedAt: string;
+  supplierName: string;
+  supplierPartnerId: string;
+  total: string;
+}
+
+export const supplierClaimTypes = ['damaged', 'non_conforming'] as const;
+export type SupplierClaimType = (typeof supplierClaimTypes)[number];
+export const supplierClaimStatuses = ['open', 'submitted', 'resolved', 'closed'] as const;
+export type SupplierClaimStatus = (typeof supplierClaimStatuses)[number];
+
+export interface CreateSupplierClaimRequest {
+  description: string;
+  goodsReceiptLineId: string;
+  quantity: string;
+  type: SupplierClaimType;
+}
+
+export interface UpdateSupplierClaimStatusRequest {
+  expectedVersion: number;
+  note?: string;
+  status: SupplierClaimStatus;
+}
+
+export interface SupplierClaimStatusEvent {
+  changedAt: string;
+  changedByAccountId: string;
+  fromStatus?: SupplierClaimStatus;
+  id: string;
+  note?: string;
+  toStatus: SupplierClaimStatus;
+}
+
+export interface SupplierClaim {
+  createdAt: string;
+  description: string;
+  goodsReceiptId: string;
+  goodsReceiptLineId: string;
+  id: string;
+  productId: string;
+  productName: string;
+  purchaseOrderId: string;
+  quantity: string;
+  status: SupplierClaimStatus;
+  statusHistory: SupplierClaimStatusEvent[];
+  supplierName: string;
+  supplierPartnerId: string;
+  type: SupplierClaimType;
+  updatedAt: string;
+  version: number;
 }
 
 export const warehouseTypes = ['standard', 'technician'] as const;

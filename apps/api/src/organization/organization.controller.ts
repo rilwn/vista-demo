@@ -17,6 +17,7 @@ import {
   ApiCreatedResponse,
   ApiHeader,
   ApiOkResponse,
+  ApiParam,
   ApiTags,
 } from '@nestjs/swagger';
 
@@ -91,6 +92,7 @@ export class OrganizationController {
   @ApiBody({ type: CreateBusinessBranchDto })
   @ApiCreatedResponse({ type: BusinessBranchDto })
   @ApiHeader({ name: 'Idempotency-Key', required: true })
+  @ApiParam({ format: 'uuid', name: 'entityId' })
   createBranch(
     @Param('entityId', new ParseUUIDPipe({ version: '4' })) entityId: string,
     @Body() input: CreateBusinessBranchDto,
@@ -112,6 +114,7 @@ export class OrganizationController {
   @ApiBody({ type: CreateBusinessLocationDto })
   @ApiCreatedResponse({ type: BusinessLocationDto })
   @ApiHeader({ name: 'Idempotency-Key', required: true })
+  @ApiParam({ format: 'uuid', name: 'branchId' })
   createLocation(
     @Param('branchId', new ParseUUIDPipe({ version: '4' })) branchId: string,
     @Body() input: CreateBusinessLocationDto,
@@ -133,6 +136,7 @@ export class OrganizationController {
   @ApiBody({ type: CreateBusinessOperatorDto })
   @ApiCreatedResponse({ type: BusinessOperatorDto })
   @ApiHeader({ name: 'Idempotency-Key', required: true })
+  @ApiParam({ format: 'uuid', name: 'locationId' })
   createOperator(
     @Param('locationId', new ParseUUIDPipe({ version: '4' })) locationId: string,
     @Body() input: CreateBusinessOperatorDto,
@@ -154,6 +158,7 @@ export class OrganizationController {
   @ApiBody({ type: CreateCashRegisterDto })
   @ApiCreatedResponse({ type: CashRegisterDto })
   @ApiHeader({ name: 'Idempotency-Key', required: true })
+  @ApiParam({ format: 'uuid', name: 'locationId' })
   createRegister(
     @Param('locationId', new ParseUUIDPipe({ version: '4' })) locationId: string,
     @Body() input: CreateCashRegisterDto,

@@ -31,6 +31,7 @@ import type {
 } from '../auth/authentication.types.js';
 import { ApiErrorException } from '../common/api-error.exception.js';
 import { DatabaseService } from '../database/database.service.js';
+import { lowStockEventType } from '../integration/low-stock-notification.consumer.js';
 
 type WarehouseRow = {
   business_location_id: string | null;
@@ -444,7 +445,12 @@ export class InventoryService {
         metadata,
         validKey(key),
       );
-      await this.reconcileLowStockAlert(client, result.warehouseId, result.productId);
+      await this.reconcileLowStockAlert(
+        client,
+        result.warehouseId,
+        result.productId,
+        metadata.correlationId,
+      );
       return result;
     });
   }
@@ -455,114 +461,148 @@ export class InventoryService {
     metadata: RequestSecurityMetadata,
   ): Promise<StockReceipt> {
     const normalized = normalizeReceipt(input);
-    return this.command('stock-receipt.create', key, normalized, async (client) => {
-      const [warehouseResult, productResult] = await Promise.all([
-        client.query<{ id: string }>(
-          'SELECT id FROM master_data.warehouses WHERE id = $1 AND active FOR KEY SHARE',
-          [normalized.warehouseId],
-        ),
-        client.query<ProductRow>(
-          'SELECT p.id, c.tracking_mode, c.requires_expiry FROM master_data.products p JOIN master_data.product_categories c ON c.id = p.category_id WHERE p.id = $1 AND p.active AND c.active FOR KEY SHARE',
-          [normalized.productId],
-        ),
-      ]);
-      if (!warehouseResult.rowCount)
-        throw new ApiErrorException(
-          'WAREHOUSE_NOT_FOUND',
-          'The selected warehouse was not found',
-          HttpStatus.NOT_FOUND,
-        );
-      await ensureWarehousesNotUnderStocktake(client, [normalized.warehouseId]);
-      const product = productResult.rows[0];
-      if (!product)
-        throw new ApiErrorException(
-          'PRODUCT_NOT_FOUND',
-          'The selected product was not found',
-          HttpStatus.NOT_FOUND,
-        );
-      validateTracking(product, normalized);
-      if (normalized.supplierPartnerId)
-        await requirePartnerRole(client, normalized.supplierPartnerId, 'supplier');
-      const movementId = randomUUID();
-      const movement = await client.query<{ total_cost_bgn: string; unit_cost_bgn: string }>(
-        `INSERT INTO inventory.stock_movements (
-           id, warehouse_id, product_id, movement_type, quantity, reference_type,
-           reference_id, actor_account_id, correlation_id, unit_cost_bgn,
-           supplier_partner_id
-         ) VALUES ($1, $2, $3, 'receipt', $4, 'manual_receipt', $5, $6, $7, $8, $9)
-         RETURNING unit_cost_bgn::text, total_cost_bgn::text`,
-        [
-          movementId,
-          normalized.warehouseId,
-          normalized.productId,
-          normalized.quantity,
-          normalized.referenceId,
-          auth.accountId,
-          metadata.correlationId,
-          normalized.unitCostBgn,
-          normalized.supplierPartnerId ?? null,
-        ],
+    return this.command('stock-receipt.create', key, normalized, (client) =>
+      this.recordReceipt(client, normalized, 'manual_receipt', validKey(key), auth, metadata),
+    );
+  }
+  receivePurchaseOrderStock(
+    client: PoolClient,
+    input: ReceiveStockRequest,
+    goodsReceiptId: string,
+    lineId: string,
+    auth: AuthenticationContext,
+    metadata: RequestSecurityMetadata,
+  ): Promise<StockReceipt> {
+    const normalized = normalizeReceipt({ ...input, referenceId: goodsReceiptId });
+    return this.recordReceipt(
+      client,
+      normalized,
+      'purchase_order_receipt',
+      `${goodsReceiptId}:${lineId}`,
+      auth,
+      metadata,
+    );
+  }
+  private async recordReceipt(
+    client: PoolClient,
+    normalized: ReturnType<typeof normalizeReceipt>,
+    referenceType: 'manual_receipt' | 'purchase_order_receipt',
+    eventKey: string,
+    auth: AuthenticationContext,
+    metadata: RequestSecurityMetadata,
+  ): Promise<StockReceipt> {
+    const [warehouseResult, productResult] = await Promise.all([
+      client.query<{ id: string }>(
+        'SELECT id FROM master_data.warehouses WHERE id = $1 AND active FOR KEY SHARE',
+        [normalized.warehouseId],
+      ),
+      client.query<ProductRow>(
+        'SELECT p.id, c.tracking_mode, c.requires_expiry FROM master_data.products p JOIN master_data.product_categories c ON c.id = p.category_id WHERE p.id = $1 AND p.active AND c.active FOR KEY SHARE',
+        [normalized.productId],
+      ),
+    ]);
+    if (!warehouseResult.rowCount)
+      throw new ApiErrorException(
+        'WAREHOUSE_NOT_FOUND',
+        'The selected warehouse was not found',
+        HttpStatus.NOT_FOUND,
       );
-      await client.query(
-        `INSERT INTO inventory.stock_balances (
-           warehouse_id, product_id, quantity, average_unit_cost_bgn
-         ) VALUES ($1, $2, $3, $4)
-         ON CONFLICT (warehouse_id, product_id) DO UPDATE SET
-           average_unit_cost_bgn = round((
-             inventory.stock_balances.quantity * inventory.stock_balances.average_unit_cost_bgn
-             + EXCLUDED.quantity * EXCLUDED.average_unit_cost_bgn
-           ) / (inventory.stock_balances.quantity + EXCLUDED.quantity), 4),
-           quantity = inventory.stock_balances.quantity + EXCLUDED.quantity,
-           updated_at = now()`,
-        [normalized.warehouseId, normalized.productId, normalized.quantity, normalized.unitCostBgn],
+    await ensureWarehousesNotUnderStocktake(client, [normalized.warehouseId]);
+    const product = productResult.rows[0];
+    if (!product)
+      throw new ApiErrorException(
+        'PRODUCT_NOT_FOUND',
+        'The selected product was not found',
+        HttpStatus.NOT_FOUND,
       );
-      let batchId: string | undefined;
-      if (normalized.batchNumber) {
-        const batch = await client.query<{ id: string }>(
-          'INSERT INTO inventory.batches (product_id, batch_number, expires_at) VALUES ($1, $2, $3) ON CONFLICT (product_id, batch_number) DO UPDATE SET expires_at = COALESCE(inventory.batches.expires_at, EXCLUDED.expires_at) RETURNING id',
-          [normalized.productId, normalized.batchNumber, normalized.expiresAt ?? null],
-        );
-        batchId = required(batch.rows[0], 'Batch insert failed').id;
-        await client.query('UPDATE inventory.stock_movements SET batch_id = $2 WHERE id = $1', [
-          movementId,
-          batchId,
-        ]);
-        await client.query(
-          'INSERT INTO inventory.batch_stock_balances (warehouse_id, batch_id, quantity) VALUES ($1, $2, $3) ON CONFLICT (warehouse_id, batch_id) DO UPDATE SET quantity = inventory.batch_stock_balances.quantity + EXCLUDED.quantity, updated_at = now()',
-          [normalized.warehouseId, batchId, normalized.quantity],
-        );
-      }
-      const serialItemIds: string[] = [];
-      for (const serialNumber of normalized.serialNumbers) {
-        const serial = await client.query<{ id: string }>(
-          'INSERT INTO inventory.serialized_items (product_id, serial_number, warehouse_id, received_movement_id) VALUES ($1, $2, $3, $4) RETURNING id',
-          [normalized.productId, serialNumber, normalized.warehouseId, movementId],
-        );
-        serialItemIds.push(required(serial.rows[0], 'Serial insert failed').id);
-      }
-      const result: StockReceipt = {
-        id: movementId,
-        warehouseId: normalized.warehouseId,
-        productId: normalized.productId,
-        quantity: normalized.quantity,
-        serialItemIds,
-        totalCostBgn: required(movement.rows[0], 'Receipt valuation insert failed').total_cost_bgn,
-        unitCostBgn: required(movement.rows[0], 'Receipt valuation insert failed').unit_cost_bgn,
-        ...(batchId ? { batchId } : {}),
-      };
-      await this.sideEffects(
-        client,
-        'stock_movement',
+    validateTracking(product, normalized);
+    if (normalized.supplierPartnerId)
+      await requirePartnerRole(client, normalized.supplierPartnerId, 'supplier');
+    const movementId = randomUUID();
+    const movement = await client.query<{ total_cost_bgn: string; unit_cost_bgn: string }>(
+      `INSERT INTO inventory.stock_movements (
+         id, warehouse_id, product_id, movement_type, quantity, reference_type,
+         reference_id, actor_account_id, correlation_id, unit_cost_bgn,
+         supplier_partner_id
+       ) VALUES ($1, $2, $3, 'receipt', $4, $5, $6, $7, $8, $9, $10)
+       RETURNING unit_cost_bgn::text, total_cost_bgn::text`,
+      [
         movementId,
-        'inventory.stock.received',
-        result,
-        auth,
-        metadata,
-        validKey(key),
+        normalized.warehouseId,
+        normalized.productId,
+        normalized.quantity,
+        referenceType,
+        normalized.referenceId,
+        auth.accountId,
+        metadata.correlationId,
+        normalized.unitCostBgn,
+        normalized.supplierPartnerId ?? null,
+      ],
+    );
+    await client.query(
+      `INSERT INTO inventory.stock_balances (
+         warehouse_id, product_id, quantity, average_unit_cost_bgn
+       ) VALUES ($1, $2, $3, $4)
+       ON CONFLICT (warehouse_id, product_id) DO UPDATE SET
+         average_unit_cost_bgn = round((
+           inventory.stock_balances.quantity * inventory.stock_balances.average_unit_cost_bgn
+           + EXCLUDED.quantity * EXCLUDED.average_unit_cost_bgn
+         ) / (inventory.stock_balances.quantity + EXCLUDED.quantity), 4),
+         quantity = inventory.stock_balances.quantity + EXCLUDED.quantity,
+         updated_at = now()`,
+      [normalized.warehouseId, normalized.productId, normalized.quantity, normalized.unitCostBgn],
+    );
+    let batchId: string | undefined;
+    if (normalized.batchNumber) {
+      const batch = await client.query<{ id: string }>(
+        'INSERT INTO inventory.batches (product_id, batch_number, expires_at) VALUES ($1, $2, $3) ON CONFLICT (product_id, batch_number) DO UPDATE SET expires_at = COALESCE(inventory.batches.expires_at, EXCLUDED.expires_at) RETURNING id',
+        [normalized.productId, normalized.batchNumber, normalized.expiresAt ?? null],
       );
-      await this.reconcileLowStockAlert(client, result.warehouseId, result.productId);
-      return result;
-    });
+      batchId = required(batch.rows[0], 'Batch insert failed').id;
+      await client.query('UPDATE inventory.stock_movements SET batch_id = $2 WHERE id = $1', [
+        movementId,
+        batchId,
+      ]);
+      await client.query(
+        'INSERT INTO inventory.batch_stock_balances (warehouse_id, batch_id, quantity) VALUES ($1, $2, $3) ON CONFLICT (warehouse_id, batch_id) DO UPDATE SET quantity = inventory.batch_stock_balances.quantity + EXCLUDED.quantity, updated_at = now()',
+        [normalized.warehouseId, batchId, normalized.quantity],
+      );
+    }
+    const serialItemIds: string[] = [];
+    for (const serialNumber of normalized.serialNumbers) {
+      const serial = await client.query<{ id: string }>(
+        'INSERT INTO inventory.serialized_items (product_id, serial_number, warehouse_id, received_movement_id) VALUES ($1, $2, $3, $4) RETURNING id',
+        [normalized.productId, serialNumber, normalized.warehouseId, movementId],
+      );
+      serialItemIds.push(required(serial.rows[0], 'Serial insert failed').id);
+    }
+    const result: StockReceipt = {
+      id: movementId,
+      warehouseId: normalized.warehouseId,
+      productId: normalized.productId,
+      quantity: normalized.quantity,
+      serialItemIds,
+      totalCostBgn: required(movement.rows[0], 'Receipt valuation insert failed').total_cost_bgn,
+      unitCostBgn: required(movement.rows[0], 'Receipt valuation insert failed').unit_cost_bgn,
+      ...(batchId ? { batchId } : {}),
+    };
+    await this.sideEffects(
+      client,
+      'stock_movement',
+      movementId,
+      'inventory.stock.received',
+      result,
+      auth,
+      metadata,
+      eventKey,
+    );
+    await this.reconcileLowStockAlert(
+      client,
+      result.warehouseId,
+      result.productId,
+      metadata.correlationId,
+    );
+    return result;
   }
   async issue(
     input: IssueStockRequest,
@@ -681,7 +721,12 @@ export class InventoryService {
         metadata,
         validKey(key),
       );
-      await this.reconcileLowStockAlert(client, result.warehouseId, result.productId);
+      await this.reconcileLowStockAlert(
+        client,
+        result.warehouseId,
+        result.productId,
+        metadata.correlationId,
+      );
       return result;
     });
   }
@@ -837,7 +882,12 @@ export class InventoryService {
         metadata,
         validKey(key),
       );
-      await this.reconcileLowStockAlert(client, result.destinationWarehouseId, result.productId);
+      await this.reconcileLowStockAlert(
+        client,
+        result.destinationWarehouseId,
+        result.productId,
+        metadata.correlationId,
+      );
       return result;
     });
   }
@@ -946,8 +996,18 @@ export class InventoryService {
         metadata,
         validKey(key),
       );
-      await this.reconcileLowStockAlert(client, result.fromWarehouseId, result.productId);
-      await this.reconcileLowStockAlert(client, result.toWarehouseId, result.productId);
+      await this.reconcileLowStockAlert(
+        client,
+        result.fromWarehouseId,
+        result.productId,
+        metadata.correlationId,
+      );
+      await this.reconcileLowStockAlert(
+        client,
+        result.toWarehouseId,
+        result.productId,
+        metadata.correlationId,
+      );
       return result;
     });
   }
@@ -1005,7 +1065,12 @@ export class InventoryService {
         metadata,
         validKey(key),
       );
-      await this.reconcileLowStockAlert(client, result.warehouseId, result.productId);
+      await this.reconcileLowStockAlert(
+        client,
+        result.warehouseId,
+        result.productId,
+        metadata.correlationId,
+      );
       return result;
     });
   }
@@ -1062,7 +1127,12 @@ export class InventoryService {
         metadata,
         validKey(key),
       );
-      await this.reconcileLowStockAlert(client, result.warehouseId, result.productId);
+      await this.reconcileLowStockAlert(
+        client,
+        result.warehouseId,
+        result.productId,
+        metadata.correlationId,
+      );
       return result;
     });
   }
@@ -1389,7 +1459,12 @@ export class InventoryService {
         validKey(key),
       );
       for (const count of counts.rows)
-        await this.reconcileLowStockAlert(client, result.warehouseId, count.product_id);
+        await this.reconcileLowStockAlert(
+          client,
+          result.warehouseId,
+          count.product_id,
+          metadata.correlationId,
+        );
       return result;
     });
   }
@@ -1397,6 +1472,7 @@ export class InventoryService {
     client: PoolClient,
     warehouseId: string,
     productId: string,
+    correlationId: string,
   ): Promise<void> {
     await client.query(
       "SELECT pg_advisory_xact_lock(hashtext('inventory.low-stock:' || $1 || ':' || $2))",
@@ -1445,23 +1521,27 @@ export class InventoryService {
       for (const subscription of subscriptions.rows) {
         const idempotencyKey = `inventory.low-stock:${warehouseId}:${productId}:${cycleNumber}:${subscription.recipient_account_id}`;
         await client.query(
-          `INSERT INTO notifications.messages (
-             recipient_account_id, channel, template_key, template_version,
-             payload, idempotency_key
-           ) VALUES ($1, 'in_system', 'inventory.low_stock', 1, $2, $3)
+          `INSERT INTO integration.outbox_events (
+             id, aggregate_type, aggregate_id, event_type, event_version,
+             correlation_id, idempotency_key, payload
+           ) VALUES ($1, 'inventory_product', $2, $3, 1, $4, $5, $6)
            ON CONFLICT (idempotency_key) DO NOTHING`,
           [
-            subscription.recipient_account_id,
+            randomUUID(),
+            productId,
+            lowStockEventType,
+            correlationId,
+            idempotencyKey,
             {
               availableQuantity: status.available_quantity,
               cycleNumber,
               minimumQuantity: status.minimum_quantity,
               productId,
+              recipientAccountId: subscription.recipient_account_id,
               recommendedQuantity: status.recommended_quantity,
               targetQuantity: status.target_quantity,
               warehouseId,
             },
-            idempotencyKey,
           ],
         );
       }

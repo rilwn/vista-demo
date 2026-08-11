@@ -324,6 +324,12 @@ export class SessionService {
     return digests.length;
   }
 
+  async removeRevokedSessionTokens(digests: string[]): Promise<void> {
+    if (digests.length === 0) return;
+    const redis = await this.redis.ensureConnected();
+    await Promise.all(digests.map((digest) => redis.del(sessionKey(digest))));
+  }
+
   private async loadPermissions(accountId: string): Promise<Permission[]> {
     const result = await this.database.getPool().query<{
       action: PermissionAction;

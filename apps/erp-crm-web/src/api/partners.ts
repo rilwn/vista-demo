@@ -1,10 +1,10 @@
 import type {
+  CreateCustomerEquipmentRequest,
+  CreateCustomerLocationRequest,
   CreatePartnerAddressRequest,
   CreatePartnerBankAccountRequest,
   CreatePartnerContactRequest,
   CreatePartnerRequest,
-  CreateCustomerEquipmentRequest,
-  CreateCustomerLocationRequest,
   CustomerEquipment,
   CustomerLocation,
   CustomerLocationProfile,
@@ -22,7 +22,12 @@ import type {
   UpdatePartnerRequest,
 } from '@vista/contracts';
 
-import { apiRequest } from './client';
+import {
+  apiClient,
+  authorizationHeaders,
+  idempotencyParameters,
+  unwrapApiResponse,
+} from './client';
 
 export interface PartnerListQuery {
   direction?: 'asc' | 'desc';
@@ -35,11 +40,12 @@ export interface PartnerListQuery {
 }
 
 export function listPartners(token: string, query: PartnerListQuery): Promise<PartnerPage> {
-  const parameters = new URLSearchParams();
-  for (const [key, value] of Object.entries(query)) {
-    if (value !== undefined && value !== '') parameters.set(key, String(value));
-  }
-  return apiRequest<PartnerPage>(`/master-data/partners?${parameters.toString()}`, { token });
+  return unwrapApiResponse(
+    apiClient.GET('/api/v1/master-data/partners', {
+      headers: authorizationHeaders(token),
+      params: { query },
+    }),
+  );
 }
 
 export function createPartner(
@@ -47,12 +53,13 @@ export function createPartner(
   idempotencyKey: string,
   input: CreatePartnerRequest,
 ): Promise<PartnerSummary> {
-  return apiRequest<PartnerSummary>('/master-data/partners', {
-    body: JSON.stringify(input),
-    headers: { 'Idempotency-Key': idempotencyKey },
-    method: 'POST',
-    token,
-  });
+  return unwrapApiResponse(
+    apiClient.POST('/api/v1/master-data/partners', {
+      body: input,
+      headers: authorizationHeaders(token),
+      params: { header: idempotencyParameters(idempotencyKey).header },
+    }),
+  );
 }
 
 export function updatePartner(
@@ -61,7 +68,16 @@ export function updatePartner(
   idempotencyKey: string,
   input: UpdatePartnerRequest,
 ): Promise<PartnerSummary> {
-  return partnerCommand(token, partnerId, '', 'PUT', idempotencyKey, input);
+  return unwrapApiResponse(
+    apiClient.PUT('/api/v1/master-data/partners/{id}', {
+      body: input,
+      headers: authorizationHeaders(token),
+      params: {
+        header: idempotencyParameters(idempotencyKey).header,
+        path: { id: partnerId },
+      },
+    }),
+  );
 }
 
 export function setPartnerActive(
@@ -71,18 +87,26 @@ export function setPartnerActive(
   idempotencyKey: string,
   input: RecordVersionRequest,
 ): Promise<PartnerSummary> {
-  return partnerCommand(
-    token,
-    partnerId,
-    active ? 'reactivate' : 'deactivate',
-    'POST',
-    idempotencyKey,
-    input,
-  );
+  const options = {
+    body: input,
+    headers: authorizationHeaders(token),
+    params: {
+      header: idempotencyParameters(idempotencyKey).header,
+      path: { id: partnerId },
+    },
+  };
+  return active
+    ? unwrapApiResponse(apiClient.POST('/api/v1/master-data/partners/{id}/reactivate', options))
+    : unwrapApiResponse(apiClient.POST('/api/v1/master-data/partners/{id}/deactivate', options));
 }
 
 export function getPartnerProfile(token: string, partnerId: string): Promise<PartnerProfile> {
-  return apiRequest<PartnerProfile>(`/master-data/partners/${partnerId}/profile`, { token });
+  return unwrapApiResponse(
+    apiClient.GET('/api/v1/master-data/partners/{id}/profile', {
+      headers: authorizationHeaders(token),
+      params: { path: { id: partnerId } },
+    }),
+  );
 }
 
 export function createPartnerAddress(
@@ -91,12 +115,15 @@ export function createPartnerAddress(
   idempotencyKey: string,
   input: CreatePartnerAddressRequest,
 ): Promise<PartnerAddress> {
-  return createPartnerProfileRecord<PartnerAddress>(
-    token,
-    partnerId,
-    'addresses',
-    idempotencyKey,
-    input,
+  return unwrapApiResponse(
+    apiClient.POST('/api/v1/master-data/partners/{id}/addresses', {
+      body: input,
+      headers: authorizationHeaders(token),
+      params: {
+        header: idempotencyParameters(idempotencyKey).header,
+        path: { id: partnerId },
+      },
+    }),
   );
 }
 
@@ -106,12 +133,15 @@ export function createPartnerContact(
   idempotencyKey: string,
   input: CreatePartnerContactRequest,
 ): Promise<PartnerContact> {
-  return createPartnerProfileRecord<PartnerContact>(
-    token,
-    partnerId,
-    'contacts',
-    idempotencyKey,
-    input,
+  return unwrapApiResponse(
+    apiClient.POST('/api/v1/master-data/partners/{id}/contacts', {
+      body: input,
+      headers: authorizationHeaders(token),
+      params: {
+        header: idempotencyParameters(idempotencyKey).header,
+        path: { id: partnerId },
+      },
+    }),
   );
 }
 
@@ -121,12 +151,15 @@ export function createPartnerBankAccount(
   idempotencyKey: string,
   input: CreatePartnerBankAccountRequest,
 ): Promise<PartnerBankAccount> {
-  return createPartnerProfileRecord<PartnerBankAccount>(
-    token,
-    partnerId,
-    'bank-accounts',
-    idempotencyKey,
-    input,
+  return unwrapApiResponse(
+    apiClient.POST('/api/v1/master-data/partners/{id}/bank-accounts', {
+      body: input,
+      headers: authorizationHeaders(token),
+      params: {
+        header: idempotencyParameters(idempotencyKey).header,
+        path: { id: partnerId },
+      },
+    }),
   );
 }
 
@@ -134,9 +167,12 @@ export function listCustomerLocations(
   token: string,
   partnerId: string,
 ): Promise<CustomerLocationProfile[]> {
-  return apiRequest<CustomerLocationProfile[]>(`/master-data/partners/${partnerId}/locations`, {
-    token,
-  });
+  return unwrapApiResponse(
+    apiClient.GET('/api/v1/master-data/partners/{partnerId}/locations', {
+      headers: authorizationHeaders(token),
+      params: { path: { partnerId } },
+    }),
+  );
 }
 
 export function createCustomerLocation(
@@ -145,12 +181,16 @@ export function createCustomerLocation(
   idempotencyKey: string,
   input: CreateCustomerLocationRequest,
 ): Promise<CustomerLocation> {
-  return apiRequest<CustomerLocation>(`/master-data/partners/${partnerId}/locations`, {
-    body: JSON.stringify(input),
-    headers: { 'Idempotency-Key': idempotencyKey },
-    method: 'POST',
-    token,
-  });
+  return unwrapApiResponse(
+    apiClient.POST('/api/v1/master-data/partners/{partnerId}/locations', {
+      body: input,
+      headers: authorizationHeaders(token),
+      params: {
+        header: idempotencyParameters(idempotencyKey).header,
+        path: { partnerId },
+      },
+    }),
+  );
 }
 
 export function createCustomerEquipment(
@@ -160,14 +200,15 @@ export function createCustomerEquipment(
   idempotencyKey: string,
   input: CreateCustomerEquipmentRequest,
 ): Promise<CustomerEquipment> {
-  return apiRequest<CustomerEquipment>(
-    `/master-data/partners/${partnerId}/locations/${locationId}/equipment`,
-    {
-      body: JSON.stringify(input),
-      headers: { 'Idempotency-Key': idempotencyKey },
-      method: 'POST',
-      token,
-    },
+  return unwrapApiResponse(
+    apiClient.POST('/api/v1/master-data/partners/{partnerId}/locations/{locationId}/equipment', {
+      body: input,
+      headers: authorizationHeaders(token),
+      params: {
+        header: idempotencyParameters(idempotencyKey).header,
+        path: { locationId, partnerId },
+      },
+    }),
   );
 }
 
@@ -178,7 +219,16 @@ export function updateCustomerLocation(
   idempotencyKey: string,
   input: UpdateCustomerLocationRequest,
 ): Promise<CustomerLocation> {
-  return assetCommand(token, partnerId, locationId, '', 'PUT', idempotencyKey, input);
+  return unwrapApiResponse(
+    apiClient.PUT('/api/v1/master-data/partners/{partnerId}/locations/{locationId}', {
+      body: input,
+      headers: authorizationHeaders(token),
+      params: {
+        header: idempotencyParameters(idempotencyKey).header,
+        path: { locationId, partnerId },
+      },
+    }),
+  );
 }
 
 export function setCustomerLocationActive(
@@ -189,15 +239,27 @@ export function setCustomerLocationActive(
   idempotencyKey: string,
   input: RecordVersionRequest,
 ): Promise<CustomerLocation> {
-  return assetCommand(
-    token,
-    partnerId,
-    locationId,
-    active ? 'reactivate' : 'deactivate',
-    'POST',
-    idempotencyKey,
-    input,
-  );
+  const options = {
+    body: input,
+    headers: authorizationHeaders(token),
+    params: {
+      header: idempotencyParameters(idempotencyKey).header,
+      path: { locationId, partnerId },
+    },
+  };
+  return active
+    ? unwrapApiResponse(
+        apiClient.POST(
+          '/api/v1/master-data/partners/{partnerId}/locations/{locationId}/reactivate',
+          options,
+        ),
+      )
+    : unwrapApiResponse(
+        apiClient.POST(
+          '/api/v1/master-data/partners/{partnerId}/locations/{locationId}/deactivate',
+          options,
+        ),
+      );
 }
 
 export function updateCustomerEquipment(
@@ -208,14 +270,18 @@ export function updateCustomerEquipment(
   idempotencyKey: string,
   input: UpdateCustomerEquipmentRequest,
 ): Promise<CustomerEquipment> {
-  return assetCommand(
-    token,
-    partnerId,
-    locationId,
-    `equipment/${equipmentId}`,
-    'PUT',
-    idempotencyKey,
-    input,
+  return unwrapApiResponse(
+    apiClient.PUT(
+      '/api/v1/master-data/partners/{partnerId}/locations/{locationId}/equipment/{equipmentId}',
+      {
+        body: input,
+        headers: authorizationHeaders(token),
+        params: {
+          header: idempotencyParameters(idempotencyKey).header,
+          path: { equipmentId, locationId, partnerId },
+        },
+      },
+    ),
   );
 }
 
@@ -228,65 +294,25 @@ export function setCustomerEquipmentActive(
   idempotencyKey: string,
   input: RecordVersionRequest,
 ): Promise<CustomerEquipment> {
-  return assetCommand(
-    token,
-    partnerId,
-    locationId,
-    `equipment/${equipmentId}/${active ? 'reactivate' : 'deactivate'}`,
-    'POST',
-    idempotencyKey,
-    input,
-  );
-}
-
-function partnerCommand<T>(
-  token: string,
-  partnerId: string,
-  suffix: string,
-  method: 'POST' | 'PUT',
-  idempotencyKey: string,
-  input: object,
-): Promise<T> {
-  return apiRequest<T>(`/master-data/partners/${partnerId}${suffix ? `/${suffix}` : ''}`, {
-    body: JSON.stringify(input),
-    headers: { 'Idempotency-Key': idempotencyKey },
-    method,
-    token,
-  });
-}
-
-function assetCommand<T>(
-  token: string,
-  partnerId: string,
-  locationId: string,
-  suffix: string,
-  method: 'POST' | 'PUT',
-  idempotencyKey: string,
-  input: object,
-): Promise<T> {
-  return apiRequest<T>(
-    `/master-data/partners/${partnerId}/locations/${locationId}${suffix ? `/${suffix}` : ''}`,
-    {
-      body: JSON.stringify(input),
-      headers: { 'Idempotency-Key': idempotencyKey },
-      method,
-      token,
+  const options = {
+    body: input,
+    headers: authorizationHeaders(token),
+    params: {
+      header: idempotencyParameters(idempotencyKey).header,
+      path: { equipmentId, locationId, partnerId },
     },
-  );
-}
-
-function createPartnerProfileRecord<T>(
-  token: string,
-  partnerId: string,
-  resource: 'addresses' | 'bank-accounts' | 'contacts',
-  idempotencyKey: string,
-  input:
-    CreatePartnerAddressRequest | CreatePartnerBankAccountRequest | CreatePartnerContactRequest,
-): Promise<T> {
-  return apiRequest<T>(`/master-data/partners/${partnerId}/${resource}`, {
-    body: JSON.stringify(input),
-    headers: { 'Idempotency-Key': idempotencyKey },
-    method: 'POST',
-    token,
-  });
+  };
+  return active
+    ? unwrapApiResponse(
+        apiClient.POST(
+          '/api/v1/master-data/partners/{partnerId}/locations/{locationId}/equipment/{equipmentId}/reactivate',
+          options,
+        ),
+      )
+    : unwrapApiResponse(
+        apiClient.POST(
+          '/api/v1/master-data/partners/{partnerId}/locations/{locationId}/equipment/{equipmentId}/deactivate',
+          options,
+        ),
+      );
 }

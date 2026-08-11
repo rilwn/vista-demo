@@ -13,12 +13,18 @@ empty states do not present sample records as real behavior.
    opens the workspace. Navigation shows only modules granted by the current
    backend permissions.
 4. Use **My access** to inspect the effective module/action permissions for the
-   current session and **Sign out** to revoke it.
+   current session, change your password, or sign out.
+
+To change a password, open **My access → Change password**. The panel shows the
+currently configured requirements. Enter the current password and the new
+password twice. A successful change keeps this browser session active and signs
+out every other session using the account. Recently used passwords are rejected;
+the form never sends the confirmation value or displays stored password data.
 
 Locked, expired-password, rate-limited, enrollment-required, invalid-credential,
-and unavailable-service responses have distinct recovery messages. Password
-reset and factor enrollment/recovery are not implemented yet and require the
-remaining P1.3 flows.
+password-policy, password-reuse, and unavailable-service responses have distinct
+recovery messages. Password reset and factor enrollment/recovery are not
+implemented yet and require the remaining P1.3 flows.
 
 ### Security
 
@@ -40,8 +46,8 @@ focused views.
   dismiss or rewrite.
 
 The interface never reveals passwords, password hashes, session token digests,
-or factor secrets. Password reset/change and 2FA enrollment/recovery controls are
-still pending and are not simulated by this screen.
+or factor secrets. Password reset and 2FA enrollment/recovery controls are still
+pending and are not simulated by this screen.
 
 ### Notifications
 
@@ -244,3 +250,50 @@ The result shows product, current custody/status, supplier receipt, transfers,
 customer issue, linked return, technician, references, and actors in time order. Missing party
 evidence is shown as absent rather than invented; unknown serials remain a clear
 not-found state.
+
+## Purchase orders and goods receipts
+
+Open **Procurement → Purchase orders** to review current orders or start an
+order. Select an active supplier, currency, and expected delivery date, then add
+one or more products with quantities and unit prices. A product can appear only
+once on an order. The displayed order reference is an internal reference until
+Vista approves its official numbering sequences.
+
+Open an order and choose **Receive goods** to record a partial or final delivery.
+Choose the destination warehouse and enter only the quantity received now. For
+serial-tracked products, scan one serial per whole unit. For batch-tracked
+products, enter the batch and required expiry date. BGN orders use their order
+price as inventory cost; foreign-currency orders require the actual BGN unit cost
+used for warehouse valuation.
+
+After posting, confirm the order comparison shows the updated received and
+remaining quantities. **Procurement → Goods receipts** shows the receipt history,
+and **Warehouse → Stock** shows the resulting quantity and weighted-average BGN
+cost. A replay of the same submission is safe; an attempt to receive more than
+the ordered quantity is rejected.
+
+### Supplier records, invoices, and claims
+
+Use the visible application navigation; no address or route needs to be entered.
+From the left navigation, choose **ERP → Procurement**. The Procurement landing
+page presents the available areas, and the same tabs remain visible after one is
+opened.
+
+- Choose **Suppliers** to review commercial terms, contacts, and evaluation
+  history. Select **Preview supplier** to open the right-side record preview. Use
+  **Back** or the close control to return to the unchanged supplier list. Users
+  with edit permission can save payment/delivery terms or append an evaluation.
+- Choose **Supplier invoices**, then **Record supplier invoice**. Select the
+  purchase order, enter the supplier's invoice number and date, and compare each
+  line's ordered, delivered, and already-invoiced quantities before recording.
+  Select **Preview** on a recorded invoice to inspect the three-way comparison;
+  use **Back** to return to the register.
+- Choose **Supplier claims**, then **New supplier claim**. Select the exact
+  received product, damaged or non-conforming type, affected quantity, and
+  description. Preview a claim to see its complete status timeline and advance it
+  through Submitted, Resolved, and Closed. The system prevents claims above the
+  received quantity.
+
+These invoice records are purchasing evidence and comparison controls. They do
+not post VAT, accounting, payment, or correction documents; those actions will
+be performed through the finance workflow.

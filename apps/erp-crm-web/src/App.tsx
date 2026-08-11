@@ -10,7 +10,13 @@ import { NotFoundPage } from './pages/NotFoundPage';
 import { OrganizationPage } from './pages/OrganizationPage';
 import { PartnersPage } from './pages/PartnersPage';
 import { ProductCategoriesPage } from './pages/ProductCategoriesPage';
+import { type ProcurementView, ProcurementPage } from './pages/ProcurementPage';
+import {
+  type SupplierProcurementView,
+  SupplierProcurementPage,
+} from './pages/SupplierProcurementPage';
 import { SecurityAdministrationPage } from './pages/SecurityAdministrationPage';
+import { SystemActivityPage } from './pages/SystemActivityPage';
 import { type WarehouseView, WarehouseOperationsPage } from './pages/WarehouseOperationsPage';
 import { WorkflowPage } from './pages/WorkflowPage';
 import { findWorkflowPage } from './pages/workflow-pages';
@@ -44,6 +50,25 @@ function pageForPath(
       <NotFoundPage />
     );
   }
+  const procurementPath = /^\/modules\/erp\.procurement\/(purchase-orders|goods-receipts)$/u.exec(
+    pathname,
+  );
+  if (procurementPath?.[1]) {
+    return hasPermission('erp.procurement') ? (
+      <ProcurementPage view={procurementPath[1] as ProcurementView} />
+    ) : (
+      <NotFoundPage />
+    );
+  }
+  const supplierProcurementPath =
+    /^\/modules\/erp\.procurement\/(suppliers|supplier-invoices|supplier-claims)$/u.exec(pathname);
+  if (supplierProcurementPath?.[1]) {
+    return hasPermission('erp.procurement') ? (
+      <SupplierProcurementPage view={supplierProcurementPath[1] as SupplierProcurementView} />
+    ) : (
+      <NotFoundPage />
+    );
+  }
   const workflow = findWorkflowPage(pathname);
   if (workflow) {
     return hasPermission(workflow.module) ? <WorkflowPage page={workflow} /> : <NotFoundPage />;
@@ -55,6 +80,9 @@ function pageForPath(
   }
   if (pathname === '/security') {
     return hasPermission('platform') ? <SecurityAdministrationPage /> : <NotFoundPage />;
+  }
+  if (pathname === '/operations') {
+    return hasPermission('platform') ? <SystemActivityPage /> : <NotFoundPage />;
   }
   if (pathname === '/partners') {
     return hasPermission('crm') ? <PartnersPage /> : <NotFoundPage />;

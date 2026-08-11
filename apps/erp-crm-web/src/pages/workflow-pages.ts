@@ -240,6 +240,42 @@ export const workflowPages: WorkflowPageDefinition[] = [
       },
     ],
   ),
+  procurement(
+    'suppliers',
+    'Suppliers',
+    'Review supplier contacts, payment and delivery terms, and evaluation history.',
+    'Open supplier register',
+    [
+      {
+        title: 'Commercial record',
+        items: ['Canonical supplier contacts', 'Payment and delivery terms', 'Versioned updates'],
+      },
+      {
+        title: 'Performance',
+        items: ['Historical 1–5 evaluations', 'Evaluation notes', 'Auditable chronology'],
+      },
+    ],
+  ),
+  procurement(
+    'supplier-invoices',
+    'Supplier invoices',
+    'Record supplier invoice evidence and compare ordered, delivered, and invoiced quantities.',
+    'Record supplier invoice',
+    [
+      {
+        title: 'Invoice matching',
+        items: [
+          'Supplier-scoped invoice reference',
+          'Purchase-order line linkage',
+          'Quantity and price evidence',
+        ],
+      },
+      {
+        title: 'Three-way control',
+        items: ['Ordered quantity', 'Delivered quantity', 'Invoiced quantity and variance'],
+      },
+    ],
+  ),
 
   warehouse(
     'catalog',

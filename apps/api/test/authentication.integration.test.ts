@@ -20,10 +20,11 @@ import { TotpService } from '../src/auth/totp.service.js';
 import { ApiErrorException } from '../src/common/api-error.exception.js';
 import { configureHttpApplication } from '../src/common/http-application.js';
 import { APP_ENVIRONMENT } from '../src/config/config.module.js';
-import { migrateUp } from '../src/database/migration-runner.js';
+import { migrateDown, migrateUp } from '../src/database/migration-runner.js';
 
 const runInfrastructureTests = process.env['RUN_INFRASTRUCTURE_TESTS'] === 'true';
 const password = 'Vista-Test-Password-7!';
+const changedPassword = 'Vista-Changed-Password-8!';
 
 describe.skipIf(!runInfrastructureTests)(
   'authentication, authorization, and audit guarantees',
@@ -68,10 +69,23 @@ describe.skipIf(!runInfrastructureTests)(
       isolatedRedisUrl.pathname = '/14';
 
       database = new Pool({ connectionString: isolatedDatabaseUrl.toString(), max: 2 });
-      await migrateUp(
-        database,
-        fileURLToPath(new URL('../src/database/migrations', import.meta.url)),
+      const migrationDirectory = fileURLToPath(
+        new URL('../src/database/migrations', import.meta.url),
       );
+      await migrateUp(database, migrationDirectory);
+      const supplierControlsRolledBack = await migrateDown(database, migrationDirectory);
+      if (supplierControlsRolledBack !== '0025_procurement_supplier_controls') {
+        throw new Error('Expected to roll back migration 0025 before procurement receiving');
+      }
+      const procurementRolledBack = await migrateDown(database, migrationDirectory);
+      if (procurementRolledBack !== '0024_procurement_purchase_receiving') {
+        throw new Error('Expected to roll back migration 0024 before the password migration');
+      }
+      const rolledBack = await migrateDown(database, migrationDirectory);
+      if (rolledBack !== '0023_employee_password_change') {
+        throw new Error(`Expected to roll back migration 0023, received ${rolledBack ?? 'none'}`);
+      }
+      await migrateUp(database, migrationDirectory);
       Object.assign(process.env, {
         AUTH_LOGIN_RATE_LIMIT_MAX: '5',
         BUSINESS_TIMEZONE: 'Europe/Sofia',
@@ -302,6 +316,105 @@ describe.skipIf(!runInfrastructureTests)(
         .set('authorization', `Bearer ${deniedToken}`)
         .expect(403);
       expect(denied.body).toMatchObject({ error: { code: 'PERMISSION_DENIED' } });
+    });
+
+    it('changes an employee password, prevents reuse, revokes other sessions, and records audit evidence', async () => {
+      const policy = await request(application.getHttpServer())
+        .get('/api/v1/auth/me/password-policy')
+        .set('authorization', `Bearer ${employeeToken}`)
+        .expect(200);
+      expect(policy.body).toMatchObject({
+        expirationDays: 0,
+        historyCount: 5,
+        minimumLength: 12,
+        requireLowercase: true,
+        requireNumber: true,
+        requireSymbol: true,
+        requireUppercase: true,
+      });
+
+      const otherLogin = await request(application.getHttpServer())
+        .post('/api/v1/auth/login')
+        .send({ email: employeeEmail, password })
+        .expect(200);
+      const otherToken = otherLogin.body.sessionToken as string;
+
+      const incorrect = await request(application.getHttpServer())
+        .post('/api/v1/auth/me/password')
+        .set('authorization', `Bearer ${employeeToken}`)
+        .send({ currentPassword: 'Wrong-Current-Password-9!', newPassword: changedPassword })
+        .expect(400);
+      expect(incorrect.body).toMatchObject({ error: { code: 'CURRENT_PASSWORD_INVALID' } });
+
+      const weak = await request(application.getHttpServer())
+        .post('/api/v1/auth/me/password')
+        .set('authorization', `Bearer ${employeeToken}`)
+        .send({ currentPassword: password, newPassword: 'weak' })
+        .expect(400);
+      expect(weak.body).toMatchObject({
+        error: {
+          code: 'PASSWORD_POLICY_VIOLATION',
+        },
+      });
+      expect(JSON.stringify(weak.body)).toContain('"field":"newPassword"');
+
+      const changed = await request(application.getHttpServer())
+        .post('/api/v1/auth/me/password')
+        .set('authorization', `Bearer ${employeeToken}`)
+        .send({ currentPassword: password, newPassword: changedPassword })
+        .expect(200);
+      expect(changed.body).toMatchObject({ revokedOtherSessionCount: 1 });
+      expect(changed.body.changedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/u);
+      expect(JSON.stringify(changed.body)).not.toContain(password);
+      expect(JSON.stringify(changed.body)).not.toContain(changedPassword);
+
+      await request(application.getHttpServer())
+        .get('/api/v1/auth/me')
+        .set('authorization', `Bearer ${employeeToken}`)
+        .expect(200);
+      await request(application.getHttpServer())
+        .get('/api/v1/auth/me')
+        .set('authorization', `Bearer ${otherToken}`)
+        .expect(401);
+      await request(application.getHttpServer())
+        .post('/api/v1/auth/login')
+        .send({ email: employeeEmail, password })
+        .expect(401);
+
+      const changedLogin = await request(application.getHttpServer())
+        .post('/api/v1/auth/login')
+        .send({ email: employeeEmail, password: changedPassword })
+        .expect(200);
+      const changedToken = changedLogin.body.sessionToken as string;
+      const reused = await request(application.getHttpServer())
+        .post('/api/v1/auth/me/password')
+        .set('authorization', `Bearer ${changedToken}`)
+        .send({ currentPassword: changedPassword, newPassword: password })
+        .expect(400);
+      expect(reused.body).toMatchObject({ error: { code: 'PASSWORD_REUSE_NOT_ALLOWED' } });
+
+      await request(application.getHttpServer())
+        .post('/api/v1/auth/logout')
+        .set('authorization', `Bearer ${changedToken}`)
+        .expect(204);
+      const evidence = await database.query<{
+        changed: string;
+        history_count: string;
+        rejected: string;
+      }>(
+        `SELECT
+           (SELECT count(*)::text FROM audit.events
+            WHERE action = 'auth.password.changed' AND target_id = account.id) AS changed,
+           (SELECT count(*)::text FROM audit.events
+            WHERE action = 'auth.password.change_rejected' AND target_id = account.id) AS rejected,
+           (SELECT count(*)::text FROM identity.password_history
+            WHERE account_id = account.id) AS history_count
+         FROM identity.user_accounts account
+         JOIN identity.employees employee ON employee.id = account.employee_id
+         WHERE employee.email = $1`,
+        [employeeEmail],
+      );
+      expect(evidence.rows[0]).toEqual({ changed: '1', history_count: '1', rejected: '2' });
     });
 
     it('revokes the current session', async () => {

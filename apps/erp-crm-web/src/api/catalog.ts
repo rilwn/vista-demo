@@ -5,10 +5,19 @@ import type {
   Unit,
 } from '@vista/contracts';
 
-import { apiRequest } from './client';
+import {
+  apiClient,
+  authorizationHeaders,
+  idempotencyParameters,
+  unwrapApiResponse,
+} from './client';
 
 export function listUnits(token: string): Promise<Unit[]> {
-  return apiRequest<Unit[]>('/master-data/catalog/units', { token });
+  return unwrapApiResponse(
+    apiClient.GET('/api/v1/master-data/catalog/units', {
+      headers: authorizationHeaders(token),
+    }),
+  );
 }
 
 export function createUnit(
@@ -16,16 +25,21 @@ export function createUnit(
   idempotencyKey: string,
   input: CreateUnitRequest,
 ): Promise<Unit> {
-  return apiRequest<Unit>('/master-data/catalog/units', {
-    body: JSON.stringify(input),
-    headers: { 'Idempotency-Key': idempotencyKey },
-    method: 'POST',
-    token,
-  });
+  return unwrapApiResponse(
+    apiClient.POST('/api/v1/master-data/catalog/units', {
+      body: input,
+      headers: authorizationHeaders(token),
+      params: { header: idempotencyParameters(idempotencyKey).header },
+    }),
+  );
 }
 
 export function listProducts(token: string): Promise<ProductSummary[]> {
-  return apiRequest<ProductSummary[]>('/master-data/catalog/products', { token });
+  return unwrapApiResponse(
+    apiClient.GET('/api/v1/master-data/catalog/products', {
+      headers: authorizationHeaders(token),
+    }),
+  );
 }
 
 export function createProduct(
@@ -33,10 +47,11 @@ export function createProduct(
   idempotencyKey: string,
   input: CreateProductRequest,
 ): Promise<ProductSummary> {
-  return apiRequest<ProductSummary>('/master-data/catalog/products', {
-    body: JSON.stringify(input),
-    headers: { 'Idempotency-Key': idempotencyKey },
-    method: 'POST',
-    token,
-  });
+  return unwrapApiResponse(
+    apiClient.POST('/api/v1/master-data/catalog/products', {
+      body: input,
+      headers: authorizationHeaders(token),
+      params: { header: idempotencyParameters(idempotencyKey).header },
+    }),
+  );
 }

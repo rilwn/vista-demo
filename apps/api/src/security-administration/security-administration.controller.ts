@@ -15,10 +15,13 @@ import {
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
+  ApiBody,
   ApiCreatedResponse,
   ApiHeader,
   ApiNoContentResponse,
   ApiOkResponse,
+  ApiParam,
+  ApiQuery,
   ApiTags,
 } from '@nestjs/swagger';
 import type {
@@ -68,6 +71,10 @@ export class SecurityAdministrationController {
   @Get('accounts')
   @RateLimitPolicy('read')
   @RequirePermissions({ action: 'view', module: 'platform' })
+  @ApiQuery({ minimum: 1, name: 'page', required: false, type: Number })
+  @ApiQuery({ maximum: 100, minimum: 1, name: 'pageSize', required: false, type: Number })
+  @ApiQuery({ maxLength: 200, name: 'search', required: false, type: String })
+  @ApiQuery({ enum: ['active', 'disabled', 'locked'], name: 'status', required: false })
   @ApiOkResponse({ type: SecurityAccountPageDto })
   listAccounts(@Query() query: SecurityAccountListQueryDto): Promise<SecurityAccountPage> {
     return this.security.listAccounts(query);
@@ -75,6 +82,7 @@ export class SecurityAdministrationController {
 
   @Post('accounts')
   @RequirePermissions({ action: 'create', module: 'platform' })
+  @ApiBody({ type: CreateSecurityAccountDto })
   @ApiHeader({ name: 'Idempotency-Key', required: true })
   @ApiCreatedResponse({ type: SecurityAccountDto })
   createAccount(
@@ -93,7 +101,9 @@ export class SecurityAdministrationController {
   @Post('accounts/:id/disable')
   @HttpCode(HttpStatus.OK)
   @RequirePermissions({ action: 'approve', module: 'platform' })
+  @ApiBody({ type: ChangeAccountStatusDto })
   @ApiHeader({ name: 'Idempotency-Key', required: true })
+  @ApiParam({ format: 'uuid', name: 'id' })
   @ApiOkResponse({ type: SecurityAccountDto })
   disableAccount(
     @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
@@ -114,7 +124,9 @@ export class SecurityAdministrationController {
   @Post('accounts/:id/reactivate')
   @HttpCode(HttpStatus.OK)
   @RequirePermissions({ action: 'approve', module: 'platform' })
+  @ApiBody({ type: ChangeAccountStatusDto })
   @ApiHeader({ name: 'Idempotency-Key', required: true })
+  @ApiParam({ format: 'uuid', name: 'id' })
   @ApiOkResponse({ type: SecurityAccountDto })
   reactivateAccount(
     @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
@@ -134,7 +146,9 @@ export class SecurityAdministrationController {
 
   @Put('accounts/:id/roles')
   @RequirePermissions({ action: 'approve', module: 'platform' })
+  @ApiBody({ type: ReplaceAccountRolesDto })
   @ApiHeader({ name: 'Idempotency-Key', required: true })
+  @ApiParam({ format: 'uuid', name: 'id' })
   @ApiOkResponse({ type: SecurityAccountDto })
   replaceRoles(
     @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
@@ -161,6 +175,7 @@ export class SecurityAdministrationController {
 
   @Post('roles')
   @RequirePermissions({ action: 'create', module: 'platform' })
+  @ApiBody({ type: CreateSecurityRoleDto })
   @ApiHeader({ name: 'Idempotency-Key', required: true })
   @ApiCreatedResponse({ type: SecurityRoleDto })
   createRole(
@@ -174,6 +189,7 @@ export class SecurityAdministrationController {
   @Get('sessions')
   @RateLimitPolicy('read')
   @RequirePermissions({ action: 'view', module: 'platform' })
+  @ApiQuery({ format: 'uuid', name: 'accountId', required: false, type: String })
   @ApiOkResponse({ type: [SecuritySessionDto] })
   listSessions(@Query() query: SecuritySessionListQueryDto): Promise<SecuritySession[]> {
     return this.security.listSessions(query);
@@ -182,6 +198,7 @@ export class SecurityAdministrationController {
   @Post('sessions/:id/revoke')
   @HttpCode(HttpStatus.NO_CONTENT)
   @RequirePermissions({ action: 'approve', module: 'platform' })
+  @ApiParam({ format: 'uuid', name: 'id' })
   @ApiNoContentResponse({ description: 'The selected login session is revoked.' })
   async revokeSession(
     @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
@@ -193,6 +210,13 @@ export class SecurityAdministrationController {
   @Get('audit-events')
   @RateLimitPolicy('read')
   @RequirePermissions({ action: 'view', module: 'platform' })
+  @ApiQuery({ maxLength: 150, name: 'action', required: false, type: String })
+  @ApiQuery({ format: 'uuid', name: 'actorAccountId', required: false, type: String })
+  @ApiQuery({ format: 'date-time', name: 'from', required: false, type: String })
+  @ApiQuery({ minimum: 1, name: 'page', required: false, type: Number })
+  @ApiQuery({ maximum: 100, minimum: 1, name: 'pageSize', required: false, type: Number })
+  @ApiQuery({ format: 'date-time', name: 'to', required: false, type: String })
+  @ApiQuery({ maxLength: 150, name: 'targetType', required: false, type: String })
   @ApiOkResponse({ type: AuditEventPageDto })
   listAuditEvents(@Query() query: AuditEventListQueryDto): Promise<AuditEventPage> {
     return this.security.listAuditEvents(query);

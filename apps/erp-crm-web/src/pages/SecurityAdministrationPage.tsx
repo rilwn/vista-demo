@@ -589,10 +589,11 @@ function RoleComposer({
     event.preventDefault();
     setBusy(true);
     setError('');
-    const permissions = selected.map((value) => {
-      const [module, action] = value.split(':');
-      return { action: action ?? '', module: module ?? '' } satisfies ApiPermission;
-    });
+    const permissions = modules.flatMap((module) =>
+      actions
+        .filter((action) => selected.includes(`${module}:${action}`))
+        .map((action) => ({ action, module }) satisfies ApiPermission),
+    );
     const input: CreateSecurityRoleRequest = { ...draft, permissions };
     const fingerprint = JSON.stringify(input);
     if (attempt.current?.fingerprint !== fingerprint)
@@ -950,6 +951,8 @@ function humanAction(action: string): string {
         'auth.account_sessions.revoked': 'All employee sessions revoked',
         'auth.login.failed': 'Sign-in failed',
         'auth.login.succeeded': 'Signed in',
+        'auth.password.change_rejected': 'Password change declined',
+        'auth.password.changed': 'Password changed',
         'auth.session.revoked': 'Signed out',
         'auth.session.revoked_by_administrator': 'Session revoked by administrator',
         'iam.account_roles.replaced': 'Employee roles changed',

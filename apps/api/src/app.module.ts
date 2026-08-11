@@ -11,6 +11,8 @@ import { PartnersModule } from './partners/partners.module.js';
 import { ProductCategoriesModule } from './product-categories/product-categories.module.js';
 import { CatalogModule } from './catalog/catalog.module.js';
 import { InventoryModule } from './inventory/inventory.module.js';
+import { ProcurementModule } from './procurement/procurement.module.js';
+import { IntegrationModule } from './integration/integration.module.js';
 import { RootController } from './root.controller.js';
 import { RateLimitModule } from './security/rate-limit.module.js';
 import { SecurityAdministrationModule } from './security-administration/security-administration.module.js';
@@ -24,6 +26,7 @@ import { SecurityAdministrationModule } from './security-administration/security
     RateLimitModule,
     HealthModule,
     JobsModule,
+    IntegrationModule,
     AuthModule,
     SecurityAdministrationModule,
     OrganizationModule,
@@ -31,6 +34,7 @@ import { SecurityAdministrationModule } from './security-administration/security
     ProductCategoriesModule,
     CatalogModule,
     InventoryModule,
+    ProcurementModule,
   ],
 })
 export class AppModule {}

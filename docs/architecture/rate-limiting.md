@@ -4,13 +4,13 @@ Every HTTP route except the liveness and readiness probes has an explicit reques
 risk policy. Limits are evaluated per route and client IP, so activity on one
 endpoint does not consume another endpoint's allowance.
 
-| Policy      | Current development default | Applied to                                              |
-| ----------- | --------------------------- | ------------------------------------------------------- |
-| `public`    | 60 requests/minute          | Platform identification and sign-in's general IP tier   |
-| `read`      | 240 requests/minute         | Authenticated lists, details, status, and notifications |
-| `write`     | 60 requests/minute          | Ordinary create, edit, and reversible lifecycle actions |
-| `sensitive` | 20 requests/minute          | Security administration and approval-level operations   |
-| fallback    | 120 requests/minute         | Defensive limit for a future route missing a policy     |
+| Policy      | Current development default | Applied to                                                   |
+| ----------- | --------------------------- | ------------------------------------------------------------ |
+| `public`    | 60 requests/minute          | Platform identification and sign-in's general IP tier        |
+| `read`      | 240 requests/minute         | Authenticated lists, details, status, and notifications      |
+| `write`     | 60 requests/minute          | Ordinary create, edit, and reversible lifecycle actions      |
+| `sensitive` | 20 requests/minute          | Password/session changes, security administration, approvals |
+| fallback    | 120 requests/minute         | Defensive limit for a future route missing a policy          |
 
 The login endpoint also retains its stricter Redis counter for each client-IP and
 normalized-account pair. Account lockout remains a separate authentication

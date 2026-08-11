@@ -181,3 +181,48 @@ enforcement, session review/revocation, and audit exploration without exposing
 credential material. Audit writes remain serialized and now allocate strictly
 monotonic event timestamps under the same advisory lock, keeping chronological
 integrity verification deterministic even during concurrent requests.
+
+Migration `0022_reliable_integration_events` turns the existing integration
+tables into an executable outbox/inbox lifecycle. Aggregate-scoped sequence
+allocation, publication claims, replay counters, delivery rows, failure codes,
+and completion/dead-letter timestamps make transport state durable and
+observable. A database trigger protects immutable event identity and content.
+Inbox receipts retain canonical payload hashes and per-cycle attempt state so a
+duplicate delivery cannot repeat a completed consumer effect. Event replay resets
+only incomplete deliveries; it does not erase completed receipts or alter the
+originating business event.
+
+Migration `0023_employee_password_change` adds the private
+`identity.password_history` store. A successful self-service change moves the
+previous salted scrypt hash into this table, retains only the configured recent
+window, updates the account password/expiration/version, revokes every other
+active session, and appends audit evidence in one transaction. The table is not
+exposed by an API and never stores plaintext credentials.
+
+Migration `0024_procurement_purchase_receiving` adds purchase orders, immutable
+order lines, goods receipts, and receipt lines under the `procurement` schema.
+Orders reference canonical supplier partners and receipt lines reference the
+existing warehouse inventory ledger. Fixed-precision quantities and prices,
+cumulative checks, row locks, and database constraints prevent over-receipt and
+derive open, partially received, or received status without a mutable duplicate
+total. Each goods receipt and its warehouse movement, balances, tracking
+evidence, audit event, outbox event, and idempotency result commit in one
+transaction. Internal UUID references are displayed until the approved scoped
+document-number policy in `BUS-002` is available; the migration does not invent
+an official numbering sequence.
+
+Migration `0025_procurement_supplier_controls` completes the core procurement
+record chain. `supplier_profiles` holds versioned payment and delivery terms,
+while `supplier_evaluations` retains immutable overall 1–5 assessments and notes
+without hard-coding vendor-specific dimensions. Supplier invoices preserve the
+supplier-provided number, date, order currency, fixed-precision lines, and exact
+purchase-order-line links; invoice numbers are unique within one supplier.
+Invoice capture increments cumulative invoiced quantity for three-way comparison
+but does not pretend to post an accounting document.
+
+Supplier claims reference the exact goods receipt and receipt line for damaged or
+non-conforming goods. Row locks and cumulative checks prevent claiming more than
+was received. Claims progress through open, submitted, resolved, and closed in
+order, with every transition appended to a separate status-history table. All
+parent and source links use restrictive foreign keys; no history is silently
+deleted or reassigned.

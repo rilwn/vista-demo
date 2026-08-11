@@ -12,6 +12,7 @@ import { APP_ENVIRONMENT } from './config/config.module.js';
 import { configureOpenApi } from './openapi.js';
 
 async function generateOpenApi(): Promise<void> {
+  process.env['NODE_ENV'] = 'test';
   const application = await NestFactory.create(AppModule, { logger: false });
   const environment = application.get<AppEnvironment>(APP_ENVIRONMENT);
   configureHttpApplication(application, environment);

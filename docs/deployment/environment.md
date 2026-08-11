@@ -18,12 +18,13 @@ environment and injected by an approved secret manager; never commit `.env`.
 | `DEPENDENCY_HEALTH_TIMEOUT_MS`             | Object-storage readiness timeout                  | yes; 2-second default                        |
 | `LOG_LEVEL`                                | redacted structured log threshold                 | yes; info default                            |
 | `REQUEST_LOGGING_ENABLED`                  | Structured request-completion event switch        | yes; enabled by default                      |
-| `PASSWORD_*`                               | Complexity and expiration controls                | yes; production values require IAM-001       |
+| `PASSWORD_*`                               | Complexity, history, and expiration controls      | yes; production values require IAM-001       |
 | `POSTGRES_PORT`, `DATABASE_URL`            | Local PostgreSQL host port and connection URL     | yes                                          |
 | `REDIS_PORT`, `REDIS_URL`                  | Local Redis host port and connection URL/database | yes                                          |
 | `IDEMPOTENCY_TTL_SECONDS`                  | Retried-command result replay window              | yes; 24-hour development default             |
 | `JOB_QUEUE_NAME`, `JOB_QUEUE_PREFIX`       | Stable BullMQ queue namespace                     | yes; environment-specific in deployment      |
 | `JOB_DEFAULT_ATTEMPTS`, `*_BACKOFF_*`      | Retry count and exponential backoff base          | yes; bounded defaults                        |
+| `INTEGRATION_OUTBOX_*`                     | Outbox batch, polling, and stale-claim recovery   | yes; bounded defaults                        |
 | `NOTIFICATION_*_MS`                        | Dispatcher poll and stale-claim recovery windows  | yes; bounded development defaults            |
 | `S3_ENDPOINT`, `S3_REGION`, `S3_BUCKET`    | S3-compatible storage destination                 | yes for current foundation configuration     |
 | `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | storage credentials                               | yes; secret manager in deployed environments |
@@ -52,10 +53,12 @@ approved operational retention policy is implemented.
 Authentication uses opaque bearer tokens. Only a SHA-256 digest is retained in
 PostgreSQL metadata and live session state is stored in Redis with an absolute
 TTL. Login throttling is Redis-backed and fails closed when its security
-dependency is unavailable. Passwords use versioned salted scrypt hashes; TOTP
-factor secrets use authenticated AES-256-GCM encryption. The example password,
-expiration, lockout, session, and TOTP values are development candidates only;
-`IAM-001` must approve production policy values.
+dependency is unavailable. Passwords use versioned salted scrypt hashes;
+`PASSWORD_HISTORY_COUNT` controls the retained recent-hash window and defaults to
+five for local development. TOTP factor secrets use authenticated AES-256-GCM
+encryption. The example password, history, expiration, lockout, session, and TOTP
+values are development candidates only; `IAM-001` must approve production policy
+values.
 
 The ERP/CRM frontend uses a same-origin `/api/v1` base by default, and local Vite
 development proxies `/api` to port 3000. Set `VITE_API_BASE_URL` only when the

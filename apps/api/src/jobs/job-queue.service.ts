@@ -114,6 +114,14 @@ export class JobQueueService implements OnApplicationShutdown {
     return true;
   }
 
+  async retryFailed(jobId: string): Promise<boolean> {
+    const job = await this.getQueue().getJob(jobId);
+    if (!job || (await job.getState()) !== 'failed') return false;
+    await job.retry('failed');
+    this.logger.event('info', 'job.retried', { jobId, jobName: job.name });
+    return true;
+  }
+
   async getSummary(jobId: string): Promise<BackgroundJobSummary | undefined> {
     const job = await this.getQueue().getJob(jobId);
     if (!job) return undefined;

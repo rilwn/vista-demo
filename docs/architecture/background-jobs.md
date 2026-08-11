@@ -57,3 +57,53 @@ end-to-end tests before that SRS responsibility is complete.
 Tests cover stable queue identifiers, handler registration, nested payload
 routing, retry versus terminal attempts, unknown handlers, deterministic outbox
 events, and live PostgreSQL replay deduplication for every named responsibility.
+
+## Transactional outbox and durable inbox
+
+Business commands write their domain state and `integration.outbox_events` in the
+same PostgreSQL transaction. The publisher only claims event types with a
+registered consumer. This keeps later-phase events durable and pending rather
+than falsely marking unsupported work complete.
+
+For a supported event, the publisher:
+
+1. recovers a `publishing` claim that exceeded the configured processing timeout;
+2. claims available rows with `FOR UPDATE SKIP LOCKED` in a short transaction;
+3. creates one delivery row per registered consumer;
+4. enqueues `integration.event.consume` with a stable event-and-replay identifier;
+5. records publication or returns the event to a delayed retry; and
+6. moves an event to `dead_letter` after the bounded publication attempts are
+   exhausted.
+
+The consumer locks one aggregate/consumer stream, validates a canonical payload
+hash, and writes its business effect, inbox receipt, and delivery completion in
+one database transaction. A repeated queue delivery sees the completed inbox
+receipt and cannot repeat the business effect. The first active consumer converts
+`inventory.low_stock.detected` events into idempotent in-system notification work.
+
+Ordering is guaranteed within one aggregate type, aggregate identifier, event
+type, and consumer. An earlier incomplete sequence blocks a later event in that
+stream. Ordering between unrelated aggregates or different event types is
+deliberately not asserted, allowing safe parallel processing.
+
+## Operations and recovery
+
+Users with `platform:view` can inspect payload-free counts, event lifecycle, and
+consumer delivery state at `/operations`. The API never returns event payloads or
+stored consumer results. Users with `platform:edit` can retry an event only after
+explicit confirmation. Replay requires an idempotency key and the event's current
+replay count, appends an audit event, retains completed consumers, and resets only
+failed or dead-lettered delivery work.
+
+For recovery:
+
+- investigate the stable error code and dependent service health first;
+- correct the consumer or infrastructure fault without editing outbox content;
+- use the protected retry command once; repeated submission with the same key is
+  safe;
+- confirm all delivery rows and the parent event reach `completed`; and
+- escalate recurring poison messages instead of repeatedly replaying them.
+
+Outbox identity, aggregate identity, event type, version, sequence, correlation,
+payload, and occurrence time are database-protected from update. Operators must
+not bypass the replay workflow with direct SQL.

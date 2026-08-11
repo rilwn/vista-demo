@@ -41,6 +41,9 @@ const environmentSchema = z
     FEATURE_POS_BACKUP_ROUTER: booleanString.default(false),
     FEATURE_POS_KIOSK: booleanString.default(false),
     IDEMPOTENCY_TTL_SECONDS: z.coerce.number().int().positive().default(86_400),
+    INTEGRATION_OUTBOX_BATCH_SIZE: z.coerce.number().int().positive().max(500).default(100),
+    INTEGRATION_OUTBOX_INTERVAL_MS: z.coerce.number().int().positive().default(1_000),
+    INTEGRATION_OUTBOX_PROCESSING_TIMEOUT_MS: z.coerce.number().int().positive().default(60_000),
     JOB_BACKOFF_DELAY_MS: z.coerce.number().int().positive().default(1_000),
     JOB_DEFAULT_ATTEMPTS: z.coerce.number().int().positive().max(20).default(5),
     JOB_QUEUE_NAME: z
@@ -58,6 +61,7 @@ const environmentSchema = z
     NOTIFICATION_DISPATCH_INTERVAL_MS: z.coerce.number().int().positive().default(5_000),
     NOTIFICATION_PROCESSING_TIMEOUT_MS: z.coerce.number().int().positive().default(300_000),
     PASSWORD_EXPIRY_DAYS: z.coerce.number().int().nonnegative().default(0),
+    PASSWORD_HISTORY_COUNT: z.coerce.number().int().min(1).max(24).default(5),
     PASSWORD_MIN_LENGTH: z.coerce.number().int().min(8).max(128).default(12),
     PASSWORD_REQUIRE_LOWERCASE: booleanString.default(true),
     PASSWORD_REQUIRE_NUMBER: booleanString.default(true),

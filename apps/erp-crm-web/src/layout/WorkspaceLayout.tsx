@@ -77,7 +77,7 @@ export function WorkspaceLayout({ children }: PropsWithChildren) {
               {group.modules.map((module) => (
                 <SidebarLink
                   icon={module.icon}
-                  key={module.key}
+                  key={`${module.key}:${module.path}`}
                   label={module.label}
                   to={module.path}
                 />

@@ -1,5 +1,11 @@
 import { Controller, Get, Inject, Param } from '@nestjs/common';
-import { ApiBearerAuth, ApiNotFoundResponse, ApiOkResponse, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiNotFoundResponse,
+  ApiOkResponse,
+  ApiParam,
+  ApiTags,
+} from '@nestjs/swagger';
 import type { BackgroundJobSummary, BackgroundJobTelemetry } from '@vista/contracts';
 
 import { RequirePermissions } from '../auth/auth.decorators.js';
@@ -24,6 +30,7 @@ export class JobsController {
 
   @Get(':id')
   @RequirePermissions({ action: 'view', module: 'platform' })
+  @ApiParam({ name: 'id', type: String })
   @ApiOkResponse({ type: BackgroundJobSummaryDto })
   @ApiNotFoundResponse({ description: 'The background job no longer exists.' })
   async summary(@Param('id') id: string): Promise<BackgroundJobSummary> {

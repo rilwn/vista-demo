@@ -1,20 +1,48 @@
-import type { AuthenticationContextResponse, LoginRequest, LoginResponse } from '@vista/contracts';
+import type {
+  AuthenticationContextResponse,
+  ChangePasswordRequest,
+  ChangePasswordResponse,
+  LoginRequest,
+  LoginResponse,
+  PasswordPolicyResponse,
+} from '@vista/contracts';
 
-import { apiRequest } from './client';
+import { apiClient, authorizationHeaders, unwrapApiResponse } from './client';
 
 export { ApiClientError } from './client';
 
 export function authenticate(input: LoginRequest): Promise<LoginResponse> {
-  return apiRequest<LoginResponse>('/auth/login', {
-    body: JSON.stringify(input),
-    method: 'POST',
-  });
+  return unwrapApiResponse(apiClient.POST('/api/v1/auth/login', { body: input }));
 }
 
 export function getCurrentAccount(token: string): Promise<AuthenticationContextResponse> {
-  return apiRequest<AuthenticationContextResponse>('/auth/me', { token });
+  return unwrapApiResponse(
+    apiClient.GET('/api/v1/auth/me', { headers: authorizationHeaders(token) }),
+  );
 }
 
 export function revokeSession(token: string): Promise<void> {
-  return apiRequest<void>('/auth/logout', { method: 'POST', token });
+  return unwrapApiResponse(
+    apiClient.POST('/api/v1/auth/logout', { headers: authorizationHeaders(token) }),
+  );
+}
+
+export function getPasswordPolicy(token: string): Promise<PasswordPolicyResponse> {
+  return unwrapApiResponse(
+    apiClient.GET('/api/v1/auth/me/password-policy', {
+      headers: authorizationHeaders(token),
+    }),
+  );
+}
+
+export function changePassword(
+  token: string,
+  input: ChangePasswordRequest,
+): Promise<ChangePasswordResponse> {
+  return unwrapApiResponse(
+    apiClient.POST('/api/v1/auth/me/password', {
+      body: input,
+      headers: authorizationHeaders(token),
+    }),
+  );
 }

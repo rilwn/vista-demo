@@ -21,6 +21,7 @@ import {
   ApiHeader,
   ApiOkResponse,
   ApiOperation,
+  ApiParam,
   ApiQuery,
   ApiTags,
 } from '@nestjs/swagger';
@@ -93,6 +94,7 @@ export class PartnersController {
   @Get(':id/profile')
   @RateLimitPolicy('read')
   @RequirePermissions({ action: 'view', module: 'crm' })
+  @ApiParam({ format: 'uuid', name: 'id' })
   @ApiOkResponse({ type: PartnerProfileDto })
   profile(
     @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
@@ -103,6 +105,7 @@ export class PartnersController {
   @Get(':id')
   @RateLimitPolicy('read')
   @RequirePermissions({ action: 'view', module: 'crm' })
+  @ApiParam({ format: 'uuid', name: 'id' })
   @ApiOkResponse({ type: PartnerSummaryDto })
   get(@Param('id', new ParseUUIDPipe({ version: '4' })) id: string): Promise<PartnerSummaryDto> {
     return this.partners.get(id);
@@ -139,6 +142,7 @@ export class PartnersController {
   @ApiBody({ type: UpdatePartnerDto })
   @ApiOkResponse({ type: PartnerSummaryDto })
   @ApiHeader({ name: 'Idempotency-Key', required: true })
+  @ApiParam({ format: 'uuid', name: 'id' })
   update(
     @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
     @Body() input: UpdatePartnerDto,
@@ -154,6 +158,7 @@ export class PartnersController {
   @ApiBody({ type: RecordVersionDto })
   @ApiOkResponse({ type: PartnerSummaryDto })
   @ApiHeader({ name: 'Idempotency-Key', required: true })
+  @ApiParam({ format: 'uuid', name: 'id' })
   deactivate(
     @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
     @Body() input: RecordVersionDto,
@@ -176,6 +181,7 @@ export class PartnersController {
   @ApiBody({ type: RecordVersionDto })
   @ApiOkResponse({ type: PartnerSummaryDto })
   @ApiHeader({ name: 'Idempotency-Key', required: true })
+  @ApiParam({ format: 'uuid', name: 'id' })
   reactivate(
     @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
     @Body() input: RecordVersionDto,
@@ -202,6 +208,7 @@ export class PartnersController {
     name: 'Idempotency-Key',
     required: true,
   })
+  @ApiParam({ format: 'uuid', name: 'id' })
   createAddress(
     @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
     @Body() input: CreatePartnerAddressDto,
@@ -227,6 +234,7 @@ export class PartnersController {
     name: 'Idempotency-Key',
     required: true,
   })
+  @ApiParam({ format: 'uuid', name: 'id' })
   createContact(
     @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
     @Body() input: CreatePartnerContactDto,
@@ -252,6 +260,7 @@ export class PartnersController {
     name: 'Idempotency-Key',
     required: true,
   })
+  @ApiParam({ format: 'uuid', name: 'id' })
   createBankAccount(
     @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
     @Body() input: CreatePartnerBankAccountDto,

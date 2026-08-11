@@ -16,6 +16,7 @@ import {
   ApiCreatedResponse,
   ApiHeader,
   ApiOkResponse,
+  ApiParam,
   ApiTags,
 } from '@nestjs/swagger';
 import { RequirePermissions } from '../auth/auth.decorators.js';
@@ -153,6 +154,7 @@ export class InventoryController {
   @ApiBody({ type: RecordStocktakeCountDto })
   @ApiCreatedResponse({ type: StocktakeDto })
   @ApiHeader({ name: 'Idempotency-Key', required: true })
+  @ApiParam({ format: 'uuid', name: 'id' })
   countStocktake(
     @Body() input: RecordStocktakeCountDto,
     @Headers('idempotency-key') key: string | undefined,
@@ -173,6 +175,7 @@ export class InventoryController {
   @RequirePermissions({ module: 'erp.warehouse', action: 'approve' })
   @ApiCreatedResponse({ type: StocktakeDto })
   @ApiHeader({ name: 'Idempotency-Key', required: true })
+  @ApiParam({ format: 'uuid', name: 'id' })
   completeStocktake(
     @Headers('idempotency-key') key: string | undefined,
     @Req() request: AuthenticatedRequest,
@@ -198,6 +201,7 @@ export class InventoryController {
   @RequirePermissions({ module: 'erp.warehouse', action: 'edit' })
   @ApiOkResponse({ type: StockReservationDto })
   @ApiHeader({ name: 'Idempotency-Key', required: true })
+  @ApiParam({ format: 'uuid', name: 'id' })
   releaseStockReservation(
     @Headers('idempotency-key') key: string | undefined,
     @Req() request: AuthenticatedRequest,
@@ -233,6 +237,7 @@ export class InventoryController {
   @Get('serial-traceability/:serialNumber')
   @RateLimitPolicy('read')
   @RequirePermissions({ module: 'erp.warehouse', action: 'view' })
+  @ApiParam({ name: 'serialNumber', type: String })
   @ApiOkResponse({ type: SerialTraceabilityDto })
   serialTraceability(@Param('serialNumber') serialNumber: string): Promise<SerialTraceabilityDto> {
     return this.inventory.serialTraceability(serialNumber);

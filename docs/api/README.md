@@ -3,16 +3,27 @@
 The NestJS application exposes versioned routes below `/api/v1` and interactive
 OpenAPI at `/api/docs`. The raw document is served at `/api/docs-json`.
 
-Generate the same document without opening a network listener:
+Generate the OpenAPI document and the versioned TypeScript client without
+opening a network listener:
 
 ```sh
-npm run openapi:generate -w @vista/api
+npm run openapi:generate
 ```
 
 The generated `apps/api/openapi.json` is a build artifact and is intentionally
-ignored. CI regenerates it to catch metadata/configuration failures. Published
-API compatibility and generated clients will be added as versioned domain
-operations begin.
+ignored. The versioned client in
+`packages/contracts/src/generated/v1.ts` is committed and exported through
+`@vista/contracts`. Do not edit it by hand. `npm run openapi:check` regenerates
+the document, validates operation IDs, path parameters, and success responses,
+then fails when the committed client is stale. The repository validation and CI
+run that drift check before compilation.
+
+All three browser applications create their client through
+`createVistaApiClientV1`. Existing ERP/CRM requests use the generated path,
+query, header, body, response, and error types. POS and backup-control have the
+same client entry point ready for their connected workflows. The helper accepts
+the established `VITE_API_BASE_URL` value with or without a terminal `/api/v1`
+and never duplicates the version prefix.
 
 Every HTTP response carries `x-correlation-id`; a valid inbound identifier is
 preserved. Errors use the shared stable envelope and code vocabulary, including
@@ -39,12 +50,17 @@ authorization headers, and client card/PIN data are not request-log fields.
 - `GET /api/v1/auth/me` returns the authenticated employee/session context.
 - `GET /api/v1/auth/me/permissions` demonstrates backend enforcement of the
   controlled `platform:view` permission.
+- `GET /api/v1/auth/me/password-policy` returns the signed-in employee's active
+  complexity, expiration, and recent-password requirements.
+- `POST /api/v1/auth/me/password` verifies the current password, applies the
+  active policy and history rule, updates the password atomically, retains the
+  current session, revokes every other session, and returns no credential data.
 
 Routes are protected by default. Health, platform identification, and login are
 explicitly public; future controllers must use the public marker deliberately or
 receive a valid bearer session. Administrative accounts cannot create or resolve
 a session without a verified second factor. TOTP enrollment/provisioning and
-password reset/change APIs remain pending and are not implied by these endpoints.
+controlled password reset remain pending and are not implied by these endpoints.
 
 The ERP/CRM browser uses these routes through a same-origin `/api/v1` client by
 default; local Vite development proxies `/api` to the NestJS server. A deployment
@@ -74,8 +90,9 @@ sessions.
 
 Account and session responses never contain password hashes, bearer-token
 digests, or factor secrets. Material changes are appended to the audit chain.
-Password change/reset and factor enrollment/recovery remain intentionally absent
-until their remaining policy decisions and recovery controls are implemented.
+Employee password change is available through the authenticated self-service
+route above. Password reset and factor enrollment/recovery remain intentionally
+absent until their recovery controls are implemented.
 
 ## In-system notifications
 
@@ -110,6 +127,25 @@ by later business modules is first handed off through one deterministic outbox
 event; its business result is not reported as complete until that owning module
 processes the event. Handler names, ownership, and producer rules are documented
 in [`../architecture/background-jobs.md`](../architecture/background-jobs.md).
+
+## Integration event operations
+
+- `GET /api/v1/platform/integrations/metrics` requires `platform:view` and
+  returns event lifecycle counts, failed-delivery count, and the age reference for
+  the oldest unfinished event.
+- `GET /api/v1/platform/integrations/events` requires `platform:view` and returns
+  a paginated, optionally status/event-type-filtered event summary.
+- `GET /api/v1/platform/integrations/events/:id` requires `platform:view` and
+  returns the event and its consumer delivery lifecycle.
+- `POST /api/v1/platform/integrations/events/:id/replay` requires
+  `platform:edit`, an `Idempotency-Key`, and the current `expectedReplayCount`.
+  Only failed work is eligible; a successful command is audited.
+
+These responses deliberately omit event payloads and consumer results. Replay
+does not mutate the original event content or repeat a consumer that already
+completed. The ERP/CRM System activity page provides the corresponding protected
+operator workflow. Lifecycle, ordering, and recovery behavior are documented in
+[`../architecture/background-jobs.md`](../architecture/background-jobs.md).
 
 ## Organization topology
 
@@ -340,3 +376,57 @@ customer and technician account. The traceability route returns current custody
 and a chronological receipt/transfer/issue/stocktake timeline with actors,
 references, costs, and available party evidence. Missing links are not guessed.
 Unknown serials return the stable `SERIAL_NOT_FOUND` code.
+
+## Procurement purchase orders and receiving
+
+The first connected procurement workflow exposes:
+
+- `GET /api/v1/procurement/reference-data` for active suppliers, products, and
+  warehouses permitted in purchase and receipt commands.
+- `GET /api/v1/procurement/purchase-orders` with pagination plus optional status
+  and supplier filters.
+- `GET /api/v1/procurement/purchase-orders/:id` for lines, cumulative delivery
+  comparison, and receipt history.
+- `POST /api/v1/procurement/purchase-orders`, requiring
+  `erp.procurement:create` and an `Idempotency-Key`.
+- `POST /api/v1/procurement/purchase-orders/:id/receipts`, requiring the same
+  permission and idempotency header.
+
+Reads require `erp.procurement:view`. An order accepts one or more unique product
+lines, fixed-precision quantity and unit price, a three-letter currency, and an
+expected delivery date. A receipt accepts any remaining quantity from one or more
+lines and updates the order to partially received or received from committed
+line totals. Over-receipt is rejected while concurrent receipts are serialized.
+
+Receiving uses the warehouse ledger in the same PostgreSQL transaction. Serial,
+batch, and expiry requirements come from the product category and cannot be
+bypassed. BGN purchase prices become the default BGN inventory cost. A
+foreign-currency order requires an explicit BGN receipt cost until the approved
+BNB exchange-rate snapshot workflow is implemented; the API never guesses a
+conversion. Supplier invoice quantities now feed the comparison only when linked
+invoice evidence has actually been recorded.
+
+The remaining core procurement operations are available:
+
+- `GET /api/v1/procurement/suppliers` and `/suppliers/:id` return canonical active
+  contacts, versioned payment/delivery terms, and evaluation history.
+- `PUT /api/v1/procurement/suppliers/:id/commercial-profile` requires
+  `erp.procurement:edit`, an idempotency key, and the current version (zero when
+  terms have never been set).
+- `POST /api/v1/procurement/suppliers/:id/evaluations` appends an immutable 1–5
+  overall assessment and optional notes with the same edit permission.
+- `GET` and `POST /api/v1/procurement/supplier-invoices` read or record
+  supplier-provided invoice evidence against purchase-order lines.
+- `GET` and `POST /api/v1/procurement/supplier-claims` read or open a damaged or
+  non-conforming claim against one goods-receipt line.
+- `POST /api/v1/procurement/supplier-claims/:id/status` performs the next
+  version-checked open → submitted → resolved → closed transition and appends its
+  status event.
+
+Invoice and claim creation require `erp.procurement:create`; reads require view.
+Invoice numbers are case-insensitively unique within a supplier. Invoice
+quantities are retained even when they differ from ordered or delivered amounts,
+so the discrepancy remains visible for review. Claims cannot cumulatively exceed
+the received line quantity. Every command is transactional, idempotent, audited,
+and outbox-backed. Supplier invoices are procurement evidence only; accounting,
+VAT, payment, and correction posting belong to the finance document workflow.

@@ -9,6 +9,7 @@ import type {
   CreateSecurityAccountRequest,
   CreateSecurityRoleRequest,
   ReplaceAccountRolesRequest,
+  RolePermission,
   SecurityAccount,
   SecurityAccountPage,
   SecurityAccountStatus,
@@ -89,14 +90,14 @@ export class CreateSecurityAccountDto implements CreateSecurityAccountRequest {
   initialPassword!: string;
 }
 
-export class SecurityPermissionDto implements ApiPermission {
+export class SecurityPermissionDto implements RolePermission {
   @ApiProperty({ enum: permissionActions })
   @IsIn(permissionActions)
-  action!: string;
+  action!: RolePermission['action'];
 
   @ApiProperty({ enum: permissionModules })
   @IsIn(permissionModules)
-  module!: string;
+  module!: RolePermission['module'];
 }
 
 export class CreateSecurityRoleDto implements CreateSecurityRoleRequest {
@@ -125,7 +126,7 @@ export class CreateSecurityRoleDto implements CreateSecurityRoleRequest {
   @ArrayMaxSize(100)
   @ValidateNested({ each: true })
   @Type(() => SecurityPermissionDto)
-  permissions!: ApiPermission[];
+  permissions!: RolePermission[];
 }
 
 export class ReplaceAccountRolesDto implements ReplaceAccountRolesRequest {

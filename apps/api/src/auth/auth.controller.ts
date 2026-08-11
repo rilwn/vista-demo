@@ -10,7 +10,9 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import {
+  ApiBadRequestResponse,
   ApiBearerAuth,
+  ApiBody,
   ApiForbiddenResponse,
   ApiNoContentResponse,
   ApiOkResponse,
@@ -24,7 +26,15 @@ import type { Request } from 'express';
 import type { CorrelatedRequest } from '../common/correlation-id.middleware.js';
 import { RateLimitPolicy } from '../security/rate-limit.decorator.js';
 import { Public, RequirePermissions } from './auth.decorators.js';
-import { LoginRequestDto, LoginResponseDto } from './auth.dto.js';
+import {
+  ApiPermissionDto,
+  AuthenticationContextDto,
+  ChangePasswordRequestDto,
+  ChangePasswordResponseDto,
+  LoginRequestDto,
+  LoginResponseDto,
+  PasswordPolicyResponseDto,
+} from './auth.dto.js';
 import { AuthService } from './auth.service.js';
 import type { AuthenticatedRequest, RequestSecurityMetadata } from './authentication.types.js';
 import { LoginRateLimitGuard } from './login-rate-limit.guard.js';
@@ -44,6 +54,7 @@ export class AuthController {
   @Post('login')
   @UseGuards(LoginRateLimitGuard)
   @HttpCode(HttpStatus.OK)
+  @ApiBody({ type: LoginRequestDto })
   @ApiOkResponse({ type: LoginResponseDto })
   @ApiUnauthorizedResponse({ description: 'Credentials or a required factor are invalid.' })
   @ApiForbiddenResponse({ description: 'Password or mandatory factor enrollment blocks login.' })
@@ -63,7 +74,10 @@ export class AuthController {
 
   @Get('me')
   @ApiBearerAuth()
-  @ApiOkResponse({ description: 'The current authenticated employee account.' })
+  @ApiOkResponse({
+    description: 'The current authenticated employee account.',
+    type: AuthenticationContextDto,
+  })
   me(@Req() request: AuthenticatedRequest): AuthenticatedRequest['authentication'] {
     return request.authentication;
   }
@@ -71,9 +85,39 @@ export class AuthController {
   @Get('me/permissions')
   @RequirePermissions({ action: 'view', module: 'platform' })
   @ApiBearerAuth()
-  @ApiOkResponse({ description: 'The current account effective permissions.' })
+  @ApiOkResponse({
+    description: 'The current account effective permissions.',
+    type: [ApiPermissionDto],
+  })
   permissions(@Req() request: AuthenticatedRequest): Permission[] {
     return request.authentication.permissions;
+  }
+
+  @Get('me/password-policy')
+  @ApiBearerAuth()
+  @ApiOkResponse({ type: PasswordPolicyResponseDto })
+  passwordPolicy(): PasswordPolicyResponseDto {
+    return this.authentication.passwordPolicy();
+  }
+
+  @Post('me/password')
+  @RateLimitPolicy('sensitive')
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth()
+  @ApiBody({ type: ChangePasswordRequestDto })
+  @ApiOkResponse({ type: ChangePasswordResponseDto })
+  @ApiBadRequestResponse({
+    description: 'The current password, password policy, or recent-password rule was not met.',
+  })
+  changePassword(
+    @Body() input: ChangePasswordRequestDto,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<ChangePasswordResponseDto> {
+    return this.authentication.changePassword(
+      input,
+      request.authentication,
+      requestMetadata(request),
+    );
   }
 }
 

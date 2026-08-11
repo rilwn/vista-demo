@@ -11,12 +11,26 @@ import type {
   SecuritySession,
 } from '@vista/contracts';
 
-import { apiRequest } from './client';
+import {
+  apiClient,
+  authorizationHeaders,
+  idempotencyParameters,
+  unwrapApiResponse,
+} from './client';
 
 export function listSecurityAccounts(token: string, search = ''): Promise<SecurityAccountPage> {
-  const query = new URLSearchParams({ page: '1', pageSize: '100' });
-  if (search.trim()) query.set('search', search.trim());
-  return apiRequest<SecurityAccountPage>(`/platform/security/accounts?${query}`, { token });
+  return unwrapApiResponse(
+    apiClient.GET('/api/v1/platform/security/accounts', {
+      headers: authorizationHeaders(token),
+      params: {
+        query: {
+          page: 1,
+          pageSize: 100,
+          ...(search.trim() ? { search: search.trim() } : {}),
+        },
+      },
+    }),
+  );
 }
 
 export function createSecurityAccount(
@@ -24,7 +38,13 @@ export function createSecurityAccount(
   key: string,
   input: CreateSecurityAccountRequest,
 ): Promise<SecurityAccount> {
-  return command('/platform/security/accounts', token, key, input, 'POST');
+  return unwrapApiResponse(
+    apiClient.POST('/api/v1/platform/security/accounts', {
+      body: input,
+      headers: authorizationHeaders(token),
+      params: { header: idempotencyParameters(key).header },
+    }),
+  );
 }
 
 export function changeSecurityAccountStatus(
@@ -34,13 +54,27 @@ export function changeSecurityAccountStatus(
   status: 'active' | 'disabled',
 ): Promise<SecurityAccount> {
   const input: ChangeAccountStatusRequest = { expectedVersion: account.version };
-  return command(
-    `/platform/security/accounts/${account.accountId}/${status === 'active' ? 'reactivate' : 'disable'}`,
-    token,
-    key,
-    input,
-    'POST',
-  );
+  return status === 'active'
+    ? unwrapApiResponse(
+        apiClient.POST('/api/v1/platform/security/accounts/{id}/reactivate', {
+          body: input,
+          headers: authorizationHeaders(token),
+          params: {
+            header: idempotencyParameters(key).header,
+            path: { id: account.accountId },
+          },
+        }),
+      )
+    : unwrapApiResponse(
+        apiClient.POST('/api/v1/platform/security/accounts/{id}/disable', {
+          body: input,
+          headers: authorizationHeaders(token),
+          params: {
+            header: idempotencyParameters(key).header,
+            path: { id: account.accountId },
+          },
+        }),
+      );
 }
 
 export function replaceSecurityAccountRoles(
@@ -53,17 +87,24 @@ export function replaceSecurityAccountRoles(
     expectedVersion: account.version,
     roleIds,
   };
-  return command(
-    `/platform/security/accounts/${account.accountId}/roles`,
-    token,
-    key,
-    input,
-    'PUT',
+  return unwrapApiResponse(
+    apiClient.PUT('/api/v1/platform/security/accounts/{id}/roles', {
+      body: input,
+      headers: authorizationHeaders(token),
+      params: {
+        header: idempotencyParameters(key).header,
+        path: { id: account.accountId },
+      },
+    }),
   );
 }
 
 export function listSecurityRoles(token: string): Promise<SecurityRole[]> {
-  return apiRequest<SecurityRole[]>('/platform/security/roles', { token });
+  return unwrapApiResponse(
+    apiClient.GET('/api/v1/platform/security/roles', {
+      headers: authorizationHeaders(token),
+    }),
+  );
 }
 
 export function createSecurityRole(
@@ -71,41 +112,51 @@ export function createSecurityRole(
   key: string,
   input: CreateSecurityRoleRequest,
 ): Promise<SecurityRole> {
-  return command('/platform/security/roles', token, key, input, 'POST');
+  return unwrapApiResponse(
+    apiClient.POST('/api/v1/platform/security/roles', {
+      body: input,
+      headers: authorizationHeaders(token),
+      params: { header: idempotencyParameters(key).header },
+    }),
+  );
 }
 
 export function listSecuritySessions(token: string): Promise<SecuritySession[]> {
-  return apiRequest<SecuritySession[]>('/platform/security/sessions', { token });
+  return unwrapApiResponse(
+    apiClient.GET('/api/v1/platform/security/sessions', {
+      headers: authorizationHeaders(token),
+    }),
+  );
 }
 
 export function revokeSecuritySession(token: string, sessionId: string): Promise<void> {
-  return apiRequest<void>(`/platform/security/sessions/${sessionId}/revoke`, {
-    method: 'POST',
-    token,
-  });
+  return unwrapApiResponse(
+    apiClient.POST('/api/v1/platform/security/sessions/{id}/revoke', {
+      headers: authorizationHeaders(token),
+      params: { path: { id: sessionId } },
+    }),
+  );
 }
 
 export function listAuditEvents(token: string, action = ''): Promise<AuditEventPage> {
-  const query = new URLSearchParams({ page: '1', pageSize: '100' });
-  if (action.trim()) query.set('action', action.trim());
-  return apiRequest<AuditEventPage>(`/platform/security/audit-events?${query}`, { token });
+  return unwrapApiResponse(
+    apiClient.GET('/api/v1/platform/security/audit-events', {
+      headers: authorizationHeaders(token),
+      params: {
+        query: {
+          page: 1,
+          pageSize: 100,
+          ...(action.trim() ? { action: action.trim() } : {}),
+        },
+      },
+    }),
+  );
 }
 
 export function verifyAuditIntegrity(token: string): Promise<AuditIntegrityResult> {
-  return apiRequest<AuditIntegrityResult>('/platform/security/audit-integrity', { token });
-}
-
-function command<T>(
-  path: string,
-  token: string,
-  key: string,
-  input: object,
-  method: 'POST' | 'PUT',
-): Promise<T> {
-  return apiRequest<T>(path, {
-    body: JSON.stringify(input),
-    headers: { 'Idempotency-Key': key },
-    method,
-    token,
-  });
+  return unwrapApiResponse(
+    apiClient.GET('/api/v1/platform/security/audit-integrity', {
+      headers: authorizationHeaders(token),
+    }),
+  );
 }

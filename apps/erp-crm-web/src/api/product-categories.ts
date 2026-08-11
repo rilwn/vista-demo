@@ -1,9 +1,18 @@
 import type { CreateProductCategoryRequest, ProductCategory } from '@vista/contracts';
 
-import { apiRequest } from './client';
+import {
+  apiClient,
+  authorizationHeaders,
+  idempotencyParameters,
+  unwrapApiResponse,
+} from './client';
 
 export function listProductCategories(token: string): Promise<ProductCategory[]> {
-  return apiRequest<ProductCategory[]>('/master-data/product-categories', { token });
+  return unwrapApiResponse(
+    apiClient.GET('/api/v1/master-data/product-categories', {
+      headers: authorizationHeaders(token),
+    }),
+  );
 }
 
 export function createProductCategory(
@@ -11,10 +20,11 @@ export function createProductCategory(
   idempotencyKey: string,
   input: CreateProductCategoryRequest,
 ): Promise<ProductCategory> {
-  return apiRequest<ProductCategory>('/master-data/product-categories', {
-    body: JSON.stringify(input),
-    headers: { 'Idempotency-Key': idempotencyKey },
-    method: 'POST',
-    token,
-  });
+  return unwrapApiResponse(
+    apiClient.POST('/api/v1/master-data/product-categories', {
+      body: input,
+      headers: authorizationHeaders(token),
+      params: { header: idempotencyParameters(idempotencyKey).header },
+    }),
+  );
 }

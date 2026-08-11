@@ -34,6 +34,13 @@ export const navigationGroups: NavigationGroup[] = [
     label: messages.navigation.administration,
     modules: [
       moduleItem('platform', 'shield', '/security'),
+      {
+        description: messages.operations.navigationDescription,
+        icon: 'activity',
+        key: 'platform',
+        label: messages.operations.navigationLabel,
+        path: '/operations',
+      },
       moduleItem('platform.organization', 'organization', '/organization'),
     ],
   },

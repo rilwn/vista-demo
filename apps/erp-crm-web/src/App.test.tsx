@@ -1,4 +1,5 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import type { ProcurementSupplierRecord } from '@vista/contracts';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { App } from './App';
@@ -261,6 +262,100 @@ describe('ERP and CRM authenticated workspace', () => {
     ).toBeTruthy();
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock.mock.calls[0]?.[0]).toBe('/api/v1/auth/me');
+  });
+
+  it('changes the signed-in employee password from My access and keeps policy-driven validation visible', async () => {
+    storeAuthenticatedSession(authenticationContext);
+    const policy = {
+      expirationDays: 0,
+      historyCount: 5,
+      minimumLength: 12,
+      requireLowercase: true,
+      requireNumber: true,
+      requireSymbol: true,
+      requireUppercase: true,
+    };
+    let passwordAttempts = 0;
+    const fetchMock = vi.fn((input: string, options?: RequestInit) => {
+      if (input.endsWith('/auth/me')) return Promise.resolve(jsonResponse(authenticationContext));
+      if (input.endsWith('/auth/me/password-policy')) return Promise.resolve(jsonResponse(policy));
+      if (input.endsWith('/auth/me/password') && options?.method === 'POST') {
+        passwordAttempts += 1;
+        if (passwordAttempts === 1) {
+          return Promise.resolve(
+            jsonResponse(
+              {
+                error: {
+                  code: 'CURRENT_PASSWORD_INVALID',
+                  correlationId: 'password-change-test',
+                  details: [{ field: 'currentPassword', message: 'Server field message' }],
+                  message: 'The current password is incorrect',
+                  timestamp: '2026-08-11T12:00:00.000Z',
+                },
+              },
+              400,
+            ),
+          );
+        }
+        return Promise.resolve(
+          jsonResponse({
+            changedAt: '2026-08-11T12:00:00.000Z',
+            revokedOtherSessionCount: 2,
+          }),
+        );
+      }
+      return Promise.resolve(jsonResponse({}));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderApplication(['/access']);
+    await screen.findByRole('heading', { name: messages.access.title });
+    fireEvent.click(screen.getByRole('button', { name: messages.access.changePassword }));
+
+    expect(await screen.findByText(messages.access.passwordRequirementLength(12))).toBeTruthy();
+    expect(screen.getByText(messages.access.passwordRequirementHistory(5))).toBeTruthy();
+    fireEvent.change(screen.getByLabelText(messages.access.currentPassword), {
+      target: { value: 'Current-Password-7!' },
+    });
+    fireEvent.change(screen.getByLabelText(messages.access.newPassword), {
+      target: { value: 'Updated-Password-8!' },
+    });
+    fireEvent.change(screen.getByLabelText(messages.access.confirmPassword), {
+      target: { value: 'Different-Password-9!' },
+    });
+    fireEvent.submit(
+      screen.getByRole('button', { name: messages.access.savePassword }).closest('form')!,
+    );
+    expect(await screen.findByText(messages.access.passwordMismatch)).toBeTruthy();
+
+    fireEvent.change(screen.getByLabelText(messages.access.confirmPassword), {
+      target: { value: 'Updated-Password-8!' },
+    });
+    fireEvent.submit(
+      screen.getByRole('button', { name: messages.access.savePassword }).closest('form')!,
+    );
+    expect(await screen.findByText(messages.access.currentPasswordInvalid)).toBeTruthy();
+    expect(screen.getByLabelText<HTMLInputElement>(messages.access.currentPassword).value).toBe('');
+    expect(screen.getByLabelText<HTMLInputElement>(messages.access.newPassword).value).toBe(
+      'Updated-Password-8!',
+    );
+    fireEvent.change(screen.getByLabelText(messages.access.currentPassword), {
+      target: { value: 'Current-Password-7!' },
+    });
+    fireEvent.submit(
+      screen.getByRole('button', { name: messages.access.savePassword }).closest('form')!,
+    );
+    expect(await screen.findByText(messages.access.passwordChangedWithSessions(2))).toBeTruthy();
+    expect(screen.queryByRole('dialog', { name: messages.access.passwordTitle })).toBeNull();
+
+    const command = fetchMock.mock.calls
+      .filter(([url, options]) => url.endsWith('/auth/me/password') && options?.method === 'POST')
+      .at(-1);
+    expect(command).toBeTruthy();
+    expect(JSON.parse((command?.[1] as RequestInit).body as string)).toEqual({
+      currentPassword: 'Current-Password-7!',
+      newPassword: 'Updated-Password-8!',
+    });
   });
 
   it('opens delivered notifications and marks an unread update as read', async () => {
@@ -1481,6 +1576,447 @@ describe('ERP and CRM authenticated workspace', () => {
       expectedVersion: 1,
       roleIds: [role.id],
     });
+  });
+
+  it('shows payload-free system activity and confirms a failed delivery retry', async () => {
+    const operationsContext = {
+      ...authenticationContext,
+      permissions: [
+        ...authenticationContext.permissions,
+        { action: 'view', module: 'platform' },
+        { action: 'edit', module: 'platform' },
+      ],
+    };
+    storeAuthenticatedSession(operationsContext);
+    const integrationEvent = {
+      aggregateId: 'd1a38bf1-ee29-449b-ab3e-54c95ae5d80b',
+      aggregateType: 'inventory_product',
+      attemptCount: 3,
+      availableAt: '2026-08-11T09:00:00.000Z',
+      correlationId: 'stock-alert-request-01',
+      deadLetteredAt: '2026-08-11T09:03:00.000Z',
+      eventType: 'inventory.low_stock.detected',
+      id: 'a12dc4f4-1b4d-4d34-82c2-5ddbf351fb17',
+      lastErrorCode: 'INTEGRATION_MESSAGE_REJECTED',
+      occurredAt: '2026-08-11T09:00:00.000Z',
+      publicationAttemptCount: 1,
+      publishedAt: '2026-08-11T09:00:01.000Z',
+      replayCount: 0,
+      sequenceNumber: '4',
+      status: 'dead_letter',
+    } as const;
+    const eventDetail = {
+      ...integrationEvent,
+      deliveries: [
+        {
+          attemptCount: 3,
+          consumer: 'notifications.low-stock',
+          cycleAttemptCount: 3,
+          deadLetteredAt: integrationEvent.deadLetteredAt,
+          lastErrorCode: integrationEvent.lastErrorCode,
+          replayCount: 0,
+          status: 'dead_letter',
+        },
+      ],
+    } as const;
+    const fetchMock = vi.fn((input: string, options?: RequestInit) => {
+      if (input.endsWith('/auth/me')) return Promise.resolve(jsonResponse(operationsContext));
+      if (input.endsWith('/platform/integrations/metrics')) {
+        return Promise.resolve(
+          jsonResponse({
+            completed: 12,
+            deadLetter: 1,
+            failedDeliveries: 1,
+            pending: 2,
+            published: 1,
+            publishing: 0,
+            timestamp: '2026-08-11T09:05:00.000Z',
+          }),
+        );
+      }
+      if (input.includes('/platform/integrations/events?')) {
+        return Promise.resolve(
+          jsonResponse({
+            items: [integrationEvent],
+            page: 1,
+            pageSize: 50,
+            total: 1,
+            totalPages: 1,
+          }),
+        );
+      }
+      if (
+        input.endsWith(`/platform/integrations/events/${integrationEvent.id}/replay`) &&
+        options?.method === 'POST'
+      ) {
+        return Promise.resolve(jsonResponse({ ...eventDetail, replayCount: 1, status: 'pending' }));
+      }
+      if (input.endsWith(`/platform/integrations/events/${integrationEvent.id}`)) {
+        return Promise.resolve(jsonResponse(eventDetail));
+      }
+      return Promise.resolve(jsonResponse({}));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderApplication(['/operations']);
+    expect(await screen.findByRole('heading', { name: messages.operations.title })).toBeTruthy();
+    expect(await screen.findByText(messages.operations.lowStock)).toBeTruthy();
+    expect(screen.queryByText(integrationEvent.lastErrorCode)).toBeNull();
+
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: `${messages.operations.open} ${messages.operations.lowStock}`,
+      }),
+    );
+    const dialog = await screen.findByRole('dialog', { name: messages.operations.details });
+    expect(within(dialog).getByText(messages.operations.inAppAlert)).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole('button', { name: messages.operations.retry }));
+    fireEvent.click(within(dialog).getByRole('button', { name: messages.operations.confirmRetry }));
+
+    await waitFor(() => {
+      const replayCall = fetchMock.mock.calls.find(
+        ([url, options]) =>
+          url.endsWith(`/platform/integrations/events/${integrationEvent.id}/replay`) &&
+          options?.method === 'POST',
+      );
+      expect(replayCall).toBeTruthy();
+      expect(JSON.parse((replayCall?.[1] as RequestInit).body as string)).toEqual({
+        expectedReplayCount: 0,
+      });
+    });
+  });
+
+  it('creates and receives a purchase order through the connected procurement workspace', async () => {
+    const procurementContext = {
+      ...authenticationContext,
+      permissions: [
+        ...authenticationContext.permissions,
+        { action: 'view', module: 'erp.procurement' },
+        { action: 'create', module: 'erp.procurement' },
+      ],
+    };
+    storeAuthenticatedSession(procurementContext);
+    const supplierId = '124bfcea-275e-4d7f-8aed-e9901f79090f';
+    const orderId = '49ff6a7b-d4d4-4ce0-aa11-b5214017dd19';
+    const orderLineId = '6899d2ed-a9fe-4274-9955-a6c391f1c7da';
+    const references = {
+      products: [
+        {
+          id: inventoryProductFixture.id,
+          name: inventoryProductFixture.name,
+          productCode: inventoryProductFixture.productCode,
+          requiresExpiry: false,
+          trackingMode: 'none',
+        },
+      ],
+      suppliers: [{ id: supplierId, name: 'Bulgarian Equipment Supply Ltd.' }],
+      warehouses: [{ id: warehouseFixture.id, name: warehouseFixture.name }],
+    };
+    let orders: unknown[] = [];
+    const fetchMock = vi.fn((input: string, options?: RequestInit) => {
+      if (input.endsWith('/auth/me')) return Promise.resolve(jsonResponse(procurementContext));
+      if (input.endsWith('/procurement/reference-data')) {
+        return Promise.resolve(jsonResponse(references));
+      }
+      if (input.includes('/procurement/purchase-orders?') && options?.method !== 'POST') {
+        return Promise.resolve(
+          jsonResponse({
+            items: orders,
+            page: 1,
+            pageSize: 100,
+            total: orders.length,
+            totalPages: 1,
+          }),
+        );
+      }
+      if (input.endsWith('/procurement/purchase-orders') && options?.method === 'POST') {
+        const order = {
+          createdAt: '2026-08-11T12:00:00.000Z',
+          currencyCode: 'BGN',
+          id: orderId,
+          lines: [
+            {
+              deliveredQuantity: '0.0000',
+              expectedDeliveryDate: '2026-08-22',
+              id: orderLineId,
+              invoicedQuantity: '0.0000',
+              orderedQuantity: '2.0000',
+              productId: inventoryProductFixture.id,
+              productName: inventoryProductFixture.name,
+              unitPrice: '125.5000',
+            },
+          ],
+          receipts: [],
+          status: 'open',
+          supplierName: references.suppliers[0]!.name,
+          supplierPartnerId: supplierId,
+          updatedAt: '2026-08-11T12:00:00.000Z',
+          version: 1,
+          warehouseId: warehouseFixture.id,
+          warehouseName: warehouseFixture.name,
+        };
+        orders = [order];
+        return Promise.resolve(jsonResponse(order, 201));
+      }
+      if (
+        input.endsWith(`/procurement/purchase-orders/${orderId}/receipts`) &&
+        options?.method === 'POST'
+      ) {
+        const receipt = {
+          id: '776fd1d4-d58e-45b9-ad95-46f8f4ee0fd8',
+          lines: [
+            {
+              id: 'e7b1d91c-20a0-4bbb-8a40-a53e09cd4e2a',
+              orderLineId,
+              productId: inventoryProductFixture.id,
+              quantity: '2.0000',
+              serialItemIds: [],
+              stockMovementId: '8ba45261-415b-4e9b-b857-b0f7f4ef3658',
+              totalCostBgn: '251.0000',
+              unitCostBgn: '125.5000',
+            },
+          ],
+          purchaseOrderId: orderId,
+          receivedAt: '2026-08-11T12:10:00.000Z',
+          supplierDeliveryReference: 'DEL-2026-42',
+          warehouseId: warehouseFixture.id,
+        };
+        orders = [
+          {
+            ...(orders[0] as Record<string, unknown>),
+            lines: [
+              {
+                ...((orders[0] as { lines: Array<Record<string, unknown>> }).lines[0] ?? {}),
+                deliveredQuantity: '2.0000',
+              },
+            ],
+            receipts: [receipt],
+            status: 'received',
+            version: 2,
+          },
+        ];
+        return Promise.resolve(jsonResponse(receipt, 201));
+      }
+      return Promise.resolve(jsonResponse({}));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderApplication(['/modules/erp.procurement/purchase-orders']);
+    expect(await screen.findByRole('heading', { name: messages.procurement.orders })).toBeTruthy();
+    expect(screen.getByText(messages.procurement.emptyOrders)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: messages.procurement.newOrder }));
+    const createDialog = screen.getByRole('dialog', { name: messages.procurement.orderTitle });
+    fireEvent.change(within(createDialog).getByLabelText(messages.procurement.quantity), {
+      target: { value: '2' },
+    });
+    fireEvent.change(within(createDialog).getByLabelText(messages.procurement.unitPrice), {
+      target: { value: '125.5' },
+    });
+    fireEvent.change(within(createDialog).getByLabelText(messages.procurement.expectedDate), {
+      target: { value: '2026-08-22' },
+    });
+    fireEvent.click(within(createDialog).getByRole('button', { name: messages.procurement.save }));
+    expect(await screen.findByText(messages.procurement.createSuccess)).toBeTruthy();
+    expect(await screen.findByText(references.suppliers[0]!.name)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: messages.procurement.receive }));
+    const receiptDialog = screen.getByRole('dialog', { name: messages.procurement.receiveTitle });
+    fireEvent.change(within(receiptDialog).getByLabelText(messages.procurement.deliveryReference), {
+      target: { value: 'DEL-2026-42' },
+    });
+    fireEvent.click(
+      within(receiptDialog).getByRole('button', { name: messages.procurement.receive }),
+    );
+    expect(await screen.findByText(messages.procurement.receiveSuccess)).toBeTruthy();
+    expect(await screen.findByText(messages.procurement.received)).toBeTruthy();
+
+    const createCall = fetchMock.mock.calls.find(
+      ([url, options]) =>
+        url.endsWith('/procurement/purchase-orders') && options?.method === 'POST',
+    );
+    expect(JSON.parse((createCall?.[1] as RequestInit).body as string)).toEqual({
+      currencyCode: 'BGN',
+      lines: [
+        {
+          expectedDeliveryDate: '2026-08-22',
+          productId: inventoryProductFixture.id,
+          quantity: '2',
+          unitPrice: '125.5',
+        },
+      ],
+      supplierPartnerId: supplierId,
+      warehouseId: warehouseFixture.id,
+    });
+  });
+
+  it('navigates supplier records, previews terms, and records an invoice without route knowledge', async () => {
+    const procurementContext = {
+      ...authenticationContext,
+      permissions: [
+        ...authenticationContext.permissions,
+        { action: 'view', module: 'erp.procurement' },
+        { action: 'create', module: 'erp.procurement' },
+        { action: 'edit', module: 'erp.procurement' },
+      ],
+    };
+    storeAuthenticatedSession(procurementContext);
+    const supplierId = '98a449a9-c96c-41f6-9eb1-ef912785b314';
+    const orderLineId = '5cbb4102-df1b-4671-a5f9-b592a09bc8f5';
+    const orderId = '6b945bbd-b026-44b1-8f74-d8af4fd7cc92';
+    let supplier: ProcurementSupplierRecord = {
+      contacts: [
+        {
+          email: 'orders@supplier.example',
+          name: 'Mira Ivanova',
+          role: 'Sales contact',
+        },
+      ],
+      evaluations: [],
+      profile: {
+        supplierName: 'Vratsa Technical Supply Ltd.',
+        supplierPartnerId: supplierId,
+        version: 0,
+      },
+    };
+    const order = {
+      createdAt: '2026-08-11T12:00:00.000Z',
+      currencyCode: 'BGN',
+      id: orderId,
+      lines: [
+        {
+          deliveredQuantity: '2.0000',
+          expectedDeliveryDate: '2026-08-20',
+          id: orderLineId,
+          invoicedQuantity: '0.0000',
+          orderedQuantity: '2.0000',
+          productId: inventoryProductFixture.id,
+          productName: inventoryProductFixture.name,
+          unitPrice: '40.0000',
+        },
+      ],
+      receipts: [],
+      status: 'received',
+      supplierInvoices: [],
+      supplierName: supplier.profile.supplierName,
+      supplierPartnerId: supplierId,
+      updatedAt: '2026-08-11T12:00:00.000Z',
+      version: 2,
+      warehouseId: warehouseFixture.id,
+      warehouseName: warehouseFixture.name,
+    };
+    let invoices: unknown[] = [];
+    const fetchMock = vi.fn((input: string, options?: RequestInit) => {
+      if (input.endsWith('/auth/me')) return Promise.resolve(jsonResponse(procurementContext));
+      if (input.endsWith('/procurement/suppliers') && options?.method !== 'PUT') {
+        return Promise.resolve(jsonResponse([supplier]));
+      }
+      if (input.includes('/procurement/purchase-orders?')) {
+        return Promise.resolve(
+          jsonResponse({ items: [order], page: 1, pageSize: 100, total: 1, totalPages: 1 }),
+        );
+      }
+      if (input.endsWith('/procurement/supplier-invoices') && options?.method !== 'POST') {
+        return Promise.resolve(jsonResponse(invoices));
+      }
+      if (input.endsWith('/procurement/supplier-claims')) {
+        return Promise.resolve(jsonResponse([]));
+      }
+      if (
+        input.endsWith(`/procurement/suppliers/${supplierId}/commercial-profile`) &&
+        options?.method === 'PUT'
+      ) {
+        const body = JSON.parse(options.body as string) as {
+          deliveryTerms?: string;
+          paymentTermsDays?: number;
+        };
+        supplier = {
+          ...supplier,
+          profile: {
+            ...supplier.profile,
+            ...body,
+            updatedAt: '2026-08-11T13:00:00.000Z',
+            version: 1,
+          },
+        };
+        return Promise.resolve(jsonResponse(supplier.profile));
+      }
+      if (input.endsWith('/procurement/supplier-invoices') && options?.method === 'POST') {
+        const invoice = {
+          currencyCode: 'BGN',
+          id: 'b58ce02e-5042-4cf8-9d45-78d65d537e1a',
+          invoiceDate: '2026-08-11',
+          invoiceNumber: 'SUP-2026-101',
+          lines: [
+            {
+              id: '592fd12f-f1d0-4c78-8e8f-9a2d2af7a34c',
+              lineTotal: '80.0000',
+              orderLineId,
+              productId: inventoryProductFixture.id,
+              productName: inventoryProductFixture.name,
+              quantity: '2.0000',
+              unitPrice: '40.0000',
+            },
+          ],
+          purchaseOrderId: orderId,
+          recordedAt: '2026-08-11T13:05:00.000Z',
+          supplierName: supplier.profile.supplierName,
+          supplierPartnerId: supplierId,
+          total: '80.0000',
+        };
+        invoices = [invoice];
+        return Promise.resolve(jsonResponse(invoice, 201));
+      }
+      return Promise.resolve(jsonResponse({}));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderApplication(['/modules/erp.procurement']);
+    expect(await screen.findByRole('heading', { name: 'Procurement' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('link', { name: /Suppliers Review supplier contacts/u }));
+
+    expect(await screen.findByRole('heading', { name: 'Suppliers' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Preview supplier' }));
+    const supplierDialog = await screen.findByRole('dialog', {
+      name: supplier.profile.supplierName,
+    });
+    expect(
+      within(supplierDialog).getByRole('button', { name: 'Back to procurement list' }),
+    ).toBeTruthy();
+    fireEvent.change(within(supplierDialog).getByLabelText('Payment terms in days'), {
+      target: { value: '30' },
+    });
+    fireEvent.change(within(supplierDialog).getByLabelText('Delivery terms'), {
+      target: { value: 'DAP warehouse' },
+    });
+    fireEvent.click(within(supplierDialog).getByRole('button', { name: 'Save terms' }));
+    expect(await screen.findByText('Supplier record updated.')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('link', { name: 'Supplier invoices' }));
+    expect(await screen.findByRole('heading', { name: 'Supplier invoices' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /Record supplier invoice/u }));
+    const invoiceDialog = await screen.findByRole('dialog', { name: 'Record supplier invoice' });
+    fireEvent.change(within(invoiceDialog).getByLabelText('Supplier invoice number'), {
+      target: { value: 'SUP-2026-101' },
+    });
+    fireEvent.click(within(invoiceDialog).getByRole('button', { name: 'Record invoice' }));
+    expect(
+      await screen.findByText('Supplier invoice recorded and comparison updated.'),
+    ).toBeTruthy();
+
+    expect(
+      fetchMock.mock.calls.some(
+        ([url, options]) =>
+          url.endsWith(`/procurement/suppliers/${supplierId}/commercial-profile`) &&
+          options?.method === 'PUT',
+      ),
+    ).toBe(true);
+    expect(
+      fetchMock.mock.calls.some(
+        ([url, options]) =>
+          url.endsWith('/procurement/supplier-invoices') && options?.method === 'POST',
+      ),
+    ).toBe(true);
   });
 });
 

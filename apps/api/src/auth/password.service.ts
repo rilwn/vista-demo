@@ -3,6 +3,7 @@ import { randomBytes, scrypt, timingSafeEqual } from 'node:crypto';
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
 import { validatePasswordPolicy, type PasswordPolicy } from '@vista/auth';
 import type { AppEnvironment } from '@vista/config';
+import type { PasswordPolicyResponse } from '@vista/contracts';
 
 import { ApiErrorException } from '../common/api-error.exception.js';
 import { APP_ENVIRONMENT } from '../config/config.module.js';
@@ -16,10 +17,12 @@ const scryptMaxMemory = 64 * 1024 * 1024;
 @Injectable()
 export class PasswordService {
   private readonly expiryDays: number;
+  private readonly historyCount: number;
   private readonly policy: PasswordPolicy;
 
   constructor(@Inject(APP_ENVIRONMENT) environment: AppEnvironment) {
     this.expiryDays = environment.PASSWORD_EXPIRY_DAYS;
+    this.historyCount = environment.PASSWORD_HISTORY_COUNT;
     this.policy = {
       minimumLength: environment.PASSWORD_MIN_LENGTH,
       requireLowercase: environment.PASSWORD_REQUIRE_LOWERCASE,
@@ -29,8 +32,8 @@ export class PasswordService {
     };
   }
 
-  async hash(password: string): Promise<string> {
-    this.assertPolicy(password);
+  async hash(password: string, field = 'password'): Promise<string> {
+    this.assertPolicy(password, field);
     const salt = randomBytes(16);
     const derivedKey = await deriveKey(password, salt, {
       blockSize: scryptBlockSize,
@@ -70,13 +73,25 @@ export class PasswordService {
     return new Date(changedAt.getTime() + this.expiryDays * 86_400_000);
   }
 
-  private assertPolicy(password: string): void {
+  policySummary(): PasswordPolicyResponse {
+    return {
+      expirationDays: this.expiryDays,
+      historyCount: this.historyCount,
+      minimumLength: this.policy.minimumLength,
+      requireLowercase: this.policy.requireLowercase,
+      requireNumber: this.policy.requireNumber,
+      requireSymbol: this.policy.requireSymbol,
+      requireUppercase: this.policy.requireUppercase,
+    };
+  }
+
+  private assertPolicy(password: string, field: string): void {
     if (password.length > 128) {
       throw new ApiErrorException(
         'PASSWORD_POLICY_VIOLATION',
         'Password does not satisfy the configured policy',
         HttpStatus.BAD_REQUEST,
-        [{ field: 'password', message: 'Password must not exceed 128 characters' }],
+        [{ field, message: 'Password must not exceed 128 characters' }],
       );
     }
     const violations = validatePasswordPolicy(password, this.policy);
@@ -85,7 +100,7 @@ export class PasswordService {
         'PASSWORD_POLICY_VIOLATION',
         'Password does not satisfy the configured policy',
         HttpStatus.BAD_REQUEST,
-        violations.map(({ message }) => ({ field: 'password', message })),
+        violations.map(({ message }) => ({ field, message })),
       );
     }
   }

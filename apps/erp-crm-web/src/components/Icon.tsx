@@ -1,4 +1,5 @@
 export type IconName =
+  | 'activity'
   | 'arrow'
   | 'bell'
   | 'chart'
@@ -40,6 +41,7 @@ export function Icon({ name, size = 19 }: IconProps) {
 }
 
 const paths: Record<IconName, React.ReactNode> = {
+  activity: <path d="M3 12h4l2.3-6 4.2 12 2.2-6H21" />,
   arrow: <path d="m9 18 6-6-6-6M4 12h11" />,
   bell: <path d="M18 10a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 22h4" />,
   chart: <path d="M4 19V9m5 10V5m6 14v-7m5 7V8M3 19h18" />,

@@ -13,14 +13,27 @@ import type {
   OrganizationTopology,
 } from '@vista/contracts';
 
-import { apiRequest } from './client';
+import {
+  apiClient,
+  authorizationHeaders,
+  idempotencyParameters,
+  unwrapApiResponse,
+} from './client';
 
 export function getOrganizationTopology(token: string): Promise<OrganizationTopology> {
-  return apiRequest<OrganizationTopology>('/organization/topology', { token });
+  return unwrapApiResponse(
+    apiClient.GET('/api/v1/organization/topology', {
+      headers: authorizationHeaders(token),
+    }),
+  );
 }
 
 export function listOrganizationMembers(token: string): Promise<OrganizationMember[]> {
-  return apiRequest<OrganizationMember[]>('/organization/members', { token });
+  return unwrapApiResponse(
+    apiClient.GET('/api/v1/organization/members', {
+      headers: authorizationHeaders(token),
+    }),
+  );
 }
 
 export function createLegalBusinessEntity(
@@ -28,7 +41,13 @@ export function createLegalBusinessEntity(
   key: string,
   input: CreateLegalBusinessEntityRequest,
 ): Promise<LegalBusinessEntity> {
-  return command('/organization/legal-entities', token, key, input);
+  return unwrapApiResponse(
+    apiClient.POST('/api/v1/organization/legal-entities', {
+      body: input,
+      headers: authorizationHeaders(token),
+      params: { header: idempotencyParameters(key).header },
+    }),
+  );
 }
 
 export function createBusinessBranch(
@@ -37,7 +56,16 @@ export function createBusinessBranch(
   key: string,
   input: CreateBusinessBranchRequest,
 ): Promise<BusinessBranch> {
-  return command(`/organization/legal-entities/${entityId}/branches`, token, key, input);
+  return unwrapApiResponse(
+    apiClient.POST('/api/v1/organization/legal-entities/{entityId}/branches', {
+      body: input,
+      headers: authorizationHeaders(token),
+      params: {
+        header: idempotencyParameters(key).header,
+        path: { entityId },
+      },
+    }),
+  );
 }
 
 export function createBusinessLocation(
@@ -46,7 +74,16 @@ export function createBusinessLocation(
   key: string,
   input: CreateBusinessLocationRequest,
 ): Promise<BusinessLocation> {
-  return command(`/organization/branches/${branchId}/locations`, token, key, input);
+  return unwrapApiResponse(
+    apiClient.POST('/api/v1/organization/branches/{branchId}/locations', {
+      body: input,
+      headers: authorizationHeaders(token),
+      params: {
+        header: idempotencyParameters(key).header,
+        path: { branchId },
+      },
+    }),
+  );
 }
 
 export function createBusinessOperator(
@@ -55,7 +92,16 @@ export function createBusinessOperator(
   key: string,
   input: CreateBusinessOperatorRequest,
 ): Promise<BusinessOperator> {
-  return command(`/organization/locations/${locationId}/operators`, token, key, input);
+  return unwrapApiResponse(
+    apiClient.POST('/api/v1/organization/locations/{locationId}/operators', {
+      body: input,
+      headers: authorizationHeaders(token),
+      params: {
+        header: idempotencyParameters(key).header,
+        path: { locationId },
+      },
+    }),
+  );
 }
 
 export function createCashRegister(
@@ -64,14 +110,14 @@ export function createCashRegister(
   key: string,
   input: CreateCashRegisterRequest,
 ): Promise<CashRegister> {
-  return command(`/organization/locations/${locationId}/registers`, token, key, input);
-}
-
-function command<T>(path: string, token: string, key: string, input: object): Promise<T> {
-  return apiRequest<T>(path, {
-    body: JSON.stringify(input),
-    headers: { 'Idempotency-Key': key },
-    method: 'POST',
-    token,
-  });
+  return unwrapApiResponse(
+    apiClient.POST('/api/v1/organization/locations/{locationId}/registers', {
+      body: input,
+      headers: authorizationHeaders(token),
+      params: {
+        header: idempotencyParameters(key).header,
+        path: { locationId },
+      },
+    }),
+  );
 }

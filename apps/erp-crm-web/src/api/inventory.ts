@@ -5,26 +5,35 @@ import type {
   IssueStockRequest,
   OpenStocktakeRequest,
   ReceiveStockRequest,
-  ReturnStockRequest,
+  RecordStocktakeCountRequest,
   ReplenishmentStatus,
+  ReturnStockRequest,
   SerialTraceability,
   StockBalance,
   StockIssue,
   StockReceipt,
-  StockReturn,
   StockReservation,
+  StockReturn,
   StockSettings,
   Stocktake,
-  RecordStocktakeCountRequest,
   StockTransfer,
   TransferStockRequest,
   Warehouse,
 } from '@vista/contracts';
 
-import { apiRequest } from './client';
+import {
+  apiClient,
+  authorizationHeaders,
+  idempotencyParameters,
+  unwrapApiResponse,
+} from './client';
 
 export function listWarehouses(token: string): Promise<Warehouse[]> {
-  return apiRequest<Warehouse[]>('/warehouse/warehouses', { token });
+  return unwrapApiResponse(
+    apiClient.GET('/api/v1/warehouse/warehouses', {
+      headers: authorizationHeaders(token),
+    }),
+  );
 }
 
 export function createWarehouse(
@@ -32,15 +41,29 @@ export function createWarehouse(
   idempotencyKey: string,
   input: CreateWarehouseRequest,
 ): Promise<Warehouse> {
-  return command('/warehouse/warehouses', token, idempotencyKey, input);
+  return unwrapApiResponse(
+    apiClient.POST('/api/v1/warehouse/warehouses', {
+      body: input,
+      headers: authorizationHeaders(token),
+      params: { header: idempotencyParameters(idempotencyKey).header },
+    }),
+  );
 }
 
 export function listStockBalances(token: string): Promise<StockBalance[]> {
-  return apiRequest<StockBalance[]>('/warehouse/stock-balances', { token });
+  return unwrapApiResponse(
+    apiClient.GET('/api/v1/warehouse/stock-balances', {
+      headers: authorizationHeaders(token),
+    }),
+  );
 }
 
 export function listReplenishment(token: string): Promise<ReplenishmentStatus[]> {
-  return apiRequest<ReplenishmentStatus[]>('/warehouse/replenishment', { token });
+  return unwrapApiResponse(
+    apiClient.GET('/api/v1/warehouse/replenishment', {
+      headers: authorizationHeaders(token),
+    }),
+  );
 }
 
 export function configureStockSettings(
@@ -48,7 +71,13 @@ export function configureStockSettings(
   idempotencyKey: string,
   input: ConfigureStockSettingsRequest,
 ): Promise<StockSettings> {
-  return command('/warehouse/stock-settings', token, idempotencyKey, input);
+  return unwrapApiResponse(
+    apiClient.POST('/api/v1/warehouse/stock-settings', {
+      body: input,
+      headers: authorizationHeaders(token),
+      params: { header: idempotencyParameters(idempotencyKey).header },
+    }),
+  );
 }
 
 export function receiveStock(
@@ -56,7 +85,13 @@ export function receiveStock(
   idempotencyKey: string,
   input: ReceiveStockRequest,
 ): Promise<StockReceipt> {
-  return command('/warehouse/stock-receipts', token, idempotencyKey, input);
+  return unwrapApiResponse(
+    apiClient.POST('/api/v1/warehouse/stock-receipts', {
+      body: input,
+      headers: authorizationHeaders(token),
+      params: { header: idempotencyParameters(idempotencyKey).header },
+    }),
+  );
 }
 
 export function issueStock(
@@ -64,7 +99,13 @@ export function issueStock(
   idempotencyKey: string,
   input: IssueStockRequest,
 ): Promise<StockIssue> {
-  return command('/warehouse/stock-issues', token, idempotencyKey, input);
+  return unwrapApiResponse(
+    apiClient.POST('/api/v1/warehouse/stock-issues', {
+      body: input,
+      headers: authorizationHeaders(token),
+      params: { header: idempotencyParameters(idempotencyKey).header },
+    }),
+  );
 }
 
 export function returnStock(
@@ -72,7 +113,13 @@ export function returnStock(
   idempotencyKey: string,
   input: ReturnStockRequest,
 ): Promise<StockReturn> {
-  return command('/warehouse/stock-returns', token, idempotencyKey, input);
+  return unwrapApiResponse(
+    apiClient.POST('/api/v1/warehouse/stock-returns', {
+      body: input,
+      headers: authorizationHeaders(token),
+      params: { header: idempotencyParameters(idempotencyKey).header },
+    }),
+  );
 }
 
 export function transferStock(
@@ -80,7 +127,13 @@ export function transferStock(
   idempotencyKey: string,
   input: TransferStockRequest,
 ): Promise<StockTransfer> {
-  return command('/warehouse/stock-transfers', token, idempotencyKey, input);
+  return unwrapApiResponse(
+    apiClient.POST('/api/v1/warehouse/stock-transfers', {
+      body: input,
+      headers: authorizationHeaders(token),
+      params: { header: idempotencyParameters(idempotencyKey).header },
+    }),
+  );
 }
 
 export function openStocktake(
@@ -88,7 +141,13 @@ export function openStocktake(
   idempotencyKey: string,
   input: OpenStocktakeRequest,
 ): Promise<Stocktake> {
-  return command('/warehouse/stocktakes', token, idempotencyKey, input);
+  return unwrapApiResponse(
+    apiClient.POST('/api/v1/warehouse/stocktakes', {
+      body: input,
+      headers: authorizationHeaders(token),
+      params: { header: idempotencyParameters(idempotencyKey).header },
+    }),
+  );
 }
 
 export function recordStocktakeCount(
@@ -97,11 +156,15 @@ export function recordStocktakeCount(
   stocktakeId: string,
   input: RecordStocktakeCountRequest,
 ): Promise<Stocktake> {
-  return command(
-    `/warehouse/stocktakes/${encodeURIComponent(stocktakeId)}/counts`,
-    token,
-    idempotencyKey,
-    input,
+  return unwrapApiResponse(
+    apiClient.POST('/api/v1/warehouse/stocktakes/{id}/counts', {
+      body: input,
+      headers: authorizationHeaders(token),
+      params: {
+        header: idempotencyParameters(idempotencyKey).header,
+        path: { id: stocktakeId },
+      },
+    }),
   );
 }
 
@@ -110,11 +173,14 @@ export function completeStocktake(
   idempotencyKey: string,
   stocktakeId: string,
 ): Promise<Stocktake> {
-  return command(
-    `/warehouse/stocktakes/${encodeURIComponent(stocktakeId)}/complete`,
-    token,
-    idempotencyKey,
-    {},
+  return unwrapApiResponse(
+    apiClient.POST('/api/v1/warehouse/stocktakes/{id}/complete', {
+      headers: authorizationHeaders(token),
+      params: {
+        header: idempotencyParameters(idempotencyKey).header,
+        path: { id: stocktakeId },
+      },
+    }),
   );
 }
 
@@ -123,7 +189,13 @@ export function createStockReservation(
   idempotencyKey: string,
   input: CreateStockReservationRequest,
 ): Promise<StockReservation> {
-  return command('/warehouse/stock-reservations', token, idempotencyKey, input);
+  return unwrapApiResponse(
+    apiClient.POST('/api/v1/warehouse/stock-reservations', {
+      body: input,
+      headers: authorizationHeaders(token),
+      params: { header: idempotencyParameters(idempotencyKey).header },
+    }),
+  );
 }
 
 export function releaseStockReservation(
@@ -131,31 +203,25 @@ export function releaseStockReservation(
   idempotencyKey: string,
   reservationId: string,
 ): Promise<StockReservation> {
-  return command(
-    `/warehouse/stock-reservations/${encodeURIComponent(reservationId)}/release`,
-    token,
-    idempotencyKey,
-    {},
+  return unwrapApiResponse(
+    apiClient.POST('/api/v1/warehouse/stock-reservations/{id}/release', {
+      headers: authorizationHeaders(token),
+      params: {
+        header: idempotencyParameters(idempotencyKey).header,
+        path: { id: reservationId },
+      },
+    }),
   );
 }
 
-export function getSerialTraceability(token: string, serialNumber: string) {
-  return apiRequest<SerialTraceability>(
-    `/warehouse/serial-traceability/${encodeURIComponent(serialNumber)}`,
-    { token },
-  );
-}
-
-function command<T, TInput>(
-  path: string,
+export function getSerialTraceability(
   token: string,
-  idempotencyKey: string,
-  input: TInput,
-): Promise<T> {
-  return apiRequest<T>(path, {
-    body: JSON.stringify(input),
-    headers: { 'Idempotency-Key': idempotencyKey },
-    method: 'POST',
-    token,
-  });
+  serialNumber: string,
+): Promise<SerialTraceability> {
+  return unwrapApiResponse(
+    apiClient.GET('/api/v1/warehouse/serial-traceability/{serialNumber}', {
+      headers: authorizationHeaders(token),
+      params: { path: { serialNumber } },
+    }),
+  );
 }

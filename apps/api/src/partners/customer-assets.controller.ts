@@ -18,6 +18,7 @@ import {
   ApiCreatedResponse,
   ApiHeader,
   ApiOkResponse,
+  ApiParam,
   ApiTags,
 } from '@nestjs/swagger';
 
@@ -50,6 +51,7 @@ export class CustomerAssetsController {
   @Get()
   @RateLimitPolicy('read')
   @RequirePermissions({ action: 'view', module: 'crm' })
+  @ApiParam({ format: 'uuid', name: 'partnerId' })
   @ApiOkResponse({ isArray: true, type: CustomerLocationProfileDto })
   list(
     @Param('partnerId', new ParseUUIDPipe({ version: '4' })) partnerId: string,
@@ -63,6 +65,7 @@ export class CustomerAssetsController {
   @ApiBody({ type: CreateCustomerLocationDto })
   @ApiCreatedResponse({ type: CustomerLocationDto })
   @ApiHeader({ name: 'Idempotency-Key', required: true })
+  @ApiParam({ format: 'uuid', name: 'partnerId' })
   createLocation(
     @Param('partnerId', new ParseUUIDPipe({ version: '4' })) partnerId: string,
     @Body() input: CreateCustomerLocationDto,
@@ -84,6 +87,8 @@ export class CustomerAssetsController {
   @ApiBody({ type: CreateCustomerEquipmentDto })
   @ApiCreatedResponse({ type: CustomerEquipmentDto })
   @ApiHeader({ name: 'Idempotency-Key', required: true })
+  @ApiParam({ format: 'uuid', name: 'partnerId' })
+  @ApiParam({ format: 'uuid', name: 'locationId' })
   createEquipment(
     @Param('partnerId', new ParseUUIDPipe({ version: '4' })) partnerId: string,
     @Param('locationId', new ParseUUIDPipe({ version: '4' })) locationId: string,
@@ -106,6 +111,8 @@ export class CustomerAssetsController {
   @ApiBody({ type: UpdateCustomerLocationDto })
   @ApiOkResponse({ type: CustomerLocationDto })
   @ApiHeader({ name: 'Idempotency-Key', required: true })
+  @ApiParam({ format: 'uuid', name: 'partnerId' })
+  @ApiParam({ format: 'uuid', name: 'locationId' })
   updateLocation(
     @Param('partnerId', new ParseUUIDPipe({ version: '4' })) partnerId: string,
     @Param('locationId', new ParseUUIDPipe({ version: '4' })) locationId: string,
@@ -129,6 +136,8 @@ export class CustomerAssetsController {
   @ApiBody({ type: CustomerAssetVersionDto })
   @ApiOkResponse({ type: CustomerLocationDto })
   @ApiHeader({ name: 'Idempotency-Key', required: true })
+  @ApiParam({ format: 'uuid', name: 'partnerId' })
+  @ApiParam({ format: 'uuid', name: 'locationId' })
   deactivateLocation(
     @Param('partnerId', new ParseUUIDPipe({ version: '4' })) partnerId: string,
     @Param('locationId', new ParseUUIDPipe({ version: '4' })) locationId: string,
@@ -153,6 +162,8 @@ export class CustomerAssetsController {
   @ApiBody({ type: CustomerAssetVersionDto })
   @ApiOkResponse({ type: CustomerLocationDto })
   @ApiHeader({ name: 'Idempotency-Key', required: true })
+  @ApiParam({ format: 'uuid', name: 'partnerId' })
+  @ApiParam({ format: 'uuid', name: 'locationId' })
   reactivateLocation(
     @Param('partnerId', new ParseUUIDPipe({ version: '4' })) partnerId: string,
     @Param('locationId', new ParseUUIDPipe({ version: '4' })) locationId: string,
@@ -176,6 +187,9 @@ export class CustomerAssetsController {
   @ApiBody({ type: UpdateCustomerEquipmentDto })
   @ApiOkResponse({ type: CustomerEquipmentDto })
   @ApiHeader({ name: 'Idempotency-Key', required: true })
+  @ApiParam({ format: 'uuid', name: 'partnerId' })
+  @ApiParam({ format: 'uuid', name: 'locationId' })
+  @ApiParam({ format: 'uuid', name: 'equipmentId' })
   updateEquipment(
     @Param('partnerId', new ParseUUIDPipe({ version: '4' })) partnerId: string,
     @Param('locationId', new ParseUUIDPipe({ version: '4' })) locationId: string,
@@ -201,6 +215,9 @@ export class CustomerAssetsController {
   @ApiBody({ type: CustomerAssetVersionDto })
   @ApiOkResponse({ type: CustomerEquipmentDto })
   @ApiHeader({ name: 'Idempotency-Key', required: true })
+  @ApiParam({ format: 'uuid', name: 'partnerId' })
+  @ApiParam({ format: 'uuid', name: 'locationId' })
+  @ApiParam({ format: 'uuid', name: 'equipmentId' })
   deactivateEquipment(
     @Param('partnerId', new ParseUUIDPipe({ version: '4' })) partnerId: string,
     @Param('locationId', new ParseUUIDPipe({ version: '4' })) locationId: string,
@@ -227,6 +244,9 @@ export class CustomerAssetsController {
   @ApiBody({ type: CustomerAssetVersionDto })
   @ApiOkResponse({ type: CustomerEquipmentDto })
   @ApiHeader({ name: 'Idempotency-Key', required: true })
+  @ApiParam({ format: 'uuid', name: 'partnerId' })
+  @ApiParam({ format: 'uuid', name: 'locationId' })
+  @ApiParam({ format: 'uuid', name: 'equipmentId' })
   reactivateEquipment(
     @Param('partnerId', new ParseUUIDPipe({ version: '4' })) partnerId: string,
     @Param('locationId', new ParseUUIDPipe({ version: '4' })) locationId: string,

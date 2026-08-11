@@ -9,11 +9,19 @@ export default tseslint.config(
       '**/dist/**',
       '**/node_modules/**',
       '**/openapi.json',
+      'packages/contracts/src/generated/**',
       'eslint.config.js',
     ],
   },
   eslint.configs.recommended,
   ...tseslint.configs.recommendedTypeChecked,
+  {
+    ...tseslint.configs.disableTypeChecked,
+    files: ['**/*.{cjs,js,mjs}'],
+    languageOptions: {
+      globals: globals.node,
+    },
+  },
   {
     files: ['**/*.{ts,tsx}'],
     languageOptions: {

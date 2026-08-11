@@ -5,12 +5,14 @@ import { describe, expect, it } from 'vitest';
 import { AuthController } from '../auth/auth.controller.js';
 import { CatalogController } from '../catalog/catalog.controller.js';
 import { InventoryController } from '../inventory/inventory.controller.js';
+import { IntegrationOperationsController } from '../integration/integration-operations.controller.js';
 import { JobsController } from '../jobs/jobs.controller.js';
 import { NotificationsController } from '../notifications/notifications.controller.js';
 import { OrganizationController } from '../organization/organization.controller.js';
 import { CustomerAssetsController } from '../partners/customer-assets.controller.js';
 import { PartnersController } from '../partners/partners.controller.js';
 import { ProductCategoriesController } from '../product-categories/product-categories.controller.js';
+import { ProcurementController } from '../procurement/procurement.controller.js';
 import { RootController } from '../root.controller.js';
 import { SecurityAdministrationController } from '../security-administration/security-administration.controller.js';
 import { RATE_LIMIT_POLICY, type RateLimitPolicyName } from './rate-limit.decorator.js';
@@ -19,12 +21,14 @@ const controllers = [
   AuthController,
   CatalogController,
   InventoryController,
+  IntegrationOperationsController,
   JobsController,
   NotificationsController,
   OrganizationController,
   CustomerAssetsController,
   PartnersController,
   ProductCategoriesController,
+  ProcurementController,
   RootController,
   SecurityAdministrationController,
 ] as const;
@@ -43,7 +47,7 @@ describe('HTTP rate-limit coverage', () => {
       })),
     );
 
-    expect(assignments).toHaveLength(68);
+    expect(assignments).toHaveLength(88);
     expect(assignments.filter(({ policy }) => policy === undefined)).toEqual([]);
     expect(assignments).toEqual(
       expect.arrayContaining([
@@ -51,6 +55,11 @@ describe('HTTP rate-limit coverage', () => {
         expect.objectContaining({
           controller: 'AuthController',
           name: 'logout',
+          policy: 'sensitive',
+        }),
+        expect.objectContaining({
+          controller: 'AuthController',
+          name: 'changePassword',
           policy: 'sensitive',
         }),
         expect.objectContaining({
@@ -95,7 +104,16 @@ function expectedPolicy(assignment: {
 }): RateLimitPolicyName {
   if (assignment.controller === 'RootController') return 'public';
   if (assignment.controller === 'AuthController' && assignment.name === 'login') return 'public';
-  if (assignment.controller === 'AuthController' && assignment.name === 'logout') {
+  if (
+    assignment.controller === 'AuthController' &&
+    (assignment.name === 'logout' || assignment.name === 'changePassword')
+  ) {
+    return 'sensitive';
+  }
+  if (
+    assignment.controller === 'IntegrationOperationsController' &&
+    assignment.method !== RequestMethod.GET
+  ) {
     return 'sensitive';
   }
   if (
