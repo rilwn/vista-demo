@@ -1,3 +1,4 @@
+import { useActiveItemVisibility } from '@vista/ui/navigation';
 import { useState } from 'react';
 
 import { messages } from './messages';
@@ -60,9 +61,20 @@ const screens: Record<
   },
 };
 
+const screenOrder: BackupScreen[] = [
+  'overview',
+  'jobs',
+  'sources',
+  'policies',
+  'approvals',
+  'dr-tests',
+  'audit',
+];
+
 export function App() {
   const [screen, setScreen] = useState<BackupScreen>('overview');
   const active = screens[screen];
+  const navigation = useActiveItemVisibility<HTMLElement>(screen);
 
   return (
     <div className="backup-console">
@@ -81,9 +93,10 @@ export function App() {
             <strong>{messages.status}</strong>
           </div>
         </div>
-        <nav aria-label="Backup control navigation">
-          {(Object.keys(screens) as BackupScreen[]).map((item) => (
+        <nav aria-label="Backup control navigation" ref={navigation}>
+          {screenOrder.map((item) => (
             <button
+              aria-current={screen === item ? 'page' : undefined}
               className={screen === item ? 'is-active' : undefined}
               key={item}
               onClick={() => {

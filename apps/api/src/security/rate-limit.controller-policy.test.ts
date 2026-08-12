@@ -14,6 +14,7 @@ import { PartnersController } from '../partners/partners.controller.js';
 import { ProductCategoriesController } from '../product-categories/product-categories.controller.js';
 import { ProcurementController } from '../procurement/procurement.controller.js';
 import { RootController } from '../root.controller.js';
+import { SalesController } from '../sales/sales.controller.js';
 import { SecurityAdministrationController } from '../security-administration/security-administration.controller.js';
 import { RATE_LIMIT_POLICY, type RateLimitPolicyName } from './rate-limit.decorator.js';
 
@@ -30,6 +31,7 @@ const controllers = [
   ProductCategoriesController,
   ProcurementController,
   RootController,
+  SalesController,
   SecurityAdministrationController,
 ] as const;
 
@@ -47,7 +49,7 @@ describe('HTTP rate-limit coverage', () => {
       })),
     );
 
-    expect(assignments).toHaveLength(88);
+    expect(assignments).toHaveLength(112);
     expect(assignments.filter(({ policy }) => policy === undefined)).toEqual([]);
     expect(assignments).toEqual(
       expect.arrayContaining([

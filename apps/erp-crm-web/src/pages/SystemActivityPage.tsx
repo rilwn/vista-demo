@@ -251,15 +251,34 @@ function ActivityDrawer({
         onClick={onClose}
         type="button"
       />
-      <aside aria-label={messages.operations.details} className="security-drawer" role="dialog">
-        <header>
+      <aside
+        aria-label={messages.operations.details}
+        aria-modal="true"
+        className="security-drawer"
+        role="dialog"
+      >
+        <header className="panel-drawer-header">
+          <button
+            aria-label="Back to system activity"
+            className="panel-back-button"
+            onClick={onClose}
+            type="button"
+          >
+            <Icon name="arrow" size={17} />
+            Back
+          </button>
+          <button
+            aria-label={messages.operations.close}
+            className="panel-close-button"
+            onClick={onClose}
+            type="button"
+          >
+            <Icon name="close" />
+          </button>
           <div>
             <h2>{event ? eventLabel(event.eventType) : messages.operations.details}</h2>
             <p>{event ? shortReference(event.id) : messages.operations.loading}</p>
           </div>
-          <button aria-label={messages.operations.close} onClick={onClose} type="button">
-            <Icon name="close" />
-          </button>
         </header>
         <div className="security-drawer-body system-activity-detail">
           {loading ? <ActivityLoading /> : null}

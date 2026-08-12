@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 import {
   Inject,
   Injectable,
@@ -64,16 +66,45 @@ export class PlatformJobWorkerService implements OnApplicationBootstrap, OnAppli
   async process(job: Job<PlatformJobData, unknown, string>): Promise<unknown> {
     const maxAttempts = job.opts.attempts ?? this.environment.JOB_DEFAULT_ATTEMPTS;
     const attemptNumber = job.attemptsMade + 1;
+    const data = executionData(job);
     return this.handlers.execute({
       attemptNumber,
-      correlationId: job.data.correlationId,
-      enqueuedAt: job.data.enqueuedAt,
-      idempotencyKey: job.data.idempotencyKey,
-      jobId: job.id ?? job.data.idempotencyKey,
+      correlationId: data.correlationId,
+      enqueuedAt: data.enqueuedAt,
+      idempotencyKey: data.idempotencyKey,
+      jobId: job.id ?? data.idempotencyKey,
       maxAttempts,
       name: job.name,
-      payload: job.data.payload,
+      payload: data.payload,
       retryAllowed: attemptNumber < maxAttempts,
     });
   }
+}
+
+function executionData(job: Job<PlatformJobData, unknown, string>): PlatformJobData {
+  const scheduleId = job.data.payload['scheduleId'];
+  if (typeof scheduleId !== 'string') return job.data;
+  const scheduledAt = scheduledExecutionTime(job);
+  const executionHash = createHash('sha256')
+    .update(`${scheduleId}\u0000${scheduledAt}`)
+    .digest('hex');
+  return {
+    ...job.data,
+    correlationId: `scheduled-${executionHash.slice(0, 32)}`,
+    enqueuedAt: new Date(scheduledAt).toISOString(),
+    idempotencyKey: `scheduler:${executionHash}`,
+    payload: {
+      ...job.data.payload,
+      scheduledFor: new Date(scheduledAt).toISOString(),
+    },
+  };
+}
+
+function scheduledExecutionTime(job: Job<PlatformJobData, unknown, string>): number {
+  const possibleTimestamp = job.id?.split(':').at(-1);
+  if (possibleTimestamp && /^\d{13}$/.test(possibleTimestamp)) {
+    const timestamp = Number(possibleTimestamp);
+    if (Number.isSafeInteger(timestamp)) return timestamp;
+  }
+  return job.timestamp;
 }

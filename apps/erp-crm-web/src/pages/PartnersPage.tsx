@@ -1212,14 +1212,25 @@ function Drawer({
         type="button"
       />
       <aside aria-label={title} aria-modal="true" className="record-drawer" role="dialog">
-        <button
-          aria-label={messages.partners.close}
-          className="drawer-close"
-          onClick={onClose}
-          type="button"
-        >
-          <Icon name="close" />
-        </button>
+        <div className="record-drawer-navigation">
+          <button
+            aria-label="Back to partners"
+            className="panel-back-button"
+            onClick={onClose}
+            type="button"
+          >
+            <Icon name="arrow" size={17} />
+            Back
+          </button>
+          <button
+            aria-label={messages.partners.close}
+            className="drawer-close panel-close-button"
+            onClick={onClose}
+            type="button"
+          >
+            <Icon name="close" />
+          </button>
+        </div>
         {children}
       </aside>
     </div>

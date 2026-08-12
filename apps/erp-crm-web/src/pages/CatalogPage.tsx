@@ -629,14 +629,23 @@ function CatalogDrawer({
     <div className="catalog-drawer-layer" role="presentation">
       <button aria-label="Close" className="catalog-drawer-scrim" onClick={onClose} type="button" />
       <aside aria-label={title} aria-modal="true" className="catalog-drawer" role="dialog">
-        <header>
+        <header className="panel-drawer-header">
+          <button
+            aria-label="Back to catalog"
+            className="panel-back-button"
+            onClick={onClose}
+            type="button"
+          >
+            <Icon name="arrow" size={17} />
+            Back
+          </button>
+          <button aria-label="Close" className="panel-close-button" onClick={onClose} type="button">
+            <Icon name="close" />
+          </button>
           <div>
-            <p className="page-eyebrow">Catalog command</p>
+            <p className="page-eyebrow">Product catalog</p>
             <h2>{title}</h2>
           </div>
-          <button aria-label="Close" onClick={onClose} type="button">
-            ×
-          </button>
         </header>
         {children}
       </aside>

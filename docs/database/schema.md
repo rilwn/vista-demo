@@ -226,3 +226,42 @@ was received. Claims progress through open, submitted, resolved, and closed in
 order, with every transition appended to a separate status-history table. All
 parent and source links use restrictive foreign keys; no history is silently
 deleted or reassigned.
+
+Migration `0026_sales_workflow_foundation` adds the connected `sales` workflow.
+Quotations retain validity, warehouse, customer, fixed-precision prices, line and
+overall discounts, VAT treatment, and calculated totals. Confirmation creates one
+order and exact inventory reservations under balance-row locks. Serialized lines
+retain specific serial assignments; batch-tracked lines require batch evidence at
+shipment. Shipment consumes reservations, stock, batches, and serialized custody
+in one transaction and links every line to its immutable issue movement.
+
+An invoice draft is then copied from the shipped commercial snapshot, preserving
+the quotation prices, discounts, VAT, currency, customer, shipment, and source
+links. The migration's sequence table produces internal workflow references only.
+It does not implement or claim approved fiscal/accounting numbering, BNB-rate
+posting, legal issuance, PDF/email delivery, corrections, or payment state.
+
+Migration `0027_sales_pricing_foundation` adds reusable customer price groups,
+group membership, promotional campaigns, effective price lists, and one
+fixed-precision price per product/list. A price list targets all customers, one
+group, or one customer through database constraints and retains currency,
+effective dates, priority, active state, and an optimistic version. Campaign and
+group lifecycle changes are reversible; existing commercial documents are never
+recalculated. Resolution filters by date and currency, ignores inactive or
+out-of-period lists/groups/campaigns, and orders matches by priority, customer
+specificity, then stable code and identifier.
+
+Migration `0028_sales_subscriptions_handover` adds versioned service subscription
+contracts linked by composite constraints to one canonical customer location and
+its installed equipment. Separate ordered service rows preserve the covered work;
+fixed-precision price/currency, validity, visit/billing frequencies, active state,
+and next invoice date remain explicit on the contract. Recurring invoice drafts
+snapshot one service period and amount per unique contract/billing date, allowing
+the scheduled generator to advance the date and safely deduplicate a retry.
+
+Every completed sales shipment now prepares one handover certificate and line
+snapshot from its actual products, quantities, and issued serial numbers. The
+certificate moves once from prepared to accepted with the representative,
+timestamp, optional note, and optimistic version retained. Internal service,
+draft, and handover references are operational identifiers only; the migration
+does not claim approved fiscal/accounting numbering or legal invoice issuance.

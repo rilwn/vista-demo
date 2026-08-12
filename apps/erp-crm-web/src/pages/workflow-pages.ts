@@ -82,7 +82,7 @@ export const workflowPages: WorkflowPageDefinition[] = [
     'New invoice',
     [
       {
-        title: 'Document workspace',
+        title: 'Invoice records',
         items: [
           'Draft and issue states',
           'Original and correction document links',
@@ -134,7 +134,7 @@ export const workflowPages: WorkflowPageDefinition[] = [
         items: [
           'Cash receipt and payment vouchers',
           'Daily cash report',
-          'Register and operator context',
+          'Register and operator details',
         ],
       },
       {
@@ -187,9 +187,9 @@ export const workflowPages: WorkflowPageDefinition[] = [
         ],
       },
       {
-        title: 'Receiving handoff',
+        title: 'Receiving and warehouse',
         items: [
-          'Partial and full receipt readiness',
+          'Partial and full receipt status',
           'Warehouse receipt generation',
           'Supplier invoice linkage',
         ],
@@ -259,7 +259,7 @@ export const workflowPages: WorkflowPageDefinition[] = [
   procurement(
     'supplier-invoices',
     'Supplier invoices',
-    'Record supplier invoice evidence and compare ordered, delivered, and invoiced quantities.',
+    'Record supplier invoices and compare ordered, delivered, and invoiced quantities.',
     'Record supplier invoice',
     [
       {
@@ -267,7 +267,7 @@ export const workflowPages: WorkflowPageDefinition[] = [
         items: [
           'Supplier-scoped invoice reference',
           'Purchase-order line linkage',
-          'Quantity and price evidence',
+          'Recorded quantity and price',
         ],
       },
       {
@@ -421,12 +421,12 @@ export const workflowPages: WorkflowPageDefinition[] = [
         items: [
           'Validity period',
           'Line-item and overall discounts',
-          'Product, service, and serial reservation context',
+          'Product, service, and serial reservation details',
         ],
       },
       {
         title: 'Conversion',
-        items: ['Confirmed-order handoff', 'Customer acceptance', 'Revision history'],
+        items: ['Confirmed order details', 'Customer acceptance', 'Revision history'],
       },
     ],
   ),
@@ -437,14 +437,17 @@ export const workflowPages: WorkflowPageDefinition[] = [
     'New sales order',
     [
       {
-        title: 'Order workspace',
+        title: 'Order details',
         items: [
           'Confirmed order lifecycle',
           'Product, service, and exact serial allocation',
           'Customer and delivery location',
         ],
       },
-      { title: 'Fulfilment', items: ['Reservation status', 'Shipment handoff', 'Invoice linkage'] },
+      {
+        title: 'Fulfilment',
+        items: ['Reservation status', 'Shipment preparation', 'Invoice linkage'],
+      },
     ],
   ),
   sales(
@@ -455,7 +458,7 @@ export const workflowPages: WorkflowPageDefinition[] = [
     [
       {
         title: 'Fulfilment',
-        items: ['Shipment status', 'Warehouse release', 'Delivery and courier handoff'],
+        items: ['Shipment status', 'Warehouse release', 'Delivery and courier connection'],
       },
       {
         title: 'Equipment acceptance',
@@ -486,7 +489,7 @@ export const workflowPages: WorkflowPageDefinition[] = [
   sales(
     'subscriptions',
     'Service subscriptions',
-    'Manage customer-location service contracts and recurring invoice readiness.',
+    'Manage customer-location service contracts and recurring invoicing.',
     'New contract',
     [
       {
@@ -502,7 +505,7 @@ export const workflowPages: WorkflowPageDefinition[] = [
         items: [
           'Recurring invoice schedule',
           'Upcoming service visit generation',
-          'Contract SLA context',
+          'Contract SLA terms',
         ],
       },
     ],
@@ -527,7 +530,7 @@ export const workflowPages: WorkflowPageDefinition[] = [
         items: [
           'Priority and scheduling need',
           'Technician assignment',
-          'SLA and notification context',
+          'SLA and notification settings',
         ],
       },
     ],
@@ -551,7 +554,7 @@ export const workflowPages: WorkflowPageDefinition[] = [
         items: [
           'Technician warehouse deduction',
           'Labor, parts, and transport cost calculation',
-          'Payment document handoff',
+          'Payment document creation',
         ],
       },
     ],
@@ -636,15 +639,15 @@ export const workflowPages: WorkflowPageDefinition[] = [
   logistics(
     'couriers',
     'Courier shipments',
-    'Create and track Econt and Speedy shipments through vendor-neutral adapters.',
+    'Create and track Econt and Speedy shipments from one place.',
     'Create shipment',
     [
       {
-        title: 'Carrier workspace',
+        title: 'Courier details',
         items: [
           'Econt shipment creation and tracking',
           'Speedy shipment creation and tracking',
-          'Adapter failure and retry status',
+          'Connection errors and retry status',
         ],
       },
       {
@@ -668,11 +671,11 @@ export const workflowPages: WorkflowPageDefinition[] = [
         items: [
           'Original document link',
           'Repairable vs restock disposition',
-          'Courier return context',
+          'Courier return details',
         ],
       },
       {
-        title: 'Service handoff',
+        title: 'Service request',
         items: [
           'Automatic applicable service request',
           'Service warehouse transfer',
@@ -689,7 +692,7 @@ export const workflowPages: WorkflowPageDefinition[] = [
     [
       {
         title: 'Route canvas',
-        items: ['Technician and delivery stops', 'Calendar context', 'Capacity and workload'],
+        items: ['Technician and delivery stops', 'Calendar schedule', 'Capacity and workload'],
       },
       {
         title: 'Execution',
@@ -705,7 +708,7 @@ export const workflowPages: WorkflowPageDefinition[] = [
   crm(
     'locations-equipment',
     'Locations & equipment',
-    'Maintain customer locations, responsible contacts, and installed equipment context.',
+    'Maintain customer locations, responsible contacts, and installed equipment.',
     'Add customer location',
     [
       {
@@ -713,7 +716,7 @@ export const workflowPages: WorkflowPageDefinition[] = [
         items: [
           'Store, fuel station, retail outlet, and other locations',
           'Address and responsible contact',
-          'Contract and SLA context',
+          'Contract and SLA terms',
         ],
       },
       {

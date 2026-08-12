@@ -362,14 +362,28 @@ function LocationForm({
 
   return (
     <form className="customer-asset-form" onSubmit={(event) => void submit(event)}>
-      <div className="customer-asset-form-heading">
+      <div className="customer-asset-form-heading panel-drawer-header">
+        <button
+          aria-label="Back to customer details"
+          className="panel-back-button"
+          onClick={onClose}
+          type="button"
+        >
+          <Icon name="arrow" size={17} />
+          Back
+        </button>
+        <button
+          aria-label="Close location form"
+          className="panel-close-button"
+          onClick={onClose}
+          type="button"
+        >
+          <Icon name="close" size={15} />
+        </button>
         <div>
           <span>{location ? 'Edit customer site' : 'New customer site'}</span>
           <strong>{location ? 'Edit customer location' : 'Customer location'}</strong>
         </div>
-        <button aria-label="Close location form" onClick={onClose} type="button">
-          <Icon name="close" size={15} />
-        </button>
       </div>
       <div className="customer-asset-form-grid">
         <TextField
@@ -520,14 +534,28 @@ function EquipmentForm({
   }
   return (
     <form className="customer-asset-form equipment-form" onSubmit={(event) => void submit(event)}>
-      <div className="customer-asset-form-heading">
+      <div className="customer-asset-form-heading panel-drawer-header">
+        <button
+          aria-label="Back to customer details"
+          className="panel-back-button"
+          onClick={onClose}
+          type="button"
+        >
+          <Icon name="arrow" size={17} />
+          Back
+        </button>
+        <button
+          aria-label="Close equipment form"
+          className="panel-close-button"
+          onClick={onClose}
+          type="button"
+        >
+          <Icon name="close" size={15} />
+        </button>
         <div>
           <span>{equipment ? 'Maintain installed asset' : 'Installed asset'}</span>
           <strong>{equipment ? 'Edit equipment' : 'Register equipment'}</strong>
         </div>
-        <button aria-label="Close equipment form" onClick={onClose} type="button">
-          <Icon name="close" size={15} />
-        </button>
       </div>
       <div className="customer-asset-form-grid">
         <TextField

@@ -24,6 +24,7 @@ environment and injected by an approved secret manager; never commit `.env`.
 | `IDEMPOTENCY_TTL_SECONDS`                  | Retried-command result replay window              | yes; 24-hour development default             |
 | `JOB_QUEUE_NAME`, `JOB_QUEUE_PREFIX`       | Stable BullMQ queue namespace                     | yes; environment-specific in deployment      |
 | `JOB_DEFAULT_ATTEMPTS`, `*_BACKOFF_*`      | Retry count and exponential backoff base          | yes; bounded defaults                        |
+| `SALES_SUBSCRIPTION_INVOICE_CRON`          | Recurring billing run time in the business zone   | yes; daily 01:15 development default         |
 | `INTEGRATION_OUTBOX_*`                     | Outbox batch, polling, and stale-claim recovery   | yes; bounded defaults                        |
 | `NOTIFICATION_*_MS`                        | Dispatcher poll and stale-claim recovery windows  | yes; bounded development defaults            |
 | `S3_ENDPOINT`, `S3_REGION`, `S3_BUCKET`    | S3-compatible storage destination                 | yes for current foundation configuration     |

@@ -1,3 +1,4 @@
+import { useActiveItemVisibility } from '@vista/ui/navigation';
 import { useState } from 'react';
 
 import { messages } from './messages';
@@ -24,9 +25,20 @@ const screenIcons: Record<PosScreen, PosIconName> = {
   sync: 'devices',
 };
 
+const screenOrder: PosScreen[] = [
+  'sell',
+  'sales',
+  'returns',
+  'customers',
+  'shifts',
+  'reports',
+  'sync',
+];
+
 export function App() {
   const [screen, setScreen] = useState<PosScreen>('sell');
   const [notice, setNotice] = useState<string | null>(null);
+  const navigation = useActiveItemVisibility<HTMLElement>(screen);
 
   return (
     <div className="pos-terminal">
@@ -61,9 +73,10 @@ export function App() {
       </header>
 
       <div className="pos-workspace">
-        <nav aria-label="POS navigation" className="pos-nav">
-          {(Object.keys(screenLabels) as PosScreen[]).map((item) => (
+        <nav aria-label="POS navigation" className="pos-nav" ref={navigation}>
+          {screenOrder.map((item) => (
             <button
+              aria-current={screen === item ? 'page' : undefined}
               className={screen === item ? 'is-active' : undefined}
               key={item}
               onClick={() => {
@@ -277,13 +290,13 @@ function RegisterScreen({ screen }: { screen: Exclude<PosScreen, 'sell'> }) {
       title: 'Sale history',
       action: 'Find sale',
       description:
-        'Find fiscal sales, invoices, payments, linked returns, and recoverable processing status.',
+        'Find fiscal sales, invoices, payments, linked returns, and any processing issues.',
     },
     shifts: {
       title: 'Cashier shifts',
       action: 'Open shift',
       description:
-        'Manage terminal/register/operator context, opening cash, closeout, and X/Z reporting.',
+        'Assign the terminal, cash register, and operator, then manage opening cash, closeout, and X/Z reports.',
     },
     sync: {
       title: 'Sync & devices',

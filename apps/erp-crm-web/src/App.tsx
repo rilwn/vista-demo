@@ -16,6 +16,9 @@ import {
   SupplierProcurementPage,
 } from './pages/SupplierProcurementPage';
 import { SecurityAdministrationPage } from './pages/SecurityAdministrationPage';
+import { SalesWorkflowPage } from './pages/SalesWorkflowPage';
+import { SalesPricingPage } from './pages/SalesPricingPage';
+import { SalesSubscriptionsPage } from './pages/SalesSubscriptionsPage';
 import { SystemActivityPage } from './pages/SystemActivityPage';
 import { type WarehouseView, WarehouseOperationsPage } from './pages/WarehouseOperationsPage';
 import { WorkflowPage } from './pages/WorkflowPage';
@@ -68,6 +71,15 @@ function pageForPath(
     ) : (
       <NotFoundPage />
     );
+  }
+  if (pathname === '/modules/erp.sales/price-lists') {
+    return hasPermission('erp.sales') ? <SalesPricingPage /> : <NotFoundPage />;
+  }
+  if (pathname === '/modules/erp.sales/subscriptions') {
+    return hasPermission('erp.sales') ? <SalesSubscriptionsPage /> : <NotFoundPage />;
+  }
+  if (/^\/modules\/erp\.sales\/(quotations|orders|shipments)$/u.test(pathname)) {
+    return hasPermission('erp.sales') ? <SalesWorkflowPage /> : <NotFoundPage />;
   }
   const workflow = findWorkflowPage(pathname);
   if (workflow) {

@@ -1,5 +1,9 @@
 import { Button, InlineAlert, TextField } from '@vista/ui';
-import type { CreateProductCategoryRequest, ProductCategory } from '@vista/contracts';
+import type {
+  CreateProductCategoryRequest,
+  ProductCategory,
+  ProductTrackingMode,
+} from '@vista/contracts';
 import { type CSSProperties, type FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 
 import { createProductCategory, listProductCategories } from '../api/product-categories';
@@ -157,7 +161,13 @@ function CategoryBranch({
         <span className="category-node-mark" aria-hidden="true">
           <Icon name="warehouse" size={15} />
         </span>
-        <span>{category.name}</span>
+        <span className="category-node-copy">
+          <strong>{category.name}</strong>
+          <span>
+            {trackingLabel(category.trackingMode)}
+            {category.requiresExpiry ? ' · Expiry required' : ''}
+          </span>
+        </span>
         {children.length > 0 ? (
           <small>{messages.categories.childCount(children.length)}</small>
         ) : null}
@@ -186,6 +196,8 @@ function CreateCategoryDrawer({
 }) {
   const [name, setName] = useState('');
   const [parentId, setParentId] = useState('');
+  const [requiresExpiry, setRequiresExpiry] = useState(false);
+  const [trackingMode, setTrackingMode] = useState<ProductTrackingMode>('none');
   const [error, setError] = useState<ApiClientError | null>(null);
   const [saving, setSaving] = useState(false);
   const lastAttempt = useRef<{ fingerprint: string; key: string } | null>(null);
@@ -198,6 +210,8 @@ function CreateCategoryDrawer({
     const input: CreateProductCategoryRequest = {
       name: name.trim(),
       ...(parentId ? { parentId } : {}),
+      requiresExpiry,
+      trackingMode,
     };
     if (!input.name) return;
     const fingerprint = JSON.stringify(input);
@@ -257,6 +271,57 @@ function CreateCategoryDrawer({
             ))}
           </select>
         </label>
+        <fieldset className="category-tracking-fieldset">
+          <legend>{messages.categories.trackingPolicy}</legend>
+          <p>{messages.categories.trackingDescription}</p>
+          <div className="category-tracking-options">
+            {(
+              [
+                ['none', messages.categories.noTracking, 'Track stock by quantity.'],
+                [
+                  'serial',
+                  messages.categories.serialTracking,
+                  'Require one unique serial number per item.',
+                ],
+                [
+                  'batch',
+                  messages.categories.batchTracking,
+                  'Require a supplier or production batch number.',
+                ],
+              ] as const
+            ).map(([value, label, description]) => (
+              <label className={trackingMode === value ? 'is-selected' : undefined} key={value}>
+                <input
+                  checked={trackingMode === value}
+                  name="category-tracking-mode"
+                  onChange={() => {
+                    setTrackingMode(value);
+                    if (value !== 'batch') setRequiresExpiry(false);
+                  }}
+                  type="radio"
+                  value={value}
+                />
+                <span>
+                  <strong>{label}</strong>
+                  <small>{description}</small>
+                </span>
+              </label>
+            ))}
+          </div>
+        </fieldset>
+        {trackingMode === 'batch' ? (
+          <label className="category-expiry-control">
+            <input
+              checked={requiresExpiry}
+              onChange={(event) => setRequiresExpiry(event.target.checked)}
+              type="checkbox"
+            />
+            <span>
+              <strong>{messages.categories.requiresExpiry}</strong>
+              <small>Leave this clear when expiry dates do not apply to the category.</small>
+            </span>
+          </label>
+        ) : null}
         {error ? (
           <InlineAlert title={messages.categories.saveError} tone="error">
             <p>{error.message}</p>
@@ -273,6 +338,12 @@ function CreateCategoryDrawer({
       </form>
     </Drawer>
   );
+}
+
+function trackingLabel(mode: ProductTrackingMode): string {
+  if (mode === 'serial') return messages.categories.serialTracking;
+  if (mode === 'batch') return messages.categories.batchTracking;
+  return messages.categories.noTracking;
 }
 
 function categoryOptions(categories: ProductCategory[]) {
@@ -333,14 +404,25 @@ function Drawer({
         type="button"
       />
       <aside aria-label={title} aria-modal="true" className="record-drawer" role="dialog">
-        <button
-          aria-label={messages.partners.close}
-          className="drawer-close"
-          onClick={onClose}
-          type="button"
-        >
-          <Icon name="close" />
-        </button>
+        <div className="record-drawer-navigation">
+          <button
+            aria-label="Back to categories"
+            className="panel-back-button"
+            onClick={onClose}
+            type="button"
+          >
+            <Icon name="arrow" size={17} />
+            Back
+          </button>
+          <button
+            aria-label={messages.partners.close}
+            className="drawer-close panel-close-button"
+            onClick={onClose}
+            type="button"
+          >
+            <Icon name="close" />
+          </button>
+        </div>
         {children}
       </aside>
     </div>

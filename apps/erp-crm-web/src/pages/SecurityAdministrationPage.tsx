@@ -1,4 +1,5 @@
 import { Button, InlineAlert, TextField } from '@vista/ui';
+import { useActiveItemVisibility } from '@vista/ui/navigation';
 import type {
   ApiPermission,
   AuditEventRecord,
@@ -62,6 +63,7 @@ export function SecurityAdministrationPage() {
   const [revision, setRevision] = useState(0);
   const [notice, setNotice] = useState('');
   const reload = useCallback(() => setRevision((value) => value + 1), []);
+  const securityTabs = useActiveItemVisibility<HTMLDivElement>(view);
 
   useEffect(() => {
     if (!token) return;
@@ -132,7 +134,12 @@ export function SecurityAdministrationPage() {
 
       <section className="content-panel security-admin-workspace">
         <div className="security-admin-toolbar">
-          <div className="security-admin-tabs" role="tablist" aria-label="Security views">
+          <div
+            aria-label="Security views"
+            className="security-admin-tabs"
+            ref={securityTabs}
+            role="tablist"
+          >
             {(
               [
                 ['accounts', `Employees · ${accounts.length}`],
@@ -143,6 +150,7 @@ export function SecurityAdministrationPage() {
             ).map(([key, label]) => (
               <button
                 aria-controls={`security-panel-${key}`}
+                aria-current={view === key ? 'page' : undefined}
                 aria-selected={view === key}
                 className={view === key ? 'is-active' : ''}
                 id={`security-tab-${key}`}
@@ -287,23 +295,25 @@ function AccountsView({
             <tbody>
               {filtered.map((account) => (
                 <tr key={account.accountId}>
-                  <td>
+                  <td data-label="Employee">
                     <strong>{account.displayName}</strong>
                     <span>
                       {account.email} · {account.employeeNumber}
                     </span>
                   </td>
-                  <td>
+                  <td data-label="Status">
                     <StatusLabel status={account.status} />
                   </td>
-                  <td>
+                  <td data-label="Access">
                     {account.roles.length
                       ? account.roles.map((role) => role.name).join(', ')
                       : 'No role'}
                   </td>
-                  <td>{account.twoFactorEnrolled ? 'Set up' : 'Not set up'}</td>
-                  <td>{account.activeSessionCount}</td>
-                  <td>
+                  <td data-label="Two-factor">
+                    {account.twoFactorEnrolled ? 'Set up' : 'Not set up'}
+                  </td>
+                  <td data-label="Sessions">{account.activeSessionCount}</td>
+                  <td className="security-account-row-action">
                     {canApprove ? (
                       <Button onClick={() => onSelect(account)} variant="quiet">
                         Manage
@@ -820,7 +830,7 @@ function AccountAccessDrawer({
       {canApprove ? (
         <section className="security-account-status-actions">
           <div>
-            <strong>Account lifecycle</strong>
+            <strong>Account status</strong>
             <span>
               Disabling this account signs the employee out on every device. Their history is kept.
             </span>
@@ -876,14 +886,28 @@ function Drawer({
         className={`security-drawer${wide ? ' is-wide' : ''}`}
         role="dialog"
       >
-        <header>
+        <header className="panel-drawer-header">
+          <button
+            aria-label="Back to security"
+            className="panel-back-button"
+            onClick={onClose}
+            type="button"
+          >
+            <Icon name="arrow" size={17} />
+            Back
+          </button>
+          <button
+            aria-label="Close panel"
+            className="panel-close-button"
+            onClick={onClose}
+            type="button"
+          >
+            <Icon name="close" />
+          </button>
           <div>
             <h2>{title}</h2>
             {subtitle ? <p>{subtitle}</p> : null}
           </div>
-          <button aria-label="Close panel" onClick={onClose} type="button">
-            <Icon name="close" />
-          </button>
         </header>
         <div className="security-drawer-body">{children}</div>
       </aside>

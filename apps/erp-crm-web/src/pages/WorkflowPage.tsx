@@ -1,4 +1,5 @@
 import { Button } from '@vista/ui';
+import { useActiveItemVisibility } from '@vista/ui/navigation';
 
 import { Icon } from '../components/Icon';
 import { Link } from '../routing/Router';
@@ -6,6 +7,7 @@ import { type WorkflowPageDefinition, pagesForModule, workflowPath } from './wor
 
 export function WorkflowPage({ page }: { page: WorkflowPageDefinition }) {
   const relatedPages = pagesForModule(page.module);
+  const tabs = useActiveItemVisibility<HTMLElement>(page.slug);
 
   return (
     <div className="page-stack workflow-page">
@@ -22,9 +24,10 @@ export function WorkflowPage({ page }: { page: WorkflowPageDefinition }) {
         </div>
       </header>
 
-      <nav aria-label={`${page.title} workflow pages`} className="workflow-tabs">
+      <nav aria-label={`${page.title} workflow pages`} className="workflow-tabs" ref={tabs}>
         {relatedPages.map((item) => (
           <Link
+            aria-current={item.slug === page.slug ? 'page' : undefined}
             className={({ isActive }) => (isActive ? 'is-active' : undefined)}
             key={item.slug}
             to={workflowPath(item)}

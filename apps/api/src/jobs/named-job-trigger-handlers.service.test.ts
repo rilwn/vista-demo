@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import type { DatabaseService } from '../database/database.service.js';
 import type { StructuredLogger } from '../logging/structured-logger.service.js';
+import type { SalesSubscriptionsService } from '../sales/sales-subscriptions.service.js';
 import { JobHandlerRegistry } from './job-handler-registry.service.js';
 import { namedBackgroundJobs } from './named-background-jobs.js';
 import { NamedJobTriggerHandlersService } from './named-job-trigger-handlers.service.js';
@@ -54,8 +55,15 @@ function createSubject(query = vi.fn().mockResolvedValue({ rowCount: 1 })) {
   const registry = new JobHandlerRegistry();
   const database = { getPool: () => ({ query }) } as unknown as DatabaseService;
   const logger = { event: vi.fn() } as unknown as StructuredLogger;
+  const subscriptions = {
+    generateDueInvoiceDrafts: vi.fn().mockResolvedValue({
+      asOf: '2026-08-10',
+      draftIds: [],
+      generatedCount: 0,
+    }),
+  } as unknown as SalesSubscriptionsService;
   return {
     registry,
-    service: new NamedJobTriggerHandlersService(database, registry, logger),
+    service: new NamedJobTriggerHandlersService(database, registry, logger, subscriptions),
   };
 }

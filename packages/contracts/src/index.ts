@@ -923,6 +923,400 @@ export interface SupplierClaim {
   version: number;
 }
 
+export const vatTreatments = ['standard_20', 'reduced_9', 'zero', 'exempt', 'ica'] as const;
+export type VatTreatment = (typeof vatTreatments)[number];
+
+export interface SalesReferenceData {
+  batches: Array<{
+    batchNumber: string;
+    productId: string;
+    quantity: string;
+    warehouseId: string;
+  }>;
+  customers: Array<{ id: string; name: string }>;
+  products: Array<{
+    id: string;
+    name: string;
+    productCode: string;
+    trackingMode: 'batch' | 'none' | 'serial';
+  }>;
+  serials: Array<{
+    productId: string;
+    serialNumber: string;
+    warehouseId: string;
+  }>;
+  warehouses: Array<{ id: string; name: string }>;
+}
+
+export interface CreateSalesQuotationLineRequest {
+  discountPercent: string;
+  productId: string;
+  quantity: string;
+  unitPrice: string;
+  vatTreatment: VatTreatment;
+}
+
+export interface CreateSalesQuotationRequest {
+  currencyCode: string;
+  customerPartnerId: string;
+  lines: CreateSalesQuotationLineRequest[];
+  overallDiscountPercent: string;
+  validUntil: string;
+  warehouseId: string;
+}
+
+export interface SalesQuotationLine extends CreateSalesQuotationLineRequest {
+  id: string;
+  lineTotal: string;
+  productName: string;
+  trackingMode: 'batch' | 'none' | 'serial';
+}
+
+export interface ConfirmSalesQuotationLineRequest {
+  quotationLineId: string;
+  serialNumbers?: string[];
+}
+
+export interface ConfirmSalesQuotationRequest {
+  lines: ConfirmSalesQuotationLineRequest[];
+}
+
+export interface CreateSalesShipmentLineRequest {
+  batchNumber?: string;
+  orderLineId: string;
+}
+
+export interface CreateSalesShipmentRequest {
+  lines: CreateSalesShipmentLineRequest[];
+}
+
+export interface SalesOrderLine {
+  id: string;
+  productId: string;
+  productName: string;
+  quantity: string;
+  reservationId: string;
+  reservedSerialNumbers: string[];
+  trackingMode: 'batch' | 'none' | 'serial';
+}
+
+export interface SalesOrder {
+  confirmedAt: string;
+  id: string;
+  lines: SalesOrderLine[];
+  number: string;
+  status: 'confirmed' | 'invoiced' | 'shipped';
+}
+
+export interface SalesShipmentLine {
+  batchNumber?: string;
+  id: string;
+  orderLineId: string;
+  productId: string;
+  productName: string;
+  quantity: string;
+  serialNumbers: string[];
+  stockMovementId: string;
+}
+
+export interface SalesShipment {
+  id: string;
+  lines: SalesShipmentLine[];
+  number: string;
+  shippedAt: string;
+}
+
+export interface SalesHandoverCertificateLine {
+  id: string;
+  productId: string;
+  productName: string;
+  quantity: string;
+  serialNumbers: string[];
+}
+
+export interface SalesHandoverCertificate {
+  acceptanceNotes?: string;
+  acceptedAt?: string;
+  acceptedByName?: string;
+  id: string;
+  lines: SalesHandoverCertificateLine[];
+  number: string;
+  preparedAt: string;
+  status: 'accepted' | 'prepared';
+  version: number;
+}
+
+export interface AcceptSalesHandoverRequest {
+  acceptedByName: string;
+  acceptanceNotes?: string;
+  expectedVersion: number;
+}
+
+export interface SalesInvoiceLine {
+  id: string;
+  lineTotal: string;
+  productId: string;
+  productName: string;
+  quantity: string;
+  unitPrice: string;
+  vatTreatment: VatTreatment;
+}
+
+export interface SalesInvoice {
+  currencyCode: string;
+  customerName: string;
+  customerPartnerId: string;
+  id: string;
+  lines: SalesInvoiceLine[];
+  number: string;
+  recordedAt: string;
+  status: 'draft';
+  subtotal: string;
+  total: string;
+  vatTotal: string;
+}
+
+export interface SalesWorkflow {
+  createdAt: string;
+  currencyCode: string;
+  customerName: string;
+  customerPartnerId: string;
+  id: string;
+  handover?: SalesHandoverCertificate;
+  invoice?: SalesInvoice;
+  lines: SalesQuotationLine[];
+  number: string;
+  order?: SalesOrder;
+  overallDiscountPercent: string;
+  shipment?: SalesShipment;
+  status: 'confirmed' | 'draft' | 'invoiced' | 'shipped';
+  subtotal: string;
+  total: string;
+  validUntil: string;
+  vatTotal: string;
+  warehouseId: string;
+  warehouseName: string;
+}
+
+export interface SalesSubscriptionReferenceData {
+  customers: Array<{ id: string; name: string }>;
+  equipment: Array<{
+    customerLocationId: string;
+    deviceName: string;
+    id: string;
+    serialNumber: string;
+  }>;
+  locations: Array<{
+    customerPartnerId: string;
+    id: string;
+    name: string;
+  }>;
+}
+
+export interface CreateServiceSubscriptionRequest {
+  billingAmount: string;
+  billingFrequencyMonths: number;
+  currencyCode: string;
+  customerLocationId: string;
+  customerPartnerId: string;
+  equipmentIds: string[];
+  includedServices: string[];
+  nextInvoiceDate: string;
+  validFrom: string;
+  validTo?: string;
+  visitFrequencyMonths: number;
+}
+
+export interface UpdateServiceSubscriptionRequest extends CreateServiceSubscriptionRequest {
+  active: boolean;
+  expectedVersion: number;
+}
+
+export interface SubscriptionInvoiceDraft {
+  amount: string;
+  billingDate: string;
+  currencyCode: string;
+  generatedAt: string;
+  id: string;
+  number: string;
+  servicePeriodEnd: string;
+  servicePeriodStart: string;
+  status: 'draft';
+}
+
+export interface ServiceSubscriptionContract {
+  active: boolean;
+  billingAmount: string;
+  billingFrequencyMonths: number;
+  createdAt: string;
+  currencyCode: string;
+  customerLocationId: string;
+  customerLocationName: string;
+  customerName: string;
+  customerPartnerId: string;
+  equipment: Array<{
+    deviceName: string;
+    id: string;
+    serialNumber: string;
+  }>;
+  id: string;
+  includedServices: string[];
+  invoiceDrafts: SubscriptionInvoiceDraft[];
+  nextInvoiceDate: string;
+  number: string;
+  updatedAt: string;
+  validFrom: string;
+  validTo?: string;
+  version: number;
+  visitFrequencyMonths: number;
+}
+
+export interface GenerateSubscriptionInvoiceDraftsResult {
+  asOf: string;
+  draftIds: string[];
+  generatedCount: number;
+}
+
+export const priceListScopes = ['all_customers', 'customer_group', 'customer'] as const;
+export type PriceListScope = (typeof priceListScopes)[number];
+
+export interface SalesPricingCustomerOption {
+  id: string;
+  name: string;
+}
+
+export interface CustomerPriceGroup {
+  active: boolean;
+  code: string;
+  createdAt: string;
+  customerPartnerIds: string[];
+  id: string;
+  name: string;
+  updatedAt: string;
+  version: number;
+}
+
+export interface CreateCustomerPriceGroupRequest {
+  code: string;
+  customerPartnerIds: string[];
+  name: string;
+}
+
+export interface UpdateCustomerPriceGroupRequest {
+  active: boolean;
+  customerPartnerIds: string[];
+  name: string;
+  version: number;
+}
+
+export interface PromotionalCampaign {
+  active: boolean;
+  code: string;
+  createdAt: string;
+  id: string;
+  name: string;
+  updatedAt: string;
+  validFrom: string;
+  validTo: string;
+  version: number;
+}
+
+export interface CreatePromotionalCampaignRequest {
+  code: string;
+  name: string;
+  validFrom: string;
+  validTo: string;
+}
+
+export interface UpdatePromotionalCampaignRequest {
+  active: boolean;
+  name: string;
+  validFrom: string;
+  validTo: string;
+  version: number;
+}
+
+export interface PriceListLine {
+  id: string;
+  productCode: string;
+  productId: string;
+  productName: string;
+  unitPrice: string;
+}
+
+export interface CreatePriceListLineRequest {
+  productId: string;
+  unitPrice: string;
+}
+
+export interface PriceList {
+  active: boolean;
+  campaign?: SalesPricingCustomerOption;
+  code: string;
+  createdAt: string;
+  currencyCode: string;
+  customer?: SalesPricingCustomerOption;
+  customerGroup?: SalesPricingCustomerOption;
+  id: string;
+  lines: PriceListLine[];
+  name: string;
+  priority: number;
+  scope: PriceListScope;
+  updatedAt: string;
+  validFrom: string;
+  validTo: string;
+  version: number;
+}
+
+export interface CreatePriceListRequest {
+  campaignId?: string;
+  code: string;
+  currencyCode: string;
+  customerGroupId?: string;
+  customerPartnerId?: string;
+  lines: CreatePriceListLineRequest[];
+  name: string;
+  priority: number;
+  scope: PriceListScope;
+  validFrom: string;
+  validTo: string;
+}
+
+export interface UpdatePriceListRequest {
+  active: boolean;
+  campaignId?: string;
+  code: string;
+  currencyCode: string;
+  customerGroupId?: string;
+  customerPartnerId?: string;
+  lines: CreatePriceListLineRequest[];
+  name: string;
+  priority: number;
+  scope: PriceListScope;
+  validFrom: string;
+  validTo: string;
+  version: number;
+}
+
+export interface SalesPricingReferenceData {
+  campaigns: PromotionalCampaign[];
+  customerGroups: CustomerPriceGroup[];
+  customers: SalesPricingCustomerOption[];
+  products: Array<SalesPricingCustomerOption & { productCode: string }>;
+}
+
+export interface SalesResolvedPrice {
+  asOf: string;
+  currencyCode: string;
+  matched: boolean;
+  priceListCode?: string;
+  priceListId?: string;
+  priceListName?: string;
+  priority?: number;
+  productId: string;
+  unitPrice?: string;
+}
+
 export const warehouseTypes = ['standard', 'technician'] as const;
 export type WarehouseType = (typeof warehouseTypes)[number];
 

@@ -82,14 +82,14 @@ export function OrganizationPage() {
           <Icon name="organization" size={24} />
         </div>
         <div>
-          <p className="page-eyebrow">Administration · Shared operating context</p>
+          <p className="page-eyebrow">Administration</p>
           <h1>Business structure</h1>
           <p>
-            Define the legal, physical, register, operator, and warehouse ownership context used
-            across ERP, CRM, service, and POS.
+            Set up legal entities, branches, business locations, cash registers, operators, and
+            warehouse responsibility across Vista Service.
           </p>
         </div>
-        <span className="organization-policy-note">Empty by design · Client configurable</span>
+        <span className="organization-policy-note">Flexible business structure</span>
       </header>
 
       {notice ? <InlineAlert tone="success">{notice}</InlineAlert> : null}
@@ -390,14 +390,28 @@ function TopologyComposer({
 
   return (
     <form className="content-panel organization-composer" onSubmit={(event) => void submit(event)}>
-      <header>
+      <header className="panel-drawer-header">
+        <button
+          aria-label="Back to business structure"
+          className="panel-back-button"
+          onClick={onCancel}
+          type="button"
+        >
+          <Icon name="arrow" size={17} />
+          Back
+        </button>
+        <button
+          aria-label="Close structure form"
+          className="panel-close-button"
+          onClick={onCancel}
+          type="button"
+        >
+          <Icon name="close" />
+        </button>
         <div>
           <p className="page-eyebrow">Business structure</p>
           <h2>{composerTitle(kind)}</h2>
         </div>
-        <button aria-label="Close structure form" onClick={onCancel} type="button">
-          <Icon name="close" />
-        </button>
       </header>
       <div className="organization-form-grid">
         {kind === 'branch' ? (

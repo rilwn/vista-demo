@@ -1,4 +1,5 @@
 import { Button, InlineAlert } from '@vista/ui';
+import { useActiveItemVisibility } from '@vista/ui/navigation';
 import type {
   CreateSupplierClaimRequest,
   CreateSupplierInvoiceRequest,
@@ -71,16 +72,25 @@ export function SupplierProcurementPage({ view }: { view: SupplierProcurementVie
         ) : null}
       </header>
 
-      <ProcurementTabs view={view} />
-      {notice ? <InlineAlert tone="success">{notice}</InlineAlert> : null}
-
-      {view === 'suppliers' ? (
-        <SupplierList suppliers={data.suppliers} onPreview={setSupplierPreview} />
-      ) : view === 'supplier-invoices' ? (
-        <InvoiceList invoices={data.invoices} onPreview={setInvoicePreview} orders={data.orders} />
-      ) : (
-        <ClaimList claims={data.claims} onPreview={setClaimPreview} />
-      )}
+      <ProcurementWorkspace
+        countLabel={`${viewRecordCount(view, data)} ${viewRecordLabel(view, data)}`}
+        description={viewRegisterDescription(view)}
+        notice={notice}
+        title={viewRegisterTitle(view)}
+        view={view}
+      >
+        {view === 'suppliers' ? (
+          <SupplierList suppliers={data.suppliers} onPreview={setSupplierPreview} />
+        ) : view === 'supplier-invoices' ? (
+          <InvoiceList
+            invoices={data.invoices}
+            onPreview={setInvoicePreview}
+            orders={data.orders}
+          />
+        ) : (
+          <ClaimList claims={data.claims} onPreview={setClaimPreview} />
+        )}
+      </ProcurementWorkspace>
 
       {supplierPreview ? (
         <SupplierPreviewDrawer
@@ -149,11 +159,43 @@ export function SupplierProcurementPage({ view }: { view: SupplierProcurementVie
   );
 }
 
-export function ProcurementTabs({
+export type ProcurementTabView = SupplierProcurementView | 'goods-receipts' | 'purchase-orders';
+
+export function ProcurementWorkspace({
+  children,
+  countLabel,
+  description,
+  notice,
+  title,
   view,
 }: {
-  view: SupplierProcurementView | 'goods-receipts' | 'purchase-orders';
+  children: React.ReactNode;
+  countLabel: string;
+  description: string;
+  notice?: string | null;
+  title: string;
+  view: ProcurementTabView;
 }) {
+  return (
+    <div className="procurement-tab-shell">
+      <ProcurementTabs view={view} />
+      <section aria-label={`${viewTitle(view)} workspace`} className="procurement-tab-surface">
+        <header className="procurement-tab-summary">
+          <div>
+            <h2>{title}</h2>
+            <p>{description}</p>
+          </div>
+          <span>{countLabel}</span>
+        </header>
+        {notice ? <InlineAlert tone="success">{notice}</InlineAlert> : null}
+        <div className="procurement-tab-body">{children}</div>
+      </section>
+    </div>
+  );
+}
+
+export function ProcurementTabs({ view }: { view: ProcurementTabView }) {
+  const tabList = useActiveItemVisibility<HTMLElement>(view);
   const tabs: Array<[typeof view, string, string]> = [
     ['purchase-orders', 'Purchase orders', '/modules/erp.procurement/purchase-orders'],
     ['goods-receipts', 'Goods receipts', '/modules/erp.procurement/goods-receipts'],
@@ -162,7 +204,7 @@ export function ProcurementTabs({
     ['supplier-claims', 'Supplier claims', '/modules/erp.procurement/supplier-claims'],
   ];
   return (
-    <nav aria-label="Procurement workflow" className="workflow-tabs procurement-tabs">
+    <nav aria-label="Procurement workflow" className="workflow-tabs procurement-tabs" ref={tabList}>
       {tabs.map(([key, label, path]) => (
         <Link aria-current={view === key ? 'page' : undefined} key={key} to={path}>
           {label}
@@ -190,11 +232,14 @@ function SupplierList({
       {suppliers.map((supplier) => {
         const latest = supplier.evaluations[0];
         return (
-          <article className="procurement-record-card" key={supplier.profile.supplierPartnerId}>
+          <article
+            className="procurement-record-card supplier-register-card"
+            key={supplier.profile.supplierPartnerId}
+          >
             <header>
-              <div className="procurement-record-icon">
-                <Icon name="customers" size={18} />
-              </div>
+              <span aria-hidden="true" className="procurement-record-icon">
+                {contactInitials(supplier.profile.supplierName)}
+              </span>
               <div>
                 <h2>{supplier.profile.supplierName}</h2>
                 <p>{supplier.contacts.length} active contacts</p>
@@ -248,25 +293,37 @@ function InvoiceList({
     );
   return (
     <section aria-label="Supplier invoices" className="procurement-record-list">
+      <header aria-hidden="true" className="procurement-ledger-head">
+        <span>Invoice and supplier</span>
+        <span>Total and date</span>
+        <span>Comparison</span>
+        <span>Action</span>
+      </header>
       {invoices.map((invoice) => {
         const order = orders.find((item) => item.id === invoice.purchaseOrderId);
-        const mismatch = order?.lines.some(
-          (line) => line.invoicedQuantity !== line.deliveredQuantity,
-        );
+        const matchState = !order
+          ? 'unavailable'
+          : order.lines.some((line) => line.invoicedQuantity !== line.deliveredQuantity)
+            ? 'variance'
+            : 'matched';
         return (
-          <article className="procurement-ledger-row" key={invoice.id}>
-            <div>
+          <article className="procurement-ledger-row is-invoice" key={invoice.id}>
+            <div className="procurement-ledger-primary">
               <strong>{invoice.invoiceNumber}</strong>
               <span>{invoice.supplierName}</span>
             </div>
-            <div>
+            <div className="procurement-ledger-value">
               <strong>{formatMoney(invoice.total, invoice.currencyCode)}</strong>
               <span>{formatDate(invoice.invoiceDate)}</span>
             </div>
-            <span className={`procurement-match ${mismatch ? 'has-variance' : 'is-matched'}`}>
-              {mismatch ? 'Review variance' : 'Matched'}
+            <span className={`procurement-match is-${matchState}`}>
+              {matchState === 'variance'
+                ? 'Review variance'
+                : matchState === 'matched'
+                  ? 'Matched'
+                  : 'Not compared'}
             </span>
-            <Button onClick={() => onPreview(invoice)} variant="quiet">
+            <Button onClick={() => onPreview(invoice)} variant="secondary">
               Preview
             </Button>
           </article>
@@ -291,20 +348,26 @@ function ClaimList({
     );
   return (
     <section aria-label="Supplier claims" className="procurement-record-list">
+      <header aria-hidden="true" className="procurement-ledger-head">
+        <span>Product and supplier</span>
+        <span>Quantity and issue</span>
+        <span>Status</span>
+        <span>Action</span>
+      </header>
       {claims.map((claim) => (
-        <article className="procurement-ledger-row" key={claim.id}>
-          <div>
+        <article className="procurement-ledger-row is-claim" key={claim.id}>
+          <div className="procurement-ledger-primary">
             <strong>{claim.productName}</strong>
             <span>{claim.supplierName}</span>
           </div>
-          <div>
+          <div className="procurement-ledger-value">
             <strong>{claim.quantity}</strong>
             <span>{claim.type === 'damaged' ? 'Damaged' : 'Non-conforming'}</span>
           </div>
           <span className={`procurement-status is-${claim.status}`}>
             {claimStatusLabel(claim.status)}
           </span>
-          <Button onClick={() => onPreview(claim)} variant="quiet">
+          <Button onClick={() => onPreview(claim)} variant="secondary">
             Preview
           </Button>
         </article>
@@ -332,6 +395,7 @@ function SupplierPreviewDrawer({
   const [deliveryTerms, setDeliveryTerms] = useState(supplier.profile.deliveryTerms ?? '');
   const [score, setScore] = useState('');
   const [notes, setNotes] = useState('');
+  const [addingEvaluation, setAddingEvaluation] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -379,93 +443,173 @@ function SupplierPreviewDrawer({
   return (
     <RecordDrawer
       busy={busy}
+      className="supplier-record-drawer"
       onBack={onBack}
       subtitle="Terms, contacts, and evaluation history"
       title={supplier.profile.supplierName}
     >
       {error ? <InlineAlert tone="error">{error}</InlineAlert> : null}
-      <section className="procurement-preview-section">
-        <h3>Commercial terms</h3>
-        <div className="procurement-form-grid">
-          <label>
-            <span>Payment terms in days</span>
-            <input
-              disabled={!canEdit}
-              max={3650}
-              min={0}
-              onChange={(event) => setPaymentTermsDays(event.target.value)}
-              type="number"
-              value={paymentTermsDays}
-            />
-          </label>
-          <label>
-            <span>Delivery terms</span>
-            <input
-              disabled={!canEdit}
-              maxLength={500}
-              onChange={(event) => setDeliveryTerms(event.target.value)}
-              value={deliveryTerms}
-            />
-          </label>
-        </div>
-        {canEdit ? (
-          <Button disabled={busy} onClick={() => void saveTerms()} variant="secondary">
-            Save terms
-          </Button>
-        ) : null}
+      <section className="procurement-preview-section supplier-terms-section">
+        <header className="procurement-section-heading">
+          <div>
+            <h3>Commercial terms</h3>
+            <p>Defaults used when preparing new purchase documents.</p>
+          </div>
+        </header>
+        <form
+          className="supplier-terms-form"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void saveTerms();
+          }}
+        >
+          <div className="supplier-terms-fields">
+            <label className="procurement-field">
+              <span>Payment terms</span>
+              <div className="supplier-number-field">
+                <input
+                  aria-label="Payment terms in days"
+                  disabled={!canEdit}
+                  max={3650}
+                  min={0}
+                  onChange={(event) => setPaymentTermsDays(event.target.value)}
+                  type="number"
+                  value={paymentTermsDays}
+                />
+                <span>days</span>
+              </div>
+            </label>
+            <label className="procurement-field supplier-delivery-field">
+              <span>Delivery terms</span>
+              <input
+                disabled={!canEdit}
+                maxLength={500}
+                onChange={(event) => setDeliveryTerms(event.target.value)}
+                value={deliveryTerms}
+              />
+            </label>
+          </div>
+          {canEdit ? (
+            <footer className="supplier-form-actions">
+              <Button busy={busy} busyLabel="Saving" type="submit" variant="secondary">
+                Save terms
+              </Button>
+            </footer>
+          ) : null}
+        </form>
       </section>
       <section className="procurement-preview-section">
-        <h3>Contacts</h3>
+        <header className="procurement-section-heading">
+          <div>
+            <h3>Contacts</h3>
+            <p>Active contacts from the shared partner record.</p>
+          </div>
+          <span>{supplier.contacts.length}</span>
+        </header>
         {supplier.contacts.length ? (
           supplier.contacts.map((contact) => (
             <div
-              className="procurement-contact-row"
+              className="supplier-contact-row"
               key={`${contact.name}-${contact.email ?? contact.telephone ?? ''}`}
             >
-              <strong>{contact.name}</strong>
-              <span>{contact.role ?? 'Contact'}</span>
-              <span>{contact.email ?? contact.telephone ?? 'No contact detail'}</span>
+              <span aria-hidden="true" className="supplier-contact-avatar">
+                {contactInitials(contact.name)}
+              </span>
+              <div>
+                <strong>{contact.name}</strong>
+                <span>{contact.role ?? 'Contact'}</span>
+              </div>
+              <span className="supplier-contact-detail">
+                {contact.email ?? contact.telephone ?? 'No contact detail'}
+              </span>
             </div>
           ))
         ) : (
           <p className="muted-copy">No active contacts are registered for this supplier.</p>
         )}
       </section>
-      <section className="procurement-preview-section">
-        <h3>Evaluation history</h3>
-        {supplier.evaluations.map((evaluation) => (
-          <div className="supplier-evaluation-row" key={evaluation.id}>
-            <strong>{evaluation.score}/5</strong>
-            <span>{evaluation.notes ?? 'No notes'}</span>
-            <small>{formatDateTime(evaluation.evaluatedAt)}</small>
+      <section className="procurement-preview-section supplier-evaluation-section">
+        <header className="procurement-section-heading">
+          <div>
+            <h3>Evaluation history</h3>
+            <p>Previous assessments remain visible for comparison.</p>
           </div>
-        ))}
-        {canEdit ? (
-          <div className="supplier-evaluation-form">
-            <label>
-              <span>Overall score</span>
-              <select onChange={(event) => setScore(event.target.value)} value={score}>
-                <option value="">Choose score</option>
-                {[1, 2, 3, 4, 5].map((value) => (
-                  <option key={value} value={value}>
-                    {value} / 5
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              <span>Evaluation notes</span>
-              <textarea
-                maxLength={1000}
-                onChange={(event) => setNotes(event.target.value)}
-                rows={3}
-                value={notes}
-              />
-            </label>
-            <Button disabled={busy || !score} onClick={() => void addEvaluation()}>
-              Record evaluation
+          {canEdit && !addingEvaluation ? (
+            <Button
+              className="supplier-add-evaluation"
+              onClick={() => setAddingEvaluation(true)}
+              variant="secondary"
+            >
+              <Icon name="plus" size={15} /> Add evaluation
             </Button>
+          ) : null}
+        </header>
+        {supplier.evaluations.length ? (
+          <div className="supplier-evaluation-list">
+            {supplier.evaluations.map((evaluation) => (
+              <div className="supplier-evaluation-row" key={evaluation.id}>
+                <strong>{evaluation.score}/5</strong>
+                <div className="supplier-evaluation-copy">
+                  <span>{evaluation.notes ?? 'No notes'}</span>
+                  <small>{formatDateTime(evaluation.evaluatedAt)}</small>
+                </div>
+              </div>
+            ))}
           </div>
+        ) : (
+          <p className="procurement-quiet-state">No evaluations have been recorded.</p>
+        )}
+        {canEdit && addingEvaluation ? (
+          <form
+            className="supplier-evaluation-form"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void addEvaluation();
+            }}
+          >
+            <div className="supplier-evaluation-form-heading">
+              <strong>New supplier evaluation</strong>
+              <span>Score the overall supplier relationship.</span>
+            </div>
+            <div className="supplier-evaluation-fields">
+              <label className="procurement-field">
+                <span>Overall score</span>
+                <select onChange={(event) => setScore(event.target.value)} value={score}>
+                  <option value="">Choose score</option>
+                  {[1, 2, 3, 4, 5].map((value) => (
+                    <option key={value} value={value}>
+                      {value} / 5
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="procurement-field">
+                <span>Evaluation notes</span>
+                <textarea
+                  maxLength={1000}
+                  onChange={(event) => setNotes(event.target.value)}
+                  rows={3}
+                  value={notes}
+                />
+              </label>
+            </div>
+            <footer className="supplier-form-actions">
+              <Button
+                disabled={busy}
+                onClick={() => {
+                  setAddingEvaluation(false);
+                  setScore('');
+                  setNotes('');
+                }}
+                variant="quiet"
+              >
+                Cancel
+              </Button>
+              <Button busy={busy} disabled={!score} type="submit">
+                Record evaluation
+              </Button>
+            </footer>
+          </form>
         ) : null}
       </section>
     </RecordDrawer>
@@ -536,7 +680,7 @@ function SupplierInvoiceDrawer({
     <RecordDrawer
       busy={busy}
       onBack={onBack}
-      subtitle="Link supplier evidence to ordered and delivered quantities"
+      subtitle="Link the supplier invoice to ordered and delivered quantities"
       title="Record supplier invoice"
     >
       <form className="procurement-form" onSubmit={(event) => void submit(event)}>
@@ -546,7 +690,7 @@ function SupplierInvoiceDrawer({
             Create a purchase order before recording an invoice.
           </InlineAlert>
         ) : null}
-        <label>
+        <label className="procurement-field">
           <span>Purchase order</span>
           <select
             onChange={(event) => selectOrder(event.target.value)}
@@ -561,7 +705,7 @@ function SupplierInvoiceDrawer({
           </select>
         </label>
         <div className="procurement-form-grid">
-          <label>
+          <label className="procurement-field">
             <span>Supplier invoice number</span>
             <input
               maxLength={120}
@@ -570,7 +714,7 @@ function SupplierInvoiceDrawer({
               value={invoiceNumber}
             />
           </label>
-          <label>
+          <label className="procurement-field">
             <span>Invoice date</span>
             <input
               onChange={(event) => setInvoiceDate(event.target.value)}
@@ -591,7 +735,7 @@ function SupplierInvoiceDrawer({
             return (
               <fieldset key={line.id}>
                 <legend>
-                  <label>
+                  <label className="procurement-check-label">
                     <input
                       checked={draft.include}
                       onChange={(event) =>
@@ -614,7 +758,7 @@ function SupplierInvoiceDrawer({
                   </span>
                 </div>
                 <div className="procurement-form-grid">
-                  <label>
+                  <label className="procurement-field">
                     <span>Invoice quantity</span>
                     <input
                       disabled={!draft.include}
@@ -627,7 +771,7 @@ function SupplierInvoiceDrawer({
                       value={draft.quantity}
                     />
                   </label>
-                  <label>
+                  <label className="procurement-field">
                     <span>Unit price ({order.currencyCode})</span>
                     <input
                       disabled={!draft.include}
@@ -778,7 +922,7 @@ function SupplierClaimDrawer({
         {!options.length ? (
           <InlineAlert tone="warning">Receive goods before opening a supplier claim.</InlineAlert>
         ) : null}
-        <label>
+        <label className="procurement-field">
           <span>Received product</span>
           <select
             onChange={(event) => setGoodsReceiptLineId(event.target.value)}
@@ -793,7 +937,7 @@ function SupplierClaimDrawer({
           </select>
         </label>
         <div className="procurement-form-grid">
-          <label>
+          <label className="procurement-field">
             <span>Issue type</span>
             <select
               onChange={(event) =>
@@ -805,7 +949,7 @@ function SupplierClaimDrawer({
               <option value="non_conforming">Non-conforming</option>
             </select>
           </label>
-          <label>
+          <label className="procurement-field">
             <span>Affected quantity</span>
             <input
               inputMode="decimal"
@@ -816,7 +960,7 @@ function SupplierClaimDrawer({
             />
           </label>
         </div>
-        <label>
+        <label className="procurement-field">
           <span>Description</span>
           <textarea
             maxLength={2000}
@@ -915,8 +1059,8 @@ function ClaimPreviewDrawer({
         </ol>
       </section>
       {canEdit && nextStatus ? (
-        <section className="procurement-preview-section">
-          <label>
+        <section className="procurement-preview-section procurement-claim-update">
+          <label className="procurement-field">
             <span>Update note</span>
             <textarea
               maxLength={1000}
@@ -925,9 +1069,11 @@ function ClaimPreviewDrawer({
               value={note}
             />
           </label>
-          <Button disabled={busy} onClick={() => void advance()}>
-            {claimAdvanceLabel(nextStatus)}
-          </Button>
+          <div className="procurement-section-actions">
+            <Button disabled={busy} onClick={() => void advance()}>
+              {claimAdvanceLabel(nextStatus)}
+            </Button>
+          </div>
         </section>
       ) : null}
     </RecordDrawer>
@@ -937,12 +1083,14 @@ function ClaimPreviewDrawer({
 function RecordDrawer({
   busy,
   children,
+  className = '',
   onBack,
   subtitle,
   title,
 }: {
   busy: boolean;
   children: React.ReactNode;
+  className?: string;
   onBack: () => void;
   subtitle: string;
   title: string;
@@ -959,7 +1107,7 @@ function RecordDrawer({
       <aside
         aria-label={title}
         aria-modal="true"
-        className="security-drawer is-wide procurement-drawer"
+        className={`security-drawer is-wide procurement-drawer procurement-record-drawer ${className}`.trim()}
         role="dialog"
       >
         <header className="procurement-drawer-header">
@@ -976,7 +1124,13 @@ function RecordDrawer({
             <h2>{title}</h2>
             <p>{subtitle}</p>
           </div>
-          <button aria-label="Close preview" disabled={busy} onClick={onBack}>
+          <button
+            aria-label="Close preview"
+            className="procurement-close-button"
+            disabled={busy}
+            onClick={onBack}
+            type="button"
+          >
             <Icon name="close" />
           </button>
         </header>
@@ -1030,7 +1184,7 @@ function ProcurementLoading() {
   return (
     <div aria-live="polite" className="procurement-loading">
       <span className="loader-mark" />
-      <p>Loading procurement workspace</p>
+      <p>Loading procurement records</p>
     </div>
   );
 }
@@ -1047,12 +1201,16 @@ function EmptyState({ children, title }: { children: React.ReactNode; title: str
   );
 }
 
-function viewTitle(view: SupplierProcurementView) {
+function viewTitle(view: ProcurementTabView) {
   return view === 'suppliers'
     ? 'Suppliers'
     : view === 'supplier-invoices'
       ? 'Supplier invoices'
-      : 'Supplier claims';
+      : view === 'supplier-claims'
+        ? 'Supplier claims'
+        : view === 'purchase-orders'
+          ? 'Purchase orders'
+          : 'Goods receipts';
 }
 
 function viewDescription(view: SupplierProcurementView) {
@@ -1061,6 +1219,52 @@ function viewDescription(view: SupplierProcurementView) {
     : view === 'supplier-invoices'
       ? 'Compare what was ordered, delivered, and invoiced before finance posting.'
       : 'Track damaged and non-conforming deliveries from opening through closure.';
+}
+
+function viewRegisterTitle(view: SupplierProcurementView) {
+  return view === 'suppliers'
+    ? 'Supplier register'
+    : view === 'supplier-invoices'
+      ? 'Invoice register'
+      : 'Claims register';
+}
+
+function viewRegisterDescription(view: SupplierProcurementView) {
+  return view === 'suppliers'
+    ? 'Commercial profiles and current supplier relationships.'
+    : view === 'supplier-invoices'
+      ? 'Invoices linked to purchase orders and delivered quantities.'
+      : 'Open and completed issues raised against supplier deliveries.';
+}
+
+function viewRecordCount(
+  view: SupplierProcurementView,
+  data: Pick<ReturnType<typeof useSupplierProcurementData>, 'claims' | 'invoices' | 'suppliers'>,
+) {
+  return view === 'suppliers'
+    ? data.suppliers.length
+    : view === 'supplier-invoices'
+      ? data.invoices.length
+      : data.claims.length;
+}
+
+function viewRecordLabel(
+  view: SupplierProcurementView,
+  data: Pick<ReturnType<typeof useSupplierProcurementData>, 'claims' | 'invoices' | 'suppliers'>,
+) {
+  const count = viewRecordCount(view, data);
+  if (view === 'suppliers') return count === 1 ? 'supplier' : 'suppliers';
+  if (view === 'supplier-invoices') return count === 1 ? 'invoice' : 'invoices';
+  return count === 1 ? 'claim' : 'claims';
+}
+
+function contactInitials(name: string) {
+  return name
+    .split(/\s+/u)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join('');
 }
 
 function invoiceDrafts(order?: PurchaseOrder): InvoiceLineDraft[] {

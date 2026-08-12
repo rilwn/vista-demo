@@ -29,14 +29,17 @@ export function WorkspaceLayout({ children }: PropsWithChildren) {
 
   if (!session) return null;
 
+  const pageParent = nestedPageParent(location.pathname);
   const currentTitle =
     location.pathname === '/access'
       ? messages.navigation.access
-      : (allModuleItems.find(
+      : (pageParent?.label ??
+        allModuleItems.find(
           (item) =>
             location.pathname === item.path ||
             (item.path.startsWith('/modules/') && location.pathname.startsWith(`${item.path}/`)),
-        )?.label ?? messages.navigation.overview);
+        )?.label ??
+        messages.navigation.overview);
   const initials = getInitials(session.context.displayName);
 
   async function signOut() {
@@ -138,11 +141,46 @@ export function WorkspaceLayout({ children }: PropsWithChildren) {
           </div>
         </header>
         <main className="workspace-content" id="workspace-content" tabIndex={-1}>
+          {pageParent ? (
+            <nav aria-label="Page navigation" className="workspace-page-navigation">
+              <Link
+                aria-label={`${messages.navigation.backTo} ${pageParent.label}`}
+                className="workspace-back-link"
+                to={pageParent.to}
+              >
+                <Icon name="arrow" size={16} />
+                <span>
+                  {messages.navigation.backTo} {pageParent.label}
+                </span>
+              </Link>
+            </nav>
+          ) : null}
           {children}
         </main>
       </div>
     </div>
   );
+}
+
+function nestedPageParent(pathname: string): { label: string; to: string } | null {
+  const moduleMatch = /^\/modules\/([^/]+)\/[^/]+$/u.exec(pathname);
+  if (moduleMatch?.[1]) {
+    const module = allModuleItems.find((item) => item.key === moduleMatch[1]);
+    if (module) return { label: module.label, to: module.path };
+  }
+
+  const moduleKey =
+    pathname === '/partners'
+      ? 'crm'
+      : pathname === '/catalog' || pathname === '/catalog/categories'
+        ? 'erp.warehouse'
+        : null;
+  if (moduleKey) {
+    const module = allModuleItems.find((item) => item.key === moduleKey);
+    if (module) return { label: module.label, to: module.path };
+  }
+
+  return pathname === '/access' ? { label: messages.navigation.overview, to: '/' } : null;
 }
 
 function NavigationSection({ children, label }: PropsWithChildren<{ label: string }>) {

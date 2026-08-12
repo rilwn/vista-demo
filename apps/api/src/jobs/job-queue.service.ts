@@ -25,6 +25,22 @@ export interface EnqueueJobResult {
   jobId: string;
 }
 
+export interface UpsertJobScheduleInput {
+  id: string;
+  name: string;
+  pattern: string;
+  payload: Record<string, unknown>;
+  timezone: string;
+}
+
+export interface JobScheduleSummary {
+  id: string;
+  name: string;
+  nextRunAt?: string;
+  pattern?: string;
+  timezone?: string;
+}
+
 export interface PlatformJobData {
   correlationId: string;
   enqueuedAt: string;
@@ -82,6 +98,56 @@ export class JobQueueService implements OnApplicationShutdown {
       jobName: input.name,
     });
     return { deduplicated: false, jobId };
+  }
+
+  async upsertSchedule(input: UpsertJobScheduleInput): Promise<JobScheduleSummary> {
+    validateScheduleInput(input);
+    const job = await this.getQueue().upsertJobScheduler(
+      input.id,
+      { pattern: input.pattern, tz: input.timezone },
+      {
+        data: {
+          correlationId: `scheduler:${input.id}`,
+          enqueuedAt: new Date().toISOString(),
+          idempotencyKey: `scheduler:${input.id}`,
+          payload: { ...input.payload, scheduleId: input.id },
+        },
+        name: input.name,
+        opts: {
+          attempts: this.environment.JOB_DEFAULT_ATTEMPTS,
+          backoff: {
+            delay: this.environment.JOB_BACKOFF_DELAY_MS,
+            type: 'exponential',
+          },
+          removeOnComplete: false,
+          removeOnFail: false,
+        },
+      },
+    );
+    const schedule = await this.getJobSchedule(input.id);
+    this.logger.event('info', 'job.schedule.registered', {
+      jobId: job.id,
+      jobName: input.name,
+      nextRunAt: schedule?.nextRunAt,
+      scheduleId: input.id,
+    });
+    return schedule ?? { id: input.id, name: input.name };
+  }
+
+  async getJobSchedule(id: string): Promise<JobScheduleSummary | undefined> {
+    const schedule = await this.getQueue().getJobScheduler(id);
+    if (!schedule) return undefined;
+    return {
+      id: schedule.key,
+      name: schedule.name,
+      ...(schedule.next === undefined ? {} : { nextRunAt: new Date(schedule.next).toISOString() }),
+      ...(schedule.pattern ? { pattern: schedule.pattern } : {}),
+      ...(schedule.tz ? { timezone: schedule.tz } : {}),
+    };
+  }
+
+  async removeJobSchedule(id: string): Promise<boolean> {
+    return this.getQueue().removeJobScheduler(id);
   }
 
   async getJobState(jobId: string): Promise<JobState | 'unknown'> {
@@ -198,5 +264,21 @@ function validateInput(input: EnqueueJobInput): void {
     JSON.stringify(input.payload);
   } catch {
     throw new Error('Job payload must be JSON serializable');
+  }
+}
+
+function validateScheduleInput(input: UpsertJobScheduleInput): void {
+  if (!/^[a-z][a-z0-9.-]{1,127}$/.test(input.id)) {
+    throw new Error('Job schedule identifier must be a stable lowercase dotted identifier');
+  }
+  if (!/^[a-z][a-z0-9.-]{1,127}$/.test(input.name)) {
+    throw new Error('Scheduled job name must be a stable lowercase dotted identifier');
+  }
+  if (!input.pattern.trim()) throw new Error('Job schedule pattern is required');
+  if (!input.timezone.trim()) throw new Error('Job schedule timezone is required');
+  try {
+    JSON.stringify(input.payload);
+  } catch {
+    throw new Error('Scheduled job payload must be JSON serializable');
   }
 }

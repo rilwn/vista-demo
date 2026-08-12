@@ -59,12 +59,18 @@ describe.skipIf(!runInfrastructureTests)('purchase order to warehouse receipt', 
       new URL('../src/database/migrations', import.meta.url),
     );
     await migrateUp(database, migrationDirectory);
+    const salesRolledBack = await migrateDown(database, migrationDirectory);
+    if (salesRolledBack !== '0026_sales_workflow_foundation')
+      throw new Error(`Expected migration 0026 rollback, received ${salesRolledBack ?? 'none'}`);
     const rolledBack = await migrateDown(database, migrationDirectory);
     if (rolledBack !== '0025_procurement_supplier_controls')
       throw new Error(`Expected migration 0025 rollback, received ${rolledBack ?? 'none'}`);
     const reapplied = await migrateUp(database, migrationDirectory);
-    if (!reapplied.includes('0025_procurement_supplier_controls'))
-      throw new Error('Migration 0025 could not be reapplied');
+    if (
+      !reapplied.includes('0025_procurement_supplier_controls') ||
+      !reapplied.includes('0026_sales_workflow_foundation')
+    )
+      throw new Error('Migrations 0025 and 0026 could not be reapplied');
 
     Object.assign(process.env, {
       BUSINESS_TIMEZONE: 'Europe/Sofia',

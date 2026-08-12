@@ -73,6 +73,10 @@ describe.skipIf(!runInfrastructureTests)(
         new URL('../src/database/migrations', import.meta.url),
       );
       await migrateUp(database, migrationDirectory);
+      const salesRolledBack = await migrateDown(database, migrationDirectory);
+      if (salesRolledBack !== '0026_sales_workflow_foundation') {
+        throw new Error('Expected to roll back migration 0026 before supplier controls');
+      }
       const supplierControlsRolledBack = await migrateDown(database, migrationDirectory);
       if (supplierControlsRolledBack !== '0025_procurement_supplier_controls') {
         throw new Error('Expected to roll back migration 0025 before procurement receiving');

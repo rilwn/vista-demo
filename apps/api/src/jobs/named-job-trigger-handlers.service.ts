@@ -4,18 +4,20 @@ import { Inject, Injectable, type OnModuleInit } from '@nestjs/common';
 
 import { DatabaseService } from '../database/database.service.js';
 import { StructuredLogger } from '../logging/structured-logger.service.js';
+import { SalesSubscriptionsService } from '../sales/sales-subscriptions.service.js';
 import { type BackgroundJobContext, JobHandlerRegistry } from './job-handler-registry.service.js';
 import { namedBackgroundJobs } from './named-background-jobs.js';
 
 interface TriggerResult {
   deduplicated: boolean;
   eventId: string;
+  [key: string]: unknown;
 }
 
 /**
- * Durable boundary for scheduled responsibilities whose owning domain arrives in
- * later phases. A successful handler means the trigger is transactionally present
- * in the outbox; it does not claim that the later domain workflow has completed.
+ * Registers the platform's named scheduled responsibilities. Implemented domains
+ * complete their transactional work before the durable trigger marker is written;
+ * later domains retain that marker as an explicit handoff boundary.
  */
 @Injectable()
 export class NamedJobTriggerHandlersService implements OnModuleInit {
@@ -23,6 +25,7 @@ export class NamedJobTriggerHandlersService implements OnModuleInit {
     @Inject(DatabaseService) private readonly database: DatabaseService,
     @Inject(JobHandlerRegistry) private readonly registry: JobHandlerRegistry,
     @Inject(StructuredLogger) private readonly logger: StructuredLogger,
+    @Inject(SalesSubscriptionsService) private readonly subscriptions: SalesSubscriptionsService,
   ) {}
 
   onModuleInit(): void {
@@ -32,6 +35,10 @@ export class NamedJobTriggerHandlersService implements OnModuleInit {
   }
 
   async handle(context: BackgroundJobContext): Promise<TriggerResult> {
+    const domainResult =
+      context.name === 'sales.subscription-invoice.generate'
+        ? await this.subscriptions.generateDueInvoiceDrafts(context)
+        : undefined;
     const eventId = deterministicUuid(`${context.name}\u0000${context.idempotencyKey}`);
     const outboxIdempotencyKey = `scheduled:${createHash('sha256')
       .update(`${context.name}\u0000${context.idempotencyKey}`)
@@ -63,7 +70,7 @@ export class NamedJobTriggerHandlersService implements OnModuleInit {
         jobName: context.name,
       },
     );
-    return { deduplicated, eventId };
+    return { deduplicated, eventId, ...(domainResult ?? {}) };
   }
 }
 

@@ -100,6 +100,10 @@
 .backup-sidebar nav {
   display: grid;
   gap: 0.15rem;
+  scrollbar-width: none;
+}
+.backup-sidebar nav::-webkit-scrollbar {
+  display: none;
 }
 .backup-sidebar nav button {
   display: flex;
@@ -115,6 +119,7 @@
   font-weight: 620;
   text-align: left;
   cursor: pointer;
+  scroll-snap-align: center;
 }
 .backup-sidebar nav button:hover {
   color: #edf5ec;
@@ -363,6 +368,8 @@
     display: flex;
     max-width: 100%;
     overflow-x: auto;
+    overscroll-behavior-inline: contain;
+    scroll-snap-type: inline proximity;
   }
   .backup-sidebar nav button {
     width: max-content;
@@ -391,15 +398,14 @@
     flex-direction: column;
   }
   .backup-list-controls {
-    flex-wrap: wrap;
-  }
-  .backup-list-controls label {
-    min-width: 100%;
-  }
-  .backup-table-head {
+    display: grid;
     grid-template-columns: 1fr 1fr;
   }
-  .backup-table-head span:nth-child(n + 3) {
+  .backup-list-controls label {
+    grid-column: 1 / -1;
+    min-width: 0;
+  }
+  .backup-table-head {
     display: none;
   }
   .backup-topbar {

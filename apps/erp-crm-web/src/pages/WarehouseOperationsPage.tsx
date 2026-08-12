@@ -152,7 +152,7 @@ function WarehousesView({ permissions, reload, token, warehouses }: OperationalP
           </Button>
         ) : undefined
       }
-      description="Create central, service, and mobile technician custody points without imposing a fixed limit."
+      description="Create and manage central, service, and mobile technician warehouses without a fixed limit."
       eyebrow="ERP · Warehouse"
       title="Warehouses"
     >
@@ -259,10 +259,10 @@ function WarehouseCreateForm({
     >
       <div className="command-card-heading">
         <div>
-          <span>New custody point</span>
+          <span>New warehouse</span>
           <h2>Warehouse setup</h2>
         </div>
-        <small>Codes are normalized and kept unique.</small>
+        <small>Each warehouse code must be unique.</small>
       </div>
       <div className="warehouse-form-grid">
         <TextField
@@ -735,7 +735,7 @@ function ReturnMovementForm({ token, warehouses }: { token: string; warehouses: 
       <section className="movement-form-main">
         <div className="command-card-heading">
           <div>
-            <span>linked return command</span>
+            <span>Linked return</span>
             <h2>Restore returned inventory</h2>
           </div>
           <small>The original issue is kept in the movement history.</small>
@@ -916,7 +916,7 @@ function MovementForm({
       <section className="movement-form-main">
         <div className="command-card-heading">
           <div>
-            <span>{mode} command</span>
+            <span>{mode} stock</span>
             <h2>
               {mode === 'receipt'
                 ? 'Receive inventory'
@@ -925,7 +925,7 @@ function MovementForm({
                   : 'Transfer inventory'}
             </h2>
           </div>
-          <small>One command, one auditable transaction.</small>
+          <small>Each posting creates one traceable stock transaction.</small>
         </div>
         <div className="warehouse-form-grid two-columns">
           <SelectField

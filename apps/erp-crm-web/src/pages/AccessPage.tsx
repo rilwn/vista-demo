@@ -205,19 +205,30 @@ function PasswordChangeDrawer({
         className="security-drawer access-password-drawer"
         role="dialog"
       >
-        <header>
-          <div>
-            <h2>{messages.access.passwordTitle}</h2>
-            <p>{messages.access.passwordSubtitle}</p>
-          </div>
+        <header className="panel-drawer-header">
+          <button
+            aria-label="Back to my access"
+            className="panel-back-button"
+            disabled={busy}
+            onClick={onClose}
+            type="button"
+          >
+            <Icon name="arrow" size={17} />
+            Back
+          </button>
           <button
             aria-label={messages.access.closePassword}
+            className="panel-close-button"
             disabled={busy}
             onClick={onClose}
             type="button"
           >
             <Icon name="close" />
           </button>
+          <div>
+            <h2>{messages.access.passwordTitle}</h2>
+            <p>{messages.access.passwordSubtitle}</p>
+          </div>
         </header>
         <div className="security-drawer-body">
           {loadingPolicy ? <PasswordPolicySkeleton /> : null}

@@ -95,6 +95,10 @@ describe.skipIf(!runInfrastructureTests)('partner master-data vertical slice', (
       new URL('../src/database/migrations', import.meta.url),
     );
     await migrateUp(database, migrationDirectory);
+    const salesRolledBack = await migrateDown(database, migrationDirectory);
+    if (salesRolledBack !== '0026_sales_workflow_foundation') {
+      throw new Error('Expected to roll back sales workflow before supplier controls');
+    }
     const supplierControlsRolledBack = await migrateDown(database, migrationDirectory);
     if (supplierControlsRolledBack !== '0025_procurement_supplier_controls') {
       throw new Error('Expected to roll back supplier controls before procurement receiving');
@@ -116,7 +120,8 @@ describe.skipIf(!runInfrastructureTests)('partner master-data vertical slice', (
       !reapplied.includes('0022_reliable_integration_events') ||
       !reapplied.includes('0023_employee_password_change') ||
       !reapplied.includes('0024_procurement_purchase_receiving') ||
-      !reapplied.includes('0025_procurement_supplier_controls')
+      !reapplied.includes('0025_procurement_supplier_controls') ||
+      !reapplied.includes('0026_sales_workflow_foundation')
     ) {
       throw new Error('The reliable integration and dependent migrations could not be reapplied');
     }

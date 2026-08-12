@@ -430,3 +430,84 @@ so the discrepancy remains visible for review. Claims cannot cumulatively exceed
 the received line quantity. Every command is transactional, idempotent, audited,
 and outbox-backed. Supplier invoices are procurement evidence only; accounting,
 VAT, payment, and correction posting belong to the finance document workflow.
+
+## Sales workflow
+
+The connected commercial chain exposes:
+
+- `GET /api/v1/sales/reference-data` for active customers, products, warehouses,
+  available serialized items, and stocked batches.
+- `GET /api/v1/sales/workflows` and `/workflows/:id` for the complete linked
+  quotation, order, shipment, and invoice-draft view.
+- `POST /api/v1/sales/quotations` for a dated quotation with fixed-precision
+  prices, line discounts, overall discount, and VAT treatment.
+- `POST /api/v1/sales/quotations/:id/confirm` to validate the quotation and reserve
+  its stock, including exact serial numbers where required.
+- `POST /api/v1/sales/orders/:id/shipments` to consume the reservation and issue
+  the stock, requiring a valid batch for batch-tracked products, and prepare the
+  linked equipment handover certificate from the shipped product/serial evidence.
+- `POST /api/v1/sales/handover-certificates/:id/accept` to record the customer
+  representative, acceptance timestamp, and optional note with optimistic
+  version protection.
+- `POST /api/v1/sales/orders/:id/invoice-draft` to prepare the invoice snapshot
+  after shipment.
+
+Reads require `erp.sales:view`; commands require `erp.sales:create` and an
+`Idempotency-Key`. Commands are transactional, retry-safe, audited, and
+outbox-backed. Expired quotations, incomplete line submissions, unavailable
+stock, duplicate serial selection, and invalid batches are rejected before the
+workflow advances.
+
+The final operation creates an invoice draft, not a legally issued invoice.
+Official scoped numbering, BNB conversion snapshots, accounting/fiscal posting,
+PDF/email delivery, corrections, and payment status remain controlled Finance
+work. Internal workflow references must not be presented as fiscal or accounting
+document numbers.
+
+## Service subscriptions
+
+The subscription API exposes:
+
+- `GET /api/v1/sales/subscriptions/reference-data` for canonical active customers,
+  their active locations, and non-retired installed equipment.
+- `GET /api/v1/sales/subscriptions` and `/subscriptions/:id` for contracts and
+  their recurring invoice-draft history.
+- `POST /api/v1/sales/subscriptions` for a location-bound contract containing one
+  or more installed devices, included services, visit frequency, validity,
+  recurring amount/currency, billing frequency, and next invoice date.
+- `PUT /api/v1/sales/subscriptions/:id` for version-checked maintenance and
+  reversible active/inactive state.
+
+Reads require `erp.sales:view`; creation and maintenance require the corresponding
+create/edit permission and an `Idempotency-Key`. Composite foreign keys prevent a
+device or location from crossing customer boundaries. The
+`sales.subscription-invoice.generate` background responsibility locks due
+contracts, creates one fixed snapshot per contract/billing date, publishes audit
+and outbox evidence, advances the next date in the same transaction, and safely
+returns no duplicate on replay. API startup upserts one stable BullMQ scheduler,
+so multiple instances or restarts do not create parallel schedules. It runs from
+`SALES_SUBSCRIPTION_INVOICE_CRON` in `BUSINESS_TIMEZONE`; each occurrence receives
+a distinct retry-stable command scope. These generated records are Finance review
+drafts, not legally issued accounting or fiscal invoices.
+
+## Sales pricing
+
+The connected pricing API exposes:
+
+- `GET /api/v1/sales/pricing/reference-data` for active customers and products,
+  plus current customer groups and campaigns.
+- `GET|POST /api/v1/sales/customer-groups` and
+  `PUT /api/v1/sales/customer-groups/:id` for reusable customer membership.
+- `GET|POST /api/v1/sales/promotional-campaigns` and
+  `PUT /api/v1/sales/promotional-campaigns/:id` for effective promotional periods.
+- `GET|POST /api/v1/sales/price-lists` and `PUT /api/v1/sales/price-lists/:id`
+  for all-customer, group, or individual-customer prices.
+- `GET /api/v1/sales/prices/resolve` with customer, product, date, and currency
+  query values for the one deterministic applicable price.
+
+Reads require `erp.sales:view`; maintenance requires `erp.sales:create` or
+`erp.sales:edit` as appropriate. Commands require an `Idempotency-Key`, use
+optimistic versions for edits, and commit audit and outbox evidence atomically.
+Resolution checks active state and effective periods for the list, group, and
+campaign; orders matches by priority and customer specificity; and never mutates
+the quotation or a saved document.

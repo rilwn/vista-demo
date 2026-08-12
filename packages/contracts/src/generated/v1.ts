@@ -1029,6 +1029,310 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/sales/customer-groups': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['SalesController_customerGroups'];
+    put?: never;
+    post: operations['SalesController_createCustomerGroup'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/sales/customer-groups/{id}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put: operations['SalesController_updateCustomerGroup'];
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/sales/handover-certificates/{id}/accept': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['SalesController_acceptHandover'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/sales/orders/{id}/invoice-draft': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['SalesController_createDraftInvoice'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/sales/orders/{id}/shipments': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['SalesController_createShipment'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/sales/price-lists': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['SalesController_priceLists'];
+    put?: never;
+    post: operations['SalesController_createPriceList'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/sales/price-lists/{id}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put: operations['SalesController_updatePriceList'];
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/sales/prices/resolve': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['SalesController_resolvePrice'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/sales/pricing/reference-data': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['SalesController_pricingReferenceData'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/sales/promotional-campaigns': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['SalesController_promotionalCampaigns'];
+    put?: never;
+    post: operations['SalesController_createPromotionalCampaign'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/sales/promotional-campaigns/{id}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put: operations['SalesController_updatePromotionalCampaign'];
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/sales/quotations': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['SalesController_createQuotation'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/sales/quotations/{id}/confirm': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['SalesController_confirmQuotation'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/sales/reference-data': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['SalesController_referenceData'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/sales/subscriptions': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['SalesController_subscriptionContracts'];
+    put?: never;
+    post: operations['SalesController_createSubscription'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/sales/subscriptions/{id}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['SalesController_subscriptionContract'];
+    put: operations['SalesController_updateSubscription'];
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/sales/subscriptions/reference-data': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['SalesController_subscriptionReferenceData'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/sales/workflows': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['SalesController_workflows'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/sales/workflows/{id}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['SalesController_workflow'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/warehouse/replenishment': {
     parameters: {
       query?: never;
@@ -1257,6 +1561,11 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
   schemas: {
+    AcceptSalesHandoverDto: {
+      acceptanceNotes?: string;
+      acceptedByName: string;
+      expectedVersion: number;
+    };
     ApiPermissionDto: {
       /** @enum {string} */
       action: 'view' | 'create' | 'edit' | 'delete' | 'approve' | '*';
@@ -1441,6 +1750,14 @@ export interface components {
       /** Format: uuid */
       warehouseId: string;
     };
+    ConfirmSalesQuotationDto: {
+      lines: components['schemas']['ConfirmSalesQuotationLineDto'][];
+    };
+    ConfirmSalesQuotationLineDto: {
+      /** Format: uuid */
+      quotationLineId: string;
+      serialNumbers?: string[];
+    };
     CreateBusinessBranchDto: {
       code: string;
       name: string;
@@ -1497,6 +1814,11 @@ export interface components {
       /** Format: uuid */
       responsibleContactId?: string;
     };
+    CreateCustomerPriceGroupDto: {
+      code: string;
+      customerPartnerIds: string[];
+      name: string;
+    };
     CreateLegalBusinessEntityDto: {
       code: string;
       name: string;
@@ -1536,6 +1858,32 @@ export interface components {
       uic?: string;
       vatNumber?: string;
     };
+    CreatePriceListDto: {
+      /** Format: uuid */
+      campaignId?: string;
+      code: string;
+      /** @example BGN */
+      currencyCode: string;
+      /** Format: uuid */
+      customerGroupId?: string;
+      /** Format: uuid */
+      customerPartnerId?: string;
+      lines: components['schemas']['CreatePriceListLineDto'][];
+      name: string;
+      priority: number;
+      /** @enum {string} */
+      scope: 'all_customers' | 'customer_group' | 'customer';
+      /** Format: date */
+      validFrom: string;
+      /** Format: date */
+      validTo: string;
+    };
+    CreatePriceListLineDto: {
+      /** Format: uuid */
+      productId: string;
+      /** @example 125.0000 */
+      unitPrice: string;
+    };
     CreateProductCategoryDto: {
       name: string;
       /** Format: uuid */
@@ -1557,6 +1905,14 @@ export interface components {
       /** Format: uuid */
       unitId: string;
     };
+    CreatePromotionalCampaignDto: {
+      code: string;
+      name: string;
+      /** Format: date */
+      validFrom: string;
+      /** Format: date */
+      validTo: string;
+    };
     CreatePurchaseOrderDto: {
       /** @example BGN */
       currencyCode: string;
@@ -1576,6 +1932,39 @@ export interface components {
       /** @example 125.5000 */
       unitPrice: string;
     };
+    CreateSalesQuotationDto: {
+      /** @example BGN */
+      currencyCode: string;
+      /** Format: uuid */
+      customerPartnerId: string;
+      lines: components['schemas']['CreateSalesQuotationLineDto'][];
+      /** @example 0.0000 */
+      overallDiscountPercent: string;
+      /** Format: date */
+      validUntil: string;
+      /** Format: uuid */
+      warehouseId: string;
+    };
+    CreateSalesQuotationLineDto: {
+      /** @example 0.0000 */
+      discountPercent: string;
+      /** Format: uuid */
+      productId: string;
+      /** @example 1.0000 */
+      quantity: string;
+      /** @example 125.0000 */
+      unitPrice: string;
+      /** @enum {string} */
+      vatTreatment: 'standard_20' | 'reduced_9' | 'zero' | 'exempt' | 'ica';
+    };
+    CreateSalesShipmentDto: {
+      lines: components['schemas']['CreateSalesShipmentLineDto'][];
+    };
+    CreateSalesShipmentLineDto: {
+      batchNumber?: string;
+      /** Format: uuid */
+      orderLineId: string;
+    };
     CreateSecurityAccountDto: {
       displayName: string;
       /** Format: email */
@@ -1590,6 +1979,26 @@ export interface components {
       isAdministrative: boolean;
       name: string;
       permissions: components['schemas']['SecurityPermissionDto'][];
+    };
+    CreateServiceSubscriptionDto: {
+      /** @example 120.0000 */
+      billingAmount: string;
+      billingFrequencyMonths: number;
+      /** @example BGN */
+      currencyCode: string;
+      /** Format: uuid */
+      customerLocationId: string;
+      /** Format: uuid */
+      customerPartnerId: string;
+      equipmentIds: string[];
+      includedServices: string[];
+      /** Format: date */
+      nextInvoiceDate: string;
+      /** Format: date */
+      validFrom: string;
+      /** Format: date */
+      validTo?: string;
+      visitFrequencyMonths: number;
     };
     CreateStockReservationDto: {
       /** Format: uuid */
@@ -1687,6 +2096,19 @@ export interface components {
     CustomerLocationProfileDto: {
       equipment: components['schemas']['CustomerEquipmentDto'][];
       location: components['schemas']['CustomerLocationDto'];
+    };
+    CustomerPriceGroupDto: {
+      active: boolean;
+      code: string;
+      /** Format: date-time */
+      createdAt: string;
+      customerPartnerIds: string[];
+      /** Format: uuid */
+      id: string;
+      name: string;
+      /** Format: date-time */
+      updatedAt: string;
+      version: number;
     };
     GoodsReceiptDto: {
       /** Format: uuid */
@@ -1994,6 +2416,50 @@ export interface components {
       /** @enum {string} */
       status: 'in-progress';
     };
+    PriceListDto: {
+      active: boolean;
+      campaign?: components['schemas']['PricingOptionDto'];
+      code: string;
+      /** Format: date-time */
+      createdAt: string;
+      currencyCode: string;
+      customer?: components['schemas']['PricingOptionDto'];
+      customerGroup?: components['schemas']['PricingOptionDto'];
+      /** Format: uuid */
+      id: string;
+      lines: components['schemas']['PriceListLineDto'][];
+      name: string;
+      priority: number;
+      /** @enum {string} */
+      scope: 'all_customers' | 'customer_group' | 'customer';
+      /** Format: date-time */
+      updatedAt: string;
+      /** Format: date */
+      validFrom: string;
+      /** Format: date */
+      validTo: string;
+      version: number;
+    };
+    PriceListLineDto: {
+      /** Format: uuid */
+      id: string;
+      productCode: string;
+      /** Format: uuid */
+      productId: string;
+      productName: string;
+      unitPrice: string;
+    };
+    PricingOptionDto: {
+      /** Format: uuid */
+      id: string;
+      name: string;
+    };
+    PricingProductOptionDto: {
+      /** Format: uuid */
+      id: string;
+      name: string;
+      productCode: string;
+    };
     ProcurementProductOptionDto: {
       /** Format: uuid */
       id: string;
@@ -2069,6 +2535,22 @@ export interface components {
       unitId: string;
       /** Format: date-time */
       updatedAt: string;
+      version: number;
+    };
+    PromotionalCampaignDto: {
+      active: boolean;
+      code: string;
+      /** Format: date-time */
+      createdAt: string;
+      /** Format: uuid */
+      id: string;
+      name: string;
+      /** Format: date-time */
+      updatedAt: string;
+      /** Format: date */
+      validFrom: string;
+      /** Format: date */
+      validTo: string;
       version: number;
     };
     PurchaseOrderDto: {
@@ -2188,6 +2670,206 @@ export interface components {
       referenceId: string;
       serialNumbers?: string[];
     };
+    SalesBatchOptionDto: {
+      batchNumber: string;
+      /** Format: uuid */
+      productId: string;
+      quantity: string;
+      /** Format: uuid */
+      warehouseId: string;
+    };
+    SalesCustomerOptionDto: {
+      /** Format: uuid */
+      id: string;
+      name: string;
+    };
+    SalesHandoverCertificateDto: {
+      acceptanceNotes?: string;
+      /** Format: date-time */
+      acceptedAt?: string;
+      acceptedByName?: string;
+      /** Format: uuid */
+      id: string;
+      lines: components['schemas']['SalesHandoverCertificateLineDto'][];
+      number: string;
+      /** Format: date-time */
+      preparedAt: string;
+      /** @enum {string} */
+      status: 'prepared' | 'accepted';
+      version: number;
+    };
+    SalesHandoverCertificateLineDto: {
+      /** Format: uuid */
+      id: string;
+      /** Format: uuid */
+      productId: string;
+      productName: string;
+      quantity: string;
+      serialNumbers: string[];
+    };
+    SalesInvoiceDto: {
+      currencyCode: string;
+      customerName: string;
+      /** Format: uuid */
+      customerPartnerId: string;
+      /** Format: uuid */
+      id: string;
+      lines: components['schemas']['SalesInvoiceLineDto'][];
+      number: string;
+      /** Format: date-time */
+      recordedAt: string;
+      /** @enum {string} */
+      status: 'draft';
+      subtotal: string;
+      total: string;
+      vatTotal: string;
+    };
+    SalesInvoiceLineDto: {
+      /** Format: uuid */
+      id: string;
+      lineTotal: string;
+      /** Format: uuid */
+      productId: string;
+      productName: string;
+      quantity: string;
+      unitPrice: string;
+      /** @enum {string} */
+      vatTreatment: 'standard_20' | 'reduced_9' | 'zero' | 'exempt' | 'ica';
+    };
+    SalesOrderDto: {
+      /** Format: date-time */
+      confirmedAt: string;
+      /** Format: uuid */
+      id: string;
+      lines: components['schemas']['SalesOrderLineDto'][];
+      number: string;
+      /** @enum {string} */
+      status: 'confirmed' | 'shipped' | 'invoiced';
+    };
+    SalesOrderLineDto: {
+      /** Format: uuid */
+      id: string;
+      /** Format: uuid */
+      productId: string;
+      productName: string;
+      quantity: string;
+      /** Format: uuid */
+      reservationId: string;
+      reservedSerialNumbers: string[];
+      /** @enum {string} */
+      trackingMode: 'batch' | 'none' | 'serial';
+    };
+    SalesPricingReferenceDataDto: {
+      campaigns: components['schemas']['PromotionalCampaignDto'][];
+      customerGroups: components['schemas']['CustomerPriceGroupDto'][];
+      customers: components['schemas']['PricingOptionDto'][];
+      products: components['schemas']['PricingProductOptionDto'][];
+    };
+    SalesProductOptionDto: {
+      /** Format: uuid */
+      id: string;
+      name: string;
+      productCode: string;
+      /** @enum {string} */
+      trackingMode: 'batch' | 'none' | 'serial';
+    };
+    SalesQuotationLineDto: {
+      discountPercent: string;
+      /** Format: uuid */
+      id: string;
+      lineTotal: string;
+      /** Format: uuid */
+      productId: string;
+      productName: string;
+      quantity: string;
+      /** @enum {string} */
+      trackingMode: 'batch' | 'none' | 'serial';
+      unitPrice: string;
+      /** @enum {string} */
+      vatTreatment: 'standard_20' | 'reduced_9' | 'zero' | 'exempt' | 'ica';
+    };
+    SalesReferenceDataDto: {
+      batches: components['schemas']['SalesBatchOptionDto'][];
+      customers: components['schemas']['SalesCustomerOptionDto'][];
+      products: components['schemas']['SalesProductOptionDto'][];
+      serials: components['schemas']['SalesSerialOptionDto'][];
+      warehouses: components['schemas']['SalesCustomerOptionDto'][];
+    };
+    SalesResolvedPriceDto: {
+      /** Format: date */
+      asOf: string;
+      currencyCode: string;
+      matched: boolean;
+      priceListCode?: string;
+      /** Format: uuid */
+      priceListId?: string;
+      priceListName?: string;
+      priority?: number;
+      /** Format: uuid */
+      productId: string;
+      unitPrice?: string;
+    };
+    SalesSerialOptionDto: {
+      /** Format: uuid */
+      productId: string;
+      serialNumber: string;
+      /** Format: uuid */
+      warehouseId: string;
+    };
+    SalesShipmentDto: {
+      /** Format: uuid */
+      id: string;
+      lines: components['schemas']['SalesShipmentLineDto'][];
+      number: string;
+      /** Format: date-time */
+      shippedAt: string;
+    };
+    SalesShipmentLineDto: {
+      batchNumber?: string;
+      /** Format: uuid */
+      id: string;
+      /** Format: uuid */
+      orderLineId: string;
+      /** Format: uuid */
+      productId: string;
+      productName: string;
+      quantity: string;
+      serialNumbers: string[];
+      /** Format: uuid */
+      stockMovementId: string;
+    };
+    SalesSubscriptionReferenceDataDto: {
+      customers: components['schemas']['SubscriptionCustomerOptionDto'][];
+      equipment: components['schemas']['SubscriptionEquipmentOptionDto'][];
+      locations: components['schemas']['SubscriptionLocationOptionDto'][];
+    };
+    SalesWorkflowDto: {
+      /** Format: date-time */
+      createdAt: string;
+      currencyCode: string;
+      customerName: string;
+      /** Format: uuid */
+      customerPartnerId: string;
+      handover?: components['schemas']['SalesHandoverCertificateDto'];
+      /** Format: uuid */
+      id: string;
+      invoice?: components['schemas']['SalesInvoiceDto'];
+      lines: components['schemas']['SalesQuotationLineDto'][];
+      number: string;
+      order?: components['schemas']['SalesOrderDto'];
+      overallDiscountPercent: string;
+      shipment?: components['schemas']['SalesShipmentDto'];
+      /** @enum {string} */
+      status: 'draft' | 'confirmed' | 'shipped' | 'invoiced';
+      subtotal: string;
+      total: string;
+      /** Format: date */
+      validUntil: string;
+      vatTotal: string;
+      /** Format: uuid */
+      warehouseId: string;
+      warehouseName: string;
+    };
     SecurityAccountDto: {
       /** Format: uuid */
       accountId: string;
@@ -2301,6 +2983,36 @@ export interface components {
       displayName: string;
       /** Format: uuid */
       id: string;
+    };
+    ServiceSubscriptionContractDto: {
+      active: boolean;
+      billingAmount: string;
+      billingFrequencyMonths: number;
+      /** Format: date-time */
+      createdAt: string;
+      currencyCode: string;
+      /** Format: uuid */
+      customerLocationId: string;
+      customerLocationName: string;
+      customerName: string;
+      /** Format: uuid */
+      customerPartnerId: string;
+      equipment: components['schemas']['SubscriptionEquipmentDto'][];
+      /** Format: uuid */
+      id: string;
+      includedServices: string[];
+      invoiceDrafts: components['schemas']['SubscriptionInvoiceDraftDto'][];
+      /** Format: date */
+      nextInvoiceDate: string;
+      number: string;
+      /** Format: date-time */
+      updatedAt: string;
+      /** Format: date */
+      validFrom: string;
+      /** Format: date */
+      validTo?: string;
+      version: number;
+      visitFrequencyMonths: number;
     };
     StockBalanceDto: {
       availableQuantity: string;
@@ -2424,6 +3136,49 @@ export interface components {
       /** Format: uuid */
       toWarehouseId: string;
       unitCostBgn: string;
+    };
+    SubscriptionCustomerOptionDto: {
+      /** Format: uuid */
+      id: string;
+      name: string;
+    };
+    SubscriptionEquipmentDto: {
+      deviceName: string;
+      /** Format: uuid */
+      id: string;
+      serialNumber: string;
+    };
+    SubscriptionEquipmentOptionDto: {
+      /** Format: uuid */
+      customerLocationId: string;
+      deviceName: string;
+      /** Format: uuid */
+      id: string;
+      serialNumber: string;
+    };
+    SubscriptionInvoiceDraftDto: {
+      amount: string;
+      /** Format: date */
+      billingDate: string;
+      currencyCode: string;
+      /** Format: date-time */
+      generatedAt: string;
+      /** Format: uuid */
+      id: string;
+      number: string;
+      /** Format: date */
+      servicePeriodEnd: string;
+      /** Format: date */
+      servicePeriodStart: string;
+      /** @enum {string} */
+      status: 'draft';
+    };
+    SubscriptionLocationOptionDto: {
+      /** Format: uuid */
+      customerPartnerId: string;
+      /** Format: uuid */
+      id: string;
+      name: string;
     };
     SupplierClaimDto: {
       /** Format: date-time */
@@ -2569,6 +3324,12 @@ export interface components {
       /** Format: uuid */
       responsibleContactId?: string;
     };
+    UpdateCustomerPriceGroupDto: {
+      active: boolean;
+      customerPartnerIds: string[];
+      name: string;
+      version: number;
+    };
     UpdatePartnerDto: {
       companyRepresentative?: string;
       displayName: string;
@@ -2578,6 +3339,59 @@ export interface components {
       roles: ('customer' | 'supplier' | 'partner')[];
       uic?: string;
       vatNumber?: string;
+    };
+    UpdatePriceListDto: {
+      active: boolean;
+      /** Format: uuid */
+      campaignId?: string;
+      code: string;
+      /** @example BGN */
+      currencyCode: string;
+      /** Format: uuid */
+      customerGroupId?: string;
+      /** Format: uuid */
+      customerPartnerId?: string;
+      lines: components['schemas']['CreatePriceListLineDto'][];
+      name: string;
+      priority: number;
+      /** @enum {string} */
+      scope: 'all_customers' | 'customer_group' | 'customer';
+      /** Format: date */
+      validFrom: string;
+      /** Format: date */
+      validTo: string;
+      version: number;
+    };
+    UpdatePromotionalCampaignDto: {
+      active: boolean;
+      name: string;
+      /** Format: date */
+      validFrom: string;
+      /** Format: date */
+      validTo: string;
+      version: number;
+    };
+    UpdateServiceSubscriptionDto: {
+      active: boolean;
+      /** @example 120.0000 */
+      billingAmount: string;
+      billingFrequencyMonths: number;
+      /** @example BGN */
+      currencyCode: string;
+      /** Format: uuid */
+      customerLocationId: string;
+      /** Format: uuid */
+      customerPartnerId: string;
+      equipmentIds: string[];
+      expectedVersion: number;
+      includedServices: string[];
+      /** Format: date */
+      nextInvoiceDate: string;
+      /** Format: date */
+      validFrom: string;
+      /** Format: date */
+      validTo?: string;
+      visitFrequencyMonths: number;
     };
     UpdateSupplierClaimStatusDto: {
       expectedVersion: number;
@@ -5455,6 +6269,897 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['SupplierEvaluationDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  SalesController_customerGroups: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CustomerPriceGroupDto'][];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  SalesController_createCustomerGroup: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['CreateCustomerPriceGroupDto'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CustomerPriceGroupDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  SalesController_updateCustomerGroup: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path: {
+        id: unknown;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['UpdateCustomerPriceGroupDto'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CustomerPriceGroupDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  SalesController_acceptHandover: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path: {
+        id: unknown;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['AcceptSalesHandoverDto'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SalesWorkflowDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  SalesController_createDraftInvoice: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path: {
+        id: unknown;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SalesWorkflowDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  SalesController_createShipment: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path: {
+        id: unknown;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['CreateSalesShipmentDto'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SalesWorkflowDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  SalesController_priceLists: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PriceListDto'][];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  SalesController_createPriceList: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['CreatePriceListDto'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PriceListDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  SalesController_updatePriceList: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path: {
+        id: unknown;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['UpdatePriceListDto'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PriceListDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  SalesController_resolvePrice: {
+    parameters: {
+      query: {
+        asOf: string;
+        currencyCode: string;
+        customerPartnerId: string;
+        productId: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SalesResolvedPriceDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  SalesController_pricingReferenceData: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SalesPricingReferenceDataDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  SalesController_promotionalCampaigns: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PromotionalCampaignDto'][];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  SalesController_createPromotionalCampaign: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['CreatePromotionalCampaignDto'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PromotionalCampaignDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  SalesController_updatePromotionalCampaign: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path: {
+        id: unknown;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['UpdatePromotionalCampaignDto'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PromotionalCampaignDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  SalesController_createQuotation: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['CreateSalesQuotationDto'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SalesWorkflowDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  SalesController_confirmQuotation: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path: {
+        id: unknown;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ConfirmSalesQuotationDto'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SalesWorkflowDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  SalesController_referenceData: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SalesReferenceDataDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  SalesController_subscriptionContracts: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ServiceSubscriptionContractDto'][];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  SalesController_createSubscription: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['CreateServiceSubscriptionDto'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ServiceSubscriptionContractDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  SalesController_subscriptionContract: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: unknown;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ServiceSubscriptionContractDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  SalesController_updateSubscription: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path: {
+        id: unknown;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['UpdateServiceSubscriptionDto'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ServiceSubscriptionContractDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  SalesController_subscriptionReferenceData: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SalesSubscriptionReferenceDataDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  SalesController_workflows: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SalesWorkflowDto'][];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  SalesController_workflow: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: unknown;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SalesWorkflowDto'];
         };
       };
       /** @description The endpoint request limit was exceeded. */

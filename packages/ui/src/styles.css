@@ -31,12 +31,28 @@
   /* Compatibility aliases used by the connected domain screens. */
   --border-strong: var(--vista-line-strong);
   --border-subtle: var(--vista-line);
+  --accent: var(--vista-accent-strong);
   --color-accent: var(--vista-accent-strong);
+  --danger: var(--vista-danger);
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  --info: var(--vista-info);
+  --radius-lg: var(--vista-radius-lg);
+  --radius-md: var(--vista-radius-md);
+  --radius-sm: var(--vista-radius-sm);
+  --shadow-xs: var(--vista-shadow-sm);
+  --success: var(--vista-success);
+  --success-strong: var(--vista-success);
   --surface: var(--vista-surface);
+  --surface-raised: var(--vista-surface);
+  --surface-soft: var(--vista-surface-muted);
+  --surface-strong: #eef1ec;
   --surface-subtle: var(--vista-surface-muted);
+  --text-muted: var(--vista-muted);
   --text-primary: var(--vista-ink);
   --text-secondary: var(--vista-muted);
+  --text-strong: var(--vista-ink);
+  --warning: var(--vista-warning);
+  --warning-strong: var(--vista-warning);
   font-family:
     Inter,
     ui-sans-serif,

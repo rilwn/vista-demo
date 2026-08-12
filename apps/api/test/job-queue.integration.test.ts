@@ -16,6 +16,7 @@ describe.skipIf(!runInfrastructureTests)('Redis job queue guarantees', () => {
   let jobId: string | undefined;
   let module: TestingModule;
   let queue: JobQueueService;
+  const scheduleId = 'sales.subscription-invoice.integration';
 
   beforeAll(async () => {
     if (!process.env['REDIS_URL']) {
@@ -51,6 +52,7 @@ describe.skipIf(!runInfrastructureTests)('Redis job queue guarantees', () => {
   });
 
   afterAll(async () => {
+    await queue.removeJobSchedule(scheduleId);
     if (jobId) {
       await queue.remove(jobId);
     }
@@ -73,5 +75,28 @@ describe.skipIf(!runInfrastructureTests)('Redis job queue guarantees', () => {
     expect(replay).toEqual({ deduplicated: true, jobId: first.jobId });
     expect(await queue.getJobState(first.jobId)).toBe('waiting');
     await expect(queue.getTelemetry()).resolves.toMatchObject({ waiting: 1 });
+  });
+
+  it('upserts a recurring schedule without duplicating it across application restarts', async () => {
+    const input = {
+      id: scheduleId,
+      name: 'sales.subscription-invoice.generate',
+      pattern: '0 15 1 * * *',
+      payload: { responsibility: 'recurring-service-billing' },
+      timezone: 'Europe/Sofia',
+    };
+
+    const first = await queue.upsertSchedule(input);
+    const replay = await queue.upsertSchedule(input);
+
+    expect(replay).toEqual(first);
+    await expect(queue.getJobSchedule(scheduleId)).resolves.toEqual(first);
+    expect(first).toMatchObject({
+      id: scheduleId,
+      name: 'sales.subscription-invoice.generate',
+      pattern: input.pattern,
+      timezone: input.timezone,
+    });
+    expect(first.nextRunAt).toMatch(/^\d{4}-\d{2}-\d{2}T/u);
   });
 });

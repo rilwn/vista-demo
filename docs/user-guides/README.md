@@ -15,6 +15,12 @@ empty states do not present sample records as real behavior.
 4. Use **My access** to inspect the effective module/action permissions for the
    current session, change your password, or sign out.
 
+Every page opened from a module hub has a previous-page control above its page
+heading, such as **Back to Sales** or **Back to Warehouse**. It always returns to
+the correct module hub, including when the nested page was opened directly.
+Record previews and forms use their own **Back** control to return to the
+unchanged register.
+
 To change a password, open **My access → Change password**. The panel shows the
 currently configured requirements. Enter the current password and the new
 password twice. A successful change keeps this browser session active and signs
@@ -166,9 +172,12 @@ product-category hierarchy. It starts empty by design: the screen does not claim
 that an example category is an approved Vista catalog value.
 
 Employees with `erp.warehouse:create` can select **Add category**, give it a name,
-and optionally choose an existing parent to form the hierarchy. A retry of an
-unchanged save is safe; duplicate normalized names under the same parent are
-blocked.
+optionally choose an existing parent, and select its stock tracking policy:
+quantity only, unique serial numbers, or batches. **Require an expiry date** is
+available only for batch tracking. Choose the policy that matches the products in
+that category; it drives receiving, reservation, shipment, and stocktake evidence.
+A retry of an unchanged save is safe; duplicate normalized names under the same
+parent are blocked.
 
 ## Product catalog
 
@@ -297,3 +306,71 @@ opened.
 These invoice records are purchasing evidence and comparison controls. They do
 not post VAT, accounting, payment, or correction documents; those actions will
 be performed through the finance workflow.
+
+### Quotation to invoice draft
+
+Use only the visible application navigation:
+
+1. From the left navigation, choose **ERP → Sales**, then select **Quotations**.
+2. Select **New quotation**. Choose the customer, dispatch warehouse, validity
+   date, and currency. Add products, quantities, discounts, and VAT. Select
+   **Use customer price** on a product line when you want to apply the active
+   customer/group/campaign price; the returned price remains editable until the
+   order is confirmed. Save the quotation.
+3. Select **Preview** on the saved quotation. Review the totals and stage timeline,
+   select the required serial numbers for serialized products, then select
+   **Confirm order**. Stock is reserved at this point.
+4. In the same preview, choose a batch for every batch-tracked line and select
+   **Create shipment**. The preview advances to Shipment and records the warehouse
+   issue. It also prepares an equipment handover certificate from the actual
+   shipment and serial numbers.
+5. In **Equipment handover certificate**, enter the accepting customer
+   representative and an optional note, then select **Record customer acceptance**.
+6. Select **Prepare invoice draft**. Review the completed timeline and use **Back**
+   to return to the register without losing the current list context.
+
+The draft is ready for final review and issuance in Finance. It is not yet a
+fiscal or accounting document and must not be sent to a customer as an issued
+invoice.
+
+### Prices and promotions
+
+Use only the visible application navigation:
+
+1. From the left navigation, choose **ERP → Sales**, then select
+   **Prices & promotions**.
+2. Open **Customer groups** and select **Add customer group**. Enter a stable code
+   and name, select the customers, and save.
+3. Open **Campaigns** and select **Add campaign**. Enter its code, name, and
+   effective dates, then save.
+4. Open **Price lists** and select **Add price list**. Choose whether it applies to
+   all customers, a group, or one customer; select the currency and period;
+   optionally link the campaign; set the priority; and enter each product price.
+5. Use **Check price** to choose a customer, product, date, and currency. The
+   result shows the exact list that would apply. A higher priority wins; when
+   priorities tie, an individual price wins over a group price, which wins over
+   an all-customer price.
+6. Select **Edit** to correct future behavior or make a list, group, or campaign
+   inactive. Existing quotations and documents keep their saved values.
+
+### Service subscriptions
+
+Use only the visible application navigation:
+
+1. From the left navigation, choose **ERP → Sales**, then select
+   **Service subscriptions**.
+2. Select **New contract**. Choose the customer and service location. If a location
+   has no available device, go to **Customers & CRM → Partner registry**, preview
+   the customer, and add the location/equipment before returning to Sales.
+3. Select the covered devices. Add one included service per line and choose the
+   visit frequency.
+4. Set the contract start/end dates, next invoice date, recurring amount,
+   currency, and billing frequency, then select **Create contract**.
+5. Select **Preview** to review coverage, equipment serials, service frequency,
+   billing schedule, and generated draft history. Use **Edit contract** for a
+   version-checked correction or to make the contract inactive.
+6. Use **Back** in the right-side panel to return to the unchanged register, or
+   **Back to Sales** above the page to return to the Sales areas.
+
+Recurring billing drafts appear after the scheduled billing task processes a due
+date. They remain review drafts until Finance performs approved legal issuance.

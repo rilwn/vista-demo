@@ -56,6 +56,7 @@ const environmentSchema = z
       .min(1)
       .regex(/^[a-z0-9-]+$/)
       .default('vista'),
+    SALES_SUBSCRIPTION_INVOICE_CRON: z.string().min(1).default('0 15 1 * * *'),
     LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
     NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
     NOTIFICATION_DISPATCH_INTERVAL_MS: z.coerce.number().int().positive().default(5_000),

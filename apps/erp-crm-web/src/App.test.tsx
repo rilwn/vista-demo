@@ -1,5 +1,5 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import type { ProcurementSupplierRecord } from '@vista/contracts';
+import type { ProcurementSupplierRecord, SalesWorkflow } from '@vista/contracts';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { App } from './App';
@@ -310,6 +310,7 @@ describe('ERP and CRM authenticated workspace', () => {
 
     renderApplication(['/access']);
     await screen.findByRole('heading', { name: messages.access.title });
+    expect(screen.getByRole('link', { name: 'Back to Overview' })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: messages.access.changePassword }));
 
     expect(await screen.findByText(messages.access.passwordRequirementLength(12))).toBeTruthy();
@@ -439,6 +440,7 @@ describe('ERP and CRM authenticated workspace', () => {
     const partnerButton = await screen.findByRole('button', {
       name: /Vista Retail Partner Ltd\./u,
     });
+    expect(screen.getByRole('link', { name: 'Back to Customers & CRM' })).toBeTruthy();
     expect(screen.getByText(messages.partners.results(1))).toBeTruthy();
     expect(screen.queryByRole('button', { name: messages.partners.create })).toBeNull();
     fireEvent.click(partnerButton);
@@ -482,6 +484,9 @@ describe('ERP and CRM authenticated workspace', () => {
     fireEvent.change(screen.getByLabelText(messages.categories.name), {
       target: { value: 'Electronic scales' },
     });
+    fireEvent.click(
+      screen.getByRole('radio', { name: new RegExp(messages.categories.serialTracking, 'u') }),
+    );
     fireEvent.submit(
       within(dialog).getByRole('button', { name: messages.categories.save }).closest('form')!,
     );
@@ -500,7 +505,11 @@ describe('ERP and CRM authenticated workspace', () => {
     );
     const requestOptions = request?.[1] as RequestInit;
     expect(new Headers(requestOptions.headers).get('Idempotency-Key')).toMatch(/^[0-9a-f-]{36}$/u);
-    expect(JSON.parse(requestOptions.body as string)).toEqual({ name: 'Electronic scales' });
+    expect(JSON.parse(requestOptions.body as string)).toEqual({
+      name: 'Electronic scales',
+      requiresExpiry: false,
+      trackingMode: 'serial',
+    });
   });
 
   it('loads the product catalog and submits a retry-safe product command', async () => {
@@ -550,6 +559,7 @@ describe('ERP and CRM authenticated workspace', () => {
     renderApplication(['/catalog']);
 
     expect(await screen.findByRole('heading', { name: 'Product catalog' })).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Back to Warehouse' })).toBeTruthy();
     expect(await screen.findByText('No products configured')).toBeTruthy();
     fireEvent.click(screen.getAllByRole('button', { name: 'Add product' })[0]!);
     const dialog = screen.getByRole('dialog', { name: 'Add product' });
@@ -1556,11 +1566,11 @@ describe('ERP and CRM authenticated workspace', () => {
     expect(await screen.findByText('Employee access updated.')).toBeTruthy();
 
     fireEvent.click(screen.getByRole('tab', { name: /^Roles/u }));
-    expect(screen.getByRole('heading', { name: role.name })).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: role.name })).toBeTruthy();
     fireEvent.click(screen.getByRole('tab', { name: /^Sessions/u }));
-    expect(screen.getByText(/Current session/u)).toBeTruthy();
+    expect(await screen.findByText(/Current session/u)).toBeTruthy();
     fireEvent.click(screen.getByRole('tab', { name: 'Activity log' }));
-    expect(screen.getAllByText('Activity log checked').length).toBeGreaterThan(0);
+    expect((await screen.findAllByText('Activity log checked')).length).toBeGreaterThan(0);
     expect(screen.getByText('Employee account created')).toBeTruthy();
 
     const roleCommand = fetchMock.mock.calls.find(
@@ -1803,6 +1813,13 @@ describe('ERP and CRM authenticated workspace', () => {
 
     renderApplication(['/modules/erp.procurement/purchase-orders']);
     expect(await screen.findByRole('heading', { name: messages.procurement.orders })).toBeTruthy();
+    const purchaseOrderWorkspace = screen.getByRole('region', {
+      name: 'Purchase orders workspace',
+    });
+    expect(purchaseOrderWorkspace.classList.contains('procurement-tab-surface')).toBe(true);
+    expect(
+      within(purchaseOrderWorkspace).getByRole('heading', { name: 'Purchase order register' }),
+    ).toBeTruthy();
     expect(screen.getByText(messages.procurement.emptyOrders)).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: messages.procurement.newOrder }));
@@ -1829,7 +1846,19 @@ describe('ERP and CRM authenticated workspace', () => {
       within(receiptDialog).getByRole('button', { name: messages.procurement.receive }),
     );
     expect(await screen.findByText(messages.procurement.receiveSuccess)).toBeTruthy();
-    expect(await screen.findByText(messages.procurement.received)).toBeTruthy();
+    await waitFor(() => {
+      expect(screen.getAllByText(messages.procurement.received).length).toBeGreaterThan(0);
+    });
+
+    fireEvent.click(screen.getByRole('link', { name: 'Goods receipts' }));
+    const goodsReceiptWorkspace = await screen.findByRole('region', {
+      name: 'Goods receipts workspace',
+    });
+    expect(goodsReceiptWorkspace.className).toBe(purchaseOrderWorkspace.className);
+    expect(
+      within(goodsReceiptWorkspace).getByRole('heading', { name: 'Goods receipt register' }),
+    ).toBeTruthy();
+    expect(within(goodsReceiptWorkspace).getByText(/DEL-2026-42/u)).toBeTruthy();
 
     const createCall = fetchMock.mock.calls.find(
       ([url, options]) =>
@@ -1976,6 +2005,12 @@ describe('ERP and CRM authenticated workspace', () => {
     fireEvent.click(screen.getByRole('link', { name: /Suppliers Review supplier contacts/u }));
 
     expect(await screen.findByRole('heading', { name: 'Suppliers' })).toBeTruthy();
+    const supplierWorkspace = screen.getByRole('region', { name: 'Suppliers workspace' });
+    expect(supplierWorkspace.classList.contains('procurement-tab-surface')).toBe(true);
+    expect(
+      within(supplierWorkspace).getByRole('heading', { name: 'Supplier register' }),
+    ).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Back to Procurement' })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Preview supplier' }));
     const supplierDialog = await screen.findByRole('dialog', {
       name: supplier.profile.supplierName,
@@ -1983,6 +2018,11 @@ describe('ERP and CRM authenticated workspace', () => {
     expect(
       within(supplierDialog).getByRole('button', { name: 'Back to procurement list' }),
     ).toBeTruthy();
+    expect(within(supplierDialog).queryByLabelText('Overall score')).toBeNull();
+    fireEvent.click(within(supplierDialog).getByRole('button', { name: 'Add evaluation' }));
+    expect(within(supplierDialog).getByLabelText('Overall score')).toBeTruthy();
+    fireEvent.click(within(supplierDialog).getByRole('button', { name: 'Cancel' }));
+    expect(within(supplierDialog).queryByLabelText('Overall score')).toBeNull();
     fireEvent.change(within(supplierDialog).getByLabelText('Payment terms in days'), {
       target: { value: '30' },
     });
@@ -2017,6 +2057,489 @@ describe('ERP and CRM authenticated workspace', () => {
           url.endsWith('/procurement/supplier-invoices') && options?.method === 'POST',
       ),
     ).toBe(true);
+  });
+
+  it('moves through the connected sales workflow using visible navigation and preview actions', async () => {
+    const salesContext = {
+      ...authenticationContext,
+      permissions: [
+        ...authenticationContext.permissions,
+        { action: 'view', module: 'erp.sales' },
+        { action: 'create', module: 'erp.sales' },
+        { action: 'edit', module: 'erp.sales' },
+      ],
+    };
+    storeAuthenticatedSession(salesContext);
+    const customerId = 'a4eaf510-58f1-49c2-90cc-ce61c102352c';
+    const productId = '773e9308-d4d8-43d7-9cf0-9dc20f2de1dc';
+    const warehouseId = '5c8c6996-585c-4375-a239-1c5be14b88f0';
+    let workflow: SalesWorkflow | undefined;
+    const references = {
+      batches: [],
+      customers: [{ id: customerId, name: 'Vista Retail Customer Ltd.' }],
+      products: [
+        {
+          id: productId,
+          name: 'Receipt paper roll',
+          productCode: 'ROLL-80',
+          trackingMode: 'none',
+        },
+      ],
+      serials: [],
+      warehouses: [{ id: warehouseId, name: 'Central warehouse' }],
+    };
+    const fetchMock = vi.fn((input: string, options?: RequestInit) => {
+      if (input.endsWith('/auth/me')) return Promise.resolve(jsonResponse(salesContext));
+      if (input.endsWith('/sales/reference-data')) return Promise.resolve(jsonResponse(references));
+      if (input.endsWith('/sales/workflows'))
+        return Promise.resolve(jsonResponse(workflow ? [workflow] : []));
+      if (input.includes('/sales/prices/resolve?'))
+        return Promise.resolve(
+          jsonResponse({
+            asOf: '2026-08-12',
+            currencyCode: 'BGN',
+            matched: true,
+            priceListCode: 'TRADE',
+            priceListId: '5860227a-84d3-4a64-bfd0-99cb9faf2e53',
+            priceListName: 'Trade customers',
+            priority: 10,
+            productId,
+            unitPrice: '38.0000',
+          }),
+        );
+      if (input.endsWith('/sales/quotations') && options?.method === 'POST') {
+        workflow = {
+          createdAt: '2026-08-12T08:00:00.000Z',
+          currencyCode: 'BGN',
+          customerName: references.customers[0]!.name,
+          customerPartnerId: customerId,
+          id: '8ea0d4c4-0493-41b8-a224-f8466a05a578',
+          lines: [
+            {
+              discountPercent: '0.0000',
+              id: 'c4a3ca8d-0a5b-42b6-8518-76f3b627334f',
+              lineTotal: '80.0000',
+              productId,
+              productName: references.products[0]!.name,
+              quantity: '2.0000',
+              trackingMode: 'none',
+              unitPrice: '40.0000',
+              vatTreatment: 'standard_20',
+            },
+          ],
+          number: 'Q-2026-000001',
+          overallDiscountPercent: '0.0000',
+          status: 'draft',
+          subtotal: '80.0000',
+          total: '96.0000',
+          validUntil: '2026-08-26',
+          vatTotal: '16.0000',
+          warehouseId,
+          warehouseName: references.warehouses[0]!.name,
+        };
+        return Promise.resolve(jsonResponse(workflow, 201));
+      }
+      if (input.includes('/sales/quotations/') && input.endsWith('/confirm')) {
+        workflow = {
+          ...workflow!,
+          order: {
+            confirmedAt: '2026-08-12T08:05:00.000Z',
+            id: 'fab8b01e-86da-4572-ab8b-c706325291c8',
+            lines: [
+              {
+                id: 'ce678f02-1ed0-4cc0-83de-952c7b00af71',
+                productId,
+                productName: references.products[0]!.name,
+                quantity: '2.0000',
+                reservationId: 'f25f1bc6-d076-4cd8-804d-b4470ec98858',
+                reservedSerialNumbers: [],
+                trackingMode: 'none',
+              },
+            ],
+            number: 'SO-2026-000001',
+            status: 'confirmed',
+          },
+          status: 'confirmed',
+        };
+        return Promise.resolve(jsonResponse(workflow, 201));
+      }
+      if (input.includes('/sales/orders/') && input.endsWith('/shipments')) {
+        workflow = {
+          ...workflow!,
+          handover: {
+            id: 'a3c58bdd-f101-4545-9b2d-529dbcf1ade5',
+            lines: [
+              {
+                id: 'f2f50cd1-8efe-467a-91aa-dca6473dc787',
+                productId,
+                productName: references.products[0]!.name,
+                quantity: '2.0000',
+                serialNumbers: [],
+              },
+            ],
+            number: 'HO-2026-000001',
+            preparedAt: '2026-08-12T08:10:00.000Z',
+            status: 'prepared',
+            version: 1,
+          },
+          order: { ...workflow!.order!, status: 'shipped' },
+          shipment: {
+            id: 'b9364434-0b22-42cd-b85c-e444e90e5da4',
+            lines: [],
+            number: 'SH-2026-000001',
+            shippedAt: '2026-08-12T08:10:00.000Z',
+          },
+          status: 'shipped',
+        };
+        return Promise.resolve(jsonResponse(workflow, 201));
+      }
+      if (input.includes('/sales/handover-certificates/') && input.endsWith('/accept')) {
+        workflow = {
+          ...workflow!,
+          handover: {
+            ...workflow!.handover!,
+            acceptedAt: '2026-08-12T08:12:00.000Z',
+            acceptedByName: 'Elena Customer',
+            status: 'accepted',
+            version: 2,
+          },
+        };
+        return Promise.resolve(jsonResponse(workflow));
+      }
+      if (input.includes('/sales/orders/') && input.endsWith('/invoice-draft')) {
+        workflow = {
+          ...workflow!,
+          invoice: {
+            currencyCode: 'BGN',
+            customerName: references.customers[0]!.name,
+            customerPartnerId: customerId,
+            id: '3b507b65-017f-4a10-a697-b2335af52acd',
+            lines: [],
+            number: 'INV-DRAFT-2026-000001',
+            recordedAt: '2026-08-12T08:15:00.000Z',
+            status: 'draft',
+            subtotal: '80.0000',
+            total: '96.0000',
+            vatTotal: '16.0000',
+          },
+          order: { ...workflow!.order!, status: 'invoiced' },
+          status: 'invoiced',
+        };
+        return Promise.resolve(jsonResponse(workflow, 201));
+      }
+      return Promise.resolve(jsonResponse({}));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderApplication(['/modules/erp.sales']);
+    expect(await screen.findByRole('heading', { name: 'Sales' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('link', { name: /Quotations Prepare time-bounded/u }));
+    expect(await screen.findByRole('heading', { name: 'Sales workflow' })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: /New quotation/u }));
+    const createDialog = await screen.findByRole('dialog', { name: 'New quotation' });
+    fireEvent.click(within(createDialog).getByRole('button', { name: 'Use customer price' }));
+    expect(await within(createDialog).findByText(/Trade customers applied/u)).toBeTruthy();
+    expect(within(createDialog).getByLabelText<HTMLInputElement>('Unit price (BGN)').value).toBe(
+      '38.0000',
+    );
+    fireEvent.change(within(createDialog).getByLabelText('Unit price (BGN)'), {
+      target: { value: '40' },
+    });
+    fireEvent.change(within(createDialog).getByLabelText('Quantity'), {
+      target: { value: '2' },
+    });
+    fireEvent.click(within(createDialog).getByRole('button', { name: 'Create quotation' }));
+    expect(await screen.findByText('Q-2026-000001 was created.')).toBeTruthy();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Preview' }));
+    let preview = await screen.findByRole('dialog', { name: 'Q-2026-000001' });
+    fireEvent.click(
+      within(preview).getByRole('button', { name: 'Confirm order and reserve stock' }),
+    );
+    expect(await screen.findByText('Quotation confirmed and stock reserved.')).toBeTruthy();
+
+    preview = await screen.findByRole('dialog', { name: 'Q-2026-000001' });
+    fireEvent.click(within(preview).getByRole('button', { name: 'Complete shipment' }));
+    expect(await screen.findByText('Shipment completed and reserved stock issued.')).toBeTruthy();
+
+    preview = await screen.findByRole('dialog', { name: 'Q-2026-000001' });
+    expect(within(preview).getAllByText('HO-2026-000001')).toHaveLength(2);
+    fireEvent.change(within(preview).getByLabelText('Customer representative'), {
+      target: { value: 'Elena Customer' },
+    });
+    fireEvent.click(within(preview).getByRole('button', { name: 'Record customer acceptance' }));
+    expect(
+      await screen.findByText('Customer acceptance recorded on the handover certificate.'),
+    ).toBeTruthy();
+    expect(await screen.findByText('Accepted by Elena Customer')).toBeTruthy();
+
+    preview = await screen.findByRole('dialog', { name: 'Q-2026-000001' });
+    fireEvent.click(within(preview).getByRole('button', { name: 'Prepare invoice draft' }));
+    expect(await screen.findByText('Invoice draft prepared from the shipment.')).toBeTruthy();
+    expect(await screen.findByText('Ready for final review and issuance in Finance.')).toBeTruthy();
+    expect(within(preview).getByRole('button', { name: 'Back to sales list' })).toBeTruthy();
+    fireEvent.click(within(preview).getByRole('button', { name: 'Back to sales list' }));
+    fireEvent.click(screen.getByRole('link', { name: 'Back to Sales' }));
+    expect(await screen.findByRole('heading', { name: 'Sales' })).toBeTruthy();
+    expect(
+      fetchMock.mock.calls.some(
+        ([url]) => url.includes('/sales/prices/resolve?asOf=') && url.includes('currencyCode=BGN'),
+      ),
+    ).toBe(true);
+  });
+
+  it('maintains customer groups, campaigns, and future prices through visible Sales navigation', async () => {
+    const contextWithSalesPricing = {
+      ...authenticationContext,
+      permissions: [
+        ...authenticationContext.permissions,
+        { action: 'view', module: 'erp.sales' },
+        { action: 'create', module: 'erp.sales' },
+        { action: 'edit', module: 'erp.sales' },
+      ],
+    };
+    storeAuthenticatedSession(contextWithSalesPricing);
+    const customerId = partner.id;
+    const productId = '1dbe3fc0-4503-4e03-b11a-d33a35a3bcb1';
+    const customerGroup = {
+      active: true,
+      code: 'TRADE',
+      createdAt: '2026-08-12T08:00:00.000Z',
+      customerPartnerIds: [customerId],
+      id: '99bb298b-b3e4-480a-8d9f-c5cb1cb88d84',
+      name: 'Trade customers',
+      updatedAt: '2026-08-12T08:00:00.000Z',
+      version: 1,
+    };
+    const campaign = {
+      active: true,
+      code: 'AUTUMN',
+      createdAt: '2026-08-12T08:05:00.000Z',
+      id: '46ad47b7-78c4-4dbc-b8c7-e2e4a5544f21',
+      name: 'Autumn campaign',
+      updatedAt: '2026-08-12T08:05:00.000Z',
+      validFrom: '2026-08-01',
+      validTo: '2026-10-31',
+      version: 1,
+    };
+    const priceList = {
+      active: true,
+      campaign: { id: campaign.id, name: campaign.name },
+      code: 'TRADE-AUTUMN',
+      createdAt: '2026-08-12T08:10:00.000Z',
+      currencyCode: 'BGN',
+      customerGroup: { id: customerGroup.id, name: customerGroup.name },
+      id: '2fc80532-0ec0-4f87-a8f3-8efcb60fb95d',
+      lines: [
+        {
+          id: '97a96090-4bc6-4ffc-9e75-3ef05352a026',
+          productCode: 'ROLL-01',
+          productId,
+          productName: 'Receipt rolls',
+          unitPrice: '24.0000',
+        },
+      ],
+      name: 'Trade autumn prices',
+      priority: 20,
+      scope: 'customer_group',
+      updatedAt: '2026-08-12T08:10:00.000Z',
+      validFrom: '2026-08-01',
+      validTo: '2026-10-31',
+      version: 1,
+    };
+    let references = {
+      campaigns: [] as (typeof campaign)[],
+      customerGroups: [] as (typeof customerGroup)[],
+      customers: [{ id: customerId, name: partner.displayName }],
+      products: [{ id: productId, name: 'Receipt rolls', productCode: 'ROLL-01' }],
+    };
+    let priceLists: (typeof priceList)[] = [];
+    const fetchMock = vi.fn((input: string, options?: RequestInit) => {
+      if (input.endsWith('/auth/me')) return Promise.resolve(jsonResponse(contextWithSalesPricing));
+      if (input.endsWith('/sales/pricing/reference-data'))
+        return Promise.resolve(jsonResponse(references));
+      if (input.endsWith('/sales/price-lists') && (!options?.method || options.method === 'GET'))
+        return Promise.resolve(jsonResponse(priceLists));
+      if (input.endsWith('/sales/customer-groups') && options?.method === 'POST') {
+        references = { ...references, customerGroups: [customerGroup] };
+        return Promise.resolve(jsonResponse(customerGroup, 201));
+      }
+      if (input.endsWith('/sales/promotional-campaigns') && options?.method === 'POST') {
+        references = { ...references, campaigns: [campaign] };
+        return Promise.resolve(jsonResponse(campaign, 201));
+      }
+      if (input.endsWith('/sales/price-lists') && options?.method === 'POST') {
+        priceLists = [priceList];
+        return Promise.resolve(jsonResponse(priceList, 201));
+      }
+      if (input.includes('/sales/prices/resolve?')) {
+        return Promise.resolve(
+          jsonResponse({
+            asOf: '2026-08-12',
+            currencyCode: 'BGN',
+            matched: true,
+            priceListCode: priceList.code,
+            priceListId: priceList.id,
+            priceListName: priceList.name,
+            priority: priceList.priority,
+            productId,
+            unitPrice: '24.0000',
+          }),
+        );
+      }
+      return Promise.resolve(jsonResponse({}));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderApplication(['/modules/erp.sales']);
+    expect(await screen.findByRole('heading', { name: 'Sales' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('link', { name: /Prices & promotions Maintain customer/u }));
+    expect(await screen.findByRole('heading', { name: 'Prices & promotions' })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Customer groups' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add customer group' }));
+    let dialog = screen.getByRole('dialog', { name: 'Create customer group' });
+    fireEvent.change(within(dialog).getByLabelText('Code'), { target: { value: 'TRADE' } });
+    fireEvent.change(within(dialog).getByLabelText('Customer group name'), {
+      target: { value: 'Trade customers' },
+    });
+    fireEvent.click(within(dialog).getByRole('checkbox', { name: partner.displayName }));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Create customer group' }));
+    expect(await screen.findByText('Trade customers')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Campaigns' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add campaign' }));
+    dialog = screen.getByRole('dialog', { name: 'Create campaign' });
+    fireEvent.change(within(dialog).getByLabelText('Code'), { target: { value: 'AUTUMN' } });
+    fireEvent.change(within(dialog).getByLabelText('Campaign name'), {
+      target: { value: 'Autumn campaign' },
+    });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Create campaign' }));
+    expect(await screen.findByText('Autumn campaign')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Price lists' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add price list' }));
+    dialog = screen.getByRole('dialog', { name: 'Create price list' });
+    fireEvent.change(within(dialog).getByLabelText('Code'), {
+      target: { value: 'TRADE-AUTUMN' },
+    });
+    fireEvent.change(within(dialog).getByLabelText('Price-list name'), {
+      target: { value: 'Trade autumn prices' },
+    });
+    fireEvent.change(within(dialog).getByLabelText('Applies to'), {
+      target: { value: 'customer_group' },
+    });
+    fireEvent.change(within(dialog).getByLabelText('Customer group'), {
+      target: { value: customerGroup.id },
+    });
+    fireEvent.change(within(dialog).getByLabelText('Campaign'), {
+      target: { value: campaign.id },
+    });
+    fireEvent.change(within(dialog).getByLabelText(/^Priority/u), { target: { value: '20' } });
+    fireEvent.change(within(dialog).getByLabelText('Unit price 1'), {
+      target: { value: '24' },
+    });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Create price list' }));
+    expect(await screen.findByText('Trade autumn prices')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Check price' }));
+    expect(await screen.findByText(/24\.00/u)).toBeTruthy();
+    expect(screen.getByText(/Trade autumn prices · TRADE-AUTUMN/u)).toBeTruthy();
+    expect(fetchMock.mock.calls.some(([url]) => url.includes('/sales/prices/resolve?'))).toBe(true);
+  });
+
+  it('creates and previews a service subscription through the Sales workspace', async () => {
+    const subscriptionsContext = {
+      ...authenticationContext,
+      permissions: [
+        ...authenticationContext.permissions,
+        { action: 'view', module: 'erp.sales' },
+        { action: 'create', module: 'erp.sales' },
+        { action: 'edit', module: 'erp.sales' },
+      ],
+    };
+    storeAuthenticatedSession(subscriptionsContext);
+    const customerId = '87606589-7be1-4ddd-8905-b470ace8f480';
+    const locationId = '9ab0258d-6b8a-4b18-917c-799b983a1391';
+    const equipmentId = '868eb1fd-65c4-4bef-a8f9-e68a774ccdf4';
+    const references = {
+      customers: [{ id: customerId, name: 'Mountain Retail Ltd.' }],
+      equipment: [
+        {
+          customerLocationId: locationId,
+          deviceName: 'Fiscal register FX-20',
+          id: equipmentId,
+          serialNumber: 'FX20-00918',
+        },
+      ],
+      locations: [{ customerPartnerId: customerId, id: locationId, name: 'Vratsa retail outlet' }],
+    };
+    let contracts: Array<Record<string, unknown>> = [];
+    const fetchMock = vi.fn((input: string, options?: RequestInit) => {
+      if (input.endsWith('/auth/me')) return Promise.resolve(jsonResponse(subscriptionsContext));
+      if (input.endsWith('/sales/subscriptions/reference-data'))
+        return Promise.resolve(jsonResponse(references));
+      if (input.endsWith('/sales/subscriptions') && (!options?.method || options.method === 'GET'))
+        return Promise.resolve(jsonResponse(contracts));
+      if (input.endsWith('/sales/subscriptions') && options?.method === 'POST') {
+        if (typeof options.body !== 'string') throw new Error('Expected a JSON request body');
+        const submitted = JSON.parse(options.body) as Record<string, unknown>;
+        const contract = {
+          ...submitted,
+          active: true,
+          billingAmount: '120.0000',
+          createdAt: '2026-08-12T09:00:00.000Z',
+          customerLocationName: 'Vratsa retail outlet',
+          customerName: 'Mountain Retail Ltd.',
+          equipment: [
+            {
+              deviceName: 'Fiscal register FX-20',
+              id: equipmentId,
+              serialNumber: 'FX20-00918',
+            },
+          ],
+          id: 'e071ce6e-ae8d-4cea-bca6-56ed215e6ff4',
+          invoiceDrafts: [],
+          number: 'SC-2026-000001',
+          updatedAt: '2026-08-12T09:00:00.000Z',
+          version: 1,
+        };
+        contracts = [contract];
+        return Promise.resolve(jsonResponse(contract, 201));
+      }
+      return Promise.resolve(jsonResponse({}));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderApplication(['/modules/erp.sales']);
+    expect(await screen.findByRole('heading', { name: 'Sales' })).toBeTruthy();
+    fireEvent.click(
+      screen.getByRole('link', { name: /Service subscriptions Manage customer-location/u }),
+    );
+    expect(await screen.findByRole('heading', { name: 'Service subscriptions' })).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Back to Sales' })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'New contract' }));
+    const dialog = await screen.findByRole('dialog', { name: 'New service contract' });
+    expect(within(dialog).getByText('Fiscal register FX-20')).toBeTruthy();
+    fireEvent.change(within(dialog).getByLabelText('Recurring amount'), {
+      target: { value: '120' },
+    });
+    fireEvent.change(within(dialog).getByLabelText('Included services'), {
+      target: { value: 'Preventive maintenance\nRemote support' },
+    });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Create contract' }));
+
+    expect(await screen.findByText('SC-2026-000001 was created.')).toBeTruthy();
+    fireEvent.click(await screen.findByRole('button', { name: 'Preview' }));
+    const preview = await screen.findByRole('dialog', { name: 'SC-2026-000001' });
+    expect(within(preview).getByText('Vratsa retail outlet')).toBeTruthy();
+    expect(within(preview).getByText('Serial FX20-00918')).toBeTruthy();
+    expect(within(preview).getByText('Preventive maintenance')).toBeTruthy();
+    expect(
+      within(preview).getByRole('button', { name: 'Back to service subscriptions' }),
+    ).toBeTruthy();
   });
 });
 

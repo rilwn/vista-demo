@@ -18,7 +18,7 @@ import {
 import { useAuth } from '../auth/AuthProvider';
 import { Icon } from '../components/Icon';
 import { messages } from '../messages';
-import { ProcurementTabs } from './SupplierProcurementPage';
+import { ProcurementWorkspace } from './SupplierProcurementPage';
 
 export type ProcurementView = 'goods-receipts' | 'purchase-orders';
 
@@ -70,74 +70,87 @@ export function ProcurementPage({ view }: { view: ProcurementView }) {
         ) : null}
       </header>
 
-      <ProcurementTabs view={view} />
-
-      {notice ? <InlineAlert tone="success">{notice}</InlineAlert> : null}
-
-      {view === 'purchase-orders' ? (
-        <>
-          <section className="procurement-toolbar" aria-label="Purchase order filters">
-            <label>
-              <span>{messages.procurement.status}</span>
-              <select
-                onChange={(event) => setStatus(event.target.value as PurchaseOrderStatus | '')}
-                value={status}
-              >
-                <option value="">{messages.procurement.allStatuses}</option>
-                <option value="open">{messages.procurement.open}</option>
-                <option value="partially_received">{messages.procurement.partiallyReceived}</option>
-                <option value="received">{messages.procurement.received}</option>
-              </select>
-            </label>
-            <span>{data.total} orders</span>
-          </section>
-          {data.orders.length ? (
-            <section className="procurement-order-list" aria-label="Purchase orders">
-              {data.orders.map((order) => (
-                <PurchaseOrderCard
-                  canReceive={canCreate}
-                  key={order.id}
-                  onReceive={() => setReceiving(order)}
-                  order={order}
-                />
-              ))}
+      <ProcurementWorkspace
+        countLabel={
+          view === 'purchase-orders'
+            ? `${data.total} ${data.total === 1 ? 'order' : 'orders'}`
+            : `${receipts.length} ${receipts.length === 1 ? 'receipt' : 'receipts'}`
+        }
+        description={
+          view === 'purchase-orders'
+            ? 'Orders awaiting delivery and completed supplier purchases.'
+            : 'Warehouse receipts created from confirmed supplier deliveries.'
+        }
+        notice={notice}
+        title={view === 'purchase-orders' ? 'Purchase order register' : 'Goods receipt register'}
+        view={view}
+      >
+        {view === 'purchase-orders' ? (
+          <>
+            <section className="procurement-toolbar" aria-label="Purchase order filters">
+              <label>
+                <span>{messages.procurement.status}</span>
+                <select
+                  onChange={(event) => setStatus(event.target.value as PurchaseOrderStatus | '')}
+                  value={status}
+                >
+                  <option value="">{messages.procurement.allStatuses}</option>
+                  <option value="open">{messages.procurement.open}</option>
+                  <option value="partially_received">
+                    {messages.procurement.partiallyReceived}
+                  </option>
+                  <option value="received">{messages.procurement.received}</option>
+                </select>
+              </label>
             </section>
-          ) : (
-            <ProcurementState title={messages.procurement.emptyOrders}>
-              <p>{messages.procurement.emptyOrdersHint}</p>
-            </ProcurementState>
-          )}
-        </>
-      ) : receipts.length ? (
-        <section className="procurement-receipt-list" aria-label="Goods receipts">
-          {receipts.map(({ order, receipt }) => (
-            <article className="procurement-receipt-card" key={receipt.id}>
-              <div className="procurement-receipt-mark">
-                <Icon name="warehouse" size={18} />
-              </div>
-              <div>
-                <strong>{order.supplierName}</strong>
-                <span>
-                  {receipt.supplierDeliveryReference ?? shortIdentity(receipt.id)} ·{' '}
-                  {formatDateTime(receipt.receivedAt)}
-                </span>
-              </div>
-              <div>
-                <strong>{receipt.lines.length}</strong>
-                <span>{receipt.lines.length === 1 ? 'product line' : 'product lines'}</span>
-              </div>
-              <div>
-                <strong>{order.warehouseName}</strong>
-                <span>Receiving warehouse</span>
-              </div>
-            </article>
-          ))}
-        </section>
-      ) : (
-        <ProcurementState title={messages.procurement.emptyReceipts}>
-          <p>{messages.procurement.emptyReceiptsHint}</p>
-        </ProcurementState>
-      )}
+            {data.orders.length ? (
+              <section className="procurement-order-list" aria-label="Purchase orders">
+                {data.orders.map((order) => (
+                  <PurchaseOrderCard
+                    canReceive={canCreate}
+                    key={order.id}
+                    onReceive={() => setReceiving(order)}
+                    order={order}
+                  />
+                ))}
+              </section>
+            ) : (
+              <ProcurementState title={messages.procurement.emptyOrders}>
+                <p>{messages.procurement.emptyOrdersHint}</p>
+              </ProcurementState>
+            )}
+          </>
+        ) : receipts.length ? (
+          <section className="procurement-receipt-list" aria-label="Goods receipts">
+            {receipts.map(({ order, receipt }) => (
+              <article className="procurement-receipt-card" key={receipt.id}>
+                <div className="procurement-receipt-mark">
+                  <Icon name="warehouse" size={18} />
+                </div>
+                <div>
+                  <strong>{order.supplierName}</strong>
+                  <span>
+                    {receipt.supplierDeliveryReference ?? shortIdentity(receipt.id)} ·{' '}
+                    {formatDateTime(receipt.receivedAt)}
+                  </span>
+                </div>
+                <div>
+                  <strong>{receipt.lines.length}</strong>
+                  <span>{receipt.lines.length === 1 ? 'product line' : 'product lines'}</span>
+                </div>
+                <div>
+                  <strong>{order.warehouseName}</strong>
+                  <span>Receiving warehouse</span>
+                </div>
+              </article>
+            ))}
+          </section>
+        ) : (
+          <ProcurementState title={messages.procurement.emptyReceipts}>
+            <p>{messages.procurement.emptyReceiptsHint}</p>
+          </ProcurementState>
+        )}
+      </ProcurementWorkspace>
 
       {creating ? (
         <PurchaseOrderDrawer
@@ -685,12 +698,27 @@ function ProcurementDrawer({
         className="security-drawer is-wide procurement-drawer"
         role="dialog"
       >
-        <header>
+        <header className="procurement-drawer-header">
+          <button
+            aria-label="Back to procurement"
+            className="procurement-back-button"
+            disabled={busy}
+            onClick={onClose}
+            type="button"
+          >
+            <Icon name="arrow" size={17} /> Back
+          </button>
           <div>
             <h2>{title}</h2>
             <p>{subtitle}</p>
           </div>
-          <button aria-label={messages.procurement.close} disabled={busy} onClick={onClose}>
+          <button
+            aria-label={messages.procurement.close}
+            className="procurement-close-button"
+            disabled={busy}
+            onClick={onClose}
+            type="button"
+          >
             <Icon name="close" />
           </button>
         </header>
