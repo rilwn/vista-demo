@@ -2541,6 +2541,276 @@ describe('ERP and CRM authenticated workspace', () => {
       within(preview).getByRole('button', { name: 'Back to service subscriptions' }),
     ).toBeTruthy();
   });
+
+  it('adds a sales invoice draft to collections and records a customer payment through Finance navigation', async () => {
+    const financeContext = {
+      ...authenticationContext,
+      permissions: [
+        ...authenticationContext.permissions,
+        { action: 'view', module: 'erp.finance' },
+        { action: 'create', module: 'erp.finance' },
+        { action: 'edit', module: 'erp.finance' },
+      ],
+    };
+    storeAuthenticatedSession(financeContext);
+    const invoiceDraft = {
+      currencyCode: 'BGN',
+      customerName: 'River Market Ltd.',
+      customerPartnerId: '2f1ac8d4-83ac-48d7-aa0e-57ce1f34dd83',
+      id: '7ad369bc-3ad2-4b49-99bf-dab68f7f4b4f',
+      number: 'INV-DRAFT-2026-000014',
+      recordedAt: '2026-08-14T09:00:00.000Z',
+      total: '273.6000',
+    };
+    let documents: Array<Record<string, unknown>> = [];
+    const documentFor = (allocatedTotal: string, paymentStatus: string, payments: unknown[]) => ({
+      allocatedTotal,
+      bgnTotal: '273.6000',
+      createdAt: '2026-08-14T09:05:00.000Z',
+      currencyCode: 'BGN',
+      customerName: invoiceDraft.customerName,
+      customerPartnerId: invoiceDraft.customerPartnerId,
+      documentDate: '2026-08-14',
+      dueDate: '2026-08-28',
+      exchangeRate: '1.00000000',
+      id: '95eb49d0-a4f4-4187-a2d4-d608cef393d5',
+      number: 'FIN-REV-2026-000001',
+      outstandingTotal: allocatedTotal === '0.0000' ? '273.6000' : '148.6000',
+      paymentStatus,
+      payments,
+      rateDate: '2026-08-14',
+      rateSource: 'internal_bgn_review',
+      reviewState: 'pending_finance_review',
+      sourceInvoiceNumber: invoiceDraft.number,
+      sourceSalesInvoiceId: invoiceDraft.id,
+      statusHistory: [
+        {
+          changedAt: '2026-08-14T09:05:00.000Z',
+          id: 'ba6757d3-7d58-4d09-a1af-2a14a59d0d0a',
+          nextStatus: paymentStatus,
+          reason: allocatedTotal === '0.0000' ? 'document_imported' : 'payment_recorded',
+        },
+      ],
+      total: '273.6000',
+      version: allocatedTotal === '0.0000' ? 1 : 2,
+    });
+    const fetchMock = vi.fn((input: string, options?: RequestInit) => {
+      if (input.endsWith('/auth/me')) return Promise.resolve(jsonResponse(financeContext));
+      if (input.endsWith('/finance/reference-data'))
+        return Promise.resolve(
+          jsonResponse({ invoiceDrafts: documents.length ? [] : [invoiceDraft] }),
+        );
+      if (input.endsWith('/finance/summary'))
+        return Promise.resolve(
+          jsonResponse({
+            activeDocuments: documents.length,
+            overdueOutstanding: '0.0000',
+            paidDocuments: 0,
+            totalOutstanding: documents.length ? '273.6000' : '0.0000',
+          }),
+        );
+      if (input.endsWith('/finance/documents') && (!options?.method || options.method === 'GET'))
+        return Promise.resolve(jsonResponse(documents));
+      if (input.endsWith('/finance/documents') && options?.method === 'POST') {
+        documents = [documentFor('0.0000', 'unpaid', [])];
+        return Promise.resolve(jsonResponse(documents[0], 201));
+      }
+      if (input.endsWith('/payments') && options?.method === 'POST') {
+        documents = [
+          documentFor('125.0000', 'partially_paid', [
+            {
+              allocatedAt: '2026-08-14T09:10:00.000Z',
+              amount: '125.0000',
+              id: '4f30bf42-b0ed-4dc6-ba7d-a8e00d935097',
+              number: 'PAY-2026-000001',
+              paymentDate: '2026-08-14',
+              paymentMethod: 'bank_transfer',
+              paymentReference: 'BANK-101',
+              recordedAt: '2026-08-14T09:10:00.000Z',
+            },
+          ]),
+        ];
+        return Promise.resolve(jsonResponse(documents[0], 201));
+      }
+      return Promise.resolve(jsonResponse({}));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderApplication(['/modules/erp.finance']);
+    expect(await screen.findByRole('heading', { name: 'Finance' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('link', { name: /Invoices Issue and manage/u }));
+    expect(await screen.findByRole('heading', { name: 'Invoices' })).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Back to Finance' })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add to collections' }));
+    let dialog = await screen.findByRole('dialog', { name: 'Add to collections' });
+    expect(within(dialog).getByText(invoiceDraft.customerName)).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Add record' }));
+    expect(await screen.findByText('FIN-REV-2026-000001 was added to collections.')).toBeTruthy();
+
+    dialog = await screen.findByRole('dialog', { name: 'FIN-REV-2026-000001' });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Record payment' }));
+    dialog = await screen.findByRole('dialog', { name: 'Record payment' });
+    fireEvent.change(within(dialog).getByLabelText('Amount (BGN)'), { target: { value: '125' } });
+    fireEvent.change(within(dialog).getByLabelText('Reference (optional)'), {
+      target: { value: 'BANK-101' },
+    });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Record payment' }));
+    expect(
+      await screen.findByText('FIN-REV-2026-000001 was updated with the payment.'),
+    ).toBeTruthy();
+
+    dialog = await screen.findByRole('dialog', { name: 'FIN-REV-2026-000001' });
+    expect(within(dialog).getAllByText('Partially paid')).toHaveLength(2);
+    expect(within(dialog).getByText('PAY-2026-000001')).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Back to finance list' }));
+    fireEvent.click(screen.getByRole('link', { name: 'Payments & allocations' }));
+    expect(await screen.findByRole('heading', { name: 'Payments & allocations' })).toBeTruthy();
+    expect(screen.getByText('1 payment')).toBeTruthy();
+  });
+
+  it('navigates from ERP Service to request intake and creates a dispatch-ready service request', async () => {
+    const serviceContext = {
+      ...authenticationContext,
+      permissions: [
+        ...authenticationContext.permissions,
+        { action: 'view', module: 'erp.service' },
+        { action: 'create', module: 'erp.service' },
+        { action: 'edit', module: 'erp.service' },
+        { action: 'approve', module: 'erp.service' },
+      ],
+    };
+    storeAuthenticatedSession(serviceContext);
+
+    const customerId = '70f5a1e9-0a41-470e-87cf-67f699573f42';
+    const locationId = '8403ff16-4e6f-40ce-9abb-7d02a4a94b43';
+    const equipmentId = 'c8c5f3a4-dc2f-43f1-bac7-4dca0a6e5f4a';
+    const request = {
+      createdAt: '2026-08-14T09:00:00.000Z',
+      customerEquipmentId: equipmentId,
+      customerLocationId: locationId,
+      customerLocationName: 'Vratsa retail outlet',
+      customerName: 'Mountain Retail Ltd.',
+      customerPartnerId: customerId,
+      deviceName: 'Fiscal register FX-20',
+      id: '91d7d617-55d0-4d2f-b46b-9146d42aa4c3',
+      number: 'SR-2026-000001',
+      priority: 'high' as const,
+      problemDescription: 'The receipt printer intermittently stops during a sale.',
+      serialNumber: 'FX20-00918',
+      serviceType: 'warranty' as const,
+      sourceChannel: 'email' as const,
+      status: 'new' as const,
+      updatedAt: '2026-08-14T09:00:00.000Z',
+      version: 1,
+    };
+    let requests: (typeof request)[] = [];
+    const page = () => ({
+      items: requests,
+      page: 1,
+      pageSize: 25,
+      summary: { completed: 0, inProgress: 0, new: requests.length, scheduled: 0 },
+      total: requests.length,
+      totalPages: requests.length ? 1 : 0,
+    });
+    const fetchMock = vi.fn((input: string, options?: RequestInit) => {
+      if (input.endsWith('/auth/me')) return Promise.resolve(jsonResponse(serviceContext));
+      if (input.endsWith('/service/reference-data')) {
+        return Promise.resolve(
+          jsonResponse({
+            businessTimezone: 'Europe/Sofia',
+            customers: [{ id: customerId, name: 'Mountain Retail Ltd.' }],
+            equipment: [
+              {
+                active: true,
+                customerLocationId: locationId,
+                customerPartnerId: customerId,
+                deviceName: 'Fiscal register FX-20',
+                id: equipmentId,
+                serialNumber: 'FX20-00918',
+                status: 'active',
+                warrantyEndsOn: '2027-08-14',
+              },
+            ],
+            locations: [
+              {
+                customerPartnerId: customerId,
+                id: locationId,
+                name: 'Vratsa retail outlet',
+              },
+            ],
+            parts: [],
+            subscriptions: [],
+            technicians: [
+              {
+                accountId: loginResponse.account.id,
+                displayName: loginResponse.account.displayName,
+                email: loginResponse.account.email,
+                warehouseId: technicianWarehouseFixture.id,
+                warehouseName: technicianWarehouseFixture.name,
+              },
+            ],
+          }),
+        );
+      }
+      if (input.includes('/service/requests') && (!options?.method || options.method === 'GET')) {
+        return Promise.resolve(jsonResponse(page()));
+      }
+      if (
+        input.includes('/service/work-orders') &&
+        (!options?.method || options.method === 'GET')
+      ) {
+        return Promise.resolve(
+          jsonResponse({ items: [], page: 1, pageSize: 25, total: 0, totalPages: 0 }),
+        );
+      }
+      if (input.endsWith('/service/requests') && options?.method === 'POST') {
+        requests = [request];
+        return Promise.resolve(jsonResponse(request, 201));
+      }
+      return Promise.resolve(jsonResponse({}));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderApplication(['/']);
+    expect(
+      await screen.findByRole('heading', { name: `${messages.home.title}, Mila.` }),
+    ).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('link', { name: 'Service' }));
+    expect(await screen.findByRole('heading', { name: 'Service' })).toBeTruthy();
+    fireEvent.click(
+      screen.getByRole('link', { name: /Service requests Capture and dispatch service requests/u }),
+    );
+    expect(await screen.findByRole('heading', { name: 'Service requests' })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'New service request' }));
+    const dialog = await screen.findByRole('dialog', { name: 'New service request' });
+    fireEvent.change(within(dialog).getByLabelText('Request source'), {
+      target: { value: 'email' },
+    });
+    fireEvent.change(within(dialog).getByLabelText('Priority'), { target: { value: 'high' } });
+    fireEvent.change(within(dialog).getByLabelText('Problem description'), {
+      target: { value: request.problemDescription },
+    });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Create request' }));
+
+    expect(await screen.findByText('SR-2026-000001 is ready for dispatch.')).toBeTruthy();
+    expect(await screen.findByRole('dialog', { name: 'SR-2026-000001' })).toBeTruthy();
+    const createCall = fetchMock.mock.calls.find(
+      ([url, options]) => url.endsWith('/service/requests') && options?.method === 'POST',
+    );
+    expect(createCall).toBeTruthy();
+    expect(JSON.parse((createCall?.[1] as RequestInit).body as string)).toMatchObject({
+      customerEquipmentId: equipmentId,
+      customerLocationId: locationId,
+      customerPartnerId: customerId,
+      priority: 'high',
+      problemDescription: request.problemDescription,
+      serviceType: 'warranty',
+      sourceChannel: 'email',
+    });
+  });
 });
 
 function renderApplication(initialEntries: string[]) {

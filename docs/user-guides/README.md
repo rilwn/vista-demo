@@ -333,6 +333,27 @@ The draft is ready for final review and issuance in Finance. It is not yet a
 fiscal or accounting document and must not be sent to a customer as an issued
 invoice.
 
+### Finance collections
+
+Use only the visible application navigation:
+
+1. From the left navigation, choose **ERP → Finance**, then select **Invoices**.
+2. Select **Add to collections**. Choose a BGN sales invoice draft and set the
+   payment due date. The panel shows the customer and collection amount before
+   you save.
+3. The saved record opens in the right-side panel. Review its source, current
+   balance, payment list, and record history. Select **Back** to return to the
+   unchanged register.
+4. Select **Record payment**. Enter an amount up to the remaining balance, date,
+   payment method, and an optional reference or concise note. Save the payment.
+   The panel returns to the record with the updated balance and status.
+5. Select **Back**, then open **Payments & allocations** above the register to
+   review the same customer record from the payment view.
+
+This workflow records BGN collection activity only. It does not issue a legal or
+fiscal invoice, post VAT/accounting entries, calculate BNB rates, import or match
+bank statements, or send payment reminders.
+
 ### Prices and promotions
 
 Use only the visible application navigation:
@@ -374,3 +395,54 @@ Use only the visible application navigation:
 
 Recurring billing drafts appear after the scheduled billing task processes a due
 date. They remain review drafts until Finance performs approved legal issuance.
+
+## Service work
+
+Set up a real operating path before testing Service. Do this with visible
+navigation, not by typing a page address:
+
+1. In **Administration → Security**, ensure the dispatcher has
+   `erp.service:view`, `erp.service:create`, and `erp.service:edit`. The
+   technician needs `erp.service:view` and `erp.service:edit`; a supervisor who
+   must work on another technician's order also needs `erp.service:approve`.
+2. In **Administration → Business structure**, create or select an active
+   operator for that technician at the relevant business location.
+3. In **ERP → Warehouse → Warehouses**, create a **Technician** warehouse at the
+   same business location and map it to that operator. Do not use a shared
+   warehouse where the work needs technician custody.
+4. In **ERP → Warehouse → Product catalog**, ensure an active spare part exists.
+   In **Warehouse → Movements**, receive stock into the technician warehouse if
+   you want to test used-parts deduction.
+5. In **Customers & CRM → Partner registry**, open or create an active customer,
+   add an active location, and use **Register equipment** to enter a device and
+   its serial number. For the simplest first test, use **Out of warranty** in the
+   service request. A warranty request requires a warranty end date that covers
+   the current business date; a subscription request requires a matching active
+   contract under **ERP → Sales → Service subscriptions**.
+
+Then run the workflow:
+
+1. Choose **ERP → Service**, then open **Service requests** and select **New
+   service request**. Choose the customer, location, device, source, service
+   type, priority, and problem. Save the request.
+2. The request preview opens. Select **Dispatch request**, choose the technician
+   and visit time, and select **Assign visit**. Use **Back** to return to the
+   request register without losing your place.
+3. Choose the **Work orders** tab, select **My work**, then open the assigned
+   work order. Select **Start work**. If useful, choose a valid JPEG, PNG, or
+   WebP file and select **Upload photo**.
+4. Select **Complete work**. Enter completion notes, working time, labor and
+   transport costs, and optionally a stocked part. Serial- or batch-tracked parts
+   require their matching evidence. Enter the customer representative and draw a
+   signature, then select **Complete work**.
+5. Use **Back** to return to the work-order details, then **Back** again to the
+   register. Open **Equipment history** and select the device to verify the
+   completed service event, technician, used parts, and stored evidence. Retired
+   devices remain available in this history selector but cannot be used for a new
+   request.
+
+The current Service workspace is intentionally limited to the documented core:
+manual source capture, dispatch, technician work, stock deduction, evidence, and
+service-only history. It does not yet create a payment document, service invoice,
+warranty card or claim, inspection reminder, subscription visit, CRM ticket/SLA,
+route plan, or full sales/supplier serial history.

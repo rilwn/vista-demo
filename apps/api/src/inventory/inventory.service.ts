@@ -611,124 +611,151 @@ export class InventoryService {
     metadata: RequestSecurityMetadata,
   ): Promise<StockIssue> {
     const normalized = normalizeIssue(input);
-    return this.command('stock-issue.create', key, normalized, async (client) => {
-      const product = await activeProduct(client, normalized.productId);
-      await requireActiveWarehouse(client, normalized.warehouseId);
-      await ensureWarehousesNotUnderStocktake(client, [normalized.warehouseId]);
-      validateIssueTracking(product, normalized);
-      if (normalized.customerPartnerId)
-        await requirePartnerRole(client, normalized.customerPartnerId, 'customer');
-      if (normalized.technicianAccountId)
-        await requireActiveTechnician(client, normalized.technicianAccountId);
-      if (normalized.reservationId)
-        await consumeReservation(
-          client,
-          { ...normalized, reservationId: normalized.reservationId },
-          auth.accountId,
-        );
-      else
-        await ensureUnreservedAvailability(
-          client,
-          normalized.warehouseId,
-          normalized.productId,
-          normalized.quantity,
-        );
-      const movementId = randomUUID();
-      const balance = await client.query<{ average_unit_cost_bgn: string; quantity: string }>(
-        `UPDATE inventory.stock_balances
-         SET quantity = quantity - $3, updated_at = now()
-         WHERE warehouse_id = $1 AND product_id = $2 AND quantity >= $3
-         RETURNING quantity::text, average_unit_cost_bgn::text`,
-        [normalized.warehouseId, normalized.productId, normalized.quantity],
+    return this.command('stock-issue.create', key, normalized, (client) =>
+      this.recordIssue(client, normalized, validKey(key), auth, metadata),
+    );
+  }
+
+  issueServicePart(
+    client: PoolClient,
+    input: Omit<IssueStockRequest, 'reason' | 'referenceId'>,
+    workOrderId: string,
+    eventKey: string,
+    auth: AuthenticationContext,
+    metadata: RequestSecurityMetadata,
+  ): Promise<StockIssue> {
+    return this.recordIssue(
+      client,
+      normalizeIssue({ ...input, reason: 'repair', referenceId: workOrderId }),
+      eventKey,
+      auth,
+      metadata,
+    );
+  }
+
+  private async recordIssue(
+    client: PoolClient,
+    normalized: ReturnType<typeof normalizeIssue>,
+    eventKey: string,
+    auth: AuthenticationContext,
+    metadata: RequestSecurityMetadata,
+  ): Promise<StockIssue> {
+    const product = await activeProduct(client, normalized.productId);
+    await requireActiveWarehouse(client, normalized.warehouseId);
+    await ensureWarehousesNotUnderStocktake(client, [normalized.warehouseId]);
+    validateIssueTracking(product, normalized);
+    if (normalized.customerPartnerId)
+      await requirePartnerRole(client, normalized.customerPartnerId, 'customer');
+    if (normalized.technicianAccountId)
+      await requireActiveTechnician(client, normalized.technicianAccountId);
+    if (normalized.reservationId)
+      await consumeReservation(
+        client,
+        { ...normalized, reservationId: normalized.reservationId },
+        auth.accountId,
       );
-      if (!balance.rowCount)
+    else
+      await ensureUnreservedAvailability(
+        client,
+        normalized.warehouseId,
+        normalized.productId,
+        normalized.quantity,
+      );
+    const movementId = randomUUID();
+    const balance = await client.query<{ average_unit_cost_bgn: string; quantity: string }>(
+      `UPDATE inventory.stock_balances
+       SET quantity = quantity - $3, updated_at = now()
+       WHERE warehouse_id = $1 AND product_id = $2 AND quantity >= $3
+       RETURNING quantity::text, average_unit_cost_bgn::text`,
+      [normalized.warehouseId, normalized.productId, normalized.quantity],
+    );
+    if (!balance.rowCount)
+      throw new ApiErrorException(
+        'INSUFFICIENT_STOCK',
+        'The warehouse does not have sufficient available stock',
+        HttpStatus.CONFLICT,
+      );
+    const issueCost = required(
+      balance.rows[0],
+      'Issue balance update failed',
+    ).average_unit_cost_bgn;
+    const movement = await client.query<{ total_cost_bgn: string }>(
+      `INSERT INTO inventory.stock_movements (
+         id, warehouse_id, product_id, movement_type, quantity, reference_type,
+         reference_id, actor_account_id, correlation_id, unit_cost_bgn,
+         customer_partner_id, technician_account_id
+       ) VALUES ($1, $2, $3, 'issue', $4, $5, $6, $7, $8, $9, $10, $11)
+       RETURNING total_cost_bgn::text`,
+      [
+        movementId,
+        normalized.warehouseId,
+        normalized.productId,
+        normalized.quantity,
+        normalized.reason,
+        normalized.referenceId,
+        auth.accountId,
+        metadata.correlationId,
+        issueCost,
+        normalized.customerPartnerId ?? null,
+        normalized.technicianAccountId ?? null,
+      ],
+    );
+    let batchId: { id: string } | undefined;
+    if (normalized.batchNumber) {
+      const batch = await client.query<{ id: string }>(
+        `SELECT id FROM inventory.batches
+         WHERE product_id = $1 AND batch_number = $2 FOR KEY SHARE`,
+        [normalized.productId, normalized.batchNumber],
+      );
+      batchId = required(batch.rows[0], 'Batch was not found');
+      await client.query('UPDATE inventory.stock_movements SET batch_id = $2 WHERE id = $1', [
+        movementId,
+        batchId.id,
+      ]);
+      const batchBalance = await client.query(
+        `UPDATE inventory.batch_stock_balances
+         SET quantity = quantity - $3, updated_at = now()
+         WHERE warehouse_id = $1 AND batch_id = $2 AND quantity >= $3
+         RETURNING quantity`,
+        [normalized.warehouseId, batchId.id, normalized.quantity],
+      );
+      if (!batchBalance.rowCount)
         throw new ApiErrorException(
-          'INSUFFICIENT_STOCK',
-          'The warehouse does not have sufficient available stock',
+          'INSUFFICIENT_BATCH_STOCK',
+          'The selected batch does not have sufficient available stock',
           HttpStatus.CONFLICT,
         );
-      const issueCost = required(
-        balance.rows[0],
-        'Issue balance update failed',
-      ).average_unit_cost_bgn;
-      const movement = await client.query<{ total_cost_bgn: string }>(
-        `INSERT INTO inventory.stock_movements (
-           id, warehouse_id, product_id, movement_type, quantity, reference_type,
-           reference_id, actor_account_id, correlation_id, unit_cost_bgn,
-           customer_partner_id, technician_account_id
-         ) VALUES ($1, $2, $3, 'issue', $4, $5, $6, $7, $8, $9, $10, $11)
-         RETURNING total_cost_bgn::text`,
-        [
-          movementId,
-          normalized.warehouseId,
-          normalized.productId,
-          normalized.quantity,
-          normalized.reason,
-          normalized.referenceId,
-          auth.accountId,
-          metadata.correlationId,
-          issueCost,
-          normalized.customerPartnerId ?? null,
-          normalized.technicianAccountId ?? null,
-        ],
-      );
-      let batchId: { id: string } | undefined;
-      if (normalized.batchNumber) {
-        const batch = await client.query<{ id: string }>(
-          `SELECT id FROM inventory.batches
-           WHERE product_id = $1 AND batch_number = $2 FOR KEY SHARE`,
-          [normalized.productId, normalized.batchNumber],
-        );
-        batchId = required(batch.rows[0], 'Batch was not found');
-        await client.query('UPDATE inventory.stock_movements SET batch_id = $2 WHERE id = $1', [
-          movementId,
-          batchId.id,
-        ]);
-        const batchBalance = await client.query(
-          `UPDATE inventory.batch_stock_balances
-           SET quantity = quantity - $3, updated_at = now()
-           WHERE warehouse_id = $1 AND batch_id = $2 AND quantity >= $3
-           RETURNING quantity`,
-          [normalized.warehouseId, batchId.id, normalized.quantity],
-        );
-        if (!batchBalance.rowCount)
-          throw new ApiErrorException(
-            'INSUFFICIENT_BATCH_STOCK',
-            'The selected batch does not have sufficient available stock',
-            HttpStatus.CONFLICT,
-          );
-      }
-      const serialItemIds = await issueSerials(client, normalized, movementId);
-      const result: StockIssue = {
-        id: movementId,
-        warehouseId: normalized.warehouseId,
-        productId: normalized.productId,
-        quantity: normalized.quantity,
-        reason: normalized.reason,
-        serialItemIds,
-        totalCostBgn: required(movement.rows[0], 'Issue valuation insert failed').total_cost_bgn,
-        unitCostBgn: issueCost,
-        ...(batchId ? { batchId: batchId.id } : {}),
-        ...(normalized.reservationId ? { reservationId: normalized.reservationId } : {}),
-      };
-      await this.sideEffects(
-        client,
-        'stock_movement',
-        movementId,
-        'inventory.stock.issued',
-        result,
-        auth,
-        metadata,
-        validKey(key),
-      );
-      await this.reconcileLowStockAlert(
-        client,
-        result.warehouseId,
-        result.productId,
-        metadata.correlationId,
-      );
-      return result;
-    });
+    }
+    const serialItemIds = await issueSerials(client, normalized, movementId);
+    const result: StockIssue = {
+      id: movementId,
+      warehouseId: normalized.warehouseId,
+      productId: normalized.productId,
+      quantity: normalized.quantity,
+      reason: normalized.reason,
+      serialItemIds,
+      totalCostBgn: required(movement.rows[0], 'Issue valuation insert failed').total_cost_bgn,
+      unitCostBgn: issueCost,
+      ...(batchId ? { batchId: batchId.id } : {}),
+      ...(normalized.reservationId ? { reservationId: normalized.reservationId } : {}),
+    };
+    await this.sideEffects(
+      client,
+      'stock_movement',
+      movementId,
+      'inventory.stock.issued',
+      result,
+      auth,
+      metadata,
+      eventKey,
+    );
+    await this.reconcileLowStockAlert(
+      client,
+      result.warehouseId,
+      result.productId,
+      metadata.correlationId,
+    );
+    return result;
   }
   async returnStock(
     input: ReturnStockRequest,

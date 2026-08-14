@@ -3,17 +3,25 @@ import { describe, expect, it, vi } from 'vitest';
 
 import type { JobQueueService } from './job-queue.service.js';
 import {
+  financePaymentStatusScheduleId,
   RecurringBillingScheduleService,
   recurringBillingScheduleId,
 } from './recurring-billing-schedule.service.js';
 
 describe('RecurringBillingScheduleService', () => {
-  it('upserts one timezone-aware daily production schedule', async () => {
-    const upsertSchedule = vi.fn().mockResolvedValue({
-      id: recurringBillingScheduleId,
-      name: 'sales.subscription-invoice.generate',
-      nextRunAt: '2026-08-13T22:15:00.000Z',
-    });
+  it('upserts the timezone-aware daily schedules for recurring invoices and payment statuses', async () => {
+    const upsertSchedule = vi
+      .fn()
+      .mockResolvedValueOnce({
+        id: recurringBillingScheduleId,
+        name: 'sales.subscription-invoice.generate',
+        nextRunAt: '2026-08-13T22:15:00.000Z',
+      })
+      .mockResolvedValueOnce({
+        id: financePaymentStatusScheduleId,
+        name: 'finance.payment-status.detect',
+        nextRunAt: '2026-08-13T22:25:00.000Z',
+      });
     const jobs = {
       upsertSchedule,
     } as unknown as JobQueueService;
@@ -21,6 +29,7 @@ describe('RecurringBillingScheduleService', () => {
     const service = new RecurringBillingScheduleService(
       {
         BUSINESS_TIMEZONE: 'Europe/Sofia',
+        FINANCE_PAYMENT_STATUS_CRON: '0 25 1 * * *',
         NODE_ENV: 'production',
         SALES_SUBSCRIPTION_INVOICE_CRON: '0 15 1 * * *',
       } as unknown as AppEnvironment,
@@ -41,6 +50,18 @@ describe('RecurringBillingScheduleService', () => {
       'info',
       'sales.subscription-invoice.schedule.ready',
       expect.objectContaining({ scheduleId: recurringBillingScheduleId }),
+    );
+    expect(upsertSchedule).toHaveBeenCalledWith({
+      id: financePaymentStatusScheduleId,
+      name: 'finance.payment-status.detect',
+      pattern: '0 25 1 * * *',
+      payload: { responsibility: 'finance-payment-status' },
+      timezone: 'Europe/Sofia',
+    });
+    expect(logger.event).toHaveBeenCalledWith(
+      'info',
+      'finance.payment-status.schedule.ready',
+      expect.objectContaining({ scheduleId: financePaymentStatusScheduleId }),
     );
   });
 

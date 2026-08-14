@@ -389,7 +389,7 @@ export const moduleMessages = {
     label: 'Sales',
   },
   'erp.service': {
-    description: 'Service requests, work orders, technicians, warranties, and inspections.',
+    description: 'Service requests, work orders, technicians, and service history.',
     label: 'Service',
   },
   'erp.logistics': {

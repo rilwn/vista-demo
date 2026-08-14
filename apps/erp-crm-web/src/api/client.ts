@@ -6,9 +6,12 @@ import {
 } from '@vista/contracts';
 
 const configuredApiBaseUrl: unknown = import.meta.env.VITE_API_BASE_URL;
-const apiBaseUrl = resolveVistaBrowserApiBaseUrl(configuredApiBaseUrl, globalThis.location.origin);
+export const apiV1BaseUrl = resolveVistaBrowserApiBaseUrl(
+  configuredApiBaseUrl,
+  globalThis.location.origin,
+);
 
-export const apiClient = createVistaApiClientV1({ baseUrl: apiBaseUrl });
+export const apiClient = createVistaApiClientV1({ baseUrl: apiV1BaseUrl });
 
 export class ApiClientError extends Error {
   readonly code: string;

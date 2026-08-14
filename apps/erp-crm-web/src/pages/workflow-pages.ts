@@ -503,9 +503,9 @@ export const workflowPages: WorkflowPageDefinition[] = [
       {
         title: 'Automation',
         items: [
-          'Recurring invoice schedule',
-          'Upcoming service visit generation',
-          'Contract SLA terms',
+          'Recurring invoice draft schedule',
+          'Contract period and billing cycle',
+          'Covered equipment and included services',
         ],
       },
     ],
@@ -514,7 +514,7 @@ export const workflowPages: WorkflowPageDefinition[] = [
   service(
     'requests',
     'Service requests',
-    'Capture requests from telephone, email, portal, on-site visit, and linked CRM tickets.',
+    'Capture and dispatch service requests from telephone, email, customer portal, or on-site visits.',
     'New service request',
     [
       {
@@ -522,15 +522,15 @@ export const workflowPages: WorkflowPageDefinition[] = [
         items: [
           'Customer, location, device, serial, and problem description',
           'Warranty, out-of-warranty, and subscription service type',
-          'Linked CRM ticket',
+          'Source and priority recorded with the request',
         ],
       },
       {
         title: 'Routing',
         items: [
-          'Priority and scheduling need',
-          'Technician assignment',
-          'SLA and notification settings',
+          'Technician assignment and rescheduling',
+          'Mapped technician warehouse',
+          'Recorded cancellation reason where needed',
         ],
       },
     ],
@@ -538,7 +538,7 @@ export const workflowPages: WorkflowPageDefinition[] = [
   service(
     'work-orders',
     'Work orders',
-    'Complete service work with time, parts, photos, signatures, and billing details.',
+    'Complete service work with time, parts, photographs, signatures, and recorded costs.',
     'New work order',
     [
       {
@@ -554,7 +554,7 @@ export const workflowPages: WorkflowPageDefinition[] = [
         items: [
           'Technician warehouse deduction',
           'Labor, parts, and transport cost calculation',
-          'Payment document creation',
+          'Completed work and evidence retained together',
         ],
       },
     ],
@@ -562,19 +562,19 @@ export const workflowPages: WorkflowPageDefinition[] = [
   service(
     'schedule',
     'Technician schedule',
-    'Plan technician workload and service appointments in a responsive calendar view.',
+    'Review assigned visits and technician appointments in one responsive schedule.',
     'Schedule visit',
     [
       {
-        title: 'Calendar',
-        items: ['Assigned jobs', 'Workload visibility', 'Route-aware appointment planning'],
+        title: 'Schedule',
+        items: ['Assigned jobs', 'Scheduled service times', 'Technician grouping by day'],
       },
       {
         title: 'Technician view',
         items: [
           'Mobile-friendly assigned work',
-          'Completed work history',
-          'Mobile-friendly technician access',
+          'Personal assigned-work view',
+          'Completed work visibility',
         ],
       },
     ],
@@ -582,12 +582,12 @@ export const workflowPages: WorkflowPageDefinition[] = [
   service(
     'devices',
     'Equipment history',
-    'Follow each device and serial through sale, service, repair, parts, and assigned technician.',
+    'Review recorded service visits, repairs, assigned technicians, and parts by serial number.',
     'Find equipment',
     [
       {
-        title: 'Serial timeline',
-        items: ['Supplier and delivery date', 'Customer sale', 'Service visits and repairs'],
+        title: 'Service timeline',
+        items: ['Service visits and repairs', 'Completed work details', 'Assigned technician'],
       },
       {
         title: 'Lifecycle',
@@ -595,27 +595,6 @@ export const workflowPages: WorkflowPageDefinition[] = [
       },
     ],
   ),
-  service(
-    'warranties',
-    'Warranties & inspections',
-    'Monitor warranty cards, claims, expiry, and required fiscal-device or scale inspections.',
-    'Create warranty claim',
-    [
-      {
-        title: 'Warranty',
-        items: [
-          'Warranty card per device serial',
-          'Remaining period and claim count',
-          'Received → review → approved/rejected → closed',
-        ],
-      },
-      {
-        title: 'Inspection',
-        items: ['Periodic inspection calendar', 'Reminders', 'Service-plan visit generation'],
-      },
-    ],
-  ),
-
   logistics(
     'deliveries',
     'Deliveries',

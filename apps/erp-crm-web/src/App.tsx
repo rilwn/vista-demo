@@ -4,6 +4,7 @@ import { WorkspaceLayout } from './layout/WorkspaceLayout';
 import { messages } from './messages';
 import { AccessPage } from './pages/AccessPage';
 import { CatalogPage } from './pages/CatalogPage';
+import { type FinanceView, FinancePage } from './pages/FinancePage';
 import { HomePage } from './pages/HomePage';
 import { ModulePage } from './pages/ModulePage';
 import { NotFoundPage } from './pages/NotFoundPage';
@@ -16,6 +17,7 @@ import {
   SupplierProcurementPage,
 } from './pages/SupplierProcurementPage';
 import { SecurityAdministrationPage } from './pages/SecurityAdministrationPage';
+import { type ServiceOperationsView, ServiceOperationsPage } from './pages/ServiceOperationsPage';
 import { SalesWorkflowPage } from './pages/SalesWorkflowPage';
 import { SalesPricingPage } from './pages/SalesPricingPage';
 import { SalesSubscriptionsPage } from './pages/SalesSubscriptionsPage';
@@ -77,6 +79,24 @@ function pageForPath(
   }
   if (pathname === '/modules/erp.sales/subscriptions') {
     return hasPermission('erp.sales') ? <SalesSubscriptionsPage /> : <NotFoundPage />;
+  }
+  const financePath = /^\/modules\/erp\.finance\/(invoices|payments)$/u.exec(pathname);
+  if (financePath?.[1]) {
+    return hasPermission('erp.finance') ? (
+      <FinancePage view={financePath[1] as FinanceView} />
+    ) : (
+      <NotFoundPage />
+    );
+  }
+  const servicePath = /^\/modules\/erp\.service\/(requests|work-orders|schedule|devices)$/u.exec(
+    pathname,
+  );
+  if (servicePath?.[1]) {
+    return hasPermission('erp.service') ? (
+      <ServiceOperationsPage view={servicePath[1] as ServiceOperationsView} />
+    ) : (
+      <NotFoundPage />
+    );
   }
   if (/^\/modules\/erp\.sales\/(quotations|orders|shipments)$/u.test(pathname)) {
     return hasPermission('erp.sales') ? <SalesWorkflowPage /> : <NotFoundPage />;

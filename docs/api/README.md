@@ -464,6 +464,37 @@ PDF/email delivery, corrections, and payment status remain controlled Finance
 work. Internal workflow references must not be presented as fiscal or accounting
 document numbers.
 
+## Finance collection records
+
+The current Finance slice provides an auditable BGN collection workflow, not a
+legal, fiscal, or accounting-document workflow:
+
+- `GET /api/v1/finance/reference-data` returns eligible BGN Sales invoice drafts
+  not already added to collections.
+- `GET /api/v1/finance/documents`, `/documents/:id`, and `/summary` return the
+  collection register, its payment/status history, and balance summary.
+- `POST /api/v1/finance/documents` adds exactly one Sales invoice draft to a
+  collection record with a due date.
+- `POST /api/v1/finance/documents/:id/payments` records one partial payment
+  allocation using cash, bank transfer, POS terminal, card, or compensation/
+  offset. The amount cannot exceed the remaining balance.
+- `POST /api/v1/finance/documents/:id/cancel` performs a version-checked,
+  reasoned cancellation only before a payment exists.
+
+Reads require `erp.finance:view`; add/payment commands require
+`erp.finance:create`; cancellation requires `erp.finance:edit`. Each command
+requires an `Idempotency-Key`, commits its data, audit event, and outbox event in
+one transaction, and preserves status history. `finance.payment-status.detect`
+is scheduled daily by `FINANCE_PAYMENT_STATUS_CRON` in `BUSINESS_TIMEZONE`; it
+marks an unpaid outstanding record overdue only once when its due date has
+passed, and is safe to retry.
+
+These records use internal `FIN-REV` and `PAY` references only. They do not
+perform legal/fiscal issuance, official branch/register/operator numbering, VAT
+or accounting posting, BNB conversion, PDF/email delivery, bank import/matching,
+cash vouchers, advances, notifications, or reporting; those remain subsequent
+Finance work.
+
 ## Service subscriptions
 
 The subscription API exposes:
@@ -511,3 +542,55 @@ optimistic versions for edits, and commit audit and outbox evidence atomically.
 Resolution checks active state and effective periods for the list, group, and
 campaign; orders matches by priority and customer specificity; and never mutates
 the quotation or a saved document.
+
+## Service operations
+
+The current Service API is an authorized request-to-completion core. It does not
+claim to issue a payment document or provide warranty, inspection, CRM-ticket,
+route, or full sales-lifecycle behavior.
+
+- `GET /api/v1/service/reference-data` returns the shared customer/location
+  choices, active technicians with their mapped technician warehouses, available
+  parts, matching active subscriptions, the configured business timezone, and
+  equipment for both request eligibility and historical review. Retired or
+  inactive equipment stays visible for history but cannot be used to open a new
+  request.
+- `GET /api/v1/service/requests` accepts bounded `page`/`pageSize` values and an
+  optional status; it returns numeric page metadata and summary counts; `GET /api/v1/service/requests/:id` returns one request.
+- `GET /api/v1/service/work-orders`, `/work-orders/my`, and
+  `/work-orders/:id` expose paged dispatcher and assigned-technician records.
+  The list routes support bounded `page`/`pageSize` values and an optional
+  status.
+- `GET /api/v1/service/equipment/:id/history` returns the service-only timeline
+  for one serial: work orders, service outcome, technician, dates, and used
+  parts. It intentionally does not yet join sales, supplier, or handover events.
+- `POST /api/v1/service/requests` records one selected telephone, email,
+  customer-portal, or on-site source with a canonical customer/location/device,
+  problem, priority, and warranty/out-of-warranty/subscription coverage type.
+- `POST /api/v1/service/requests/:id/assign` creates or reschedules one work
+  order for a valid technician/warehouse pairing; `POST /api/v1/service/requests/:id/cancel` records a reasoned pre-completion
+  cancellation.
+- `POST /api/v1/service/work-orders/:id/start`, `/photos`, and `/complete`
+  start assigned work, accept one image evidence file, and finish a work order
+  with notes, time, optional serial/batch-aware parts, labor/transport costs,
+  customer representative, and PNG signature; `GET /api/v1/service/work-orders/:id/photos/:photoId` and
+  `GET /api/v1/service/work-orders/:id/signature` return only
+  access-controlled binary evidence with private/no-store response headers.
+
+All reads require `erp.service:view`; request creation requires
+`erp.service:create`; dispatch and cancellation require `erp.service:edit`.
+Starting, uploading evidence, and completion require `erp.service:edit` from the
+assigned technician or `erp.service:approve` as an authorized override. Every
+write requires an `Idempotency-Key`, applies an optimistic version where the
+record is mutable, commits its audit event and outbox event with the business
+change, and returns the prior response on an exact retry. Work start rejects a
+second active repair for the same device. Completion issues parts from the
+assigned technician warehouse within the same PostgreSQL transaction, so a
+failed inventory issue rolls back the work completion.
+
+Request and appointment display use `BUSINESS_TIMEZONE`. The implementation is
+currently a date-grouped schedule, not capacity/overlap enforcement, route
+planning, or a complete calendar. Payment-document issuance, warranty cards and
+claims, inspection reminders, subscription-generated visits, CRM ticket
+correlation/SLA, reports/exports, and a complete sale-to-service serial timeline
+remain pending.

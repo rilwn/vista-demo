@@ -62,8 +62,8 @@ export function SalesSubscriptionsPage() {
           <p className="page-eyebrow">ERP · Sales</p>
           <h1>Service subscriptions</h1>
           <p>
-            Keep customer locations, covered devices, planned visits, and recurring billing in one
-            contract record.
+            Keep customer locations, covered devices, service coverage frequency, and recurring
+            billing in one contract record.
           </p>
         </div>
         {canCreate ? (
@@ -163,7 +163,7 @@ function SubscriptionRegister({
           </div>
           <div>
             <strong>{contract.equipment.length} device(s)</strong>
-            <span>Visits every {frequencyLabel(contract.visitFrequencyMonths)}</span>
+            <span>Coverage every {frequencyLabel(contract.visitFrequencyMonths)}</span>
           </div>
           <div>
             <strong>{formatMoney(contract.billingAmount, contract.currencyCode)}</strong>
@@ -399,7 +399,7 @@ function SubscriptionEditor({
     <SubscriptionDrawer
       busy={busy}
       onBack={onBack}
-      subtitle={contract ? contract.customerName : 'Define contract coverage and schedule'}
+      subtitle={contract ? contract.customerName : 'Define contract coverage and recurring billing'}
       title={contract ? `Edit ${contract.number}` : 'New service contract'}
     >
       <form className="subscription-form" onSubmit={(event) => void submit(event)}>
@@ -481,7 +481,7 @@ function SubscriptionEditor({
             <span>3</span>
             <div>
               <h3>Service coverage</h3>
-              <p>List each included service on its own line and choose the visit cycle.</p>
+              <p>List each included service on its own line and record the coverage frequency.</p>
             </div>
           </header>
           <SubscriptionField label="Included services">
@@ -494,7 +494,7 @@ function SubscriptionEditor({
             />
           </SubscriptionField>
           <div className="sales-form-grid">
-            <SubscriptionField label="Visit frequency">
+            <SubscriptionField label="Coverage frequency">
               <select
                 onChange={(event) =>
                   setForm((current) => ({

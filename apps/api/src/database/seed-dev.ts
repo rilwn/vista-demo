@@ -90,6 +90,8 @@ async function run(): Promise<void> {
       ['crm', 'create'],
       ['crm', 'edit'],
       ['erp.finance', 'view'],
+      ['erp.finance', 'create'],
+      ['erp.finance', 'edit'],
       ['erp.procurement', 'view'],
       ['erp.procurement', 'create'],
       ['erp.procurement', 'edit'],
@@ -99,6 +101,9 @@ async function run(): Promise<void> {
       ['erp.sales', 'create'],
       ['erp.sales', 'edit'],
       ['erp.service', 'view'],
+      ['erp.service', 'create'],
+      ['erp.service', 'edit'],
+      ['erp.service', 'approve'],
       ['erp.logistics', 'view'],
       ['reports', 'view'],
     ] as const;

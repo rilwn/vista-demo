@@ -265,3 +265,39 @@ certificate moves once from prepared to accepted with the representative,
 timestamp, optional note, and optimistic version retained. Internal service,
 draft, and handover references are operational identifiers only; the migration
 does not claim approved fiscal/accounting numbering or legal invoice issuance.
+
+Migration `0029_finance_collections_foundation` adds the `finance` schema and a
+bounded BGN collection workflow. `customer_documents` link one Sales invoice
+draft to one immutable source reference and retain exact total, allocated,
+outstanding, and BGN amounts; the database constrains valid payment and review
+states, prevents allocation above the total, and prohibits cancellation once an
+allocation exists. `payments` and `payment_allocations` retain payment evidence
+and one restrictive allocation link, while `payment_status_history` preserves
+the transition trail. `internal_document_sequences` allocates `FIN-REV` and
+`PAY` operational references under transaction locks. These records are not
+legal, fiscal, accounting, or BNB-posted invoices; future financial documents,
+rates, VAT, bank reconciliation, vouchers, and reports require their own
+approved workflows.
+
+Migration `0030_service_work_orders_core` adds the `service` schema and its
+operational request-to-completion record chain. `requests` retain the immutable
+canonical customer, location, equipment, optional subscription reference, intake
+channel, coverage type, priority, problem, reasoned cancellation, status, actor,
+and timestamps. `work_orders` retain one request link, assigned technician and
+technician warehouse, schedule, lifecycle timestamps, fixed-precision BGN labor,
+parts, transport, and total costs, plus completion notes and customer-signature
+metadata. Database constraints keep the request/work-order relationships,
+statuses, costs, and dates valid; a work order cannot be orphaned from its
+request.
+
+Separate append-only status-history, time-entry, part-usage, part-serial, and
+photo tables preserve the evidence and inventory relationship without rewriting
+completed work. The service completion command joins the existing inventory
+transaction to atomically issue parts from the assigned technician warehouse;
+serial and batch rules remain enforced by that ledger. Images and signatures are
+stored as controlled binary evidence and are available only through the
+parent-record authorization boundary. Internal `SRV` and `WO` sequences are
+operational identifiers, not fiscal or accounting document numbers. The migration
+does not implement payment documents, warranty claims, inspections, route
+planning, or full sales/supplier serial history; those remain separate required
+workflows.

@@ -34,7 +34,21 @@ PostgreSQL claim, records attempts and terminal failures, recovers stale claims,
 and currently delivers only in-system notifications. Email and SMS remain
 observable failures until their provider adapters are delivered.
 
-The other named handlers form the durable boundary for domains delivered in later
+`finance.payment-status.detect` is also an active domain handler. Startup
+upserts its stable daily schedule using `FINANCE_PAYMENT_STATUS_CRON` in
+`BUSINESS_TIMEZONE`. For each occurrence it locks due collection records,
+transitions an outstanding record to `overdue` once, appends status/audit/outbox
+evidence in the same transaction, and returns no further update on replay. It
+does not send payment reminders; notification policy and delivery remain a later
+Finance responsibility.
+
+`sales.subscription-invoice.generate` remains an active domain handler. Its
+stable daily schedule creates exactly one review draft for each due
+location/device subscription period and advances the next billing date in the
+same transaction. The resulting draft follows the separate Finance collection
+and legal-issuance workflows.
+
+The remaining named handlers form the durable boundary for domains delivered in later
 ordered phases. A successful handler writes one deterministic
 `scheduler.<job-name>.requested` event to the transactional outbox. Replaying the
 same logical run cannot create a second event. Success therefore means that the

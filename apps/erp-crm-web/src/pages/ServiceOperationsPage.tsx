@@ -1,0 +1,2391 @@
+import { Button, InlineAlert } from '@vista/ui';
+import type {
+  AssignServiceWorkOrderRequest,
+  CompleteServiceWorkOrderRequest,
+  CreateServiceRequest,
+  ServiceEquipmentHistory,
+  ServicePartUsageInput,
+  ServicePriority,
+  ServiceReferenceData,
+  ServiceRequest,
+  ServiceRequestPage,
+  ServiceRequestChannel,
+  ServiceType,
+  ServiceWorkOrder,
+  ServiceWorkOrderPage,
+  ServiceWorkTimeEntryInput,
+} from '@vista/contracts';
+import {
+  type FormEvent,
+  type PointerEvent as ReactPointerEvent,
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
+
+import { ApiClientError } from '../api/client';
+import {
+  assignServiceWorkOrder,
+  cancelServiceRequest,
+  completeServiceWorkOrder,
+  createServiceRequest,
+  fetchServicePhoto,
+  fetchServiceSignature,
+  getServiceEquipmentHistory,
+  getServiceReferenceData,
+  getServiceWorkOrder,
+  listMyServiceWork,
+  listServiceRequests,
+  listServiceWorkOrders,
+  startServiceWorkOrder,
+  uploadServicePhoto,
+} from '../api/service';
+import { useAuth } from '../auth/AuthProvider';
+import { Icon } from '../components/Icon';
+import { Link } from '../routing/Router';
+
+export type ServiceOperationsView = 'devices' | 'requests' | 'schedule' | 'work-orders';
+
+const emptyReferences: ServiceReferenceData = {
+  businessTimezone: 'UTC',
+  customers: [],
+  equipment: [],
+  locations: [],
+  parts: [],
+  subscriptions: [],
+  technicians: [],
+};
+
+const emptyRequestPage: ServiceRequestPage = {
+  items: [],
+  page: 1,
+  pageSize: 25,
+  summary: { completed: 0, inProgress: 0, new: 0, scheduled: 0 },
+  total: 0,
+  totalPages: 0,
+};
+
+const emptyWorkOrderPage: ServiceWorkOrderPage = {
+  items: [],
+  page: 1,
+  pageSize: 25,
+  total: 0,
+  totalPages: 0,
+};
+
+export function ServiceOperationsPage({ view }: { view: ServiceOperationsView }) {
+  const { hasPermission, session } = useAuth();
+  const token = session?.sessionToken ?? '';
+  const [requestListPage, setRequestListPage] = useState(1);
+  const [workOrderListPage, setWorkOrderListPage] = useState(1);
+  const data = useServiceData(token, requestListPage, workOrderListPage);
+  const [creating, setCreating] = useState(false);
+  const [selectedRequest, setSelectedRequest] = useState<ServiceRequest | null>(null);
+  const [selectedWorkOrder, setSelectedWorkOrder] = useState<ServiceWorkOrder | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const canCreate = hasPermission('erp.service', 'create');
+  const canEdit = hasPermission('erp.service', 'edit');
+  const canApprove = hasPermission('erp.service', 'approve');
+
+  const openWorkOrder = useCallback(
+    async (id: string) => {
+      try {
+        setSelectedWorkOrder(await getServiceWorkOrder(token, id));
+      } catch {
+        setNotice('The work order could not be opened. Try again.');
+      }
+    },
+    [token],
+  );
+
+  if (data.loading) return <ServiceState title="Loading service work" />;
+  if (data.error)
+    return (
+      <ServiceState title="Service work could not be loaded">
+        <Button onClick={data.reload} variant="secondary">
+          Try again
+        </Button>
+      </ServiceState>
+    );
+
+  const page = pageMeta(view);
+  const businessTimezone = data.references.businessTimezone;
+  return (
+    <div className="page-stack service-workspace">
+      <header className="page-header service-workspace-header">
+        <div>
+          <p className="page-eyebrow">ERP · Service</p>
+          <h1>{page.title}</h1>
+          <p>{page.description}</p>
+        </div>
+        {view === 'requests' && canCreate ? (
+          <Button onClick={() => setCreating(true)}>
+            <Icon name="plus" size={17} /> New service request
+          </Button>
+        ) : null}
+      </header>
+
+      <nav aria-label="Service sections" className="service-tabs">
+        <Link
+          className={({ isActive }) => (isActive ? 'is-active' : undefined)}
+          end
+          to="/modules/erp.service/requests"
+        >
+          Service requests
+        </Link>
+        <Link
+          className={({ isActive }) => (isActive ? 'is-active' : undefined)}
+          end
+          to="/modules/erp.service/work-orders"
+        >
+          Work orders
+        </Link>
+        <Link
+          className={({ isActive }) => (isActive ? 'is-active' : undefined)}
+          end
+          to="/modules/erp.service/schedule"
+        >
+          Schedule
+        </Link>
+        <Link
+          className={({ isActive }) => (isActive ? 'is-active' : undefined)}
+          end
+          to="/modules/erp.service/devices"
+        >
+          Equipment history
+        </Link>
+      </nav>
+
+      {notice ? (
+        <InlineAlert tone="success">
+          <div className="service-notice">
+            <span>{notice}</span>
+            <button aria-label="Dismiss message" onClick={() => setNotice(null)} type="button">
+              Close
+            </button>
+          </div>
+        </InlineAlert>
+      ) : null}
+
+      {view === 'requests' ? (
+        <ServiceRequestsView
+          canEdit={canEdit}
+          onOpen={setSelectedRequest}
+          onOpenWorkOrder={(id) => void openWorkOrder(id)}
+          onPageChange={setRequestListPage}
+          page={data.requestPage}
+          timezone={businessTimezone}
+          workOrders={data.workOrderPage.items}
+        />
+      ) : null}
+      {view === 'work-orders' ? (
+        <ServiceWorkOrdersView
+          currentAccountId={session?.context.accountId ?? ''}
+          onOpen={setSelectedWorkOrder}
+          onPageChange={setWorkOrderListPage}
+          myWorkOrderPage={data.myWorkOrderPage}
+          timezone={businessTimezone}
+          workOrderPage={data.workOrderPage}
+        />
+      ) : null}
+      {view === 'schedule' ? (
+        <ServiceScheduleView
+          onOpen={setSelectedWorkOrder}
+          onPageChange={setWorkOrderListPage}
+          page={data.workOrderPage}
+          timezone={businessTimezone}
+        />
+      ) : null}
+      {view === 'devices' ? (
+        <ServiceDevicesView
+          references={data.references}
+          token={token}
+          timezone={businessTimezone}
+        />
+      ) : null}
+
+      {creating ? (
+        <NewServiceRequestDrawer
+          onBack={() => setCreating(false)}
+          onSaved={(request) => {
+            setCreating(false);
+            setNotice(`${request.number} is ready for dispatch.`);
+            setRequestListPage(1);
+            data.reload();
+            setSelectedRequest(request);
+          }}
+          references={data.references}
+          token={token}
+        />
+      ) : null}
+      {selectedRequest ? (
+        <ServiceRequestDrawer
+          canEdit={canEdit}
+          onBack={() => setSelectedRequest(null)}
+          onOpenWorkOrder={(id) => {
+            setSelectedRequest(null);
+            void openWorkOrder(id);
+          }}
+          onSaved={(request, message) => {
+            setSelectedRequest(request);
+            setNotice(message);
+            data.reload();
+          }}
+          references={data.references}
+          request={selectedRequest}
+          token={token}
+          timezone={businessTimezone}
+        />
+      ) : null}
+      {selectedWorkOrder ? (
+        <ServiceWorkOrderDrawer
+          canApprove={canApprove}
+          canEdit={canEdit}
+          currentAccountId={session?.context.accountId ?? ''}
+          onBack={() => setSelectedWorkOrder(null)}
+          onSaved={(workOrder, message) => {
+            setSelectedWorkOrder(workOrder);
+            setNotice(message);
+            data.reload();
+          }}
+          references={data.references}
+          token={token}
+          timezone={businessTimezone}
+          workOrder={selectedWorkOrder}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function ServiceRequestsView({
+  canEdit,
+  onOpen,
+  onOpenWorkOrder,
+  onPageChange,
+  page,
+  timezone,
+  workOrders,
+}: {
+  canEdit: boolean;
+  onOpen: (request: ServiceRequest) => void;
+  onOpenWorkOrder: (id: string) => void;
+  onPageChange: (page: number) => void;
+  page: ServiceRequestPage;
+  timezone: string;
+  workOrders: ServiceWorkOrder[];
+}) {
+  const { items: requests, summary } = page;
+  return (
+    <>
+      <section aria-label="Service request summary" className="service-summary">
+        <ServiceMetric label="New" value={summary.new.toString()} />
+        <ServiceMetric label="Scheduled" value={summary.scheduled.toString()} />
+        <ServiceMetric label="In progress" tone="warning" value={summary.inProgress.toString()} />
+        <ServiceMetric label="Completed" value={summary.completed.toString()} />
+      </section>
+      {!requests.length ? (
+        <ServiceState title="No service requests yet">
+          <p>Start with a customer, service location, and registered device.</p>
+        </ServiceState>
+      ) : (
+        <section aria-label="Service requests" className="service-register">
+          <div className="service-register-head" role="row">
+            <span>Request</span>
+            <span>Customer &amp; device</span>
+            <span>Schedule</span>
+            <span>Status</span>
+            <span aria-hidden="true" />
+          </div>
+          {requests.map((request) => {
+            const order = request.workOrderId
+              ? workOrders.find((item) => item.id === request.workOrderId)
+              : undefined;
+            return (
+              <article className="service-register-row" key={request.id}>
+                <div className="service-record-mark">
+                  <span className={`service-priority is-${request.priority}`} />
+                  <div>
+                    <strong>{request.number}</strong>
+                    <small>{sourceLabel(request.sourceChannel)}</small>
+                  </div>
+                </div>
+                <div className="service-customer-cell">
+                  <strong>{request.customerName}</strong>
+                  <span>
+                    {request.deviceName} · {request.serialNumber}
+                  </span>
+                </div>
+                <div className="service-schedule-cell">
+                  {request.scheduledStart ? (
+                    <>
+                      <strong>{formatDateTime(request.scheduledStart, timezone)}</strong>
+                      <span>{request.assignedTechnician?.displayName ?? 'Technician pending'}</span>
+                    </>
+                  ) : (
+                    <span>Needs dispatch</span>
+                  )}
+                </div>
+                <ServiceStatus status={request.status} />
+                <div className="service-row-actions">
+                  {order ? (
+                    <Button onClick={() => onOpenWorkOrder(order.id)} variant="quiet">
+                      Work order
+                    </Button>
+                  ) : null}
+                  <Button onClick={() => onOpen(request)} variant="quiet">
+                    {canEdit ? 'Manage' : 'View'}
+                  </Button>
+                </div>
+              </article>
+            );
+          })}
+          <ServicePager onPageChange={onPageChange} page={page} />
+        </section>
+      )}
+    </>
+  );
+}
+
+function ServiceWorkOrdersView({
+  currentAccountId,
+  onOpen,
+  onPageChange,
+  myWorkOrderPage,
+  timezone,
+  workOrderPage,
+}: {
+  currentAccountId: string;
+  onOpen: (workOrder: ServiceWorkOrder) => void;
+  onPageChange: (page: number) => void;
+  myWorkOrderPage: ServiceWorkOrderPage;
+  timezone: string;
+  workOrderPage: ServiceWorkOrderPage;
+}) {
+  const [scope, setScope] = useState<'all' | 'mine'>('all');
+  const activePage = scope === 'mine' ? myWorkOrderPage : workOrderPage;
+  const visible = activePage.items;
+  return (
+    <section className="service-work-orders-panel">
+      <div className="service-view-toolbar">
+        <div>
+          <h2>{scope === 'mine' ? 'My assigned work' : 'All work orders'}</h2>
+          <p>Open one work order to start, record evidence, or complete the visit.</p>
+        </div>
+        <div className="service-segmented" role="group" aria-label="Work order scope">
+          <button
+            className={scope === 'all' ? 'is-active' : undefined}
+            onClick={() => setScope('all')}
+            type="button"
+          >
+            All work
+          </button>
+          <button
+            className={scope === 'mine' ? 'is-active' : undefined}
+            onClick={() => setScope('mine')}
+            type="button"
+          >
+            My work
+          </button>
+        </div>
+      </div>
+      {!visible.length ? (
+        <ServiceState title={scope === 'mine' ? 'No work assigned to you' : 'No work orders yet'}>
+          <p>
+            {scope === 'mine'
+              ? 'Assigned visits will appear here and stay available on a smaller screen.'
+              : 'Dispatch a service request to create the first work order.'}
+          </p>
+        </ServiceState>
+      ) : (
+        <div className="service-work-order-list">
+          {visible.map((workOrder) => (
+            <button
+              className="service-work-order-card"
+              key={workOrder.id}
+              onClick={() => onOpen(workOrder)}
+              type="button"
+            >
+              <span className="service-work-order-card-top">
+                <ServiceStatus status={workOrder.status} />
+                <small>{workOrder.number}</small>
+              </span>
+              <strong>{workOrder.customerName}</strong>
+              <span>
+                {workOrder.deviceName} · {workOrder.serialNumber}
+              </span>
+              <footer>
+                <span>{workOrder.assignedTechnician?.displayName ?? 'Technician pending'}</span>
+                <span>
+                  {workOrder.scheduledStart
+                    ? formatDateTime(workOrder.scheduledStart, timezone)
+                    : 'Unscheduled'}
+                </span>
+              </footer>
+              {workOrder.assignedTechnician?.accountId === currentAccountId ? (
+                <em>Assigned to you</em>
+              ) : null}
+            </button>
+          ))}
+        </div>
+      )}
+      <ServicePager onPageChange={onPageChange} page={activePage} />
+    </section>
+  );
+}
+
+function ServiceScheduleView({
+  onOpen,
+  onPageChange,
+  page,
+  timezone,
+}: {
+  onOpen: (workOrder: ServiceWorkOrder) => void;
+  onPageChange: (page: number) => void;
+  page: ServiceWorkOrderPage;
+  timezone: string;
+}) {
+  const scheduled = useMemo(
+    () =>
+      page.items
+        .filter(
+          (workOrder) =>
+            workOrder.scheduledStart &&
+            (workOrder.status === 'scheduled' || workOrder.status === 'in_progress'),
+        )
+        .sort((left, right) =>
+          (left.scheduledStart ?? '').localeCompare(right.scheduledStart ?? ''),
+        ),
+    [page.items],
+  );
+  const groups = useMemo(() => groupSchedule(scheduled), [scheduled]);
+  return (
+    <section className="service-schedule-panel">
+      <div className="service-view-toolbar">
+        <div>
+          <h2>Technician schedule</h2>
+          <p>Appointments are grouped by business day so workload remains visible at a glance.</p>
+        </div>
+        <span className="service-schedule-count">{scheduled.length} upcoming</span>
+      </div>
+      {!scheduled.length ? (
+        <ServiceState title="No scheduled visits">
+          <p>Dispatch a request to place it on a technician’s schedule.</p>
+        </ServiceState>
+      ) : (
+        <div className="service-schedule-grid">
+          {groups.map(([day, appointments]) => (
+            <section className="service-day-column" key={day}>
+              <header>
+                <strong>{formatScheduleDay(day, timezone)}</strong>
+                <span>
+                  {appointments.length} visit{appointments.length === 1 ? '' : 's'}
+                </span>
+              </header>
+              <div>
+                {appointments.map((workOrder) => (
+                  <button key={workOrder.id} onClick={() => onOpen(workOrder)} type="button">
+                    <span>{formatTime(workOrder.scheduledStart!, timezone)}</span>
+                    <strong>{workOrder.customerName}</strong>
+                    <small>
+                      {workOrder.assignedTechnician?.displayName ?? 'Technician pending'}
+                    </small>
+                    <em>{workOrder.deviceName}</em>
+                  </button>
+                ))}
+              </div>
+            </section>
+          ))}
+        </div>
+      )}
+      <ServicePager onPageChange={onPageChange} page={page} />
+    </section>
+  );
+}
+
+function ServiceDevicesView({
+  references,
+  token,
+  timezone,
+}: {
+  references: ServiceReferenceData;
+  token: string;
+  timezone: string;
+}) {
+  const [equipmentId, setEquipmentId] = useState(references.equipment[0]?.id ?? '');
+  const [history, setHistory] = useState<ServiceEquipmentHistory | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!equipmentId) {
+      setHistory(null);
+      return;
+    }
+    let active = true;
+    setLoading(true);
+    setError(null);
+    void getServiceEquipmentHistory(token, equipmentId)
+      .then((result) => active && setHistory(result))
+      .catch(
+        (caught) => active && setError(errorText(caught, 'Equipment history could not be loaded.')),
+      )
+      .finally(() => active && setLoading(false));
+    return () => {
+      active = false;
+    };
+  }, [equipmentId, token]);
+
+  return (
+    <section className="service-device-history-panel">
+      <div className="service-device-picker">
+        <div>
+          <h2>Service history by serial number</h2>
+          <p>
+            Review every recorded visit, technician, service result, and part used for one device.
+          </p>
+        </div>
+        <label>
+          <span>Device</span>
+          <select onChange={(event) => setEquipmentId(event.target.value)} value={equipmentId}>
+            {!references.equipment.length ? (
+              <option value="">No registered equipment</option>
+            ) : null}
+            {references.equipment.map((equipment) => (
+              <option key={equipment.id} value={equipment.id}>
+                {equipment.deviceName} · {equipment.serialNumber}
+                {equipment.status === 'retired' ? ' · Retired' : ''}
+                {!equipment.active ? ' · Inactive' : ''}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+      {loading ? <ServiceState title="Loading equipment history" /> : null}
+      {error ? <InlineAlert tone="error">{error}</InlineAlert> : null}
+      {!loading && !error && history ? (
+        <div className="service-device-history">
+          <header>
+            <span className="service-device-mark">
+              <Icon name="service" size={20} />
+            </span>
+            <div>
+              <h3>{history.deviceName}</h3>
+              <p>
+                Serial {history.serialNumber}
+                {history.warrantyEndsOn
+                  ? ` · Warranty until ${formatDate(history.warrantyEndsOn, timezone)}`
+                  : ''}
+              </p>
+            </div>
+            <strong>
+              {history.events.length} service record{history.events.length === 1 ? '' : 's'}
+            </strong>
+          </header>
+          {!history.events.length ? (
+            <p className="service-empty-inline">
+              No service work has been recorded for this device yet.
+            </p>
+          ) : (
+            <ol className="service-history-list">
+              {history.events.map((event) => (
+                <li key={event.id}>
+                  <span aria-hidden="true" />
+                  <div>
+                    <strong>{event.workOrderNumber}</strong>
+                    <p>{event.description}</p>
+                    <small>
+                      {formatDateTime(event.occurredAt, timezone)}
+                      {event.technicianName ? ` · ${event.technicianName}` : ''}
+                    </small>
+                    {event.parts.length ? (
+                      <div className="service-history-parts">
+                        {event.parts.map((part) => (
+                          <span key={part.id}>
+                            {part.productName} × {part.quantity}
+                          </span>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                  <ServiceStatus status={event.status} />
+                </li>
+              ))}
+            </ol>
+          )}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function NewServiceRequestDrawer({
+  onBack,
+  onSaved,
+  references,
+  token,
+}: {
+  onBack: () => void;
+  onSaved: (request: ServiceRequest) => void;
+  references: ServiceReferenceData;
+  token: string;
+}) {
+  const eligibleEquipment = references.equipment.filter(
+    (item) => item.active && item.status === 'active',
+  );
+  const initialEquipment = eligibleEquipment[0];
+  const initialCustomerPartnerId =
+    initialEquipment?.customerPartnerId ?? references.customers[0]?.id ?? '';
+  const [customerPartnerId, setCustomerPartnerId] = useState(initialCustomerPartnerId);
+  const locations = references.locations.filter(
+    (location) => location.customerPartnerId === customerPartnerId,
+  );
+  const initialCustomerLocationId =
+    initialEquipment?.customerLocationId ??
+    references.locations.find((location) => location.customerPartnerId === initialCustomerPartnerId)
+      ?.id ??
+    '';
+  const [customerLocationId, setCustomerLocationId] = useState(initialCustomerLocationId);
+  const equipment = eligibleEquipment.filter(
+    (item) =>
+      item.customerPartnerId === customerPartnerId &&
+      item.customerLocationId === customerLocationId,
+  );
+  const [customerEquipmentId, setCustomerEquipmentId] = useState(initialEquipment?.id ?? '');
+  const [sourceChannel, setSourceChannel] = useState<ServiceRequestChannel>('telephone');
+  const [serviceType, setServiceType] = useState<ServiceType>('warranty');
+  const [subscriptionContractId, setSubscriptionContractId] = useState('');
+  const [priority, setPriority] = useState<ServicePriority>('normal');
+  const [problemDescription, setProblemDescription] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  function changeCustomer(nextCustomerId: string) {
+    const nextEquipment = eligibleEquipment.find(
+      (item) => item.customerPartnerId === nextCustomerId,
+    );
+    const nextLocationId =
+      nextEquipment?.customerLocationId ??
+      references.locations.find((location) => location.customerPartnerId === nextCustomerId)?.id;
+    setCustomerPartnerId(nextCustomerId);
+    setCustomerLocationId(nextLocationId ?? '');
+    setCustomerEquipmentId(nextEquipment?.id ?? '');
+    setSubscriptionContractId('');
+  }
+
+  function changeLocation(nextLocationId: string) {
+    const nextEquipmentId = eligibleEquipment.find(
+      (item) =>
+        item.customerPartnerId === customerPartnerId && item.customerLocationId === nextLocationId,
+    )?.id;
+    setCustomerLocationId(nextLocationId);
+    setCustomerEquipmentId(nextEquipmentId ?? '');
+    setSubscriptionContractId('');
+  }
+
+  const subscriptions = references.subscriptions.filter(
+    (contract) =>
+      contract.customerPartnerId === customerPartnerId &&
+      contract.customerLocationId === customerLocationId &&
+      contract.customerEquipmentIds.includes(customerEquipmentId),
+  );
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      const input: CreateServiceRequest = {
+        customerEquipmentId,
+        customerLocationId,
+        customerPartnerId,
+        priority,
+        problemDescription,
+        serviceType,
+        sourceChannel,
+        ...(serviceType === 'subscription' ? { subscriptionContractId } : {}),
+      };
+      onSaved(await createServiceRequest(token, crypto.randomUUID(), input));
+    } catch (caught) {
+      setError(errorText(caught, 'The service request could not be created.'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <ServiceDrawer
+      busy={busy}
+      onBack={onBack}
+      subtitle="Customer, device, and request details"
+      title="New service request"
+    >
+      <form className="service-form" onSubmit={(event) => void submit(event)}>
+        {error ? <InlineAlert tone="error">{error}</InlineAlert> : null}
+        {!references.customers.length ? (
+          <InlineAlert tone="warning">
+            Add a customer before creating a service request.
+          </InlineAlert>
+        ) : (
+          <>
+            <FormSection
+              index="1"
+              title="Customer and equipment"
+              description="Use the shared customer and device register."
+            >
+              <ServiceField label="Customer">
+                <select
+                  onChange={(event) => changeCustomer(event.target.value)}
+                  required
+                  value={customerPartnerId}
+                >
+                  {references.customers.map((customer) => (
+                    <option key={customer.id} value={customer.id}>
+                      {customer.name}
+                    </option>
+                  ))}
+                </select>
+              </ServiceField>
+              <ServiceField label="Service location">
+                <select
+                  onChange={(event) => changeLocation(event.target.value)}
+                  required
+                  value={customerLocationId}
+                >
+                  <option value="">Choose location</option>
+                  {locations.map((location) => (
+                    <option key={location.id} value={location.id}>
+                      {location.name}
+                    </option>
+                  ))}
+                </select>
+              </ServiceField>
+              {equipment.length ? (
+                <ServiceField label="Device and serial number">
+                  <select
+                    onChange={(event) => {
+                      setCustomerEquipmentId(event.target.value);
+                      setSubscriptionContractId('');
+                    }}
+                    required
+                    value={customerEquipmentId}
+                  >
+                    {equipment.map((item) => (
+                      <option key={item.id} value={item.id}>
+                        {item.deviceName} · {item.serialNumber}
+                      </option>
+                    ))}
+                  </select>
+                </ServiceField>
+              ) : (
+                <InlineAlert tone="warning">
+                  This location has no active registered device. Choose another customer or
+                  location, or register the device first.
+                </InlineAlert>
+              )}
+            </FormSection>
+            {equipment.length ? (
+              <FormSection
+                index="2"
+                title="Request details"
+                description="Capture the source and service coverage accurately."
+              >
+                <div className="service-form-grid">
+                  <ServiceField label="Request source">
+                    <select
+                      onChange={(event) =>
+                        setSourceChannel(event.target.value as ServiceRequestChannel)
+                      }
+                      value={sourceChannel}
+                    >
+                      {sourceChannels.map((channel) => (
+                        <option key={channel} value={channel}>
+                          {sourceLabel(channel)}
+                        </option>
+                      ))}
+                    </select>
+                  </ServiceField>
+                  <ServiceField label="Priority">
+                    <select
+                      onChange={(event) => setPriority(event.target.value as ServicePriority)}
+                      value={priority}
+                    >
+                      {priorities.map((item) => (
+                        <option key={item} value={item}>
+                          {priorityLabel(item)}
+                        </option>
+                      ))}
+                    </select>
+                  </ServiceField>
+                  <ServiceField label="Service type">
+                    <select
+                      onChange={(event) => setServiceType(event.target.value as ServiceType)}
+                      value={serviceType}
+                    >
+                      {serviceTypes.map((item) => (
+                        <option key={item} value={item}>
+                          {serviceTypeLabel(item)}
+                        </option>
+                      ))}
+                    </select>
+                  </ServiceField>
+                  {serviceType === 'subscription' ? (
+                    <ServiceField label="Service subscription">
+                      <select
+                        onChange={(event) => setSubscriptionContractId(event.target.value)}
+                        required
+                        value={subscriptionContractId}
+                      >
+                        <option value="">Choose a contract</option>
+                        {subscriptions.map((contract) => (
+                          <option key={contract.id} value={contract.id}>
+                            {contract.number}
+                          </option>
+                        ))}
+                      </select>
+                    </ServiceField>
+                  ) : null}
+                </div>
+                <ServiceField label="Problem description">
+                  <textarea
+                    maxLength={4000}
+                    onChange={(event) => setProblemDescription(event.target.value)}
+                    placeholder="Describe the reported issue and any useful context."
+                    required
+                    rows={5}
+                    value={problemDescription}
+                  />
+                </ServiceField>
+              </FormSection>
+            ) : null}
+          </>
+        )}
+        <DrawerActions
+          busy={busy}
+          disabled={!customerEquipmentId || !customerLocationId || !customerPartnerId}
+          onBack={onBack}
+          submitLabel="Create request"
+        />
+      </form>
+    </ServiceDrawer>
+  );
+}
+
+function ServiceRequestDrawer({
+  canEdit,
+  onBack,
+  onOpenWorkOrder,
+  onSaved,
+  references,
+  request,
+  token,
+  timezone,
+}: {
+  canEdit: boolean;
+  onBack: () => void;
+  onOpenWorkOrder: (id: string) => void;
+  onSaved: (request: ServiceRequest, message: string) => void;
+  references: ServiceReferenceData;
+  request: ServiceRequest;
+  token: string;
+  timezone: string;
+}) {
+  const [assigning, setAssigning] = useState(false);
+  const [cancellationReason, setCancellationReason] = useState('');
+  const [cancelling, setCancelling] = useState(false);
+  const [showCancellation, setShowCancellation] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function cancel() {
+    if (!cancellationReason.trim()) {
+      setError('Enter the reason for cancelling this request.');
+      return;
+    }
+    setCancelling(true);
+    setError(null);
+    try {
+      const saved = await cancelServiceRequest(token, request.id, crypto.randomUUID(), {
+        cancellationReason,
+        expectedVersion: request.version,
+      });
+      setShowCancellation(false);
+      onSaved(saved, `${saved.number} was cancelled.`);
+    } catch (caught) {
+      setError(errorText(caught, 'The service request could not be cancelled.'));
+    } finally {
+      setCancelling(false);
+    }
+  }
+
+  return (
+    <ServiceDrawer
+      busy={cancelling}
+      onBack={onBack}
+      subtitle={request.customerName}
+      title={request.number}
+    >
+      <div className="service-preview">
+        {error ? <InlineAlert tone="error">{error}</InlineAlert> : null}
+        <section className="service-preview-hero">
+          <div>
+            <ServiceStatus status={request.status} />
+            <h3>{request.deviceName}</h3>
+            <p>
+              {request.serialNumber} · {serviceTypeLabel(request.serviceType)}
+            </p>
+          </div>
+          {request.workOrderId ? (
+            <Button onClick={() => onOpenWorkOrder(request.workOrderId!)} variant="secondary">
+              Open work order
+            </Button>
+          ) : canEdit ? (
+            <Button onClick={() => setAssigning(true)}>Dispatch request</Button>
+          ) : null}
+        </section>
+        <section className="service-preview-section">
+          <header>
+            <div>
+              <h3>Reported issue</h3>
+              <p>
+                {sourceLabel(request.sourceChannel)} · {priorityLabel(request.priority)}
+              </p>
+            </div>
+          </header>
+          <p className="service-problem-copy">{request.problemDescription}</p>
+        </section>
+        <section className="service-preview-section">
+          <header>
+            <div>
+              <h3>Service location</h3>
+              <p>Shared ERP customer and equipment data.</p>
+            </div>
+          </header>
+          <dl className="service-fact-grid">
+            <div>
+              <dt>Customer</dt>
+              <dd>{request.customerName}</dd>
+            </div>
+            <div>
+              <dt>Location</dt>
+              <dd>{request.customerLocationName}</dd>
+            </div>
+            <div>
+              <dt>Device</dt>
+              <dd>{request.deviceName}</dd>
+            </div>
+            <div>
+              <dt>Serial number</dt>
+              <dd>{request.serialNumber}</dd>
+            </div>
+          </dl>
+        </section>
+        {request.assignedTechnician ? (
+          <section className="service-preview-section">
+            <header>
+              <div>
+                <h3>Dispatch</h3>
+                <p>Scheduled work stays with the assigned technician.</p>
+              </div>
+            </header>
+            <div className="service-assignment-card">
+              <span>{request.assignedTechnician.displayName}</span>
+              <strong>
+                {request.scheduledStart
+                  ? formatDateTime(request.scheduledStart, timezone)
+                  : 'Time pending'}
+              </strong>
+              <small>{request.assignedTechnician.warehouseName}</small>
+            </div>
+            {canEdit && request.status === 'scheduled' ? (
+              <Button onClick={() => setAssigning(true)} variant="quiet">
+                Reschedule
+              </Button>
+            ) : null}
+          </section>
+        ) : null}
+        {assigning ? (
+          <AssignServiceRequestForm
+            onCancel={() => setAssigning(false)}
+            onError={setError}
+            onSaved={(saved) => {
+              setAssigning(false);
+              onSaved(saved, `${saved.number} was assigned to a technician.`);
+            }}
+            references={references}
+            request={request}
+            token={token}
+            timezone={timezone}
+          />
+        ) : null}
+        {canEdit && (request.status === 'new' || request.status === 'scheduled') ? (
+          <section className="service-preview-section service-cancel-section">
+            <header>
+              <div>
+                <h3>Cancel request</h3>
+                <p>
+                  Use this only when the visit will not go ahead. The reason remains in the record.
+                </p>
+              </div>
+              {!showCancellation ? (
+                <Button onClick={() => setShowCancellation(true)} variant="quiet">
+                  Cancel request
+                </Button>
+              ) : null}
+            </header>
+            {showCancellation ? (
+              <div className="service-cancel-form">
+                <ServiceField label="Cancellation reason">
+                  <textarea
+                    maxLength={1000}
+                    onChange={(event) => setCancellationReason(event.target.value)}
+                    required
+                    rows={3}
+                    value={cancellationReason}
+                  />
+                </ServiceField>
+                <div className="service-inline-actions">
+                  <Button
+                    busy={cancelling}
+                    onClick={() => void cancel()}
+                    type="button"
+                    variant="danger"
+                  >
+                    Confirm cancellation
+                  </Button>
+                  <Button
+                    disabled={cancelling}
+                    onClick={() => setShowCancellation(false)}
+                    type="button"
+                    variant="secondary"
+                  >
+                    Keep request
+                  </Button>
+                </div>
+              </div>
+            ) : null}
+          </section>
+        ) : null}
+      </div>
+    </ServiceDrawer>
+  );
+}
+
+function AssignServiceRequestForm({
+  onCancel,
+  onError,
+  onSaved,
+  references,
+  request,
+  token,
+  timezone,
+}: {
+  onCancel: () => void;
+  onError: (message: string | null) => void;
+  onSaved: (request: ServiceRequest) => void;
+  references: ServiceReferenceData;
+  request: ServiceRequest;
+  token: string;
+  timezone: string;
+}) {
+  const [technicianAccountId, setTechnicianAccountId] = useState(
+    request.assignedTechnician?.accountId ?? references.technicians[0]?.accountId ?? '',
+  );
+  const technician = references.technicians.find((item) => item.accountId === technicianAccountId);
+  const [scheduledStart, setScheduledStart] = useState(
+    toBusinessDateTimeInput(request.scheduledStart ?? nextBusinessHour(timezone), timezone),
+  );
+  const [scheduledEnd, setScheduledEnd] = useState(
+    toBusinessDateTimeInput(request.scheduledEnd ?? nextBusinessHour(timezone, 2), timezone),
+  );
+  const [busy, setBusy] = useState(false);
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!technician) return;
+    setBusy(true);
+    onError(null);
+    try {
+      const input: AssignServiceWorkOrderRequest = {
+        expectedVersion: request.version,
+        scheduledEnd: businessDateTimeToIso(scheduledEnd, timezone),
+        scheduledStart: businessDateTimeToIso(scheduledStart, timezone),
+        technicianAccountId: technician.accountId,
+        technicianWarehouseId: technician.warehouseId,
+      };
+      onSaved(await assignServiceWorkOrder(token, request.id, crypto.randomUUID(), input));
+    } catch (caught) {
+      onError(errorText(caught, 'The request could not be assigned.'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="service-dispatch-form">
+      <header>
+        <span>Dispatch</span>
+        <p>Assign the visit to a technician and their mapped mobile warehouse.</p>
+      </header>
+      {!references.technicians.length ? (
+        <InlineAlert tone="warning">
+          Set up an active technician operator and technician warehouse in Business structure first.
+        </InlineAlert>
+      ) : (
+        <form onSubmit={(event) => void submit(event)}>
+          <div className="service-form-grid">
+            <ServiceField label="Technician">
+              <select
+                onChange={(event) => setTechnicianAccountId(event.target.value)}
+                value={technicianAccountId}
+              >
+                {references.technicians.map((item) => (
+                  <option key={item.warehouseId} value={item.accountId}>
+                    {item.displayName} · {item.warehouseName}
+                  </option>
+                ))}
+              </select>
+            </ServiceField>
+            <ServiceField label="Scheduled start">
+              <input
+                onChange={(event) => setScheduledStart(event.target.value)}
+                required
+                type="datetime-local"
+                value={scheduledStart}
+              />
+            </ServiceField>
+            <ServiceField label="Scheduled end">
+              <input
+                onChange={(event) => setScheduledEnd(event.target.value)}
+                required
+                type="datetime-local"
+                value={scheduledEnd}
+              />
+            </ServiceField>
+          </div>
+          <div className="service-inline-actions">
+            <Button busy={busy} type="submit">
+              Assign visit
+            </Button>
+            <Button disabled={busy} onClick={onCancel} type="button" variant="secondary">
+              Cancel
+            </Button>
+          </div>
+        </form>
+      )}
+    </section>
+  );
+}
+
+function ServiceWorkOrderDrawer({
+  canApprove,
+  canEdit,
+  currentAccountId,
+  onBack,
+  onSaved,
+  references,
+  token,
+  timezone,
+  workOrder,
+}: {
+  canApprove: boolean;
+  canEdit: boolean;
+  currentAccountId: string;
+  onBack: () => void;
+  onSaved: (workOrder: ServiceWorkOrder, message: string) => void;
+  references: ServiceReferenceData;
+  token: string;
+  timezone: string;
+  workOrder: ServiceWorkOrder;
+}) {
+  const [mode, setMode] = useState<'details' | 'complete'>('details');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [photo, setPhoto] = useState<File | null>(null);
+  const canManage =
+    canEdit && (canApprove || workOrder.assignedTechnician?.accountId === currentAccountId);
+
+  if (mode === 'complete')
+    return (
+      <CompleteWorkOrderDrawer
+        onBack={() => setMode('details')}
+        onSaved={(saved) =>
+          onSaved(saved, `${saved.number} was completed and the visit was recorded.`)
+        }
+        references={references}
+        token={token}
+        timezone={timezone}
+        workOrder={workOrder}
+      />
+    );
+
+  async function start() {
+    setBusy(true);
+    setError(null);
+    try {
+      onSaved(
+        await startServiceWorkOrder(token, workOrder.id, crypto.randomUUID(), {
+          expectedVersion: workOrder.version,
+        }),
+        `${workOrder.number} is now in progress.`,
+      );
+    } catch (caught) {
+      setError(errorText(caught, 'The work order could not be started.'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function uploadPhoto() {
+    if (!photo) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await uploadServicePhoto(token, workOrder.id, crypto.randomUUID(), photo);
+      const refreshed = await getServiceWorkOrder(token, workOrder.id);
+      setPhoto(null);
+      onSaved(refreshed, 'Photo evidence was added to the work order.');
+    } catch (caught) {
+      setError(errorText(caught, 'The photo could not be uploaded.'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <ServiceDrawer
+      busy={busy}
+      onBack={onBack}
+      subtitle={workOrder.customerName}
+      title={workOrder.number}
+    >
+      <div className="service-preview">
+        {error ? <InlineAlert tone="error">{error}</InlineAlert> : null}
+        <section className="service-preview-hero">
+          <div>
+            <ServiceStatus status={workOrder.status} />
+            <h3>{workOrder.deviceName}</h3>
+            <p>
+              {workOrder.serialNumber} ·{' '}
+              {workOrder.assignedTechnician?.displayName ?? 'Technician pending'}
+            </p>
+          </div>
+          {canManage && workOrder.status === 'scheduled' ? (
+            <Button busy={busy} onClick={() => void start()}>
+              Start work
+            </Button>
+          ) : null}
+          {canManage && workOrder.status === 'in_progress' ? (
+            <Button onClick={() => setMode('complete')}>Complete work</Button>
+          ) : null}
+        </section>
+        <section className="service-preview-section">
+          <header>
+            <div>
+              <h3>Visit</h3>
+              <p>{workOrder.problemDescription}</p>
+            </div>
+          </header>
+          <dl className="service-fact-grid">
+            <div>
+              <dt>Location</dt>
+              <dd>{workOrder.customerLocationName}</dd>
+            </div>
+            <div>
+              <dt>Service type</dt>
+              <dd>{serviceTypeLabel(workOrder.serviceType)}</dd>
+            </div>
+            <div>
+              <dt>Scheduled</dt>
+              <dd>
+                {workOrder.scheduledStart
+                  ? formatDateTime(workOrder.scheduledStart, timezone)
+                  : 'Not scheduled'}
+              </dd>
+            </div>
+            <div>
+              <dt>Technician warehouse</dt>
+              <dd>{workOrder.assignedTechnician?.warehouseName ?? 'Not assigned'}</dd>
+            </div>
+          </dl>
+        </section>
+        {canManage && workOrder.status === 'in_progress' ? (
+          <section className="service-preview-section service-photo-upload">
+            <header>
+              <div>
+                <h3>Photo evidence</h3>
+                <p>JPEG, PNG, or WebP up to 5 MB.</p>
+              </div>
+            </header>
+            <div>
+              <input
+                accept="image/jpeg,image/png,image/webp"
+                aria-label="Service photo"
+                onChange={(event) => setPhoto(event.target.files?.[0] ?? null)}
+                type="file"
+              />
+              <Button
+                busy={busy}
+                disabled={!photo}
+                onClick={() => void uploadPhoto()}
+                variant="secondary"
+              >
+                Upload photo
+              </Button>
+            </div>
+          </section>
+        ) : null}
+        <ServiceWorkEvidence token={token} timezone={timezone} workOrder={workOrder} />
+      </div>
+    </ServiceDrawer>
+  );
+}
+
+function ServiceWorkEvidence({
+  token,
+  timezone,
+  workOrder,
+}: {
+  token: string;
+  timezone: string;
+  workOrder: ServiceWorkOrder;
+}) {
+  return (
+    <>
+      <section className="service-preview-section">
+        <header>
+          <div>
+            <h3>Evidence</h3>
+            <p>Time, parts, and photos remain attached to this work order.</p>
+          </div>
+          <span>
+            {workOrder.photos.length + workOrder.parts.length + workOrder.timeEntries.length}
+          </span>
+        </header>
+        <div className="service-evidence-grid">
+          <div>
+            <span>Working time</span>
+            <strong>{formatMinutes(workOrder.laborMinutes)}</strong>
+          </div>
+          <div>
+            <span>Parts used</span>
+            <strong>{workOrder.parts.length}</strong>
+          </div>
+          <div>
+            <span>Photos</span>
+            <strong>{workOrder.photos.length}</strong>
+          </div>
+        </div>
+        {workOrder.parts.length ? (
+          <div className="service-part-list">
+            {workOrder.parts.map((part) => (
+              <div key={part.id}>
+                <div>
+                  <strong>{part.productName}</strong>
+                  <span>
+                    {part.quantity} from {part.warehouseName}
+                  </span>
+                </div>
+                <strong>{formatMoney(part.totalCostBgn)}</strong>
+              </div>
+            ))}
+          </div>
+        ) : null}
+        {workOrder.photos.length || workOrder.signature ? (
+          <ServiceEvidenceGallery token={token} workOrder={workOrder} />
+        ) : null}
+      </section>
+      {workOrder.status === 'completed' ? (
+        <section className="service-preview-section">
+          <header>
+            <div>
+              <h3>Completion</h3>
+              <p>{workOrder.completionNotes}</p>
+            </div>
+          </header>
+          <dl className="service-cost-grid">
+            <div>
+              <dt>Labour</dt>
+              <dd>{formatMoney(workOrder.laborCostBgn)}</dd>
+            </div>
+            <div>
+              <dt>Parts</dt>
+              <dd>{formatMoney(workOrder.partsCostBgn)}</dd>
+            </div>
+            <div>
+              <dt>Transport</dt>
+              <dd>{formatMoney(workOrder.transportCostBgn)}</dd>
+            </div>
+            <div>
+              <dt>Total service cost</dt>
+              <dd>{formatMoney(workOrder.totalCostBgn)}</dd>
+            </div>
+          </dl>
+          {workOrder.signature ? (
+            <div className="service-signature-summary">
+              <Icon name="check" size={17} />
+              <span>
+                Customer confirmation captured from{' '}
+                <strong>{workOrder.signature.signerName}</strong>
+              </span>
+            </div>
+          ) : null}
+        </section>
+      ) : null}
+      <section className="service-preview-section">
+        <header>
+          <div>
+            <h3>Activity</h3>
+            <p>Status changes are kept with the work order.</p>
+          </div>
+        </header>
+        <ol className="service-history-list is-compact">
+          {workOrder.history.map((entry) => (
+            <li key={entry.id}>
+              <span aria-hidden="true" />
+              <div>
+                <strong>{workOrderStatusLabel(entry.nextStatus)}</strong>
+                <p>{historyLabel(entry.reason)}</p>
+                <small>
+                  {formatDateTime(entry.changedAt, timezone)}
+                  {entry.changedByName ? ` · ${entry.changedByName}` : ''}
+                </small>
+              </div>
+            </li>
+          ))}
+        </ol>
+      </section>
+    </>
+  );
+}
+
+function ServiceEvidenceGallery({
+  token,
+  workOrder,
+}: {
+  token: string;
+  workOrder: ServiceWorkOrder;
+}) {
+  const [error, setError] = useState<string | null>(null);
+  const [photoUrls, setPhotoUrls] = useState<Record<string, string>>({});
+  const [signatureUrl, setSignatureUrl] = useState<string | null>(null);
+  const photoKey = workOrder.photos.map((photo) => photo.id).join(':');
+
+  useEffect(() => {
+    let active = true;
+    const createdUrls: string[] = [];
+    setError(null);
+    setPhotoUrls({});
+    setSignatureUrl(null);
+    void Promise.all([
+      ...workOrder.photos.map(async (photo) => {
+        const url = URL.createObjectURL(await fetchServicePhoto(token, workOrder.id, photo.id));
+        createdUrls.push(url);
+        return [photo.id, url] as const;
+      }),
+      ...(workOrder.signature
+        ? [
+            fetchServiceSignature(token, workOrder.id).then((blob) => {
+              const url = URL.createObjectURL(blob);
+              createdUrls.push(url);
+              return url;
+            }),
+          ]
+        : []),
+    ])
+      .then((entries) => {
+        if (!active) return;
+        const photos = entries.filter((entry): entry is readonly [string, string] =>
+          Array.isArray(entry),
+        );
+        setPhotoUrls(Object.fromEntries(photos));
+        const signature = entries.find((entry): entry is string => typeof entry === 'string');
+        setSignatureUrl(signature ?? null);
+      })
+      .catch((caught) => {
+        if (active) setError(errorText(caught, 'Service evidence could not be loaded.'));
+      });
+    return () => {
+      active = false;
+      createdUrls.forEach((url) => URL.revokeObjectURL(url));
+    };
+  }, [photoKey, token, workOrder.id, workOrder.signature?.signedAt]);
+
+  return (
+    <div className="service-evidence-gallery">
+      {error ? <InlineAlert tone="warning">{error}</InlineAlert> : null}
+      {workOrder.photos.map((photo) =>
+        photoUrls[photo.id] ? (
+          <figure key={photo.id}>
+            <img alt={`Service photo: ${photo.fileName}`} src={photoUrls[photo.id]} />
+            <figcaption>{photo.fileName}</figcaption>
+          </figure>
+        ) : null,
+      )}
+      {signatureUrl && workOrder.signature ? (
+        <figure className="service-evidence-signature">
+          <img alt={`Signature from ${workOrder.signature.signerName}`} src={signatureUrl} />
+          <figcaption>Customer signature · {workOrder.signature.signerName}</figcaption>
+        </figure>
+      ) : null}
+    </div>
+  );
+}
+
+function CompleteWorkOrderDrawer({
+  onBack,
+  onSaved,
+  references,
+  token,
+  timezone,
+  workOrder,
+}: {
+  onBack: () => void;
+  onSaved: (workOrder: ServiceWorkOrder) => void;
+  references: ServiceReferenceData;
+  token: string;
+  timezone: string;
+  workOrder: ServiceWorkOrder;
+}) {
+  const [completionNotes, setCompletionNotes] = useState('');
+  const [laborCostBgn, setLaborCostBgn] = useState('0');
+  const [transportCostBgn, setTransportCostBgn] = useState('0');
+  const [timeEntries, setTimeEntries] = useState<ServiceWorkTimeEntryInput[]>([
+    { minutes: 30, workDate: today(timezone) },
+  ]);
+  const [parts, setParts] = useState<PartForm[]>([]);
+  const [signerName, setSignerName] = useState('');
+  const [signatureImageDataUrl, setSignatureImageDataUrl] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const availableParts = references.parts.filter(
+    (part) => part.warehouseId === workOrder.assignedTechnician?.warehouseId,
+  );
+
+  function addPart() {
+    const first = availableParts[0];
+    if (!first) return;
+    setParts((current) => [...current, { productId: first.productId, quantity: '1' }]);
+  }
+
+  function updatePart(index: number, patch: Partial<PartForm>) {
+    setParts((current) =>
+      current.map((part, itemIndex) => (itemIndex === index ? { ...part, ...patch } : part)),
+    );
+  }
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!signatureImageDataUrl) {
+      setError('Capture the customer signature before completing the work order.');
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const input: CompleteServiceWorkOrderRequest = {
+        completionNotes,
+        expectedVersion: workOrder.version,
+        laborCostBgn,
+        parts: parts.map(partInput),
+        signatureImageDataUrl,
+        signerName,
+        timeEntries,
+        transportCostBgn,
+      };
+      onSaved(await completeServiceWorkOrder(token, workOrder.id, crypto.randomUUID(), input));
+    } catch (caught) {
+      setError(errorText(caught, 'The work order could not be completed.'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <ServiceDrawer
+      busy={busy}
+      onBack={onBack}
+      subtitle={`${workOrder.number} · ${workOrder.customerName}`}
+      title="Complete work"
+    >
+      <form
+        className="service-form service-completion-form"
+        onSubmit={(event) => void submit(event)}
+      >
+        {error ? <InlineAlert tone="error">{error}</InlineAlert> : null}
+        <FormSection
+          index="1"
+          title="Work performed"
+          description="Record the result and the time spent on site."
+        >
+          <ServiceField label="Completion notes">
+            <textarea
+              maxLength={4000}
+              onChange={(event) => setCompletionNotes(event.target.value)}
+              placeholder="Describe the diagnosis, repair, checks, and outcome."
+              required
+              rows={4}
+              value={completionNotes}
+            />
+          </ServiceField>
+          <div className="service-time-entries">
+            {timeEntries.map((entry, index) => (
+              <div className="service-time-entry" key={`time-${index}`}>
+                <ServiceField label="Work date">
+                  <input
+                    onChange={(event) =>
+                      setTimeEntries((current) =>
+                        current.map((item, itemIndex) =>
+                          itemIndex === index ? { ...item, workDate: event.target.value } : item,
+                        ),
+                      )
+                    }
+                    required
+                    type="date"
+                    value={entry.workDate}
+                  />
+                </ServiceField>
+                <ServiceField label="Minutes">
+                  <input
+                    max="1440"
+                    min="1"
+                    onChange={(event) =>
+                      setTimeEntries((current) =>
+                        current.map((item, itemIndex) =>
+                          itemIndex === index
+                            ? { ...item, minutes: Number(event.target.value) }
+                            : item,
+                        ),
+                      )
+                    }
+                    required
+                    type="number"
+                    value={entry.minutes}
+                  />
+                </ServiceField>
+                <ServiceField label="Note (optional)">
+                  <input
+                    maxLength={1000}
+                    onChange={(event) =>
+                      setTimeEntries((current) =>
+                        current.map((item, itemIndex) =>
+                          itemIndex === index ? { ...item, note: event.target.value } : item,
+                        ),
+                      )
+                    }
+                    value={entry.note ?? ''}
+                  />
+                </ServiceField>
+                {timeEntries.length > 1 ? (
+                  <button
+                    aria-label="Remove time entry"
+                    className="service-remove-row"
+                    onClick={() =>
+                      setTimeEntries((current) =>
+                        current.filter((_, itemIndex) => itemIndex !== index),
+                      )
+                    }
+                    type="button"
+                  >
+                    <Icon name="close" size={15} />
+                  </button>
+                ) : null}
+              </div>
+            ))}
+            <Button
+              onClick={() =>
+                setTimeEntries((current) => [
+                  ...current,
+                  { minutes: 30, workDate: today(timezone) },
+                ])
+              }
+              type="button"
+              variant="quiet"
+            >
+              <Icon name="plus" size={15} /> Add time
+            </Button>
+          </div>
+        </FormSection>
+        <FormSection
+          index="2"
+          title="Parts and costs"
+          description="Parts are deducted from the assigned technician warehouse when saved."
+        >
+          <div className="service-cost-inputs">
+            <ServiceField label="Labour cost (BGN)">
+              <input
+                min="0"
+                onChange={(event) => setLaborCostBgn(event.target.value)}
+                required
+                step="0.0001"
+                type="number"
+                value={laborCostBgn}
+              />
+            </ServiceField>
+            <ServiceField label="Transport cost (BGN)">
+              <input
+                min="0"
+                onChange={(event) => setTransportCostBgn(event.target.value)}
+                required
+                step="0.0001"
+                type="number"
+                value={transportCostBgn}
+              />
+            </ServiceField>
+          </div>
+          {!availableParts.length ? (
+            <InlineAlert tone="warning">
+              No available parts were found in this technician warehouse. You can still complete the
+              work without a part.
+            </InlineAlert>
+          ) : null}
+          <div className="service-part-editor">
+            {parts.map((part, index) => {
+              const reference = availableParts.find((item) => item.productId === part.productId);
+              return (
+                <div className="service-part-editor-row" key={`part-${index}`}>
+                  <ServiceField label="Part">
+                    <select
+                      onChange={(event) =>
+                        updatePart(index, {
+                          productId: event.target.value,
+                          serialNumbers: '',
+                          batchNumber: '',
+                        })
+                      }
+                      value={part.productId}
+                    >
+                      {availableParts.map((item) => (
+                        <option key={item.productId} value={item.productId}>
+                          {item.productName} · {item.availableQuantity} available
+                        </option>
+                      ))}
+                    </select>
+                  </ServiceField>
+                  <ServiceField label="Quantity">
+                    <input
+                      min="0.0001"
+                      onChange={(event) => updatePart(index, { quantity: event.target.value })}
+                      required
+                      step="0.0001"
+                      type="number"
+                      value={part.quantity}
+                    />
+                  </ServiceField>
+                  {reference?.trackingMode === 'batch' ? (
+                    <ServiceField label="Batch number">
+                      <input
+                        onChange={(event) => updatePart(index, { batchNumber: event.target.value })}
+                        required
+                        value={part.batchNumber ?? ''}
+                      />
+                    </ServiceField>
+                  ) : null}
+                  {reference?.trackingMode === 'serial' ? (
+                    <ServiceField label="Serial number">
+                      <input
+                        onChange={(event) =>
+                          updatePart(index, { serialNumbers: event.target.value })
+                        }
+                        required
+                        value={part.serialNumbers ?? ''}
+                      />
+                    </ServiceField>
+                  ) : null}
+                  <button
+                    aria-label="Remove part"
+                    className="service-remove-row"
+                    onClick={() =>
+                      setParts((current) => current.filter((_, itemIndex) => itemIndex !== index))
+                    }
+                    type="button"
+                  >
+                    <Icon name="close" size={15} />
+                  </button>
+                </div>
+              );
+            })}
+            <Button
+              disabled={!availableParts.length}
+              onClick={addPart}
+              type="button"
+              variant="quiet"
+            >
+              <Icon name="plus" size={15} /> Add used part
+            </Button>
+          </div>
+        </FormSection>
+        <FormSection
+          index="3"
+          title="Customer confirmation"
+          description="Capture the customer name and signature after the completed work is reviewed."
+        >
+          <ServiceField label="Customer representative">
+            <input
+              maxLength={255}
+              onChange={(event) => setSignerName(event.target.value)}
+              required
+              value={signerName}
+            />
+          </ServiceField>
+          <SignaturePad onChange={setSignatureImageDataUrl} />
+        </FormSection>
+        <DrawerActions busy={busy} onBack={onBack} submitLabel="Complete work" />
+      </form>
+    </ServiceDrawer>
+  );
+}
+
+function SignaturePad({ onChange }: { onChange: (value: string) => void }) {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const drawing = useRef(false);
+
+  function position(event: ReactPointerEvent<HTMLCanvasElement>) {
+    const canvas = canvasRef.current!;
+    const rect = canvas.getBoundingClientRect();
+    return {
+      x: ((event.clientX - rect.left) / rect.width) * canvas.width,
+      y: ((event.clientY - rect.top) / rect.height) * canvas.height,
+    };
+  }
+
+  function begin(event: ReactPointerEvent<HTMLCanvasElement>) {
+    const canvas = canvasRef.current;
+    const context = canvas?.getContext('2d');
+    if (!canvas || !context) return;
+    const point = position(event);
+    drawing.current = true;
+    canvas.setPointerCapture(event.pointerId);
+    context.lineCap = 'round';
+    context.lineJoin = 'round';
+    context.lineWidth = 2.4;
+    context.strokeStyle = '#182230';
+    context.beginPath();
+    context.moveTo(point.x, point.y);
+  }
+
+  function draw(event: ReactPointerEvent<HTMLCanvasElement>) {
+    if (!drawing.current) return;
+    const canvas = canvasRef.current;
+    const context = canvas?.getContext('2d');
+    if (!canvas || !context) return;
+    const point = position(event);
+    context.lineTo(point.x, point.y);
+    context.stroke();
+  }
+
+  function finish() {
+    if (!drawing.current) return;
+    drawing.current = false;
+    const canvas = canvasRef.current;
+    if (canvas) onChange(canvas.toDataURL('image/png'));
+  }
+
+  function clear() {
+    const canvas = canvasRef.current;
+    const context = canvas?.getContext('2d');
+    if (canvas && context) context.clearRect(0, 0, canvas.width, canvas.height);
+    onChange('');
+  }
+
+  return (
+    <div className="service-signature-pad">
+      <div>
+        <span>Customer signature</span>
+        <button onClick={clear} type="button">
+          Clear
+        </button>
+      </div>
+      <canvas
+        aria-label="Customer signature pad"
+        height="150"
+        onPointerCancel={finish}
+        onPointerDown={begin}
+        onPointerLeave={finish}
+        onPointerMove={draw}
+        onPointerUp={finish}
+        ref={canvasRef}
+        width="620"
+      />
+      <small>Draw with a mouse, trackpad, finger, or stylus.</small>
+    </div>
+  );
+}
+
+function ServiceDrawer({
+  busy,
+  children,
+  onBack,
+  subtitle,
+  title,
+}: {
+  busy: boolean;
+  children: ReactNode;
+  onBack: () => void;
+  subtitle: string;
+  title: string;
+}) {
+  const drawerRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    const drawerElement = drawerRef.current;
+    const previousFocus =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    if (!drawerElement) return;
+    const drawer: HTMLElement = drawerElement;
+    const focusable = () =>
+      Array.from(
+        drawer.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ),
+      );
+    const initialFocus = drawer.querySelector<HTMLElement>('.panel-back-button');
+    (initialFocus ?? drawer).focus();
+    function trapFocus(event: KeyboardEvent) {
+      if (event.key !== 'Tab') return;
+      const elements = focusable();
+      if (!elements.length) {
+        event.preventDefault();
+        drawer.focus();
+        return;
+      }
+      const first = elements[0]!;
+      const last = elements.at(-1)!;
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    }
+    drawer.addEventListener('keydown', trapFocus);
+    return () => {
+      drawer.removeEventListener('keydown', trapFocus);
+      previousFocus?.focus();
+    };
+  }, []);
+
+  return (
+    <div className="security-drawer-layer" role="presentation">
+      <button
+        aria-label={`Back from ${title}`}
+        className="security-drawer-scrim"
+        disabled={busy}
+        onClick={onBack}
+        type="button"
+      />
+      <aside
+        aria-label={title}
+        aria-modal="true"
+        className="security-drawer is-wide service-drawer"
+        ref={drawerRef}
+        role="dialog"
+        tabIndex={-1}
+      >
+        <header className="panel-drawer-header service-drawer-header">
+          <button
+            aria-label={`Back from ${title}`}
+            className="panel-back-button"
+            disabled={busy}
+            onClick={onBack}
+            type="button"
+          >
+            <Icon name="arrow" size={17} /> Back
+          </button>
+          <button
+            aria-label="Close panel"
+            className="panel-close-button"
+            disabled={busy}
+            onClick={onBack}
+            type="button"
+          >
+            <Icon name="close" />
+          </button>
+          <div>
+            <h2>{title}</h2>
+            <p>{subtitle}</p>
+          </div>
+        </header>
+        <div className="security-drawer-body">{children}</div>
+      </aside>
+    </div>
+  );
+}
+
+function FormSection({
+  children,
+  description,
+  index,
+  title,
+}: {
+  children: ReactNode;
+  description: string;
+  index: string;
+  title: string;
+}) {
+  return (
+    <section className="service-form-section">
+      <header>
+        <span>{index}</span>
+        <div>
+          <h3>{title}</h3>
+          <p>{description}</p>
+        </div>
+      </header>
+      {children}
+    </section>
+  );
+}
+
+function ServiceField({ children, label }: { children: ReactNode; label: string }) {
+  return (
+    <label className="service-field">
+      <span>{label}</span>
+      {children}
+    </label>
+  );
+}
+
+function DrawerActions({
+  busy,
+  disabled,
+  onBack,
+  submitLabel,
+}: {
+  busy: boolean;
+  disabled?: boolean;
+  onBack: () => void;
+  submitLabel: string;
+}) {
+  return (
+    <div className="service-drawer-actions">
+      <Button busy={busy} disabled={disabled} type="submit">
+        {submitLabel}
+      </Button>
+      <Button disabled={busy} onClick={onBack} type="button" variant="secondary">
+        Back
+      </Button>
+    </div>
+  );
+}
+
+function ServicePager({
+  onPageChange,
+  page,
+}: {
+  onPageChange: (page: number) => void;
+  page: Pick<ServiceRequestPage, 'page' | 'total' | 'totalPages'>;
+}) {
+  if (page.totalPages < 2) return null;
+  return (
+    <nav aria-label="Service list pages" className="service-pager">
+      <Button
+        disabled={page.page <= 1}
+        onClick={() => onPageChange(page.page - 1)}
+        variant="secondary"
+      >
+        Previous
+      </Button>
+      <span>
+        Page {page.page} of {page.totalPages} · {page.total} records
+      </span>
+      <Button
+        disabled={page.page >= page.totalPages}
+        onClick={() => onPageChange(page.page + 1)}
+        variant="secondary"
+      >
+        Next
+      </Button>
+    </nav>
+  );
+}
+
+function ServiceMetric({ label, tone, value }: { label: string; tone?: 'warning'; value: string }) {
+  return (
+    <div className={tone ? `is-${tone}` : undefined}>
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
+  );
+}
+
+function ServiceStatus({
+  status,
+}: {
+  status: ServiceRequest['status'] | ServiceWorkOrder['status'];
+}) {
+  return <span className={`service-status is-${status}`}>{workOrderStatusLabel(status)}</span>;
+}
+
+function ServiceState({ children, title }: { children?: ReactNode; title: string }) {
+  return (
+    <section className="service-state">
+      <Icon name="service" size={25} />
+      <h2>{title}</h2>
+      {children}
+    </section>
+  );
+}
+
+function useServiceData(token: string, requestListPage: number, workOrderListPage: number) {
+  const [references, setReferences] = useState<ServiceReferenceData>(emptyReferences);
+  const [requestPage, setRequestPage] = useState<ServiceRequestPage>(emptyRequestPage);
+  const [workOrderPage, setWorkOrderPage] = useState<ServiceWorkOrderPage>(emptyWorkOrderPage);
+  const [myWorkOrderPage, setMyWorkOrderPage] = useState<ServiceWorkOrderPage>(emptyWorkOrderPage);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+  const [revision, setRevision] = useState(0);
+  const reload = useCallback(() => setRevision((current) => current + 1), []);
+
+  useEffect(() => {
+    if (!token) return;
+    let active = true;
+    setLoading(true);
+    setError(false);
+    void Promise.all([
+      getServiceReferenceData(token),
+      listServiceRequests(token, requestListPage),
+      listServiceWorkOrders(token, workOrderListPage),
+      listMyServiceWork(token, workOrderListPage),
+    ])
+      .then(([nextReferences, nextRequests, nextWorkOrders, nextMyWorkOrders]) => {
+        if (!active) return;
+        setReferences(nextReferences);
+        setRequestPage(nextRequests);
+        setWorkOrderPage(nextWorkOrders);
+        setMyWorkOrderPage(nextMyWorkOrders);
+      })
+      .catch(() => active && setError(true))
+      .finally(() => active && setLoading(false));
+    return () => {
+      active = false;
+    };
+  }, [requestListPage, revision, token, workOrderListPage]);
+
+  return useMemo(
+    () => ({ error, loading, myWorkOrderPage, references, reload, requestPage, workOrderPage }),
+    [error, loading, myWorkOrderPage, references, reload, requestPage, workOrderPage],
+  );
+}
+
+interface PartForm {
+  batchNumber?: string;
+  productId: string;
+  quantity: string;
+  serialNumbers?: string;
+}
+
+function partInput(part: PartForm): ServicePartUsageInput {
+  return {
+    ...(part.batchNumber?.trim() ? { batchNumber: part.batchNumber.trim() } : {}),
+    productId: part.productId,
+    quantity: part.quantity,
+    ...(part.serialNumbers?.trim()
+      ? {
+          serialNumbers: part.serialNumbers
+            .split(/[\n,]+/u)
+            .map((item) => item.trim())
+            .filter(Boolean),
+        }
+      : {}),
+  };
+}
+
+function pageMeta(view: ServiceOperationsView) {
+  return {
+    devices: {
+      description:
+        'Follow each registered serial through its service work, technician, and used parts.',
+      title: 'Equipment history',
+    },
+    requests: {
+      description:
+        'Capture, dispatch, and follow customer service needs from one operational register.',
+      title: 'Service requests',
+    },
+    schedule: {
+      description:
+        'See upcoming visits and technician workload without leaving the service workspace.',
+      title: 'Technician schedule',
+    },
+    'work-orders': {
+      description:
+        'Keep field work, evidence, parts, time, cost, and customer confirmation together.',
+      title: 'Work orders',
+    },
+  }[view];
+}
+
+const sourceChannels: ServiceRequestChannel[] = [
+  'telephone',
+  'email',
+  'customer_portal',
+  'on_site',
+];
+const serviceTypes: ServiceType[] = ['warranty', 'out_of_warranty', 'subscription'];
+const priorities: ServicePriority[] = ['low', 'normal', 'high', 'critical'];
+
+function sourceLabel(value: ServiceRequestChannel) {
+  return {
+    customer_portal: 'Customer portal',
+    email: 'Email',
+    on_site: 'On-site visit',
+    telephone: 'Telephone',
+  }[value];
+}
+
+function serviceTypeLabel(value: ServiceType) {
+  return {
+    out_of_warranty: 'Out of warranty',
+    subscription: 'Subscription',
+    warranty: 'Warranty',
+  }[value];
+}
+
+function priorityLabel(value: ServicePriority) {
+  return { critical: 'Critical', high: 'High', low: 'Low', normal: 'Normal' }[value];
+}
+
+function workOrderStatusLabel(status: ServiceRequest['status'] | ServiceWorkOrder['status']) {
+  return {
+    cancelled: 'Cancelled',
+    completed: 'Completed',
+    in_progress: 'In progress',
+    new: 'New',
+    scheduled: 'Scheduled',
+  }[status];
+}
+
+function historyLabel(reason: string) {
+  return (
+    {
+      request_cancelled: 'Request cancelled before the visit.',
+      technician_assigned: 'Technician and warehouse assigned.',
+      technician_completed_work: 'Work completed with customer confirmation.',
+      technician_reassigned: 'Visit rescheduled or reassigned.',
+      technician_started_work: 'Technician started work.',
+    }[reason] ?? 'Work order updated.'
+  );
+}
+
+function groupSchedule(workOrders: ServiceWorkOrder[]): Array<[string, ServiceWorkOrder[]]> {
+  const groups = new Map<string, ServiceWorkOrder[]>();
+  for (const workOrder of workOrders) {
+    const day = workOrder.scheduledStart!.slice(0, 10);
+    groups.set(day, [...(groups.get(day) ?? []), workOrder]);
+  }
+  return [...groups.entries()].slice(0, 7);
+}
+
+function formatScheduleDay(value: string, timezone: string) {
+  return new Intl.DateTimeFormat('en-GB', {
+    day: 'numeric',
+    month: 'short',
+    timeZone: timezone,
+    weekday: 'short',
+  }).format(new Date(`${value}T12:00:00Z`));
+}
+
+function formatDate(value: string, timezone: string) {
+  return new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium', timeZone: timezone }).format(
+    new Date(`${value}T12:00:00Z`),
+  );
+}
+
+function formatDateTime(value: string, timezone: string) {
+  return new Intl.DateTimeFormat('en-GB', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+    timeZone: timezone,
+  }).format(new Date(value));
+}
+
+function formatTime(value: string, timezone: string) {
+  return new Intl.DateTimeFormat('en-GB', {
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone: timezone,
+  }).format(new Date(value));
+}
+
+function formatMoney(value: string) {
+  return new Intl.NumberFormat('en-GB', { currency: 'BGN', style: 'currency' }).format(
+    Number(value),
+  );
+}
+
+function formatMinutes(value: number) {
+  if (!value) return 'Not recorded';
+  const hours = Math.floor(value / 60);
+  const minutes = value % 60;
+  return hours ? `${hours}h${minutes ? ` ${minutes}m` : ''}` : `${minutes}m`;
+}
+
+function today(timezone: string) {
+  const parts = zonedParts(new Date(), timezone);
+  return `${parts.year}-${parts.month}-${parts.day}`;
+}
+
+function nextBusinessHour(timezone: string, hours = 1) {
+  const rounded = new Date(Math.floor(Date.now() / 3_600_000) * 3_600_000 + hours * 3_600_000);
+  return rounded.toISOString();
+}
+
+function toBusinessDateTimeInput(value: string, timezone: string) {
+  const parts = zonedParts(new Date(value), timezone);
+  return `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}`;
+}
+
+function businessDateTimeToIso(value: string, timezone: string) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/u.exec(value);
+  if (!match) return new Date(value).toISOString();
+  const [, year, month, day, hour, minute] = match;
+  const target = Date.UTC(
+    Number(year),
+    Number(month) - 1,
+    Number(day),
+    Number(hour),
+    Number(minute),
+  );
+  let instant = target;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const observed = zonedParts(new Date(instant), timezone);
+    const observedAsUtc = Date.UTC(
+      Number(observed.year),
+      Number(observed.month) - 1,
+      Number(observed.day),
+      Number(observed.hour),
+      Number(observed.minute),
+    );
+    instant += target - observedAsUtc;
+  }
+  return new Date(instant).toISOString();
+}
+
+function zonedParts(value: Date, timezone: string) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    day: '2-digit',
+    hour: '2-digit',
+    hourCycle: 'h23',
+    minute: '2-digit',
+    month: '2-digit',
+    timeZone: timezone,
+    year: 'numeric',
+  }).formatToParts(value);
+  const lookup = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((part) => part.type === type)?.value ?? '00';
+  return {
+    day: lookup('day'),
+    hour: lookup('hour'),
+    minute: lookup('minute'),
+    month: lookup('month'),
+    year: lookup('year'),
+  };
+}
+
+function errorText(error: unknown, fallback: string) {
+  return error instanceof ApiClientError ? error.message : fallback;
+}

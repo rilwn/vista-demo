@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 
 import { DatabaseModule } from '../database/database.module.js';
+import { FinanceModule } from '../finance/finance.module.js';
 import { SalesModule } from '../sales/sales.module.js';
 import { JobHandlerRegistry } from './job-handler-registry.service.js';
 import { JobsController } from './jobs.controller.js';
@@ -12,7 +13,7 @@ import { RecurringBillingScheduleService } from './recurring-billing-schedule.se
 @Module({
   controllers: [JobsController],
   exports: [JobHandlerRegistry, JobQueueService],
-  imports: [DatabaseModule, SalesModule],
+  imports: [DatabaseModule, FinanceModule, SalesModule],
   providers: [
     JobHandlerRegistry,
     JobQueueService,

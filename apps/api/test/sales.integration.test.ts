@@ -15,6 +15,15 @@ import type {
   SalesResolvedPrice,
   SalesWorkflow,
   ServiceSubscriptionContract,
+  FinanceCustomerDocument,
+  FinanceReferenceData,
+  ServiceEquipmentHistory,
+  ServiceReferenceData,
+  ServiceRequest,
+  ServiceRequestPage,
+  ServiceWorkOrder,
+  ServiceWorkOrderPhoto,
+  ServiceWorkOrderPage,
 } from '@vista/contracts';
 import { Pool } from 'pg';
 import request from 'supertest';
@@ -33,6 +42,7 @@ const password = 'Vista-Sales-Test-8!';
 describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workflow', () => {
   let adminDatabase: Pool;
   let application: INestApplication;
+  let creatorAccountId: string;
   let database: Pool;
   let databaseName: string;
   let token: string;
@@ -43,7 +53,9 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
   let productId: string;
   let serialProductId: string;
   let warehouseId: string;
+  let technicianWarehouseId: string;
   let serialNumber: string;
+  let salesInvoiceId: string;
   const runId = randomUUID().replaceAll('-', '');
 
   beforeAll(async () => {
@@ -64,11 +76,9 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
       new URL('../src/database/migrations', import.meta.url),
     );
     await migrateUp(database, migrationDirectory);
-    expect(await migrateDown(database, migrationDirectory)).toBe(
-      '0028_sales_subscriptions_handover',
-    );
+    expect(await migrateDown(database, migrationDirectory)).toBe('0030_service_work_orders_core');
     expect(await migrateUp(database, migrationDirectory)).toContain(
-      '0028_sales_subscriptions_handover',
+      '0030_service_work_orders_core',
     );
 
     Object.assign(process.env, {
@@ -96,6 +106,7 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
 
     const passwordHash = await application.get(PasswordService).hash(password);
     const creatorId = await createAccount(database, `sales-${runId}@example.invalid`, passwordHash);
+    creatorAccountId = creatorId;
     const viewerId = await createAccount(
       database,
       `sales-viewer-${runId}@example.invalid`,
@@ -103,6 +114,9 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
     );
     await grantPermissions(database, creatorId, ['create', 'edit', 'view']);
     await grantPermissions(database, viewerId, ['view']);
+    await grantFinancePermissions(database, creatorId, ['create', 'edit', 'view']);
+    await grantFinancePermissions(database, viewerId, ['view']);
+    await grantServicePermissions(database, creatorId, ['approve', 'create', 'edit', 'view']);
     ({
       customerId,
       customerLocationId,
@@ -112,6 +126,12 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
       serialProductId,
       warehouseId,
     } = await seedSalesData(database, creatorId, runId));
+    technicianWarehouseId = await seedServiceTechnicianWarehouse(
+      database,
+      creatorId,
+      productId,
+      runId,
+    );
     token = await login(application, `sales-${runId}@example.invalid`);
     viewerToken = await login(application, `sales-viewer-${runId}@example.invalid`);
   }, 30_000);
@@ -239,6 +259,7 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
     const invoiced = invoicedResponse.body as SalesWorkflow;
     expect(invoiced).toMatchObject({ status: 'invoiced', invoice: { status: 'draft' } });
     expect(invoiced.invoice?.total).toBe('273.6000');
+    salesInvoiceId = invoiced.invoice!.id;
 
     const evidence = await database.query<{
       audit_count: string;
@@ -261,6 +282,143 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
       reservation_count: '2',
       serial_status: 'issued',
       stock_quantity: '8.0000',
+    });
+  });
+
+  it('allocates partial payments once, marks overdue balances, and preserves the collection trail', async () => {
+    const referencesResponse = await request(application.getHttpServer())
+      .get('/api/v1/finance/reference-data')
+      .set('authorization', `Bearer ${token}`)
+      .expect(200);
+    const references = referencesResponse.body as FinanceReferenceData;
+    expect(references.invoiceDrafts).toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: salesInvoiceId, total: '273.6000' })]),
+    );
+
+    const businessDateResult = await database.query<{ date: string }>(
+      "SELECT (now() AT TIME ZONE 'Europe/Sofia')::date::text AS date",
+    );
+    const dueDate = businessDateResult.rows[0]?.date;
+    if (!dueDate) throw new Error('Could not determine the finance test business date');
+    const createKey = `finance-document-${runId}`;
+    const createdResponse = await request(application.getHttpServer())
+      .post('/api/v1/finance/documents')
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', createKey)
+      .send({ dueDate, salesInvoiceId })
+      .expect(201);
+    const created = createdResponse.body as FinanceCustomerDocument;
+    expect(created).toMatchObject({
+      allocatedTotal: '0.0000',
+      outstandingTotal: '273.6000',
+      paymentStatus: 'unpaid',
+      sourceSalesInvoiceId: salesInvoiceId,
+      total: '273.6000',
+    });
+    const createReplay = await request(application.getHttpServer())
+      .post('/api/v1/finance/documents')
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', createKey)
+      .send({ dueDate, salesInvoiceId })
+      .expect(201);
+    expect((createReplay.body as FinanceCustomerDocument).id).toBe(created.id);
+
+    const partialPayment = {
+      amount: '100',
+      notes: 'Customer paid the first instalment.',
+      paymentDate: dueDate,
+      paymentMethod: 'bank_transfer',
+      paymentReference: `BANK-${runId}`,
+    };
+    const partialResponse = await request(application.getHttpServer())
+      .post(`/api/v1/finance/documents/${created.id}/payments`)
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', `finance-payment-partial-${runId}`)
+      .send(partialPayment)
+      .expect(201);
+    const partiallyPaid = partialResponse.body as FinanceCustomerDocument;
+    expect(partiallyPaid).toMatchObject({
+      allocatedTotal: '100.0000',
+      outstandingTotal: '173.6000',
+      paymentStatus: 'partially_paid',
+      payments: [expect.objectContaining({ amount: '100.0000', paymentMethod: 'bank_transfer' })],
+    });
+    await request(application.getHttpServer())
+      .post(`/api/v1/finance/documents/${created.id}/payments`)
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', `finance-overpayment-${runId}`)
+      .send({ ...partialPayment, amount: '174', paymentReference: `OVER-${runId}` })
+      .expect(409);
+
+    await database.query(
+      `UPDATE finance.customer_documents
+       SET document_date = ((now() AT TIME ZONE 'Europe/Sofia')::date - 1),
+           due_date = ((now() AT TIME ZONE 'Europe/Sofia')::date - 1)
+       WHERE id = $1`,
+      [created.id],
+    );
+    const handlers = application.get(JobHandlerRegistry);
+    await expect(
+      handlers.execute({
+        attemptNumber: 1,
+        correlationId: `finance-job-${runId}`,
+        enqueuedAt: '2026-08-14T01:25:00.000Z',
+        idempotencyKey: `finance-status-${runId}`,
+        jobId: `finance-job-${runId}`,
+        maxAttempts: 5,
+        name: 'finance.payment-status.detect',
+        payload: { scheduledFor: '2026-08-14T01:25:00.000Z' },
+        retryAllowed: true,
+      }),
+    ).resolves.toMatchObject({ updatedCount: 1 });
+    const overdueResponse = await request(application.getHttpServer())
+      .get(`/api/v1/finance/documents/${created.id}`)
+      .set('authorization', `Bearer ${token}`)
+      .expect(200);
+    expect((overdueResponse.body as FinanceCustomerDocument).paymentStatus).toBe('overdue');
+
+    const finalResponse = await request(application.getHttpServer())
+      .post(`/api/v1/finance/documents/${created.id}/payments`)
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', `finance-payment-final-${runId}`)
+      .send({
+        amount: '173.6',
+        paymentDate: dueDate,
+        paymentMethod: 'card',
+      })
+      .expect(201);
+    const settled = finalResponse.body as FinanceCustomerDocument;
+    expect(settled).toMatchObject({
+      allocatedTotal: '273.6000',
+      outstandingTotal: '0.0000',
+      paymentStatus: 'paid',
+      payments: [expect.any(Object), expect.any(Object)],
+    });
+    await request(application.getHttpServer())
+      .post(`/api/v1/finance/documents/${created.id}/cancel`)
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', `finance-cancel-${runId}`)
+      .send({
+        cancellationReason: 'This should remain unavailable after payment.',
+        expectedVersion: settled.version,
+      })
+      .expect(409);
+
+    const evidence = await database.query<{
+      allocation_count: string;
+      audit_count: string;
+      outbox_count: string;
+    }>(
+      `SELECT
+         (SELECT count(*)::text FROM finance.payment_allocations WHERE customer_document_id = $1) AS allocation_count,
+         (SELECT count(*)::text FROM audit.events WHERE action LIKE 'finance.%') AS audit_count,
+         (SELECT count(*)::text FROM integration.outbox_events WHERE event_type LIKE 'finance.%') AS outbox_count`,
+      [created.id],
+    );
+    expect(evidence.rows[0]).toEqual({
+      allocation_count: '2',
+      audit_count: '4',
+      outbox_count: '4',
     });
   });
 
@@ -569,6 +727,295 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
     expect(evidence.rows[0]).toEqual({ audit_count: '3', draft_count: '1', outbox_count: '3' });
   });
 
+  it('carries a service request through technician work, evidence, parts, signature, and serial history', async () => {
+    await request(application.getHttpServer())
+      .get('/api/v1/service/reference-data')
+      .set('authorization', `Bearer ${viewerToken}`)
+      .expect(403);
+
+    const referencesResponse = await request(application.getHttpServer())
+      .get('/api/v1/service/reference-data')
+      .set('authorization', `Bearer ${token}`)
+      .expect(200);
+    const references = referencesResponse.body as ServiceReferenceData;
+    expect(references.businessTimezone).toBe('Europe/Sofia');
+    expect(references.equipment).toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: equipmentId })]),
+    );
+    expect(references.technicians).toEqual(
+      expect.arrayContaining([expect.objectContaining({ warehouseId: technicianWarehouseId })]),
+    );
+    expect(references.parts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ productId, warehouseId: technicianWarehouseId }),
+      ]),
+    );
+
+    const requestInput = {
+      customerEquipmentId: equipmentId,
+      customerLocationId,
+      customerPartnerId: customerId,
+      priority: 'high',
+      problemDescription: 'Fiscal display intermittently loses connection.',
+      serviceType: 'warranty',
+      sourceChannel: 'telephone',
+    };
+    const createKey = `service-request-${runId}`;
+    const createdResponse = await request(application.getHttpServer())
+      .post('/api/v1/service/requests')
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', createKey)
+      .send(requestInput)
+      .expect(201);
+    const created = createdResponse.body as ServiceRequest;
+    expect(created).toMatchObject({
+      customerEquipmentId: equipmentId,
+      serviceType: 'warranty',
+      status: 'new',
+    });
+    const createReplay = await request(application.getHttpServer())
+      .post('/api/v1/service/requests')
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', createKey)
+      .send(requestInput)
+      .expect(201);
+    expect((createReplay.body as ServiceRequest).id).toBe(created.id);
+
+    const requestPageResponse = await request(application.getHttpServer())
+      .get('/api/v1/service/requests?page=1&pageSize=25')
+      .set('authorization', `Bearer ${token}`)
+      .expect(200);
+    const requestPage = requestPageResponse.body as ServiceRequestPage;
+    expect(requestPage).toMatchObject({
+      page: 1,
+      pageSize: 25,
+      summary: { new: 1 },
+      total: 1,
+      totalPages: 1,
+    });
+    expect(requestPage.items).toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: created.id })]),
+    );
+
+    const assignedResponse = await request(application.getHttpServer())
+      .post(`/api/v1/service/requests/${created.id}/assign`)
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', `service-assign-${runId}`)
+      .send({
+        expectedVersion: created.version,
+        scheduledEnd: '2099-09-01T10:00:00.000Z',
+        scheduledStart: '2099-09-01T09:00:00.000Z',
+        technicianAccountId: creatorAccountId,
+        technicianWarehouseId,
+      })
+      .expect(201);
+    const assigned = assignedResponse.body as ServiceRequest;
+    expect(assigned.status).toBe('scheduled');
+    expect(assigned.workOrderId).toBeTypeOf('string');
+    expect(assigned.workOrderNumber).toMatch(/^WO-/u);
+    if (!assigned.workOrderId) throw new Error('Assigned request did not include a work order.');
+
+    const scheduledResponse = await request(application.getHttpServer())
+      .get(`/api/v1/service/work-orders/${assigned.workOrderId}`)
+      .set('authorization', `Bearer ${token}`)
+      .expect(200);
+    const scheduled = scheduledResponse.body as ServiceWorkOrder;
+    const startKey = `service-start-${runId}`;
+    const startInput = { expectedVersion: scheduled.version };
+    const startedResponse = await request(application.getHttpServer())
+      .post(`/api/v1/service/work-orders/${scheduled.id}/start`)
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', startKey)
+      .send(startInput)
+      .expect(200);
+    const started = startedResponse.body as ServiceWorkOrder;
+    expect(started.status).toBe('in_progress');
+    const startReplay = await request(application.getHttpServer())
+      .post(`/api/v1/service/work-orders/${scheduled.id}/start`)
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', startKey)
+      .send(startInput)
+      .expect(200);
+    expect((startReplay.body as ServiceWorkOrder).id).toBe(started.id);
+
+    const photoResponse = await request(application.getHttpServer())
+      .post(`/api/v1/service/work-orders/${started.id}/photos`)
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', `service-photo-${runId}`)
+      .attach('photo', tinyPng, { contentType: 'image/png', filename: 'display-check.png' })
+      .expect(201);
+    expect(photoResponse.body as ServiceWorkOrderPhoto).toMatchObject({
+      fileName: 'display-check.png',
+      mediaType: 'image/png',
+    });
+    const photo = photoResponse.body as ServiceWorkOrderPhoto;
+    const photoReplay = await request(application.getHttpServer())
+      .post(`/api/v1/service/work-orders/${started.id}/photos`)
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', `service-photo-${runId}`)
+      .attach('photo', tinyPng, { contentType: 'image/png', filename: 'display-check.png' })
+      .expect(201);
+    expect((photoReplay.body as ServiceWorkOrderPhoto).id).toBe(photo.id);
+    const downloadedPhoto = await request(application.getHttpServer())
+      .get(`/api/v1/service/work-orders/${started.id}/photos/${photo.id}`)
+      .set('authorization', `Bearer ${token}`)
+      .expect('content-type', /image\/png/u)
+      .expect(200);
+    expect(downloadedPhoto.body).toEqual(tinyPng);
+
+    const conflictingRequestResponse = await request(application.getHttpServer())
+      .post('/api/v1/service/requests')
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', `service-conflicting-request-${runId}`)
+      .send({
+        ...requestInput,
+        problemDescription: 'A second reported fault while the first repair is active.',
+      })
+      .expect(201);
+    const conflictingRequest = conflictingRequestResponse.body as ServiceRequest;
+    const conflictingAssignmentResponse = await request(application.getHttpServer())
+      .post(`/api/v1/service/requests/${conflictingRequest.id}/assign`)
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', `service-conflicting-assign-${runId}`)
+      .send({
+        expectedVersion: conflictingRequest.version,
+        scheduledEnd: '2099-09-02T10:00:00.000Z',
+        scheduledStart: '2099-09-02T09:00:00.000Z',
+        technicianAccountId: creatorAccountId,
+        technicianWarehouseId,
+      })
+      .expect(201);
+    const conflictingAssignment = conflictingAssignmentResponse.body as ServiceRequest;
+    const conflictingWorkOrderResponse = await request(application.getHttpServer())
+      .get(`/api/v1/service/work-orders/${conflictingAssignment.workOrderId}`)
+      .set('authorization', `Bearer ${token}`)
+      .expect(200);
+    const conflictingWorkOrder = conflictingWorkOrderResponse.body as ServiceWorkOrder;
+    const conflictingStart = await request(application.getHttpServer())
+      .post(`/api/v1/service/work-orders/${conflictingWorkOrder.id}/start`)
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', `service-conflicting-start-${runId}`)
+      .send({ expectedVersion: conflictingWorkOrder.version })
+      .expect(409);
+    expect(conflictingStart.body.error.code).toBe('SERVICE_EQUIPMENT_ALREADY_IN_SERVICE');
+    const cancelledConflict = await request(application.getHttpServer())
+      .post(`/api/v1/service/requests/${conflictingAssignment.id}/cancel`)
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', `service-conflicting-cancel-${runId}`)
+      .send({
+        cancellationReason: 'Duplicate request while the active repair is in progress.',
+        expectedVersion: conflictingAssignment.version,
+      })
+      .expect(200);
+    expect((cancelledConflict.body as ServiceRequest).status).toBe('cancelled');
+
+    const readyResponse = await request(application.getHttpServer())
+      .get(`/api/v1/service/work-orders/${started.id}`)
+      .set('authorization', `Bearer ${token}`)
+      .expect(200);
+    const ready = readyResponse.body as ServiceWorkOrder;
+    const completionInput = {
+      completionNotes: 'Repaired the display connection and verified normal operation.',
+      expectedVersion: ready.version,
+      laborCostBgn: '40',
+      parts: [{ productId, quantity: '1' }],
+      signatureImageDataUrl: `data:image/png;base64,${tinyPng.toString('base64')}`,
+      signerName: 'Elena Stoyanova',
+      timeEntries: [
+        { minutes: 30, note: 'On-site repair and verification.', workDate: '2026-08-14' },
+      ],
+      transportCostBgn: '10',
+    };
+    const completionKey = `service-complete-${runId}`.padEnd(200, 'x');
+    const completedResponse = await request(application.getHttpServer())
+      .post(`/api/v1/service/work-orders/${ready.id}/complete`)
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', completionKey)
+      .send(completionInput)
+      .expect(200);
+    const completed = completedResponse.body as ServiceWorkOrder;
+    expect(completed).toMatchObject({
+      laborCostBgn: '40.0000',
+      laborMinutes: 30,
+      parts: [expect.objectContaining({ productId, quantity: '1.0000' })],
+      partsCostBgn: '7.0000',
+      photos: [expect.objectContaining({ fileName: 'display-check.png' })],
+      signature: { signerName: 'Elena Stoyanova' },
+      status: 'completed',
+      totalCostBgn: '57.0000',
+      transportCostBgn: '10.0000',
+    });
+    const completionReplay = await request(application.getHttpServer())
+      .post(`/api/v1/service/work-orders/${ready.id}/complete`)
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', completionKey)
+      .send(completionInput)
+      .expect(200);
+    expect((completionReplay.body as ServiceWorkOrder).id).toBe(completed.id);
+    const downloadedSignature = await request(application.getHttpServer())
+      .get(`/api/v1/service/work-orders/${completed.id}/signature`)
+      .set('authorization', `Bearer ${token}`)
+      .expect('content-type', /image\/png/u)
+      .expect(200);
+    expect(downloadedSignature.body).toEqual(tinyPng);
+
+    const mineResponse = await request(application.getHttpServer())
+      .get('/api/v1/service/work-orders/my')
+      .set('authorization', `Bearer ${token}`)
+      .expect(200);
+    expect((mineResponse.body as ServiceWorkOrderPage).items).toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: completed.id })]),
+    );
+    const historyResponse = await request(application.getHttpServer())
+      .get(`/api/v1/service/equipment/${equipmentId}/history`)
+      .set('authorization', `Bearer ${token}`)
+      .expect(200);
+    expect((historyResponse.body as ServiceEquipmentHistory).events).toEqual(
+      expect.arrayContaining([expect.objectContaining({ workOrderNumber: completed.number })]),
+    );
+
+    await database.query(
+      "UPDATE master_data.customer_equipment SET status = 'retired' WHERE id = $1",
+      [equipmentId],
+    );
+    const retiredReferenceResponse = await request(application.getHttpServer())
+      .get('/api/v1/service/reference-data')
+      .set('authorization', `Bearer ${token}`)
+      .expect(200);
+    expect((retiredReferenceResponse.body as ServiceReferenceData).equipment).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ active: true, id: equipmentId, status: 'retired' }),
+      ]),
+    );
+    const retiredHistoryResponse = await request(application.getHttpServer())
+      .get(`/api/v1/service/equipment/${equipmentId}/history`)
+      .set('authorization', `Bearer ${token}`)
+      .expect(200);
+    expect((retiredHistoryResponse.body as ServiceEquipmentHistory).events).toEqual(
+      expect.arrayContaining([expect.objectContaining({ workOrderNumber: completed.number })]),
+    );
+
+    const evidence = await database.query<{
+      audit_count: string;
+      outbox_count: string;
+      part_usage_count: string;
+      stock_quantity: string;
+    }>(
+      `SELECT
+         (SELECT count(*)::text FROM service.work_order_part_usages WHERE work_order_id = $1) AS part_usage_count,
+         (SELECT quantity::text FROM inventory.stock_balances WHERE warehouse_id = $2 AND product_id = $3) AS stock_quantity,
+         (SELECT count(*)::text FROM audit.events WHERE action LIKE 'service.%') AS audit_count,
+         (SELECT count(*)::text FROM integration.outbox_events WHERE event_type LIKE 'service.%') AS outbox_count`,
+      [completed.id, technicianWarehouseId, productId],
+    );
+    expect(evidence.rows[0]).toMatchObject({
+      part_usage_count: '1',
+      stock_quantity: '4.0000',
+    });
+    expect(Number(evidence.rows[0]?.audit_count)).toBeGreaterThanOrEqual(5);
+    expect(Number(evidence.rows[0]?.outbox_count)).toBeGreaterThanOrEqual(5);
+  });
+
   function quotationInput() {
     return {
       currencyCode: 'BGN',
@@ -640,6 +1087,62 @@ async function grantPermissions(
   for (const action of actions) {
     const permission = await pool.query<{ id: string }>(
       `INSERT INTO iam.permissions (id, module, action) VALUES ($1, 'erp.sales', $2)
+       ON CONFLICT (module, action) DO UPDATE SET module = EXCLUDED.module RETURNING id`,
+      [randomUUID(), action],
+    );
+    await pool.query('INSERT INTO iam.role_permissions (role_id, permission_id) VALUES ($1, $2)', [
+      roleId,
+      permission.rows[0]?.id,
+    ]);
+  }
+  await pool.query('INSERT INTO iam.account_roles (account_id, role_id) VALUES ($1, $2)', [
+    accountId,
+    roleId,
+  ]);
+}
+
+async function grantFinancePermissions(
+  pool: Pool,
+  accountId: string,
+  actions: Array<'create' | 'edit' | 'view'>,
+) {
+  const roleId = randomUUID();
+  await pool.query('INSERT INTO iam.roles (id, code, name) VALUES ($1, $2, $3)', [
+    roleId,
+    `finance-${randomUUID()}`,
+    'Finance test role',
+  ]);
+  for (const action of actions) {
+    const permission = await pool.query<{ id: string }>(
+      `INSERT INTO iam.permissions (id, module, action) VALUES ($1, 'erp.finance', $2)
+       ON CONFLICT (module, action) DO UPDATE SET module = EXCLUDED.module RETURNING id`,
+      [randomUUID(), action],
+    );
+    await pool.query('INSERT INTO iam.role_permissions (role_id, permission_id) VALUES ($1, $2)', [
+      roleId,
+      permission.rows[0]?.id,
+    ]);
+  }
+  await pool.query('INSERT INTO iam.account_roles (account_id, role_id) VALUES ($1, $2)', [
+    accountId,
+    roleId,
+  ]);
+}
+
+async function grantServicePermissions(
+  pool: Pool,
+  accountId: string,
+  actions: Array<'approve' | 'create' | 'edit' | 'view'>,
+) {
+  const roleId = randomUUID();
+  await pool.query('INSERT INTO iam.roles (id, code, name) VALUES ($1, $2, $3)', [
+    roleId,
+    `service-${randomUUID()}`,
+    'Service test role',
+  ]);
+  for (const action of actions) {
+    const permission = await pool.query<{ id: string }>(
+      `INSERT INTO iam.permissions (id, module, action) VALUES ($1, 'erp.service', $2)
        ON CONFLICT (module, action) DO UPDATE SET module = EXCLUDED.module RETURNING id`,
       [randomUUID(), action],
     );
@@ -764,6 +1267,67 @@ async function seedSalesData(pool: Pool, actorId: string, runId: string) {
     warehouseId,
   };
 }
+
+async function seedServiceTechnicianWarehouse(
+  pool: Pool,
+  accountId: string,
+  productId: string,
+  runId: string,
+) {
+  const entityId = randomUUID();
+  const branchId = randomUUID();
+  const locationId = randomUUID();
+  const operatorId = randomUUID();
+  const warehouseId = randomUUID();
+  await pool.query(
+    `INSERT INTO organization.legal_entities (id, code, name, created_by, updated_by)
+     VALUES ($1, $2, 'Service test entity', $3, $3)`,
+    [entityId, `SE-${runId.slice(0, 8).toUpperCase()}`, accountId],
+  );
+  await pool.query(
+    `INSERT INTO organization.branches (id, legal_entity_id, code, name, created_by, updated_by)
+     VALUES ($1, $2, $3, 'Service test branch', $4, $4)`,
+    [branchId, entityId, `SB-${runId.slice(0, 8).toUpperCase()}`, accountId],
+  );
+  await pool.query(
+    `INSERT INTO organization.business_locations (
+       id, branch_id, code, name, location_type, address_line_1, city, created_by, updated_by
+     ) VALUES ($1, $2, $3, 'Service test base', 'Service center', '1 Technician Street',
+       'Vratsa', $4, $4)`,
+    [locationId, branchId, `SL-${runId.slice(0, 8).toUpperCase()}`, accountId],
+  );
+  await pool.query(
+    `INSERT INTO organization.operators (
+       id, business_location_id, account_id, code, created_by, updated_by
+     ) VALUES ($1, $2, $3, $4, $3, $3)`,
+    [operatorId, locationId, accountId, `TECH-${runId.slice(0, 8).toUpperCase()}`],
+  );
+  await pool.query(
+    `INSERT INTO master_data.warehouses (
+       id, code, name, warehouse_type, business_location_id, technician_operator_id, created_by, updated_by
+     ) VALUES ($1, $2, 'Service technician warehouse', 'technician', $3, $4, $5, $5)`,
+    [warehouseId, `TW-${runId.slice(0, 8).toUpperCase()}`, locationId, operatorId, accountId],
+  );
+  const movementId = randomUUID();
+  await pool.query(
+    `INSERT INTO inventory.stock_movements (
+       id, warehouse_id, product_id, movement_type, quantity, reference_type, reference_id,
+       actor_account_id, correlation_id, unit_cost_bgn
+     ) VALUES ($1, $2, $3, 'receipt', 5, 'service_test_seed', $4, $5, $6, 7)`,
+    [movementId, warehouseId, productId, `technician-${runId}`, accountId, randomUUID()],
+  );
+  await pool.query(
+    `INSERT INTO inventory.stock_balances (warehouse_id, product_id, quantity, average_unit_cost_bgn)
+     VALUES ($1, $2, 5, 7)`,
+    [warehouseId, productId],
+  );
+  return warehouseId;
+}
+
+const tinyPng = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScL8SAAAAABJRU5ErkJggg==',
+  'base64',
+);
 
 async function login(application: INestApplication, email: string) {
   const response = await request(application.getHttpServer())

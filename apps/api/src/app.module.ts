@@ -17,6 +17,8 @@ import { RootController } from './root.controller.js';
 import { RateLimitModule } from './security/rate-limit.module.js';
 import { SecurityAdministrationModule } from './security-administration/security-administration.module.js';
 import { SalesModule } from './sales/sales.module.js';
+import { FinanceModule } from './finance/finance.module.js';
+import { ServiceOperationsModule } from './service/service.module.js';
 
 @Module({
   controllers: [RootController],
@@ -37,6 +39,8 @@ import { SalesModule } from './sales/sales.module.js';
     InventoryModule,
     ProcurementModule,
     SalesModule,
+    FinanceModule,
+    ServiceOperationsModule,
   ],
 })
 export class AppModule {}

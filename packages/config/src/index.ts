@@ -40,6 +40,7 @@ const environmentSchema = z
     FEATURE_FIFO_COSTING: booleanString.default(false),
     FEATURE_POS_BACKUP_ROUTER: booleanString.default(false),
     FEATURE_POS_KIOSK: booleanString.default(false),
+    FINANCE_PAYMENT_STATUS_CRON: z.string().min(1).default('0 25 1 * * *'),
     IDEMPOTENCY_TTL_SECONDS: z.coerce.number().int().positive().default(86_400),
     INTEGRATION_OUTBOX_BATCH_SIZE: z.coerce.number().int().positive().max(500).default(100),
     INTEGRATION_OUTBOX_INTERVAL_MS: z.coerce.number().int().positive().default(1_000),

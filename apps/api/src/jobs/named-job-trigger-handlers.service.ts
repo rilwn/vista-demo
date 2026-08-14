@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { Inject, Injectable, type OnModuleInit } from '@nestjs/common';
 
 import { DatabaseService } from '../database/database.service.js';
+import { FinanceService } from '../finance/finance.service.js';
 import { StructuredLogger } from '../logging/structured-logger.service.js';
 import { SalesSubscriptionsService } from '../sales/sales-subscriptions.service.js';
 import { type BackgroundJobContext, JobHandlerRegistry } from './job-handler-registry.service.js';
@@ -26,6 +27,7 @@ export class NamedJobTriggerHandlersService implements OnModuleInit {
     @Inject(JobHandlerRegistry) private readonly registry: JobHandlerRegistry,
     @Inject(StructuredLogger) private readonly logger: StructuredLogger,
     @Inject(SalesSubscriptionsService) private readonly subscriptions: SalesSubscriptionsService,
+    @Inject(FinanceService) private readonly finance: FinanceService,
   ) {}
 
   onModuleInit(): void {
@@ -38,7 +40,9 @@ export class NamedJobTriggerHandlersService implements OnModuleInit {
     const domainResult =
       context.name === 'sales.subscription-invoice.generate'
         ? await this.subscriptions.generateDueInvoiceDrafts(context)
-        : undefined;
+        : context.name === 'finance.payment-status.detect'
+          ? await this.finance.detectPaymentStatuses(context)
+          : undefined;
     const eventId = deterministicUuid(`${context.name}\u0000${context.idempotencyKey}`);
     const outboxIdempotencyKey = `scheduled:${createHash('sha256')
       .update(`${context.name}\u0000${context.idempotencyKey}`)

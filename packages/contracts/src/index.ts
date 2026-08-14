@@ -1098,6 +1098,375 @@ export interface SalesWorkflow {
   warehouseName: string;
 }
 
+export const financePaymentMethods = [
+  'cash',
+  'bank_transfer',
+  'pos_terminal',
+  'card',
+  'offset',
+] as const;
+export type FinancePaymentMethod = (typeof financePaymentMethods)[number];
+
+export type FinancePaymentStatus = 'cancelled' | 'overdue' | 'paid' | 'partially_paid' | 'unpaid';
+
+export interface FinanceInvoiceDraftReference {
+  currencyCode: string;
+  customerName: string;
+  customerPartnerId: string;
+  id: string;
+  number: string;
+  recordedAt: string;
+  total: string;
+}
+
+export interface FinanceReferenceData {
+  invoiceDrafts: FinanceInvoiceDraftReference[];
+}
+
+export interface CreateFinanceCustomerDocumentRequest {
+  dueDate: string;
+  salesInvoiceId: string;
+}
+
+export interface CreateFinancePaymentRequest {
+  amount: string;
+  notes?: string;
+  paymentDate: string;
+  paymentMethod: FinancePaymentMethod;
+  paymentReference?: string;
+}
+
+export interface CancelFinanceCustomerDocumentRequest {
+  cancellationReason: string;
+  expectedVersion: number;
+}
+
+export interface FinancePayment {
+  amount: string;
+  allocatedAt: string;
+  id: string;
+  notes?: string;
+  number: string;
+  paymentDate: string;
+  paymentMethod: FinancePaymentMethod;
+  paymentReference?: string;
+  recordedAt: string;
+}
+
+export interface FinancePaymentStatusHistoryEntry {
+  changedAt: string;
+  changedByName?: string;
+  id: string;
+  nextStatus: FinancePaymentStatus;
+  previousStatus?: FinancePaymentStatus;
+  reason: string;
+}
+
+export interface FinanceCustomerDocument {
+  allocatedTotal: string;
+  bgnTotal: string;
+  createdAt: string;
+  currencyCode: string;
+  customerName: string;
+  customerPartnerId: string;
+  documentDate: string;
+  dueDate: string;
+  exchangeRate: string;
+  id: string;
+  number: string;
+  outstandingTotal: string;
+  paymentStatus: FinancePaymentStatus;
+  payments: FinancePayment[];
+  rateDate: string;
+  rateSource: string;
+  reviewState: 'cancelled' | 'pending_finance_review';
+  sourceInvoiceNumber: string;
+  sourceSalesInvoiceId: string;
+  statusHistory: FinancePaymentStatusHistoryEntry[];
+  total: string;
+  version: number;
+}
+
+export interface FinanceSummary {
+  activeDocuments: number;
+  overdueOutstanding: string;
+  paidDocuments: number;
+  totalOutstanding: string;
+}
+
+export const serviceRequestChannels = ['telephone', 'email', 'customer_portal', 'on_site'] as const;
+export type ServiceRequestChannel = (typeof serviceRequestChannels)[number];
+
+export const serviceTypes = ['warranty', 'out_of_warranty', 'subscription'] as const;
+export type ServiceType = (typeof serviceTypes)[number];
+
+export const servicePriorities = ['low', 'normal', 'high', 'critical'] as const;
+export type ServicePriority = (typeof servicePriorities)[number];
+
+export type ServiceRequestStatus = 'new' | 'scheduled' | 'in_progress' | 'completed' | 'cancelled';
+
+export type ServiceWorkOrderStatus = 'scheduled' | 'in_progress' | 'completed' | 'cancelled';
+
+export interface ServiceCustomerReference {
+  id: string;
+  name: string;
+}
+
+export interface ServiceLocationReference {
+  customerPartnerId: string;
+  id: string;
+  name: string;
+}
+
+export interface ServiceEquipmentReference {
+  active: boolean;
+  customerLocationId: string;
+  customerPartnerId: string;
+  deviceName: string;
+  id: string;
+  serialNumber: string;
+  status: 'active' | 'under_repair' | 'retired';
+  warrantyEndsOn?: string;
+}
+
+export interface ServiceTechnicianReference {
+  accountId: string;
+  displayName: string;
+  email: string;
+  warehouseId: string;
+  warehouseName: string;
+}
+
+export interface ServicePartReference {
+  availableQuantity: string;
+  productCode: string;
+  productId: string;
+  productName: string;
+  trackingMode: ProductTrackingMode;
+  warehouseId: string;
+}
+
+export interface ServiceSubscriptionReference {
+  customerEquipmentIds: string[];
+  customerLocationId: string;
+  customerPartnerId: string;
+  id: string;
+  number: string;
+}
+
+export interface ServiceReferenceData {
+  businessTimezone: string;
+  customers: ServiceCustomerReference[];
+  equipment: ServiceEquipmentReference[];
+  locations: ServiceLocationReference[];
+  parts: ServicePartReference[];
+  subscriptions: ServiceSubscriptionReference[];
+  technicians: ServiceTechnicianReference[];
+}
+
+export interface CreateServiceRequest {
+  customerEquipmentId: string;
+  customerLocationId: string;
+  customerPartnerId: string;
+  priority: ServicePriority;
+  problemDescription: string;
+  sourceChannel: ServiceRequestChannel;
+  subscriptionContractId?: string;
+  serviceType: ServiceType;
+}
+
+export interface AssignServiceWorkOrderRequest {
+  expectedVersion: number;
+  scheduledEnd: string;
+  scheduledStart: string;
+  technicianAccountId: string;
+  technicianWarehouseId: string;
+}
+
+export interface StartServiceWorkOrderRequest {
+  expectedVersion: number;
+}
+
+export interface ServiceWorkTimeEntryInput {
+  minutes: number;
+  note?: string;
+  workDate: string;
+}
+
+export interface ServicePartUsageInput {
+  batchNumber?: string;
+  productId: string;
+  quantity: string;
+  serialNumbers?: string[];
+}
+
+export interface CompleteServiceWorkOrderRequest {
+  completionNotes: string;
+  expectedVersion: number;
+  laborCostBgn: string;
+  parts: ServicePartUsageInput[];
+  signatureImageDataUrl: string;
+  signerName: string;
+  timeEntries: ServiceWorkTimeEntryInput[];
+  transportCostBgn: string;
+}
+
+export interface CancelServiceRequest {
+  cancellationReason: string;
+  expectedVersion: number;
+}
+
+export interface ServiceRequest {
+  assignedTechnician?: ServiceTechnicianReference;
+  completedAt?: string;
+  createdAt: string;
+  customerEquipmentId: string;
+  customerLocationId: string;
+  customerLocationName: string;
+  customerName: string;
+  customerPartnerId: string;
+  deviceName: string;
+  id: string;
+  number: string;
+  priority: ServicePriority;
+  problemDescription: string;
+  scheduledEnd?: string;
+  scheduledStart?: string;
+  serialNumber: string;
+  serviceType: ServiceType;
+  sourceChannel: ServiceRequestChannel;
+  status: ServiceRequestStatus;
+  subscriptionContractId?: string;
+  updatedAt: string;
+  version: number;
+  workOrderId?: string;
+  workOrderNumber?: string;
+}
+
+export interface ServiceRequestPage {
+  items: ServiceRequest[];
+  page: number;
+  pageSize: number;
+  summary: {
+    completed: number;
+    inProgress: number;
+    new: number;
+    scheduled: number;
+  };
+  total: number;
+  totalPages: number;
+}
+
+export interface ServiceWorkOrderTimeEntry {
+  id: string;
+  minutes: number;
+  note?: string;
+  recordedAt: string;
+  workDate: string;
+}
+
+export interface ServiceWorkOrderPartUsage {
+  batchNumber?: string;
+  id: string;
+  productId: string;
+  productName: string;
+  quantity: string;
+  serialNumbers: string[];
+  stockIssueId: string;
+  totalCostBgn: string;
+  unitCostBgn: string;
+  warehouseId: string;
+  warehouseName: string;
+}
+
+export interface ServiceWorkOrderPhoto {
+  capturedAt: string;
+  fileName: string;
+  id: string;
+  mediaType: 'image/jpeg' | 'image/png' | 'image/webp';
+  sizeBytes: number;
+}
+
+export interface ServiceWorkOrderSignature {
+  signedAt: string;
+  signerName: string;
+}
+
+export interface ServiceWorkOrderHistoryEntry {
+  changedAt: string;
+  changedByName?: string;
+  id: string;
+  nextStatus: ServiceWorkOrderStatus;
+  previousStatus?: ServiceWorkOrderStatus;
+  reason: string;
+}
+
+export interface ServiceWorkOrder {
+  assignedTechnician?: ServiceTechnicianReference;
+  completedAt?: string;
+  completionNotes?: string;
+  createdAt: string;
+  customerEquipmentId: string;
+  customerLocationId: string;
+  customerLocationName: string;
+  customerName: string;
+  customerPartnerId: string;
+  deviceName: string;
+  history: ServiceWorkOrderHistoryEntry[];
+  id: string;
+  laborCostBgn: string;
+  laborMinutes: number;
+  number: string;
+  parts: ServiceWorkOrderPartUsage[];
+  partsCostBgn: string;
+  photos: ServiceWorkOrderPhoto[];
+  priority: ServicePriority;
+  problemDescription: string;
+  requestId: string;
+  requestNumber: string;
+  scheduledEnd?: string;
+  scheduledStart?: string;
+  serialNumber: string;
+  serviceType: ServiceType;
+  signature?: ServiceWorkOrderSignature;
+  startedAt?: string;
+  status: ServiceWorkOrderStatus;
+  subscriptionContractId?: string;
+  timeEntries: ServiceWorkOrderTimeEntry[];
+  totalCostBgn: string;
+  transportCostBgn: string;
+  updatedAt: string;
+  version: number;
+}
+
+export interface ServiceWorkOrderPage {
+  items: ServiceWorkOrder[];
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+}
+
+export interface ServiceEquipmentHistoryEvent {
+  completedAt?: string;
+  description: string;
+  id: string;
+  occurredAt: string;
+  parts: ServiceWorkOrderPartUsage[];
+  serviceType: ServiceType;
+  status: ServiceWorkOrderStatus;
+  technicianName?: string;
+  workOrderNumber: string;
+}
+
+export interface ServiceEquipmentHistory {
+  deviceName: string;
+  equipmentId: string;
+  events: ServiceEquipmentHistoryEvent[];
+  serialNumber: string;
+  warrantyEndsOn?: string;
+}
+
 export interface SalesSubscriptionReferenceData {
   customers: Array<{ id: string; name: string }>;
   equipment: Array<{
