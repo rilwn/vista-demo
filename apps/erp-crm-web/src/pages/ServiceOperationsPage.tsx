@@ -79,16 +79,16 @@ const emptyWorkOrderPage: ServiceWorkOrderPage = {
 export function ServiceOperationsPage({ view }: { view: ServiceOperationsView }) {
   const { hasPermission, session } = useAuth();
   const token = session?.sessionToken ?? '';
+  const canCreate = hasPermission('erp.service', 'create');
+  const canEdit = hasPermission('erp.service', 'edit');
+  const canApprove = hasPermission('erp.service', 'approve');
   const [requestListPage, setRequestListPage] = useState(1);
   const [workOrderListPage, setWorkOrderListPage] = useState(1);
-  const data = useServiceData(token, requestListPage, workOrderListPage);
+  const data = useServiceData(token, requestListPage, workOrderListPage, canApprove);
   const [creating, setCreating] = useState(false);
   const [selectedRequest, setSelectedRequest] = useState<ServiceRequest | null>(null);
   const [selectedWorkOrder, setSelectedWorkOrder] = useState<ServiceWorkOrder | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const canCreate = hasPermission('erp.service', 'create');
-  const canEdit = hasPermission('erp.service', 'edit');
-  const canApprove = hasPermission('erp.service', 'approve');
 
   const openWorkOrder = useCallback(
     async (id: string) => {
@@ -172,7 +172,7 @@ export function ServiceOperationsPage({ view }: { view: ServiceOperationsView })
 
       {view === 'requests' ? (
         <ServiceRequestsView
-          canEdit={canEdit}
+          canApprove={canApprove}
           onOpen={setSelectedRequest}
           onOpenWorkOrder={(id) => void openWorkOrder(id)}
           onPageChange={setRequestListPage}
@@ -183,6 +183,7 @@ export function ServiceOperationsPage({ view }: { view: ServiceOperationsView })
       ) : null}
       {view === 'work-orders' ? (
         <ServiceWorkOrdersView
+          canApprove={canApprove}
           currentAccountId={session?.context.accountId ?? ''}
           onOpen={setSelectedWorkOrder}
           onPageChange={setWorkOrderListPage}
@@ -193,6 +194,7 @@ export function ServiceOperationsPage({ view }: { view: ServiceOperationsView })
       ) : null}
       {view === 'schedule' ? (
         <ServiceScheduleView
+          canApprove={canApprove}
           onOpen={setSelectedWorkOrder}
           onPageChange={setWorkOrderListPage}
           page={data.workOrderPage}
@@ -223,7 +225,7 @@ export function ServiceOperationsPage({ view }: { view: ServiceOperationsView })
       ) : null}
       {selectedRequest ? (
         <ServiceRequestDrawer
-          canEdit={canEdit}
+          canApprove={canApprove}
           onBack={() => setSelectedRequest(null)}
           onOpenWorkOrder={(id) => {
             setSelectedRequest(null);
@@ -262,7 +264,7 @@ export function ServiceOperationsPage({ view }: { view: ServiceOperationsView })
 }
 
 function ServiceRequestsView({
-  canEdit,
+  canApprove,
   onOpen,
   onOpenWorkOrder,
   onPageChange,
@@ -270,7 +272,7 @@ function ServiceRequestsView({
   timezone,
   workOrders,
 }: {
-  canEdit: boolean;
+  canApprove: boolean;
   onOpen: (request: ServiceRequest) => void;
   onOpenWorkOrder: (id: string) => void;
   onPageChange: (page: number) => void;
@@ -337,7 +339,7 @@ function ServiceRequestsView({
                     </Button>
                   ) : null}
                   <Button onClick={() => onOpen(request)} variant="quiet">
-                    {canEdit ? 'Manage' : 'View'}
+                    {canApprove ? 'Manage' : 'View'}
                   </Button>
                 </div>
               </article>
@@ -351,6 +353,7 @@ function ServiceRequestsView({
 }
 
 function ServiceWorkOrdersView({
+  canApprove,
   currentAccountId,
   onOpen,
   onPageChange,
@@ -358,6 +361,7 @@ function ServiceWorkOrdersView({
   timezone,
   workOrderPage,
 }: {
+  canApprove: boolean;
   currentAccountId: string;
   onOpen: (workOrder: ServiceWorkOrder) => void;
   onPageChange: (page: number) => void;
@@ -365,39 +369,42 @@ function ServiceWorkOrdersView({
   timezone: string;
   workOrderPage: ServiceWorkOrderPage;
 }) {
-  const [scope, setScope] = useState<'all' | 'mine'>('all');
-  const activePage = scope === 'mine' ? myWorkOrderPage : workOrderPage;
+  const [scope, setScope] = useState<'all' | 'mine'>(canApprove ? 'all' : 'mine');
+  const showAllWork = canApprove && scope === 'all';
+  const activePage = showAllWork ? workOrderPage : myWorkOrderPage;
   const visible = activePage.items;
   return (
     <section className="service-work-orders-panel">
       <div className="service-view-toolbar">
         <div>
-          <h2>{scope === 'mine' ? 'My assigned work' : 'All work orders'}</h2>
+          <h2>{showAllWork ? 'All work orders' : 'My assigned work'}</h2>
           <p>Open one work order to start, record evidence, or complete the visit.</p>
         </div>
-        <div className="service-segmented" role="group" aria-label="Work order scope">
-          <button
-            className={scope === 'all' ? 'is-active' : undefined}
-            onClick={() => setScope('all')}
-            type="button"
-          >
-            All work
-          </button>
-          <button
-            className={scope === 'mine' ? 'is-active' : undefined}
-            onClick={() => setScope('mine')}
-            type="button"
-          >
-            My work
-          </button>
-        </div>
+        {canApprove ? (
+          <div className="service-segmented" role="group" aria-label="Work order scope">
+            <button
+              className={scope === 'all' ? 'is-active' : undefined}
+              onClick={() => setScope('all')}
+              type="button"
+            >
+              All work
+            </button>
+            <button
+              className={scope === 'mine' ? 'is-active' : undefined}
+              onClick={() => setScope('mine')}
+              type="button"
+            >
+              My work
+            </button>
+          </div>
+        ) : null}
       </div>
       {!visible.length ? (
-        <ServiceState title={scope === 'mine' ? 'No work assigned to you' : 'No work orders yet'}>
+        <ServiceState title={showAllWork ? 'No work orders yet' : 'No work assigned to you'}>
           <p>
-            {scope === 'mine'
-              ? 'Assigned visits will appear here and stay available on a smaller screen.'
-              : 'Dispatch a service request to create the first work order.'}
+            {showAllWork
+              ? 'Dispatch a service request to create the first work order.'
+              : 'Assigned visits will appear here and stay available on a smaller screen.'}
           </p>
         </ServiceState>
       ) : (
@@ -438,11 +445,13 @@ function ServiceWorkOrdersView({
 }
 
 function ServiceScheduleView({
+  canApprove,
   onOpen,
   onPageChange,
   page,
   timezone,
 }: {
+  canApprove: boolean;
   onOpen: (workOrder: ServiceWorkOrder) => void;
   onPageChange: (page: number) => void;
   page: ServiceWorkOrderPage;
@@ -466,8 +475,12 @@ function ServiceScheduleView({
     <section className="service-schedule-panel">
       <div className="service-view-toolbar">
         <div>
-          <h2>Technician schedule</h2>
-          <p>Appointments are grouped by business day so workload remains visible at a glance.</p>
+          <h2>{canApprove ? 'Technician schedule' : 'My schedule'}</h2>
+          <p>
+            {canApprove
+              ? 'Appointments are grouped by business day so workload remains visible at a glance.'
+              : 'Your assigned appointments are grouped by business day.'}
+          </p>
         </div>
         <span className="service-schedule-count">{scheduled.length} upcoming</span>
       </div>
@@ -875,7 +888,7 @@ function NewServiceRequestDrawer({
 }
 
 function ServiceRequestDrawer({
-  canEdit,
+  canApprove,
   onBack,
   onOpenWorkOrder,
   onSaved,
@@ -884,7 +897,7 @@ function ServiceRequestDrawer({
   token,
   timezone,
 }: {
-  canEdit: boolean;
+  canApprove: boolean;
   onBack: () => void;
   onOpenWorkOrder: (id: string) => void;
   onSaved: (request: ServiceRequest, message: string) => void;
@@ -941,7 +954,7 @@ function ServiceRequestDrawer({
             <Button onClick={() => onOpenWorkOrder(request.workOrderId!)} variant="secondary">
               Open work order
             </Button>
-          ) : canEdit ? (
+          ) : canApprove ? (
             <Button onClick={() => setAssigning(true)}>Dispatch request</Button>
           ) : null}
         </section>
@@ -999,7 +1012,7 @@ function ServiceRequestDrawer({
               </strong>
               <small>{request.assignedTechnician.warehouseName}</small>
             </div>
-            {canEdit && request.status === 'scheduled' ? (
+            {canApprove && request.status === 'scheduled' ? (
               <Button onClick={() => setAssigning(true)} variant="quiet">
                 Reschedule
               </Button>
@@ -1020,7 +1033,7 @@ function ServiceRequestDrawer({
             timezone={timezone}
           />
         ) : null}
-        {canEdit && (request.status === 'new' || request.status === 'scheduled') ? (
+        {canApprove && (request.status === 'new' || request.status === 'scheduled') ? (
           <section className="service-preview-section service-cancel-section">
             <header>
               <div>
@@ -2130,7 +2143,12 @@ function ServiceState({ children, title }: { children?: ReactNode; title: string
   );
 }
 
-function useServiceData(token: string, requestListPage: number, workOrderListPage: number) {
+function useServiceData(
+  token: string,
+  requestListPage: number,
+  workOrderListPage: number,
+  canApprove: boolean,
+) {
   const [references, setReferences] = useState<ServiceReferenceData>(emptyReferences);
   const [requestPage, setRequestPage] = useState<ServiceRequestPage>(emptyRequestPage);
   const [workOrderPage, setWorkOrderPage] = useState<ServiceWorkOrderPage>(emptyWorkOrderPage);
@@ -2145,11 +2163,15 @@ function useServiceData(token: string, requestListPage: number, workOrderListPag
     let active = true;
     setLoading(true);
     setError(false);
+    const myWorkOrders = listMyServiceWork(token, workOrderListPage);
+    const scopedWorkOrders = canApprove
+      ? listServiceWorkOrders(token, workOrderListPage)
+      : myWorkOrders;
     void Promise.all([
       getServiceReferenceData(token),
       listServiceRequests(token, requestListPage),
-      listServiceWorkOrders(token, workOrderListPage),
-      listMyServiceWork(token, workOrderListPage),
+      scopedWorkOrders,
+      myWorkOrders,
     ])
       .then(([nextReferences, nextRequests, nextWorkOrders, nextMyWorkOrders]) => {
         if (!active) return;
@@ -2163,7 +2185,7 @@ function useServiceData(token: string, requestListPage: number, workOrderListPag
     return () => {
       active = false;
     };
-  }, [requestListPage, revision, token, workOrderListPage]);
+  }, [canApprove, requestListPage, revision, token, workOrderListPage]);
 
   return useMemo(
     () => ({ error, loading, myWorkOrderPage, references, reload, requestPage, workOrderPage }),

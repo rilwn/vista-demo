@@ -577,16 +577,20 @@ route, or full sales-lifecycle behavior.
   `GET /api/v1/service/work-orders/:id/signature` return only
   access-controlled binary evidence with private/no-store response headers.
 
-All reads require `erp.service:view`; request creation requires
-`erp.service:create`; dispatch and cancellation require `erp.service:edit`.
-Starting, uploading evidence, and completion require `erp.service:edit` from the
-assigned technician or `erp.service:approve` as an authorized override. Every
-write requires an `Idempotency-Key`, applies an optimistic version where the
-record is mutable, commits its audit event and outbox event with the business
-change, and returns the prior response on an exact retry. Work start rejects a
-second active repair for the same device. Completion issues parts from the
-assigned technician warehouse within the same PostgreSQL transaction, so a
-failed inventory issue rolls back the work completion.
+All reads require `erp.service:view`. An account without
+`erp.service:approve` is scoped to its own assigned work: registers, direct
+request/work-order reads, evidence, equipment history, and reference data do
+not expose another technician's records. Request creation requires
+`erp.service:create`; dispatch, rescheduling, and cancellation require
+`erp.service:approve`. Starting, uploading evidence, and completion require
+`erp.service:edit` from the assigned technician or `erp.service:approve` as an
+authorized override. Every write requires an `Idempotency-Key`, applies an
+optimistic version where the record is mutable, commits its audit event and
+outbox event with the business change, and returns the prior response on an
+exact retry. Work start rejects a second active repair for the same device.
+Completion issues parts from the assigned technician warehouse within the same
+PostgreSQL transaction, so a failed inventory issue rolls back the work
+completion.
 
 Request and appointment display use `BUSINESS_TIMEZONE`. The implementation is
 currently a date-grouped schedule, not capacity/overlap enforcement, route

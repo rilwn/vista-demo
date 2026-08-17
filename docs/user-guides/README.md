@@ -10,8 +10,9 @@ empty states do not present sample records as real behavior.
 2. If the account has an enrolled second factor, enter the current six-digit code
    when the focused verification step appears.
 3. The application validates the new or restored session with the API before it
-   opens the workspace. Navigation shows only modules granted by the current
-   backend permissions.
+   opens the workspace. A new sign-in always opens the permission-safe Overview,
+   rather than restoring a page left in browser history by another employee.
+   Navigation shows only modules granted by the current backend permissions.
 4. Use **My access** to inspect the effective module/action permissions for the
    current session, change your password, or sign out.
 
@@ -72,18 +73,54 @@ deliberately payload-free and read-only: it cannot reveal queued customer data o
 modify/replay/delete jobs. A dedicated operational console remains part of the
 remaining Phase 1 operations work.
 
-### Local browser testing
+### Local ERP/CRM fixture accounts
 
-The repository does not contain a shared password. After applying migrations,
-create a development-only account with a password chosen on your machine:
+For local browser testing, configure these values in the untracked `.env` file:
 
-```sh
-DEV_SEED_EMAIL='dev@vista.local' DEV_SEED_PASSWORD='choose-a-strong-local-password' npm run db:seed:dev
+```dotenv
+DEV_FIXTURES_ENABLED=true
+DEV_FIXTURES_PASSWORD=ChooseYourOwn!2026
 ```
 
-Then open `http://localhost:5173/login` and use that email and password. Re-running
-the command safely resets this local account's password and clears failed-login
-lockout state. The command refuses to run with `NODE_ENV=production`.
+Then start the development environment with `npm run dev`. In development mode,
+the startup sequence prepares the local fixture set after migrations. It requires
+an explicit opt-in and a loopback PostgreSQL URL, but that is a safeguard rather
+than proof that data is isolated: never use it with shared, staging, or
+production credentials or data. Re-running normal local startup preserves
+user-edited operational records and completed test work; it does not reset
+passwords or business documents. It reconciles only the dedicated fixture-role
+grants after confirming those roles and accounts have no unexpected assignments.
+The only compatibility repair replaces the former invalid fixture
+EAN/IBAN literals on their fixed fixture IDs; it leaves any edited value
+untouched.
+
+Replace the shown password with a private value that meets the configured
+password policy before using this outside a disposable local environment.
+If a reserved demo identifier belongs to another record, startup stops the
+fixture transaction without applying a partial setup.
+
+The configured `DEV_FIXTURES_PASSWORD` value is used when an account is first
+created. Changing it later deliberately does not reset credentials. Sign in to
+the ERP/CRM application with the account that matches the workflow you want to
+test.
+
+| Account                        | Use it for                                                                  |
+| ------------------------------ | --------------------------------------------------------------------------- |
+| `manager@vista.local`          | Broad review of currently implemented non-administrative ERP/CRM workflows. |
+| `platform.manager@vista.local` | Business structure and read-only Security review.                           |
+| `crm@vista.local`              | Partner, location, contact, and equipment records.                          |
+| `warehouse@vista.local`        | Catalog, warehouse, stock, reservation, and traceability work.              |
+| `procurement@vista.local`      | Procurement records and receiving.                                          |
+| `sales@vista.local`            | Sales, pricing, handover, and subscriptions.                                |
+| `finance@vista.local`          | Collections and payment allocation.                                         |
+| `dispatcher@vista.local`       | Service requests and dispatch.                                              |
+| `technician@vista.local`       | Assigned Service work and completion.                                       |
+| `viewer@vista.local`           | Read-only ERP/CRM review outside restricted Service work.                   |
+
+The fixture accounts are intentionally non-administrative because administrative
+roles require a configured second factor. POS and Backup Control do not yet
+have login-wired operational backends, so do not use these accounts to claim a
+POS or backup workflow has been tested.
 
 ## Business structure
 
@@ -398,48 +435,40 @@ date. They remain review drafts until Finance performs approved legal issuance.
 
 ## Service work
 
-Set up a real operating path before testing Service. Do this with visible
-navigation, not by typing a page address:
+The development fixtures provide an active customer location and device, a
+dispatcher, a technician mapped to a technician warehouse, and optional stocked
+parts. Test the complete Service core with two browser sessions (for example, a
+normal window and a private window), using visible application navigation only:
 
-1. In **Administration → Security**, ensure the dispatcher has
-   `erp.service:view`, `erp.service:create`, and `erp.service:edit`. The
-   technician needs `erp.service:view` and `erp.service:edit`; a supervisor who
-   must work on another technician's order also needs `erp.service:approve`.
-2. In **Administration → Business structure**, create or select an active
-   operator for that technician at the relevant business location.
-3. In **ERP → Warehouse → Warehouses**, create a **Technician** warehouse at the
-   same business location and map it to that operator. Do not use a shared
-   warehouse where the work needs technician custody.
-4. In **ERP → Warehouse → Product catalog**, ensure an active spare part exists.
-   In **Warehouse → Movements**, receive stock into the technician warehouse if
-   you want to test used-parts deduction.
-5. In **Customers & CRM → Partner registry**, open or create an active customer,
-   add an active location, and use **Register equipment** to enter a device and
-   its serial number. For the simplest first test, use **Out of warranty** in the
-   service request. A warranty request requires a warranty end date that covers
-   the current business date; a subscription request requires a matching active
-   contract under **ERP → Sales → Service subscriptions**.
-
-Then run the workflow:
-
-1. Choose **ERP → Service**, then open **Service requests** and select **New
-   service request**. Choose the customer, location, device, source, service
-   type, priority, and problem. Save the request.
-2. The request preview opens. Select **Dispatch request**, choose the technician
-   and visit time, and select **Assign visit**. Use **Back** to return to the
-   request register without losing your place.
-3. Choose the **Work orders** tab, select **My work**, then open the assigned
-   work order. Select **Start work**. If useful, choose a valid JPEG, PNG, or
-   WebP file and select **Upload photo**.
+1. In the first browser session, sign in as `dispatcher@vista.local`. From the
+   left navigation, choose **ERP → Service**, open **Service requests**, and
+   select **New service request**. Select an active fixture customer, location,
+   and device; use **Out of warranty** for a straightforward first run; add the
+   source, priority, and problem; then save.
+2. In the request preview, select **Dispatch request**. Choose the fixture
+   technician, select a visit time, and choose **Assign visit**. The generated
+   work order is now assigned to that technician. Use **Back** to return to the
+   unchanged request register.
+3. In the second browser session, sign in as `technician@vista.local`. Choose
+   **ERP → Service → Work orders**; the technician view shows only work assigned
+   to that account. Open the work order created by the dispatcher. Select
+   **Start work**. If useful, select a valid JPEG, PNG, or WebP file and choose
+   **Upload photo**. Dispatch, rescheduling, and cancellation stay with the
+   dispatcher or another approving service role.
 4. Select **Complete work**. Enter completion notes, working time, labor and
-   transport costs, and optionally a stocked part. Serial- or batch-tracked parts
-   require their matching evidence. Enter the customer representative and draw a
-   signature, then select **Complete work**.
-5. Use **Back** to return to the work-order details, then **Back** again to the
-   register. Open **Equipment history** and select the device to verify the
-   completed service event, technician, used parts, and stored evidence. Retired
-   devices remain available in this history selector but cannot be used for a new
-   request.
+   transport costs, and optionally a stocked fixture part. Serial- or
+   batch-tracked parts require their matching evidence. Enter the customer
+   representative, draw a signature, and select **Complete work**.
+5. Before leaving the completed work-order panel, verify the uploaded photo and
+   signature there. Use **Back** to return to the work-order details, then
+   **Back** again to the register. Open **Equipment history** and select the same
+   active device to verify the completed service event, technician, and used
+   parts. Evidence is intentionally reviewed from the completed work order, not
+   from the history list.
+
+To test a warranty or subscription request, choose the fixture device with the
+corresponding active coverage. Do not use an expired warranty or a device without
+a matching active subscription; the API correctly prevents that request.
 
 The current Service workspace is intentionally limited to the documented core:
 manual source capture, dispatch, technician work, stock deduction, evidence, and

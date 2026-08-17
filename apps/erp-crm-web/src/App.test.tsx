@@ -195,6 +195,34 @@ describe('ERP and CRM authenticated workspace', () => {
     );
   });
 
+  it('starts a newly signed-in employee at the overview instead of restoring a stale restricted page', async () => {
+    const warehouseOnlyContext = {
+      ...authenticationContext,
+      permissions: [{ action: 'view', module: 'erp.warehouse' }],
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(loginResponse))
+      .mockResolvedValueOnce(jsonResponse(warehouseOnlyContext));
+    vi.stubGlobal('fetch', fetchMock);
+    renderApplication(['/partners']);
+
+    fireEvent.change(screen.getByLabelText(messages.auth.emailLabel), {
+      target: { value: loginResponse.account.email },
+    });
+    fireEvent.change(screen.getByLabelText(messages.auth.passwordLabel), {
+      target: { value: 'ValidPassword!42' },
+    });
+    fireEvent.submit(screen.getByRole('button', { name: messages.auth.signIn }).closest('form')!);
+
+    expect(
+      await screen.findByRole('heading', {
+        name: `${messages.home.title}, Mila.`,
+      }),
+    ).toBeTruthy();
+    expect(screen.queryByText(messages.states.notFound)).toBeNull();
+  });
+
   it('uses a focused second step when the API requires TOTP', async () => {
     const fetchMock = vi
       .fn()

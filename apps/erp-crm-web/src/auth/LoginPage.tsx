@@ -9,7 +9,7 @@ import { useAuth } from './AuthProvider';
 
 export function LoginPage() {
   const { login, status } = useAuth();
-  const { location, navigate } = useRouter();
+  const { navigate } = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [totpCode, setTotpCode] = useState('');
@@ -30,7 +30,7 @@ export function LoginPage() {
     );
   }
   if (status === 'authenticated') {
-    return <Navigate replace to={returnPath(location.state)} />;
+    return <Navigate replace to="/" />;
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -39,7 +39,10 @@ export function LoginPage() {
     setError(null);
     try {
       await login({ email, password, ...(step === 'totp' ? { totpCode } : {}) });
-      navigate(returnPath(location.state), { replace: true });
+      // A login can follow a stale browser-history entry from another employee.
+      // Always begin a newly authenticated session at the permission-safe overview;
+      // navigation then exposes only what this account may open.
+      navigate('/', { replace: true });
     } catch (caught) {
       const apiError =
         caught instanceof ApiClientError
@@ -214,18 +217,4 @@ export function LoginPage() {
 
 function errorMessage(code: string): string {
   return messages.errors[code as keyof typeof messages.errors] ?? messages.errors.default;
-}
-
-function returnPath(state: unknown): string {
-  if (
-    state &&
-    typeof state === 'object' &&
-    'from' in state &&
-    typeof state.from === 'string' &&
-    state.from.startsWith('/') &&
-    !state.from.startsWith('//')
-  ) {
-    return state.from;
-  }
-  return '/';
 }

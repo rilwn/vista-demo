@@ -7,6 +7,7 @@ import { APP_ENVIRONMENT } from '../config/config.module.js';
 @Injectable()
 export class RedisService implements OnApplicationShutdown {
   private readonly client: Redis;
+  private connectionPromise: Promise<void> | undefined;
 
   constructor(@Inject(APP_ENVIRONMENT) environment: AppEnvironment) {
     this.client = new Redis(environment.REDIS_URL, {
@@ -26,8 +27,11 @@ export class RedisService implements OnApplicationShutdown {
 
   async ensureConnected(): Promise<Redis> {
     if (this.client.status === 'wait') {
-      await this.client.connect();
+      this.connectionPromise ??= this.client.connect().finally(() => {
+        this.connectionPromise = undefined;
+      });
     }
+    if (this.connectionPromise) await this.connectionPromise;
     if (this.client.status !== 'ready') {
       throw new Error('Redis is not ready');
     }

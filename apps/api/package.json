@@ -12,7 +12,8 @@
     "test:coverage": "vitest run --coverage",
     "db:migrate": "DOTENV_CONFIG_PATH=../../.env tsx src/database/migrate.ts up",
     "db:rollback": "DOTENV_CONFIG_PATH=../../.env tsx src/database/migrate.ts down",
-    "db:seed:dev": "DOTENV_CONFIG_PATH=../../.env tsx src/database/seed-dev.ts",
+    "db:fixtures:dev": "DOTENV_CONFIG_PATH=../../.env tsx src/database/seed-dev.ts",
+    "db:seed:dev": "npm run db:fixtures:dev",
     "openapi:generate": "DOTENV_CONFIG_PATH=../../.env tsx src/generate-openapi.ts"
   },
   "dependencies": {

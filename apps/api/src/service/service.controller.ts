@@ -72,8 +72,8 @@ export class ServiceOperationsController {
   @RateLimitPolicy('read')
   @RequirePermissions({ action: 'view', module: 'erp.service' })
   @ApiOkResponse({ type: ServiceReferenceDataDto })
-  referenceData(): Promise<ServiceReferenceDataDto> {
-    return this.service.referenceData();
+  referenceData(@Req() request: AuthenticatedRequest): Promise<ServiceReferenceDataDto> {
+    return this.service.referenceData(request.authentication);
   }
 
   @Get('requests')
@@ -87,8 +87,11 @@ export class ServiceOperationsController {
     name: 'status',
     required: false,
   })
-  requests(@Query() query: ListServiceRequestsQueryDto): Promise<ServiceRequestPageDto> {
-    return this.service.requests(query);
+  requests(
+    @Query() query: ListServiceRequestsQueryDto,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<ServiceRequestPageDto> {
+    return this.service.requests(query, request.authentication);
   }
 
   @Get('requests/:id')
@@ -96,8 +99,11 @@ export class ServiceOperationsController {
   @RequirePermissions({ action: 'view', module: 'erp.service' })
   @ApiOkResponse({ type: ServiceRequestDto })
   @ApiParam({ format: 'uuid', name: 'id' })
-  request(@Param('id') id: string): Promise<ServiceRequestDto> {
-    return this.service.request(id);
+  request(
+    @Param('id') id: string,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<ServiceRequestDto> {
+    return this.service.request(id, request.authentication);
   }
 
   @Get('work-orders/my')
@@ -115,7 +121,7 @@ export class ServiceOperationsController {
     @Query() query: ListServiceWorkOrdersQueryDto,
     @Req() request: AuthenticatedRequest,
   ): Promise<ServiceWorkOrderPageDto> {
-    return this.service.workOrders(query, request.authentication.accountId);
+    return this.service.workOrders(query, request.authentication, true);
   }
 
   @Get('work-orders')
@@ -129,8 +135,11 @@ export class ServiceOperationsController {
     name: 'status',
     required: false,
   })
-  workOrders(@Query() query: ListServiceWorkOrdersQueryDto): Promise<ServiceWorkOrderPageDto> {
-    return this.service.workOrders(query);
+  workOrders(
+    @Query() query: ListServiceWorkOrdersQueryDto,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<ServiceWorkOrderPageDto> {
+    return this.service.workOrders(query, request.authentication);
   }
 
   @Get('work-orders/:id')
@@ -138,8 +147,11 @@ export class ServiceOperationsController {
   @RequirePermissions({ action: 'view', module: 'erp.service' })
   @ApiOkResponse({ type: ServiceWorkOrderDto })
   @ApiParam({ format: 'uuid', name: 'id' })
-  workOrder(@Param('id') id: string): Promise<ServiceWorkOrderDto> {
-    return this.service.workOrder(id);
+  workOrder(
+    @Param('id') id: string,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<ServiceWorkOrderDto> {
+    return this.service.workOrder(id, request.authentication);
   }
 
   @Get('work-orders/:id/photos/:photoId')
@@ -159,9 +171,10 @@ export class ServiceOperationsController {
   async photoContent(
     @Param('id') id: string,
     @Param('photoId') photoId: string,
+    @Req() request: AuthenticatedRequest,
     @Res() response: Response,
   ): Promise<void> {
-    sendEvidence(response, await this.service.photoEvidence(id, photoId));
+    sendEvidence(response, await this.service.photoEvidence(id, photoId, request.authentication));
   }
 
   @Get('work-orders/:id/signature')
@@ -173,8 +186,12 @@ export class ServiceOperationsController {
     description: 'Access-controlled customer signature evidence.',
   })
   @ApiParam({ format: 'uuid', name: 'id' })
-  async signatureContent(@Param('id') id: string, @Res() response: Response): Promise<void> {
-    sendEvidence(response, await this.service.signatureEvidence(id));
+  async signatureContent(
+    @Param('id') id: string,
+    @Req() request: AuthenticatedRequest,
+    @Res() response: Response,
+  ): Promise<void> {
+    sendEvidence(response, await this.service.signatureEvidence(id, request.authentication));
   }
 
   @Get('equipment/:id/history')
@@ -182,8 +199,11 @@ export class ServiceOperationsController {
   @RequirePermissions({ action: 'view', module: 'erp.service' })
   @ApiOkResponse({ type: ServiceEquipmentHistoryDto })
   @ApiParam({ format: 'uuid', name: 'id' })
-  equipmentHistory(@Param('id') id: string): Promise<ServiceEquipmentHistoryDto> {
-    return this.service.equipmentHistory(id);
+  equipmentHistory(
+    @Param('id') id: string,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<ServiceEquipmentHistoryDto> {
+    return this.service.equipmentHistory(id, request.authentication);
   }
 
   @Post('requests')

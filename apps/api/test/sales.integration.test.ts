@@ -1016,6 +1016,213 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
     expect(Number(evidence.rows[0]?.outbox_count)).toBeGreaterThanOrEqual(5);
   });
 
+  it('limits a technician without service approval to assigned work and preserves dispatcher oversight', async () => {
+    const firstTechnicianAccountId = await createAccount(
+      database,
+      `service-tech-one-${runId}@example.invalid`,
+      await application.get(PasswordService).hash(password),
+    );
+    const secondTechnicianAccountId = await createAccount(
+      database,
+      `service-tech-two-${runId}@example.invalid`,
+      await application.get(PasswordService).hash(password),
+    );
+    await grantServicePermissions(database, firstTechnicianAccountId, ['edit', 'view']);
+    await grantServicePermissions(database, secondTechnicianAccountId, ['edit', 'view']);
+    const firstTechnicianWarehouseId = await seedServiceTechnicianWarehouse(
+      database,
+      firstTechnicianAccountId,
+      productId,
+      `scope-one-${runId}`,
+    );
+    const secondTechnicianWarehouseId = await seedServiceTechnicianWarehouse(
+      database,
+      secondTechnicianAccountId,
+      productId,
+      `scope-two-${runId}`,
+    );
+    const firstTechnicianToken = await login(
+      application,
+      `service-tech-one-${runId}@example.invalid`,
+    );
+
+    const firstScope = await seedSalesData(database, creatorAccountId, `scope-one-${runId}`);
+    const secondScope = await seedSalesData(database, creatorAccountId, `scope-two-${runId}`);
+    const firstRequestInput = {
+      customerEquipmentId: firstScope.equipmentId,
+      customerLocationId: firstScope.customerLocationId,
+      customerPartnerId: firstScope.customerId,
+      priority: 'normal',
+      problemDescription: 'Technician one visit.',
+      serviceType: 'warranty',
+      sourceChannel: 'telephone',
+    };
+    const secondRequestInput = {
+      customerEquipmentId: secondScope.equipmentId,
+      customerLocationId: secondScope.customerLocationId,
+      customerPartnerId: secondScope.customerId,
+      priority: 'normal',
+      problemDescription: 'Technician two visit.',
+      serviceType: 'warranty',
+      sourceChannel: 'telephone',
+    };
+    const firstCreatedResponse = await request(application.getHttpServer())
+      .post('/api/v1/service/requests')
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', `service-scope-one-create-${runId}`)
+      .send(firstRequestInput)
+      .expect(201);
+    const firstCreated = firstCreatedResponse.body as ServiceRequest;
+    const secondCreatedResponse = await request(application.getHttpServer())
+      .post('/api/v1/service/requests')
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', `service-scope-two-create-${runId}`)
+      .send(secondRequestInput)
+      .expect(201);
+    const secondCreated = secondCreatedResponse.body as ServiceRequest;
+
+    const firstAssignedResponse = await request(application.getHttpServer())
+      .post(`/api/v1/service/requests/${firstCreated.id}/assign`)
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', `service-scope-one-assign-${runId}`)
+      .send({
+        expectedVersion: firstCreated.version,
+        scheduledEnd: '2099-10-01T10:00:00.000Z',
+        scheduledStart: '2099-10-01T09:00:00.000Z',
+        technicianAccountId: firstTechnicianAccountId,
+        technicianWarehouseId: firstTechnicianWarehouseId,
+      })
+      .expect(201);
+    const firstAssigned = firstAssignedResponse.body as ServiceRequest;
+    const secondAssignedResponse = await request(application.getHttpServer())
+      .post(`/api/v1/service/requests/${secondCreated.id}/assign`)
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', `service-scope-two-assign-${runId}`)
+      .send({
+        expectedVersion: secondCreated.version,
+        scheduledEnd: '2099-10-02T10:00:00.000Z',
+        scheduledStart: '2099-10-02T09:00:00.000Z',
+        technicianAccountId: secondTechnicianAccountId,
+        technicianWarehouseId: secondTechnicianWarehouseId,
+      })
+      .expect(201);
+    const secondAssigned = secondAssignedResponse.body as ServiceRequest;
+    if (!firstAssigned.workOrderId || !secondAssigned.workOrderId)
+      throw new Error('The scoped service requests must receive work orders.');
+
+    const ownReferencesResponse = await request(application.getHttpServer())
+      .get('/api/v1/service/reference-data')
+      .set('authorization', `Bearer ${firstTechnicianToken}`)
+      .expect(200);
+    const ownReferences = ownReferencesResponse.body as ServiceReferenceData;
+    expect(ownReferences.equipment).toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: firstScope.equipmentId })]),
+    );
+    expect(ownReferences.equipment).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: secondScope.equipmentId })]),
+    );
+    expect(ownReferences.technicians).toEqual([
+      expect.objectContaining({ accountId: firstTechnicianAccountId }),
+    ]);
+
+    const ownRequestsResponse = await request(application.getHttpServer())
+      .get('/api/v1/service/requests?page=1&pageSize=25')
+      .set('authorization', `Bearer ${firstTechnicianToken}`)
+      .expect(200);
+    const ownRequests = ownRequestsResponse.body as ServiceRequestPage;
+    expect(ownRequests).toMatchObject({ total: 1, totalPages: 1 });
+    expect(ownRequests.items).toEqual([expect.objectContaining({ id: firstAssigned.id })]);
+    await request(application.getHttpServer())
+      .get(`/api/v1/service/requests/${firstAssigned.id}`)
+      .set('authorization', `Bearer ${firstTechnicianToken}`)
+      .expect(200);
+    const unrelatedRequest = await request(application.getHttpServer())
+      .get(`/api/v1/service/requests/${secondAssigned.id}`)
+      .set('authorization', `Bearer ${firstTechnicianToken}`)
+      .expect(403);
+    expect(unrelatedRequest.body.error.code).toBe('SERVICE_REQUEST_ACCESS_DENIED');
+
+    const ownWorkResponse = await request(application.getHttpServer())
+      .get('/api/v1/service/work-orders?page=1&pageSize=25')
+      .set('authorization', `Bearer ${firstTechnicianToken}`)
+      .expect(200);
+    const ownWork = ownWorkResponse.body as ServiceWorkOrderPage;
+    expect(ownWork).toMatchObject({ total: 1, totalPages: 1 });
+    expect(ownWork.items).toEqual([expect.objectContaining({ id: firstAssigned.workOrderId })]);
+    const unrelatedWorkOrder = await request(application.getHttpServer())
+      .get(`/api/v1/service/work-orders/${secondAssigned.workOrderId}`)
+      .set('authorization', `Bearer ${firstTechnicianToken}`)
+      .expect(403);
+    expect(unrelatedWorkOrder.body.error.code).toBe('SERVICE_WORK_ORDER_ACCESS_DENIED');
+    const unrelatedEvidence = await request(application.getHttpServer())
+      .get(`/api/v1/service/work-orders/${secondAssigned.workOrderId}/signature`)
+      .set('authorization', `Bearer ${firstTechnicianToken}`)
+      .expect(403);
+    expect(unrelatedEvidence.body.error.code).toBe('SERVICE_WORK_ORDER_ACCESS_DENIED');
+    const unrelatedHistory = await request(application.getHttpServer())
+      .get(`/api/v1/service/equipment/${secondScope.equipmentId}/history`)
+      .set('authorization', `Bearer ${firstTechnicianToken}`)
+      .expect(403);
+    expect(unrelatedHistory.body.error.code).toBe('SERVICE_EQUIPMENT_ACCESS_DENIED');
+
+    const prohibitedDispatch = await request(application.getHttpServer())
+      .post(`/api/v1/service/requests/${secondAssigned.id}/assign`)
+      .set('authorization', `Bearer ${firstTechnicianToken}`)
+      .set('idempotency-key', `service-scope-dispatch-denied-${runId}`)
+      .send({
+        expectedVersion: secondAssigned.version,
+        scheduledEnd: '2099-10-03T10:00:00.000Z',
+        scheduledStart: '2099-10-03T09:00:00.000Z',
+        technicianAccountId: firstTechnicianAccountId,
+        technicianWarehouseId: firstTechnicianWarehouseId,
+      })
+      .expect(403);
+    expect(prohibitedDispatch.body.error.code).toBe('SERVICE_DISPATCH_APPROVAL_REQUIRED');
+    const prohibitedCancellation = await request(application.getHttpServer())
+      .post(`/api/v1/service/requests/${secondAssigned.id}/cancel`)
+      .set('authorization', `Bearer ${firstTechnicianToken}`)
+      .set('idempotency-key', `service-scope-cancel-denied-${runId}`)
+      .send({
+        cancellationReason: 'This is not assigned to the technician.',
+        expectedVersion: secondAssigned.version,
+      })
+      .expect(403);
+    expect(prohibitedCancellation.body.error.code).toBe('SERVICE_DISPATCH_APPROVAL_REQUIRED');
+
+    const prohibitedOwnCancellation = await request(application.getHttpServer())
+      .post(`/api/v1/service/requests/${firstAssigned.id}/cancel`)
+      .set('authorization', `Bearer ${firstTechnicianToken}`)
+      .set('idempotency-key', `service-scope-cancel-own-${runId}`)
+      .send({
+        cancellationReason: 'The assigned technician cannot complete this visit.',
+        expectedVersion: firstAssigned.version,
+      })
+      .expect(403);
+    expect(prohibitedOwnCancellation.body.error.code).toBe('SERVICE_DISPATCH_APPROVAL_REQUIRED');
+
+    const dispatcherCancellation = await request(application.getHttpServer())
+      .post(`/api/v1/service/requests/${firstAssigned.id}/cancel`)
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', `service-scope-cancel-dispatcher-${runId}`)
+      .send({
+        cancellationReason: 'The assigned technician cannot complete this visit.',
+        expectedVersion: firstAssigned.version,
+      })
+      .expect(200);
+    expect((dispatcherCancellation.body as ServiceRequest).status).toBe('cancelled');
+
+    const dispatcherWorkResponse = await request(application.getHttpServer())
+      .get('/api/v1/service/work-orders?page=1&pageSize=100')
+      .set('authorization', `Bearer ${token}`)
+      .expect(200);
+    expect((dispatcherWorkResponse.body as ServiceWorkOrderPage).items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: firstAssigned.workOrderId }),
+        expect.objectContaining({ id: secondAssigned.workOrderId }),
+      ]),
+    );
+  });
+
   function quotationInput() {
     return {
       currencyCode: 'BGN',
@@ -1195,8 +1402,13 @@ async function seedSalesData(pool: Pool, actorId: string, runId: string) {
   );
   await pool.query(
     `INSERT INTO master_data.units (id, code, name, created_by, updated_by)
-     VALUES ($1, $2, 'Pieces', $3, $3)`,
-    [unitId, `SU${runId.slice(0, 6).toUpperCase()}`, actorId],
+     VALUES ($1, $2, $3, $4, $4)`,
+    [
+      unitId,
+      `SU${runId.slice(0, 8).replaceAll('-', '').toUpperCase()}`,
+      `Pieces ${runId}`,
+      actorId,
+    ],
   );
   await pool.query(
     `INSERT INTO master_data.products (id, product_code, name, category_id, unit_id, created_by, updated_by)

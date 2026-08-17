@@ -226,15 +226,24 @@ export class ServiceOperationsService {
     @Inject(InventoryService) private readonly inventory: InventoryService,
   ) {}
 
-  async referenceData(): Promise<ServiceReferenceData> {
+  async referenceData(auth: AuthenticationContext): Promise<ServiceReferenceData> {
     const pool = this.database.getPool();
+    const visibilityAccountId = serviceVisibilityAccountId(auth);
     const [customers, locations, equipment, technicians, parts, subscriptions] = await Promise.all([
       pool.query<{ id: string; name: string }>(
         `SELECT DISTINCT partner.id, partner.display_name AS name
          FROM master_data.partners partner
          JOIN master_data.partner_roles role ON role.partner_id = partner.id
          WHERE partner.active AND role.role = 'customer'
+           AND ($1::uuid IS NULL OR EXISTS (
+             SELECT 1
+             FROM service.work_orders scope_work_order
+             JOIN service.requests scope_request ON scope_request.id = scope_work_order.service_request_id
+             WHERE scope_request.customer_partner_id = partner.id
+               AND scope_work_order.assigned_technician_account_id = $1
+           ))
          ORDER BY partner.display_name, partner.id`,
+        [visibilityAccountId],
       ),
       pool.query<{ customer_partner_id: string; id: string; name: string }>(
         `SELECT location.id, location.partner_id AS customer_partner_id, location.name
@@ -242,7 +251,15 @@ export class ServiceOperationsService {
          JOIN master_data.partners partner ON partner.id = location.partner_id
          JOIN master_data.partner_roles role ON role.partner_id = partner.id AND role.role = 'customer'
          WHERE location.active AND partner.active
+           AND ($1::uuid IS NULL OR EXISTS (
+             SELECT 1
+             FROM service.work_orders scope_work_order
+             JOIN service.requests scope_request ON scope_request.id = scope_work_order.service_request_id
+             WHERE scope_request.customer_location_id = location.id
+               AND scope_work_order.assigned_technician_account_id = $1
+           ))
          ORDER BY location.name, location.id`,
+        [visibilityAccountId],
       ),
       pool.query<{
         active: boolean;
@@ -262,9 +279,19 @@ export class ServiceOperationsService {
          JOIN master_data.partners partner ON partner.id = location.partner_id
          JOIN master_data.partner_roles role ON role.partner_id = partner.id AND role.role = 'customer'
          WHERE role.role = 'customer'
+           AND ($1::uuid IS NULL OR EXISTS (
+             SELECT 1
+             FROM service.work_orders scope_work_order
+             JOIN service.requests scope_request ON scope_request.id = scope_work_order.service_request_id
+             WHERE scope_request.customer_equipment_id = equipment.id
+               AND scope_work_order.assigned_technician_account_id = $1
+           ))
          ORDER BY equipment.device_name, equipment.serial_number, equipment.id`,
+        [visibilityAccountId],
       ),
-      pool.query<TechnicianRow>(technicianQuery()),
+      pool.query<TechnicianRow>(`${technicianQuery()} AND ($1::uuid IS NULL OR account.id = $1)`, [
+        visibilityAccountId,
+      ]),
       pool.query<{
         available_quantity: string;
         product_code: string;
@@ -285,7 +312,9 @@ export class ServiceOperationsService {
          WHERE warehouse.active AND warehouse.warehouse_type = 'technician'
            AND operator.active AND account.status = 'active' AND product.active AND category.active
            AND balance.quantity > 0
+           AND ($1::uuid IS NULL OR account.id = $1)
          ORDER BY product.name, product.id, warehouse.id`,
+        [visibilityAccountId],
       ),
       pool.query<{
         customer_equipment_ids: string[];
@@ -303,9 +332,10 @@ export class ServiceOperationsService {
          WHERE contract.active
            AND contract.valid_from <= (now() AT TIME ZONE $1)::date
            AND (contract.valid_to IS NULL OR contract.valid_to >= (now() AT TIME ZONE $1)::date)
+           AND $2::uuid IS NULL
          GROUP BY contract.id
          ORDER BY contract.contract_number, contract.id`,
-        [this.environment.BUSINESS_TIMEZONE],
+        [this.environment.BUSINESS_TIMEZONE, visibilityAccountId],
       ),
     ]);
     return {
@@ -345,7 +375,10 @@ export class ServiceOperationsService {
     };
   }
 
-  async requests(query: ServiceRequestListQuery): Promise<ServiceRequestPage> {
+  async requests(
+    query: ServiceRequestListQuery,
+    auth: AuthenticationContext,
+  ): Promise<ServiceRequestPage> {
     const client = await this.database.getPool().connect();
     try {
       // Query values are validated by Nest, but explicitly coerce them here as
@@ -354,6 +387,7 @@ export class ServiceOperationsService {
       // strings.
       const page = Number(query.page ?? 1);
       const pageSize = Number(query.pageSize ?? 25);
+      const visibilityAccountId = serviceVisibilityAccountId(auth);
       const aggregate = await client.query<{
         completed: string;
         in_progress: string;
@@ -366,17 +400,27 @@ export class ServiceOperationsService {
                 count(*) FILTER (WHERE status = 'scheduled')::text AS scheduled,
                 count(*) FILTER (WHERE status = 'in_progress')::text AS in_progress,
                 count(*) FILTER (WHERE status = 'completed')::text AS completed
-         FROM service.requests
-         WHERE ($1::text IS NULL OR status = $1)`,
-        [query.status ?? null],
+         FROM service.requests request
+         WHERE ($1::text IS NULL OR request.status = $1)
+           AND ($2::uuid IS NULL OR EXISTS (
+             SELECT 1 FROM service.work_orders scope_work_order
+             WHERE scope_work_order.service_request_id = request.id
+               AND scope_work_order.assigned_technician_account_id = $2
+           ))`,
+        [query.status ?? null, visibilityAccountId],
       );
       const total = Number(aggregate.rows[0]?.total ?? 0);
       const ids = await client.query<{ id: string }>(
-        `SELECT id FROM service.requests
-         WHERE ($1::text IS NULL OR status = $1)
-         ORDER BY created_at DESC, id DESC
-         LIMIT $2 OFFSET $3`,
-        [query.status ?? null, pageSize, (page - 1) * pageSize],
+        `SELECT request.id FROM service.requests request
+         WHERE ($1::text IS NULL OR request.status = $1)
+           AND ($2::uuid IS NULL OR EXISTS (
+             SELECT 1 FROM service.work_orders scope_work_order
+             WHERE scope_work_order.service_request_id = request.id
+               AND scope_work_order.assigned_technician_account_id = $2
+           ))
+         ORDER BY request.created_at DESC, request.id DESC
+         LIMIT $3 OFFSET $4`,
+        [query.status ?? null, visibilityAccountId, pageSize, (page - 1) * pageSize],
       );
       const items: ServiceRequest[] = [];
       for (const row of ids.rows) items.push(await this.loadRequest(client, row.id));
@@ -398,9 +442,10 @@ export class ServiceOperationsService {
     }
   }
 
-  async request(id: string): Promise<ServiceRequest> {
+  async request(id: string, auth: AuthenticationContext): Promise<ServiceRequest> {
     const client = await this.database.getPool().connect();
     try {
+      await this.assertRequestAccess(client, id, auth);
       return await this.loadRequest(client, id);
     } finally {
       client.release();
@@ -409,7 +454,8 @@ export class ServiceOperationsService {
 
   async workOrders(
     query: ServiceWorkOrderListQuery,
-    assignedTechnicianAccountId?: string,
+    auth: AuthenticationContext,
+    ownWorkOnly = false,
   ): Promise<ServiceWorkOrderPage> {
     const client = await this.database.getPool().connect();
     try {
@@ -418,7 +464,10 @@ export class ServiceOperationsService {
       // a response declared to contain numbers.
       const page = Number(query.page ?? 1);
       const pageSize = Number(query.pageSize ?? 25);
-      const filters = [query.status ?? null, assignedTechnicianAccountId ?? null];
+      const filters = [
+        query.status ?? null,
+        ownWorkOnly ? auth.accountId : serviceVisibilityAccountId(auth),
+      ];
       const count = await client.query<{ total: string }>(
         `SELECT count(*)::text AS total FROM service.work_orders
          WHERE ($1::text IS NULL OR status = $1)
@@ -448,18 +497,24 @@ export class ServiceOperationsService {
     }
   }
 
-  async workOrder(id: string): Promise<ServiceWorkOrder> {
+  async workOrder(id: string, auth: AuthenticationContext): Promise<ServiceWorkOrder> {
     const client = await this.database.getPool().connect();
     try {
+      await this.assertWorkOrderAccess(client, id, auth);
       return await this.loadWorkOrder(client, id);
     } finally {
       client.release();
     }
   }
 
-  async photoEvidence(workOrderId: string, photoId: string): Promise<ServiceBinaryEvidence> {
+  async photoEvidence(
+    workOrderId: string,
+    photoId: string,
+    auth: AuthenticationContext,
+  ): Promise<ServiceBinaryEvidence> {
     const client = await this.database.getPool().connect();
     try {
+      await this.assertWorkOrderAccess(client, workOrderId, auth);
       const result = await client.query<{
         content: Buffer;
         file_name: string;
@@ -484,9 +539,13 @@ export class ServiceOperationsService {
     }
   }
 
-  async signatureEvidence(workOrderId: string): Promise<ServiceBinaryEvidence> {
+  async signatureEvidence(
+    workOrderId: string,
+    auth: AuthenticationContext,
+  ): Promise<ServiceBinaryEvidence> {
     const client = await this.database.getPool().connect();
     try {
+      await this.assertWorkOrderAccess(client, workOrderId, auth);
       const result = await client.query<{
         signature_data: Buffer | null;
         signer_name: string | null;
@@ -511,9 +570,13 @@ export class ServiceOperationsService {
     }
   }
 
-  async equipmentHistory(id: string): Promise<ServiceEquipmentHistory> {
+  async equipmentHistory(
+    id: string,
+    auth: AuthenticationContext,
+  ): Promise<ServiceEquipmentHistory> {
     const client = await this.database.getPool().connect();
     try {
+      await this.assertEquipmentHistoryAccess(client, id, auth);
       const equipment = await client.query<{
         device_name: string;
         id: string;
@@ -531,9 +594,10 @@ export class ServiceOperationsService {
          FROM service.work_orders work_order
          JOIN service.requests request ON request.id = work_order.service_request_id
          WHERE request.customer_equipment_id = $1
+           AND ($2::uuid IS NULL OR work_order.assigned_technician_account_id = $2)
          ORDER BY COALESCE(work_order.completed_at, work_order.started_at, work_order.created_at) DESC,
                   work_order.id DESC`,
-        [id],
+        [id, serviceVisibilityAccountId(auth)],
       );
       const events: ServiceEquipmentHistoryEvent[] = [];
       for (const workOrder of workOrders.rows) {
@@ -623,6 +687,7 @@ export class ServiceOperationsService {
     auth: AuthenticationContext,
     metadata: RequestSecurityMetadata,
   ): Promise<ServiceRequest> {
+    this.assertServiceDispatchAccess(auth);
     const normalized = normalizeAssignment(input);
     return this.command(
       `service.request.assign:${id}`,
@@ -1058,6 +1123,7 @@ export class ServiceOperationsService {
     auth: AuthenticationContext,
     metadata: RequestSecurityMetadata,
   ): Promise<ServiceRequest> {
+    this.assertServiceDispatchAccess(auth);
     const cancellationReason = text(
       input.cancellationReason,
       'SERVICE_CANCELLATION_REASON_REQUIRED',
@@ -1224,6 +1290,74 @@ export class ServiceOperationsService {
     return row;
   }
 
+  private async assertRequestAccess(
+    client: PoolClient,
+    id: string,
+    auth: AuthenticationContext,
+  ): Promise<void> {
+    const visibilityAccountId = serviceVisibilityAccountId(auth);
+    if (!visibilityAccountId) return;
+    const result = await client.query<{
+      assigned_technician_account_id: string | null;
+      id: string;
+    }>(
+      `SELECT request.id, work_order.assigned_technician_account_id
+       FROM service.requests request
+       LEFT JOIN service.work_orders work_order ON work_order.service_request_id = request.id
+       WHERE request.id = $1`,
+      [id],
+    );
+    const row = result.rows[0];
+    if (!row) throw requestNotFound();
+    if (row.assigned_technician_account_id !== visibilityAccountId)
+      throw serviceRequestAccessDenied();
+  }
+
+  private async assertWorkOrderAccess(
+    client: PoolClient,
+    id: string,
+    auth: AuthenticationContext,
+  ): Promise<void> {
+    const visibilityAccountId = serviceVisibilityAccountId(auth);
+    if (!visibilityAccountId) return;
+    const result = await client.query<{ assigned_technician_account_id: string | null }>(
+      `SELECT assigned_technician_account_id FROM service.work_orders WHERE id = $1`,
+      [id],
+    );
+    const row = result.rows[0];
+    if (!row) throw workOrderNotFound();
+    if (row.assigned_technician_account_id !== visibilityAccountId)
+      throw serviceWorkOrderAccessDenied();
+  }
+
+  private async assertEquipmentHistoryAccess(
+    client: PoolClient,
+    equipmentId: string,
+    auth: AuthenticationContext,
+  ): Promise<void> {
+    const visibilityAccountId = serviceVisibilityAccountId(auth);
+    if (!visibilityAccountId) return;
+    const result = await client.query<{ id: string }>(
+      `SELECT work_order.id
+       FROM service.work_orders work_order
+       JOIN service.requests request ON request.id = work_order.service_request_id
+       WHERE request.customer_equipment_id = $1
+         AND work_order.assigned_technician_account_id = $2
+       LIMIT 1`,
+      [equipmentId, visibilityAccountId],
+    );
+    if (!result.rows[0]) throw serviceEquipmentAccessDenied();
+  }
+
+  private assertServiceDispatchAccess(auth: AuthenticationContext): void {
+    if (serviceVisibilityAccountId(auth) === undefined) return;
+    throw new ApiErrorException(
+      'SERVICE_DISPATCH_APPROVAL_REQUIRED',
+      'Only a service dispatcher or supervisor can assign, reschedule, or cancel service work.',
+      HttpStatus.FORBIDDEN,
+    );
+  }
+
   private async requireRequestReferences(
     client: PoolClient,
     input: ReturnType<typeof normalizeCreateRequest>,
@@ -1307,12 +1441,7 @@ export class ServiceOperationsService {
 
   private assertTechnicianAccess(workOrder: LockedWorkOrderRow, auth: AuthenticationContext): void {
     if (workOrder.assigned_technician_account_id === auth.accountId) return;
-    const canApprove = auth.permissions.some(
-      (permission) =>
-        (permission.module === 'erp.service' || permission.module === '*') &&
-        (permission.action === 'approve' || permission.action === '*'),
-    );
-    if (!canApprove)
+    if (serviceVisibilityAccountId(auth) !== undefined)
       throw new ApiErrorException(
         'SERVICE_TECHNICIAN_ASSIGNMENT_REQUIRED',
         'Only the assigned technician can update this work order.',
@@ -1510,6 +1639,15 @@ function technicianQuery(): string {
           JOIN identity.employees employee ON employee.id = account.employee_id
           WHERE warehouse.active AND warehouse.warehouse_type = 'technician'
             AND operator.active AND account.status = 'active' AND employee.active`;
+}
+
+export function serviceVisibilityAccountId(auth: AuthenticationContext): string | undefined {
+  const canApprove = auth.permissions.some(
+    (permission) =>
+      (permission.module === 'erp.service' || permission.module === '*') &&
+      (permission.action === 'approve' || permission.action === '*'),
+  );
+  return canApprove ? undefined : auth.accountId;
 }
 
 function mapTechnician(row: TechnicianRow): ServiceTechnicianReference {
@@ -2006,6 +2144,14 @@ function requestNotFound() {
   );
 }
 
+function serviceRequestAccessDenied() {
+  return new ApiErrorException(
+    'SERVICE_REQUEST_ACCESS_DENIED',
+    'This account can only access service requests assigned to it.',
+    HttpStatus.FORBIDDEN,
+  );
+}
+
 function workOrderNotFound() {
   return new ApiErrorException(
     'SERVICE_WORK_ORDER_NOT_FOUND',
@@ -2014,11 +2160,27 @@ function workOrderNotFound() {
   );
 }
 
+function serviceWorkOrderAccessDenied() {
+  return new ApiErrorException(
+    'SERVICE_WORK_ORDER_ACCESS_DENIED',
+    'This account can only access work orders assigned to it.',
+    HttpStatus.FORBIDDEN,
+  );
+}
+
 function equipmentNotFound() {
   return new ApiErrorException(
     'SERVICE_EQUIPMENT_NOT_FOUND',
     'The selected equipment was not found.',
     HttpStatus.NOT_FOUND,
+  );
+}
+
+function serviceEquipmentAccessDenied() {
+  return new ApiErrorException(
+    'SERVICE_EQUIPMENT_ACCESS_DENIED',
+    'This account can only access equipment linked to its assigned service work.',
+    HttpStatus.FORBIDDEN,
   );
 }
 

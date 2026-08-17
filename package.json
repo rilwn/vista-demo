@@ -23,7 +23,7 @@
   "scripts": {
     "build": "npm run build --workspaces --if-present",
     "build:packages": "npm run build --workspace=@vista/contracts --workspace=@vista/auth --workspace=@vista/config --workspace=@vista/domain --workspace=@vista/ui",
-    "dev": "npm run infra:up && concurrently -k -n api,erp-crm,pos,backup -c blue,green,magenta,cyan \"npm run start:dev -w @vista/api\" \"npm run dev -w @vista/erp-crm-web\" \"npm run dev -w @vista/pos-web\" \"npm run dev -w @vista/backup-control\"",
+    "dev": "npm run infra:up && npm run db:migrate && npm run db:fixtures:dev && npm run dev:apps",
     "dev:apps": "concurrently -k -n api,erp-crm,pos,backup -c blue,green,magenta,cyan \"npm run start:dev -w @vista/api\" \"npm run dev -w @vista/erp-crm-web\" \"npm run dev -w @vista/pos-web\" \"npm run dev -w @vista/backup-control\"",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
@@ -36,7 +36,8 @@
     "openapi:generate": "npm run openapi:generate -w @vista/api && npm run client:generate -w @vista/contracts",
     "db:migrate": "npm run db:migrate -w @vista/api",
     "db:rollback": "npm run db:rollback -w @vista/api",
-    "db:seed:dev": "npm run db:seed:dev -w @vista/api",
+    "db:fixtures:dev": "npm run db:fixtures:dev -w @vista/api",
+    "db:seed:dev": "npm run db:fixtures:dev",
     "infra:up": "docker compose --env-file .env -f infrastructure/docker/compose.yml up -d --wait postgres redis minio mailpit && docker compose --env-file .env -f infrastructure/docker/compose.yml run --rm minio-init",
     "infra:down": "docker compose --env-file .env -f infrastructure/docker/compose.yml down"
   },
