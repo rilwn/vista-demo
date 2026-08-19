@@ -14,6 +14,61 @@
   font: inherit;
 }
 
+.backup-application-state {
+  display: grid;
+  min-height: 100vh;
+  place-content: center;
+  justify-items: center;
+  gap: 0.65rem;
+  padding: 2rem;
+  color: #eff6ea;
+  background: #102a1e;
+  text-align: center;
+}
+
+.backup-application-state > span {
+  display: grid;
+  width: 2.7rem;
+  height: 2.7rem;
+  place-items: center;
+  border: 1px solid rgb(219 237 207 / 0.23);
+  border-radius: 0.65rem;
+  color: #c5e2ac;
+  background: rgb(255 255 255 / 0.06);
+  font-size: 0.76rem;
+  font-weight: 800;
+}
+
+.backup-application-state strong,
+.backup-application-state h1 {
+  margin: 0.35rem 0 0;
+  font-size: clamp(1.45rem, 4vw, 2rem);
+  letter-spacing: -0.035em;
+}
+
+.backup-application-state p {
+  max-width: 28rem;
+  margin: 0;
+  color: #b9c9ba;
+  font-size: 0.86rem;
+  line-height: 1.55;
+}
+
+.backup-application-state--restricted > p:first-of-type {
+  color: #b9d89f;
+  font-size: 0.72rem;
+  font-weight: 720;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.backup-application-state .vista-button--secondary {
+  margin-top: 0.55rem;
+  border-color: rgb(255 255 255 / 22%);
+  color: #eff6ea;
+  background: rgb(255 255 255 / 0.08);
+}
+
 .backup-console :focus-visible {
   outline: 3px solid rgb(128 174 119 / 28%);
   outline-offset: 2px;
@@ -173,6 +228,28 @@
 }
 .backup-topbar-actions {
   gap: 0.75rem;
+}
+
+.backup-signed-in {
+  max-width: 12rem;
+  overflow: hidden;
+  color: #52635a;
+  font-size: 0.72rem;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.backup-sign-out.vista-button {
+  min-height: 2rem;
+  padding: 0.4rem 0.5rem;
+  color: #506359;
+  font-size: 0.71rem;
+}
+
+.backup-sign-out.vista-button:hover:not(:disabled) {
+  color: #24362b;
+  background: #e6ece5;
 }
 .backup-environment {
   min-height: 1.8rem;

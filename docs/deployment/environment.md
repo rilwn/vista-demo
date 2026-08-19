@@ -34,8 +34,10 @@ environment and injected by an approved secret manager; never commit `.env`.
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_FROM`      | email transport and sender                               | yes                                          |
 | `SESSION_SECRET`                           | reserved application session security material           | yes; at least 32 characters                  |
 | `SESSION_TTL_SECONDS`                      | Absolute opaque-session lifetime                         | yes; production value requires IAM-001       |
+| `ACCOUNT_RECOVERY_TTL_SECONDS`             | Administrator-issued recovery-code validity window       | yes; 15-minute bounded default               |
 | `TOTP_ENCRYPTION_KEY`                      | encryption material for 2FA secrets                      | yes; at least 32 characters                  |
 | `TOTP_ISSUER`, `TOTP_WINDOW_STEPS`         | Authenticator label and verification window              | yes; production values require IAM-001       |
+| `INITIAL_ADMIN_*`                          | One-time initial-administrator provisioning command only | no; set only for that controlled command     |
 | `FEATURE_*`                                | explicit optional capability gates                       | yes; disabled unless approved                |
 
 The example uses `Europe/Sofia` because it is a development candidate for the
@@ -60,7 +62,19 @@ dependency is unavailable. Passwords use versioned salted scrypt hashes;
 five for local development. TOTP factor secrets use authenticated AES-256-GCM
 encryption. The example password, history, expiration, lockout, session, and TOTP
 values are development candidates only; `IAM-001` must approve production policy
-values.
+values. `ACCOUNT_RECOVERY_TTL_SECONDS` bounds an administrator-issued recovery
+handoff to 5–60 minutes and defaults to 15 minutes. Recovery codes are hashed
+for lookup and encrypted only to support the exact authorized retry; they are
+never stored in plaintext or written to audit data.
+
+`INITIAL_ADMIN_PROVISIONING_ENABLED`, `INITIAL_ADMIN_EMAIL`,
+`INITIAL_ADMIN_DISPLAY_NAME`, `INITIAL_ADMIN_EMPLOYEE_NUMBER`, and
+`INITIAL_ADMIN_PASSWORD` are read only by `npm run iam:provision-initial-admin`.
+The command creates a single minimal bootstrap administrator only when no
+administrative assignment exists, prints a one-time authenticator setup key, and
+then refuses subsequent runs. Remove the enable flag and password immediately
+after the controlled run. Do not include these values in application deployment
+configuration or source control.
 
 The ERP/CRM frontend uses a same-origin `/api/v1` base by default, and local Vite
 development proxies `/api` to port 3000. Set `VITE_API_BASE_URL` only when the

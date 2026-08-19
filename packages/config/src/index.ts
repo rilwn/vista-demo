@@ -24,6 +24,7 @@ const environmentSchema = z
     AUTH_LOGIN_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(5),
     AUTH_LOGIN_RATE_LIMIT_TTL_MS: z.coerce.number().int().positive().default(60_000),
     AUTH_MAX_FAILED_ATTEMPTS: z.coerce.number().int().positive().max(100).default(5),
+    ACCOUNT_RECOVERY_TTL_SECONDS: z.coerce.number().int().min(300).max(3_600).default(900),
     BUSINESS_TIMEZONE: z.string().min(1),
     CORS_ORIGINS: z
       .string()
@@ -85,6 +86,7 @@ const environmentSchema = z
     SMTP_HOST: z.string().min(1),
     SMTP_PORT: z.coerce.number().int().positive().max(65_535),
     TOTP_ENCRYPTION_KEY: z.string().min(32),
+    TOTP_ENROLLMENT_TTL_SECONDS: z.coerce.number().int().min(60).max(3_600).default(900),
     TOTP_ISSUER: z.string().min(1).default('Vista Service'),
     TOTP_WINDOW_STEPS: z.coerce.number().int().min(0).max(2).default(1),
   })

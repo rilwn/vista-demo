@@ -9,17 +9,25 @@ import {
 } from './development-fixtures.js';
 
 describe('development fixtures', () => {
-  it('uses stable identities for the complete ERP/CRM account matrix', () => {
+  it('uses stable identities for the complete local application account matrix', () => {
     const emails = developmentFixtureAccounts.map(({ email }) => email);
     const employeeNumbers = developmentFixtureAccounts.map(({ employeeNumber }) => employeeNumber);
     const roleCodes = developmentFixtureAccounts.map(({ roleCode }) => roleCode);
 
-    expect(developmentFixtureAccounts).toHaveLength(10);
+    expect(developmentFixtureAccounts).toHaveLength(12);
     expect(new Set(emails).size).toBe(emails.length);
     expect(new Set(employeeNumbers).size).toBe(employeeNumbers.length);
     expect(new Set(roleCodes).size).toBe(roleCodes.length);
     expect(emails).toContain('dispatcher@vista.local');
     expect(emails).toContain('technician@vista.local');
+    expect(emails).toContain('pos.operator@vista.local');
+    expect(emails).toContain('backup.operator@vista.local');
+    expect(
+      developmentFixtureAccounts.find((account) => account.key === 'pos-operator')?.permissions,
+    ).toEqual([{ action: 'view', module: 'pos' }]);
+    expect(
+      developmentFixtureAccounts.find((account) => account.key === 'backup-operator')?.permissions,
+    ).toEqual([{ action: 'view', module: 'backup' }]);
     expect(
       developmentFixtureAccounts
         .find((account) => account.key === 'manager')

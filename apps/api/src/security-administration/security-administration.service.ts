@@ -10,6 +10,8 @@ import type {
   AuditIntegrityResult,
   CreateSecurityAccountRequest,
   CreateSecurityRoleRequest,
+  AccountRecoveryHandoff,
+  IssueAccountRecoveryHandoffRequest,
   ReplaceAccountRolesRequest,
   SecurityAccount,
   SecurityAccountPage,
@@ -26,6 +28,7 @@ import type {
   RequestSecurityMetadata,
 } from '../auth/authentication.types.js';
 import { PasswordService } from '../auth/password.service.js';
+import { AccountRecoveryService } from '../auth/account-recovery.service.js';
 import { SessionService } from '../auth/session.service.js';
 import { ApiErrorException } from '../common/api-error.exception.js';
 import { APP_ENVIRONMENT } from '../config/config.module.js';
@@ -142,6 +145,7 @@ export class SecurityAdministrationService {
     @Inject(APP_ENVIRONMENT) private readonly environment: AppEnvironment,
     @Inject(DatabaseService) private readonly database: DatabaseService,
     @Inject(PasswordService) private readonly passwords: PasswordService,
+    @Inject(AccountRecoveryService) private readonly recovery: AccountRecoveryService,
     @Inject(SessionService) private readonly sessions: SessionService,
     @Inject(AuditService) private readonly audit: AuditService,
   ) {}
@@ -256,6 +260,16 @@ export class SecurityAdministrationService {
       },
     );
     return result.value;
+  }
+
+  issueAccountRecoveryHandoff(
+    accountId: string,
+    input: IssueAccountRecoveryHandoffRequest,
+    keyValue: string | undefined,
+    actor: AuthenticationContext,
+    metadata: RequestSecurityMetadata,
+  ): Promise<AccountRecoveryHandoff> {
+    return this.recovery.issueHandoff(accountId, input, keyValue, actor, metadata);
   }
 
   async listRoles(): Promise<SecurityRole[]> {

@@ -33,8 +33,9 @@ acceptance criteria, dependencies, and unresolved decisions are maintained in
 3. Install dependencies with `npm install`.
 4. Start the local environment with `npm run dev`. It starts infrastructure,
    applies pending migrations, prepares the development fixtures when enabled,
-   and then starts the applications. No separate seed command is needed for
-   normal local browser testing.
+   starts the API, waits for its health check, and then starts the browser
+   applications. No separate seed command is needed for normal local browser
+   testing.
 
 Default development endpoints:
 
@@ -51,8 +52,8 @@ decision.
 
 ### Development fixture accounts
 
-When `DEV_FIXTURES_ENABLED=true`, each account below is created in the ERP/CRM
-application with the value of `DEV_FIXTURES_PASSWORD` from the local `.env`
+When `DEV_FIXTURES_ENABLED=true`, each account below is created for local
+browser testing with the value of `DEV_FIXTURES_PASSWORD` from the local `.env`
 file. Later changes to that value deliberately do not reset an existing fixture
 account's password. The fixture set includes the related local organization,
 warehouse, catalog, partner, equipment, and Service data needed for the
@@ -69,12 +70,17 @@ implemented ERP/CRM workflows. It is not production data.
 | `finance@vista.local`          | Finance collection and payment-allocation workflows.                                     |
 | `dispatcher@vista.local`       | Service-request intake and technician-dispatch workflows.                                |
 | `technician@vista.local`       | Assigned Service work, time, parts, evidence, signature, and completion workflows.       |
+| `pos.operator@vista.local`     | POS sign-in and controlled terminal-shell access only.                                   |
+| `backup.operator@vista.local`  | Backup Control sign-in and controlled console-shell access only.                         |
 | `viewer@vista.local`           | Read-only review of ERP/CRM registers outside restricted Service work.                   |
 
 Administrative roles still require a configured second factor, so this local
-fixture set deliberately does not create a generally usable administrator.
-POS and Backup Control do not yet have a login-wired operational backend; these
-accounts must not be treated as POS or backup test accounts.
+fixture set deliberately does not create a generally usable administrator. To
+create the first administrator for a private environment, use the controlled
+one-time `npm run iam:provision-initial-admin` command described in the user
+guide; it requires an authenticator setup before sign-in. POS and Backup Control
+use the shared authenticated session, but their operational workflows remain
+deliberately unavailable until their respective backend phases are complete.
 
 ## Validation
 

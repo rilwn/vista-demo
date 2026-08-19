@@ -11,6 +11,7 @@
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "db:migrate": "DOTENV_CONFIG_PATH=../../.env tsx src/database/migrate.ts up",
+    "iam:provision-initial-admin": "DOTENV_CONFIG_PATH=../../.env tsx src/database/provision-initial-administrator.ts",
     "db:rollback": "DOTENV_CONFIG_PATH=../../.env tsx src/database/migrate.ts down",
     "db:fixtures:dev": "DOTENV_CONFIG_PATH=../../.env tsx src/database/seed-dev.ts",
     "db:seed:dev": "npm run db:fixtures:dev",

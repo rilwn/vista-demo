@@ -5,6 +5,7 @@ import { AuditModule } from '../audit/audit.module.js';
 import { DatabaseModule } from '../database/database.module.js';
 import { RedisModule } from '../database/redis.module.js';
 import { AuthController } from './auth.controller.js';
+import { AccountRecoveryService } from './account-recovery.service.js';
 import { AuthService } from './auth.service.js';
 import { LoginRateLimitGuard } from './login-rate-limit.guard.js';
 import { PasswordService } from './password.service.js';
@@ -14,10 +15,11 @@ import { TotpService } from './totp.service.js';
 
 @Module({
   controllers: [AuthController],
-  exports: [PasswordService, SessionService, TotpService],
+  exports: [AccountRecoveryService, PasswordService, SessionService, TotpService],
   imports: [AuditModule, DatabaseModule, RedisModule],
   providers: [
     AuthService,
+    AccountRecoveryService,
     LoginRateLimitGuard,
     PasswordService,
     SessionAuthenticationGuard,

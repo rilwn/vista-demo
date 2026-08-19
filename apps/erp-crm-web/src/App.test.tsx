@@ -163,6 +163,41 @@ describe('ERP and CRM authenticated workspace', () => {
     expect(screen.getByLabelText(messages.auth.passwordLabel)).toBeTruthy();
   });
 
+  it('lets an employee complete a verified recovery handoff without creating a browser session', async () => {
+    const recoveryCode = 'A'.repeat(43);
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      jsonResponse({
+        requiresTotpEnrollment: false,
+      }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    renderApplication(['/recover']);
+
+    fireEvent.change(screen.getByLabelText('Work email'), {
+      target: { value: 'employee@example.invalid' },
+    });
+    fireEvent.change(screen.getByLabelText('Recovery code'), { target: { value: recoveryCode } });
+    fireEvent.change(screen.getByLabelText('New password'), {
+      target: { value: 'Vista-Recovered-Password-9!' },
+    });
+    fireEvent.change(screen.getByLabelText('Confirm new password'), {
+      target: { value: 'Vista-Recovered-Password-9!' },
+    });
+    fireEvent.submit(screen.getByRole('button', { name: 'Reset password' }).closest('form')!);
+
+    expect(await screen.findByRole('heading', { name: 'Account recovered' })).toBeTruthy();
+    expect(sessionStorage.getItem('vista.erp-crm.session.v1')).toBeNull();
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/v1/auth/recovery/complete',
+      expect.objectContaining({ method: 'POST' }),
+    );
+    expect(JSON.parse((fetchMock.mock.calls[0]?.[1] as RequestInit).body as string)).toEqual({
+      email: 'employee@example.invalid',
+      newPassword: 'Vista-Recovered-Password-9!',
+      recoveryCode,
+    });
+  });
+
   it('creates a session and shows only modules granted by the backend', async () => {
     const fetchMock = vi
       .fn()
@@ -385,6 +420,76 @@ describe('ERP and CRM authenticated workspace', () => {
       currentPassword: 'Current-Password-7!',
       newPassword: 'Updated-Password-8!',
     });
+  });
+
+  it('enrols an authenticator from My access and verifies its current code', async () => {
+    storeAuthenticatedSession(authenticationContext);
+    const enrollmentId = '825eef1d-56d5-431d-838c-0084076f32d7';
+    const fetchMock = vi.fn((input: string, options?: RequestInit) => {
+      if (input.endsWith('/auth/me')) return Promise.resolve(jsonResponse(authenticationContext));
+      if (input.endsWith('/auth/me/totp') && !options?.method)
+        return Promise.resolve(jsonResponse({ enrolled: false }));
+      if (input.endsWith('/auth/me/totp/enrollment') && options?.method === 'POST') {
+        return Promise.resolve(
+          jsonResponse({
+            enrollmentId,
+            expiresAt: '2026-08-12T11:15:00.000Z',
+            manualEntryKey: 'ABCDEFGHIJKLMNOP',
+            provisioningUri:
+              'otpauth://totp/Vista%20Service:mila@example.invalid?secret=ABCDEFGHIJKLMNOP',
+          }),
+        );
+      }
+      if (input.endsWith(`/auth/me/totp/enrollment/${enrollmentId}/verify`)) {
+        return Promise.resolve(
+          jsonResponse({
+            enrolled: true,
+            enrolledAt: '2026-08-12T11:01:00.000Z',
+            revokedOtherSessionCount: 0,
+          }),
+        );
+      }
+      return Promise.resolve(jsonResponse({}));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderApplication(['/access']);
+    await screen.findByRole('heading', { name: messages.access.title });
+    await screen.findByRole('button', { name: messages.access.setUpAuthenticator });
+    fireEvent.click(screen.getByRole('button', { name: messages.access.setUpAuthenticator }));
+    const drawer = await screen.findByRole('dialog', {
+      name: messages.access.authenticatorSetupTitle,
+    });
+    fireEvent.change(within(drawer).getByLabelText(messages.access.currentPassword), {
+      target: { value: 'Current-Password-7!' },
+    });
+    fireEvent.submit(
+      within(drawer)
+        .getByRole('button', { name: messages.access.setUpAuthenticator })
+        .closest('form')!,
+    );
+
+    expect(await within(drawer).findByText('ABCD EFGH IJKL MNOP')).toBeTruthy();
+    fireEvent.change(within(drawer).getByLabelText(messages.access.authenticatorCode), {
+      target: { value: '123 456extra' },
+    });
+    expect(
+      within(drawer).getByLabelText<HTMLInputElement>(messages.access.authenticatorCode).value,
+    ).toBe('123456');
+    fireEvent.submit(
+      within(drawer)
+        .getByRole('button', { name: messages.access.verifyAuthenticator })
+        .closest('form')!,
+    );
+
+    expect(await screen.findByText(messages.access.authenticatorEnrollmentSuccess)).toBeTruthy();
+    expect(
+      screen.queryByRole('dialog', { name: messages.access.authenticatorSetupTitle }),
+    ).toBeNull();
+    const command = fetchMock.mock.calls.find(([url]) =>
+      url.endsWith(`/auth/me/totp/enrollment/${enrollmentId}/verify`),
+    );
+    expect(JSON.parse((command?.[1] as RequestInit).body as string)).toEqual({ code: '123456' });
   });
 
   it('opens delivered notifications and marks an unread update as read', async () => {

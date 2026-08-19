@@ -473,9 +473,164 @@ textarea {
   font-weight: 650;
 }
 
+.vista-auth-page {
+  display: grid;
+  min-height: 100vh;
+  grid-template-columns: minmax(0, 1.1fr) minmax(22rem, 0.9fr);
+  color: var(--vista-ink);
+  background: var(--vista-canvas);
+}
+
+.vista-auth-context {
+  display: flex;
+  min-height: 100%;
+  flex-direction: column;
+  justify-content: center;
+  padding: clamp(2rem, 7vw, 6rem);
+  color: #eef5e8;
+  background:
+    radial-gradient(circle at 12% 12%, rgb(129 178 113 / 19%), transparent 23rem),
+    linear-gradient(150deg, #112d1e, #173d2a);
+}
+
+.vista-auth-context > div {
+  max-width: 31rem;
+  margin-top: clamp(2.8rem, 7vw, 6.5rem);
+}
+
+.vista-auth-eyebrow {
+  margin: 0 0 0.85rem;
+  color: #b9d89f;
+  font-size: 0.7rem;
+  font-weight: 760;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+
+.vista-auth-context h1 {
+  margin: 0;
+  font-size: clamp(2.2rem, 4.2vw, 4.25rem);
+  letter-spacing: -0.055em;
+  line-height: 0.98;
+}
+
+.vista-auth-context p:not(.vista-auth-eyebrow) {
+  margin: 1rem 0 0;
+  color: #c8dac5;
+  font-size: 0.98rem;
+  line-height: 1.65;
+}
+
+.vista-auth-context > small {
+  margin-top: auto;
+  color: #93ad99;
+  font-size: 0.72rem;
+}
+
+.vista-auth-panel {
+  display: grid;
+  place-items: center;
+  padding: clamp(1.4rem, 4vw, 3.5rem);
+  background: #fff;
+}
+
+.vista-auth-panel-inner {
+  width: min(100%, 24rem);
+}
+
+.vista-auth-panel .vista-eyebrow {
+  margin: 0 0 0.65rem;
+  color: var(--vista-accent-strong);
+}
+
+.vista-auth-panel h2 {
+  margin: 0;
+  color: var(--vista-ink);
+  font-size: clamp(1.55rem, 3vw, 2.15rem);
+  letter-spacing: -0.04em;
+}
+
+.vista-auth-panel-inner > p:not(.vista-eyebrow) {
+  margin: 0.6rem 0 0;
+  color: var(--vista-muted);
+  font-size: 0.85rem;
+  line-height: 1.55;
+}
+
+.vista-auth-form {
+  display: grid;
+  gap: 1rem;
+  margin-top: 1.75rem;
+}
+
+.vista-auth-form .vista-alert p {
+  margin: 0;
+}
+
+.vista-auth-account {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.65rem;
+  border: 1px solid var(--vista-line);
+  border-radius: var(--vista-radius-sm);
+  background: var(--vista-surface-muted);
+}
+
+.vista-auth-account span {
+  display: grid;
+  width: 2rem;
+  height: 2rem;
+  place-items: center;
+  border-radius: 50%;
+  color: var(--vista-accent-strong);
+  background: var(--vista-accent-soft);
+  font-size: 0.8rem;
+  font-weight: 760;
+}
+
+.vista-auth-account strong {
+  overflow: hidden;
+  color: var(--vista-ink-soft);
+  font-size: 0.78rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vista-auth-support {
+  display: block;
+  margin-top: 1.25rem;
+  color: var(--vista-muted);
+  font-size: 0.71rem;
+  line-height: 1.5;
+}
+
 @media (max-width: 680px) {
   .vista-header {
     flex-direction: column;
+  }
+
+  .vista-auth-page {
+    grid-template-columns: 1fr;
+  }
+
+  .vista-auth-context {
+    min-height: auto;
+    padding: 1.7rem;
+  }
+
+  .vista-auth-context > div {
+    margin-top: 2rem;
+  }
+
+  .vista-auth-context > small {
+    display: none;
+  }
+
+  .vista-auth-panel {
+    align-items: start;
+    min-height: 66vh;
+    padding: 2rem 1.35rem;
   }
 }
 

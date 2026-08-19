@@ -4,6 +4,8 @@ import type {
   ChangeAccountStatusRequest,
   CreateSecurityAccountRequest,
   CreateSecurityRoleRequest,
+  AccountRecoveryHandoff,
+  IssueAccountRecoveryHandoffRequest,
   ReplaceAccountRolesRequest,
   SecurityAccount,
   SecurityAccountPage,
@@ -75,6 +77,24 @@ export function changeSecurityAccountStatus(
           },
         }),
       );
+}
+
+export function issueAccountRecoveryHandoff(
+  token: string,
+  key: string,
+  account: SecurityAccount,
+  input: IssueAccountRecoveryHandoffRequest,
+): Promise<AccountRecoveryHandoff> {
+  return unwrapApiResponse(
+    apiClient.POST('/api/v1/platform/security/accounts/{id}/recovery-handoff', {
+      body: input,
+      headers: authorizationHeaders(token),
+      params: {
+        header: idempotencyParameters(key).header,
+        path: { id: account.accountId },
+      },
+    }),
+  );
 }
 
 export function replaceSecurityAccountRoles(

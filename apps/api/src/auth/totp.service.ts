@@ -48,9 +48,19 @@ export class TotpService {
 
   encryptSecret(secret: string): Buffer {
     decodeBase32(secret);
+    return this.encryptValue(secret);
+  }
+
+  decryptSecret(value: Buffer): string {
+    const secret = this.decryptValue(value);
+    decodeBase32(secret);
+    return secret;
+  }
+
+  encryptValue(value: string): Buffer {
     const initializationVector = randomBytes(initializationVectorLength);
     const cipher = createCipheriv(algorithm, this.encryptionKey, initializationVector);
-    const encrypted = Buffer.concat([cipher.update(secret, 'utf8'), cipher.final()]);
+    const encrypted = Buffer.concat([cipher.update(value, 'utf8'), cipher.final()]);
     return Buffer.concat([
       Buffer.from([formatVersion]),
       initializationVector,
@@ -59,7 +69,7 @@ export class TotpService {
     ]);
   }
 
-  decryptSecret(value: Buffer): string {
+  decryptValue(value: Buffer): string {
     if (value.length <= 1 + initializationVectorLength + tagLength || value[0] !== formatVersion) {
       throw new Error('Unsupported encrypted TOTP secret format');
     }

@@ -55,12 +55,22 @@ authorization headers, and client card/PIN data are not request-log fields.
 - `POST /api/v1/auth/me/password` verifies the current password, applies the
   active policy and history rule, updates the password atomically, retains the
   current session, revokes every other session, and returns no credential data.
+- `POST /api/v1/auth/recovery/complete` accepts an employee email, an
+  administrator-issued one-time recovery code, and a replacement password. It
+  closes all active sessions and removes existing factors. Administrative
+  accounts must immediately complete the recovery-only TOTP enrollment and
+  verification endpoints before they can sign in.
+- `POST /api/v1/auth/recovery/totp/enrollment` and
+  `POST /api/v1/auth/recovery/totp/enrollment/:enrollmentId/verify` are public
+  only because possession of the short-lived recovery code is required. They do
+  not reveal account state without that code.
 
-Routes are protected by default. Health, platform identification, and login are
-explicitly public; future controllers must use the public marker deliberately or
-receive a valid bearer session. Administrative accounts cannot create or resolve
-a session without a verified second factor. TOTP enrollment/provisioning and
-controlled password reset remain pending and are not implied by these endpoints.
+Routes are protected by default. Health, platform identification, login, and the
+recovery-code endpoints are explicitly public; future controllers must use the
+public marker deliberately or receive a valid bearer session. Administrative
+accounts cannot create or resolve a session without a verified second factor.
+The one-time initial-administrator provisioning command is separate from the API
+and refuses to run once any administrative assignment exists.
 
 The ERP/CRM browser uses these routes through a same-origin `/api/v1` client by
 default; local Vite development proxies `/api` to the NestJS server. A deployment
@@ -76,6 +86,8 @@ The protected `/api/v1/platform/security` surface provides:
 - role reads and idempotent creation from the controlled module/action vocabulary;
 - version-checked, idempotent account role replacement and reversible
   disable/reactivate commands;
+- an idempotent recovery-handoff command, available only to an administrative
+  actor whose current session has verified 2FA;
 - active and historical session reads plus administrator-initiated revocation;
 - filtered, paginated audit-event reads and a full audit-chain integrity check.
 
@@ -86,7 +98,9 @@ verified 2FA. The target employee must already have an enabled factor before an
 administrative role can be assigned. The last active administrator cannot be
 disabled or stripped of administrative access, and an actor cannot disable their
 own account. Disabling an account revokes all of its current PostgreSQL/Redis
-sessions.
+sessions. A recovery handoff returns its code only at issue time, logs neither
+the code nor a password, replaces all target sessions/factors on completion, and
+requires a fresh factor before an administrative target can sign in.
 
 Account and session responses never contain password hashes, bearer-token
 digests, or factor secrets. Material changes are appended to the audit chain.

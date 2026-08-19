@@ -30,13 +30,13 @@ export class AuditService {
 
   async append(input: AuditEventInput, transaction?: PoolClient): Promise<AppendedAuditEvent> {
     if (transaction) {
-      return this.appendInTransaction(transaction, input);
+      return appendAuditEvent(transaction, input);
     }
 
     const client = await this.database.getPool().connect();
     try {
       await client.query('BEGIN');
-      const result = await this.appendInTransaction(client, input);
+      const result = await appendAuditEvent(client, input);
       await client.query('COMMIT');
       return result;
     } catch (error) {
@@ -88,65 +88,65 @@ export class AuditService {
       valid: true,
     };
   }
+}
 
-  private async appendInTransaction(
-    client: PoolClient,
-    input: AuditEventInput,
-  ): Promise<AppendedAuditEvent> {
-    await client.query("SELECT pg_advisory_xact_lock(hashtext('vista.audit.events.chain'))");
-    const previousResult = await client.query<{ event_hash: string; occurred_at: Date | string }>(
-      'SELECT event_hash, occurred_at FROM audit.events ORDER BY occurred_at DESC, id DESC LIMIT 1',
-    );
-    const previousEvent = previousResult.rows[0];
-    const previousEventHash = previousEvent?.event_hash;
-    const id = randomUUID();
-    const occurredAt = new Date(
-      Math.max(Date.now(), previousEvent ? new Date(previousEvent.occurred_at).getTime() + 1 : 0),
-    ).toISOString();
-    const metadata = input.metadata ?? {};
-    const eventHash = calculateEventHash({
-      action: input.action,
-      actorAccountId: input.actorAccountId ?? null,
-      after: input.after ?? null,
-      before: input.before ?? null,
-      correlationId: input.correlationId,
+export async function appendAuditEvent(
+  client: PoolClient,
+  input: AuditEventInput,
+): Promise<AppendedAuditEvent> {
+  await client.query("SELECT pg_advisory_xact_lock(hashtext('vista.audit.events.chain'))");
+  const previousResult = await client.query<{ event_hash: string; occurred_at: Date | string }>(
+    'SELECT event_hash, occurred_at FROM audit.events ORDER BY occurred_at DESC, id DESC LIMIT 1',
+  );
+  const previousEvent = previousResult.rows[0];
+  const previousEventHash = previousEvent?.event_hash;
+  const id = randomUUID();
+  const occurredAt = new Date(
+    Math.max(Date.now(), previousEvent ? new Date(previousEvent.occurred_at).getTime() + 1 : 0),
+  ).toISOString();
+  const metadata = input.metadata ?? {};
+  const eventHash = calculateEventHash({
+    action: input.action,
+    actorAccountId: input.actorAccountId ?? null,
+    after: input.after ?? null,
+    before: input.before ?? null,
+    correlationId: input.correlationId,
+    id,
+    metadata,
+    occurredAt,
+    previousEventHash: previousEventHash ?? null,
+    sourceIp: input.sourceIp ?? null,
+    targetId: input.targetId ?? null,
+    targetType: input.targetType,
+    userAgent: input.userAgent ?? null,
+  });
+
+  await client.query(
+    `INSERT INTO audit.events (
+       id, occurred_at, actor_account_id, action, target_type, target_id,
+       correlation_id, source_ip, user_agent, before_data, after_data,
+       metadata, previous_event_hash, event_hash
+     ) VALUES (
+       $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14
+     )`,
+    [
       id,
-      metadata,
       occurredAt,
-      previousEventHash: previousEventHash ?? null,
-      sourceIp: input.sourceIp ?? null,
-      targetId: input.targetId ?? null,
-      targetType: input.targetType,
-      userAgent: input.userAgent ?? null,
-    });
-
-    await client.query(
-      `INSERT INTO audit.events (
-         id, occurred_at, actor_account_id, action, target_type, target_id,
-         correlation_id, source_ip, user_agent, before_data, after_data,
-         metadata, previous_event_hash, event_hash
-       ) VALUES (
-         $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14
-       )`,
-      [
-        id,
-        occurredAt,
-        input.actorAccountId ?? null,
-        input.action,
-        input.targetType,
-        input.targetId ?? null,
-        input.correlationId,
-        input.sourceIp ?? null,
-        input.userAgent ?? null,
-        input.before ?? null,
-        input.after ?? null,
-        metadata,
-        previousEventHash ?? null,
-        eventHash,
-      ],
-    );
-    return { eventHash, id };
-  }
+      input.actorAccountId ?? null,
+      input.action,
+      input.targetType,
+      input.targetId ?? null,
+      input.correlationId,
+      input.sourceIp ?? null,
+      input.userAgent ?? null,
+      input.before ?? null,
+      input.after ?? null,
+      metadata,
+      previousEventHash ?? null,
+      eventHash,
+    ],
+  );
+  return { eventHash, id };
 }
 
 interface AuditVerificationRow {

@@ -1,129 +1,79 @@
-# Test now — ERP/CRM local fixture flows
+# Test initial administrator access and account recovery
 
-This is the current, browser-ready test pack. It is replaced when the next
-meaningful milestone is ready; it is not a project backlog or history.
+This is the completed first-administrator and controlled account-recovery flow.
+It uses the private development database only. Do not run the provisioning step
+if an administrator already exists.
 
-## Start and sign in
+The administrator must be provisioned successfully before attempting the
+administrator sign-in in section 2. The normal development fixture bootstrap
+does not create an administrative account because administrative access must
+have a separately enrolled second factor.
 
-1. In the private `.env`, set `DEV_FIXTURES_ENABLED=true` and a policy-compliant
-   `DEV_FIXTURES_PASSWORD`.
-2. Run `npm run dev`, then open `http://localhost:5173`.
-3. Sign in with any fixture account below using the password that was set when
-   the fixture accounts were first created.
+## 1. Provision the first administrator once
 
-Every new sign-in must land on **Overview**, never on a previous employee's
-page. If you changed `DEV_FIXTURES_PASSWORD` after the accounts already existed,
-their passwords intentionally remain unchanged.
+1. Ensure your private `.env` has `NODE_ENV=development`,
+   `DEV_FIXTURES_ENABLED=true`, and your private `DEV_FIXTURES_PASSWORD`.
+2. Add these temporary settings to the same `.env`. For
+   `INITIAL_ADMIN_PASSWORD`, enter the exact private password you already chose
+   for `DEV_FIXTURES_PASSWORD` (it must meet the password policy).
 
-Use a unique suffix such as `TEST-20260817-1530` for new records. Use the
-visible **Back** actions; do not type internal routes.
+   ```dotenv
+   INITIAL_ADMIN_PROVISIONING_ENABLED=true
+   INITIAL_ADMIN_EMAIL=local.admin@vista.local
+   INITIAL_ADMIN_DISPLAY_NAME=Local Vista Administrator
+   INITIAL_ADMIN_EMPLOYEE_NUMBER=LOCAL-ADMIN-001
+   INITIAL_ADMIN_PASSWORD=<your-private-fixture-password>
+   ```
 
-## 1. Customer and equipment
+3. Run `npm run iam:provision-initial-admin`.
+4. Confirm that the terminal says
+   `Initial administrator provisioned for local.admin@vista.local.` If it does
+   not, stop here and use the reported error to correct the setup.
+5. Copy the one-time setup key printed in the terminal into a trusted
+   time-based authenticator app. Do not store that key in a ticket, chat, or
+   source file.
+6. Remove the five `INITIAL_ADMIN_*` settings from `.env` (or at minimum set
+   `INITIAL_ADMIN_PROVISIONING_ENABLED=false`), then start the stack with
+   `npm run dev`.
 
-Sign in as `crm@vista.local`.
+Expected: the command succeeds once only. Re-running it is refused because an
+administrator now exists.
 
-1. Go to **Customers & CRM → Partner registry → Add partner**.
-2. Use **Legal entity**, name `TEST Customer <suffix>`, and select **Customer**.
-   Leave UIC and VAT number empty for this first test.
-3. Save, then in the new profile add:
-   - Address: `1 Test Street`, `Vratsa`, `BG`.
-   - Contact: `Test Contact <suffix>`, `test@example.invalid`.
-   - Customer location: `TEST Outlet <suffix>` with the same address.
-   - Equipment: `TEST Fiscal Device`, serial `TEST-SERIAL-<suffix>`, status
-     **Active**, purchase date today, and a warranty end date one year ahead.
+## 2. Sign in as the administrator
 
-Expected: the partner, location, and device remain visible in the profile after
-using **Back**. To check duplicate protection, try creating `Alfa Market Demo
-Ltd.`; it must be blocked rather than merged.
+1. Open `http://localhost:5173`.
+2. Enter `local.admin@vista.local` and the password you used above.
+3. Enter the current six-digit code from the authenticator app.
 
-## 2. Purchase order and partial receipt
+Expected: the Workspace overview opens. **Administration → Security** is
+available.
 
-Sign in as `procurement@vista.local`.
+## 3. Recover a standard employee account
 
-1. Go to **ERP → Procurement → Purchase orders → New purchase order**.
-2. Select supplier **TechSupply Demo Ltd.**, warehouse **Demo Central Warehouse**,
-   currency **BGN**, delivery date tomorrow, and product **Demo 12 V Power
-   Adapter**.
-3. Set quantity **2** and unit price **45.00**, then save.
-4. On the new order select **Receive delivery** and receive quantity **1**.
-5. Open **Goods receipts**.
+1. In the sidebar, choose **Administration → Security**.
+2. In **Employees**, search for **Vista Demo Manager** and select **Manage**.
+3. In **Account recovery**, select **Issue recovery handoff**.
+4. Keep or replace the note with `Identity verified in person.` and select
+   **Issue recovery code**.
+5. Record the code shown in the panel. Close the panel.
+6. Open a private browser window at `http://localhost:5173` and select
+   **Use a recovery code** on the sign-in screen.
+7. Enter:
+   - Work email: `manager@vista.local`
+   - Recovery code: the code from step 5
+   - New password: a new private policy-compliant password
+   - Confirm new password: the same new password
+8. Select **Reset password**, then **Back to sign in**.
+9. Sign in as `manager@vista.local` with the new password.
 
-Expected: the order shows **Part received** and the receipt appears in the
-register. Use that same received line for a supplier invoice or claim only after
-the receipt exists.
+Expected: recovery reports success, the code cannot be reused, and the manager
+can sign in with the replacement password. The Security activity log records
+the handoff and recovery without showing the code or password.
 
-## 3. Pricing, sales, and collection
+## Not part of this test
 
-Sign in as `sales@vista.local`.
-
-1. Go to **ERP → Sales → Prices & promotions → Check price**.
-2. Select customer **Balkan Retail Demo Ltd.**, product **Demo 12 V Power
-   Adapter**, currency **BGN**, and today. The result should be **BGN 45.00**
-   from **Demo retail BGN prices**.
-3. Go to **Quotations → New quotation** and select:
-   - Customer: **Balkan Retail Demo Ltd.**
-   - Warehouse: **Demo Central Warehouse**
-   - Currency: **BGN**
-   - Validity date: a date after today
-   - Product: **Demo 12 V Power Adapter**
-   - Quantity: **1**, discount: **0**, VAT: **20%**
-4. Select **Use customer price**, save, open **Preview**, then select:
-   **Confirm order and reserve stock → Complete shipment → Record customer
-   acceptance → Prepare invoice draft**. Enter `Test Receiver <suffix>` for the
-   customer representative.
-
-Then sign in as `finance@vista.local`.
-
-5. Go to **ERP → Finance → Invoices → Add to collections** and select the draft
-   you just created. Set a due date after today and save.
-6. Open it, select **Record payment**, enter **10.00**, choose **Cash**, and
-   save.
-
-Expected: the draft is linked to a collection record and its outstanding balance
-falls by BGN 10.00.
-
-## 4. Service: dispatcher to technician
-
-Use a normal window for the dispatcher and a private/incognito window for the
-technician.
-
-Dispatcher: sign in as `dispatcher@vista.local`.
-
-1. Go to **ERP → Service → Service requests → New service request**.
-2. Select:
-   - Customer: **Alfa Market Demo Ltd.**
-   - Location: **Alfa Market — Central Store**
-   - Device: **Demo Fiscal Register X1 · DEMO-FR-ALFA-01**
-   - Source: **Telephone**
-   - Priority: **Normal**
-   - Service type: **Out of warranty**
-   - Problem: `TEST-SERVICE-<suffix>: printer feed check`
-3. Save, open the preview, select **Dispatch request**, choose **Vista Demo
-   Service Technician**, select a future visit time, then choose **Assign visit**.
-
-Technician: sign in as `technician@vista.local` in the private window.
-
-4. Go to **ERP → Service → Work orders**. Only assigned work should be visible.
-5. Open the newly assigned order and select **Start work**.
-6. Select **Complete work** and enter:
-   - Completion notes: `Printer feed checked and operating normally.`
-   - Work date: today; minutes: **30**
-   - Labour cost: **30.00**; transport cost: **0.00**
-   - Customer representative: `Test Receiver <suffix>`
-   - Draw a signature in the signature box
-7. Select **Complete work**.
-
-Expected: the order reaches **Completed**. The completed drawer shows the
-signature and cost. **Equipment history** shows the service event. Do not test
-payment documents, warranty claims, inspection scheduling, routes, or CRM tickets
-from this screen; they are not ready yet.
-
-## What is intentionally not in this test pack
-
-- POS and Backup Control operational workflows.
-- Legal/fiscal invoicing, VAT/accounting, bank import, reports, and exports.
-- Password reset, 2FA enrolment/recovery, and Security administration changes.
-- Warehouse returns and stocktakes.
-- CRM leads, tickets/SLA, customer portal, warranty claims, and analytics.
-- Service payment documents, inspection visits, routes, and complete sale/supplier
-  serial history.
+- Email or SMS delivery of recovery messages; approved provider adapters are
+  still pending.
+- Recovering the administrator itself in the browser, because that deliberately
+  closes the current administrator session and requires a fresh authenticator
+  setup. This protected branch is covered by the automated integration suite.

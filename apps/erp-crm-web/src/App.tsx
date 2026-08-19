@@ -1,5 +1,6 @@
 import { useAuth } from './auth/AuthProvider';
 import { LoginPage } from './auth/LoginPage';
+import { RecoveryPage } from './auth/RecoveryPage';
 import { WorkspaceLayout } from './layout/WorkspaceLayout';
 import { messages } from './messages';
 import { AccessPage } from './pages/AccessPage';
@@ -31,6 +32,7 @@ export function App() {
   const { hasPermission, status } = useAuth();
   const { location } = useRouter();
 
+  if (location.pathname === '/recover') return <RecoveryPage />;
   if (location.pathname === '/login') return <LoginPage />;
   if (status === 'checking') return <FullPageLoader />;
   if (status === 'anonymous') {

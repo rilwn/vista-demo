@@ -4,7 +4,7 @@ import { type FormEvent, useState } from 'react';
 import { ApiClientError } from '../api/auth';
 import { Icon } from '../components/Icon';
 import { messages } from '../messages';
-import { Navigate, useRouter } from '../routing/Router';
+import { Link, Navigate, useRouter } from '../routing/Router';
 import { useAuth } from './AuthProvider';
 
 export function LoginPage() {
@@ -208,7 +208,9 @@ export function LoginPage() {
             ) : null}
           </form>
 
-          <p className="login-support">{messages.auth.support}</p>
+          <p className="login-support">
+            {messages.auth.support} <Link to="/recover">{messages.auth.recoveryLink}</Link>
+          </p>
         </div>
       </section>
     </main>

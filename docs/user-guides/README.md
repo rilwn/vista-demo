@@ -13,8 +13,8 @@ empty states do not present sample records as real behavior.
    opens the workspace. A new sign-in always opens the permission-safe Overview,
    rather than restoring a page left in browser history by another employee.
    Navigation shows only modules granted by the current backend permissions.
-4. Use **My access** to inspect the effective module/action permissions for the
-   current session, change your password, or sign out.
+4. Use **My access** to inspect effective module/action permissions, manage an
+   authenticator app, change your password, or sign out.
 
 Every page opened from a module hub has a previous-page control above its page
 heading, such as **Back to Sales** or **Back to Warehouse**. It always returns to
@@ -30,8 +30,36 @@ the form never sends the confirmation value or displays stored password data.
 
 Locked, expired-password, rate-limited, enrollment-required, invalid-credential,
 password-policy, password-reuse, and unavailable-service responses have distinct
-recovery messages. Password reset and factor enrollment/recovery are not
-implemented yet and require the remaining P1.3 flows.
+recovery messages. If an employee cannot sign in, a two-factor-verified
+administrator must first verify the employee’s identity, issue a short-lived
+recovery handoff from **Administration → Security**, and share its one-time code
+through an approved channel. The employee then opens **Use a recovery code** on
+the sign-in screen, enters the verified work email, code, and a new password.
+All existing sign-ins are closed. An administrative account must set up and
+verify a new authenticator before it can sign in again. Direct email or SMS
+recovery delivery is not enabled until the approved provider adapters are live.
+
+### Authenticator app
+
+To add a second factor to a standard employee account, open **My access → Set up
+authenticator**. Confirm the current password, add the displayed one-time setup
+key to a time-based authenticator app, and enter its current six-digit code. The
+factor is not active until that code is accepted. On subsequent sign-ins the same
+six-digit code is required after the password.
+
+To remove an enrolled factor, use **My access → Remove authenticator** and
+confirm both the current password and a current authenticator code. The action
+signs out every other active session and is audited. Administrative accounts
+must retain an enrolled factor; an employee should enroll their factor before
+being assigned an administrative role.
+
+When no administrative account exists, an authorized deployment owner can run
+the one-time `npm run iam:provision-initial-admin` command with the documented
+`INITIAL_ADMIN_*` settings. It creates the minimal bootstrap administrator only
+when no administrative assignment exists, displays an authenticator setup key
+once, records the event in the audit chain, and refuses all later runs. Add that
+key to an authenticator app before the first sign-in, then remove the temporary
+enable flag and password from the environment.
 
 ### Security
 
@@ -48,13 +76,19 @@ focused views.
   user whose current session passed 2FA, and the receiving account must already
   have an enabled factor. The final active administrator is protected from
   removal, and users cannot disable themselves.
+- A two-factor-verified administrative user can select an active employee,
+  choose **Issue recovery handoff**, record the identity-verification note, and
+  share the displayed code through an approved channel. The code is shown once,
+  expires quickly, and cannot be used after completion, replacement, or
+  revocation.
 - The Activity log shows material events and the independently recomputed chain
   result. A failed result is a security incident to investigate, not a control to
   dismiss or rewrite.
 
 The interface never reveals passwords, password hashes, session token digests,
-or factor secrets. Password reset and 2FA enrollment/recovery controls are still
-pending and are not simulated by this screen.
+or stored factor secrets. A one-time setup key is visible only during initial or
+recovery factor setup, and a recovery code is visible only when the authorized
+administrator issues it.
 
 ### Notifications
 
@@ -73,7 +107,7 @@ deliberately payload-free and read-only: it cannot reveal queued customer data o
 modify/replay/delete jobs. A dedicated operational console remains part of the
 remaining Phase 1 operations work.
 
-### Local ERP/CRM fixture accounts
+### Local fixture accounts
 
 For local browser testing, configure these values in the untracked `.env` file:
 
@@ -115,12 +149,15 @@ test.
 | `finance@vista.local`          | Collections and payment allocation.                                         |
 | `dispatcher@vista.local`       | Service requests and dispatch.                                              |
 | `technician@vista.local`       | Assigned Service work and completion.                                       |
+| `pos.operator@vista.local`     | POS sign-in and terminal-shell review only.                                 |
+| `backup.operator@vista.local`  | Backup Control sign-in and console-shell review only.                       |
 | `viewer@vista.local`           | Read-only ERP/CRM review outside restricted Service work.                   |
 
 The fixture accounts are intentionally non-administrative because administrative
-roles require a configured second factor. POS and Backup Control do not yet
-have login-wired operational backends, so do not use these accounts to claim a
-POS or backup workflow has been tested.
+roles require a configured second factor. POS and Backup Control now use the
+same authenticated session controls as ERP/CRM, but their operational workflows
+remain unavailable. Signing in confirms access control and the controlled shell;
+it does not test selling, fiscalization, backup jobs, restore, or DR operations.
 
 ## Business structure
 

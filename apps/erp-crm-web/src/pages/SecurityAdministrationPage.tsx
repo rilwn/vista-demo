@@ -1,6 +1,7 @@
 import { Button, InlineAlert, TextField } from '@vista/ui';
 import { useActiveItemVisibility } from '@vista/ui/navigation';
 import type {
+  AccountRecoveryHandoff,
   ApiPermission,
   AuditEventRecord,
   AuditIntegrityResult,
@@ -16,6 +17,7 @@ import {
   changeSecurityAccountStatus,
   createSecurityAccount,
   createSecurityRole,
+  issueAccountRecoveryHandoff,
   listAuditEvents,
   listSecurityAccounts,
   listSecurityRoles,
@@ -58,6 +60,7 @@ export function SecurityAdministrationPage() {
   const [view, setView] = useState<SecurityView>('accounts');
   const [composer, setComposer] = useState<Composer>(null);
   const [selected, setSelected] = useState<SecurityAccount | null>(null);
+  const [recoveryTarget, setRecoveryTarget] = useState<SecurityAccount | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [revision, setRevision] = useState(0);
@@ -101,6 +104,9 @@ export function SecurityAdministrationPage() {
   ).length;
   const canCreate = hasPermission('platform', 'create');
   const canApprove = hasPermission('platform', 'approve');
+  const canIssueRecovery = Boolean(
+    canApprove && session?.context.isAdministrative && session.context.twoFactorVerified,
+  );
 
   if (loading) return <SecurityLoading />;
   if (loadError)
@@ -225,14 +231,26 @@ export function SecurityAdministrationPage() {
         <AccountAccessDrawer
           account={selected}
           canApprove={canApprove}
+          canIssueRecovery={canIssueRecovery}
           currentAccountId={session?.context.accountId ?? ''}
           onClose={() => setSelected(null)}
+          onIssueRecovery={(account) => {
+            setSelected(null);
+            setRecoveryTarget(account);
+          }}
           onUpdated={() => {
             setSelected(null);
             setNotice('Employee access updated.');
             reload();
           }}
           roles={roles}
+          token={token}
+        />
+      ) : null}
+      {recoveryTarget ? (
+        <RecoveryHandoffDrawer
+          account={recoveryTarget}
+          onClose={() => setRecoveryTarget(null)}
           token={token}
         />
       ) : null}
@@ -709,16 +727,20 @@ function RoleComposer({
 function AccountAccessDrawer({
   account,
   canApprove,
+  canIssueRecovery,
   currentAccountId,
   onClose,
+  onIssueRecovery,
   onUpdated,
   roles,
   token,
 }: {
   account: SecurityAccount;
   canApprove: boolean;
+  canIssueRecovery: boolean;
   currentAccountId: string;
   onClose: () => void;
+  onIssueRecovery: (account: SecurityAccount) => void;
   onUpdated: () => void;
   roles: SecurityRole[];
   token: string;
@@ -781,6 +803,20 @@ function AccountAccessDrawer({
           <span>An administrator role cannot be assigned until this is set up.</span>
         </div>
       </section>
+      {canIssueRecovery && account.status !== 'disabled' ? (
+        <section className="security-account-recovery">
+          <div>
+            <strong>Account recovery</strong>
+            <span>
+              Issue a short-lived, single-use recovery code after verifying this employee’s
+              identity.
+            </span>
+          </div>
+          <Button onClick={() => onIssueRecovery(account)} variant="secondary">
+            Issue recovery handoff
+          </Button>
+        </section>
+      ) : null}
       <fieldset className="security-role-assignment" disabled={!canApprove}>
         <legend>Assigned roles</legend>
         {roles.length ? (
@@ -855,6 +891,105 @@ function AccountAccessDrawer({
           )}
         </section>
       ) : null}
+    </Drawer>
+  );
+}
+
+function RecoveryHandoffDrawer({
+  account,
+  onClose,
+  token,
+}: {
+  account: SecurityAccount;
+  onClose: () => void;
+  token: string;
+}) {
+  const [reason, setReason] = useState('Identity verified in person.');
+  const [handoff, setHandoff] = useState<AccountRecoveryHandoff | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  async function issue(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setBusy(true);
+    setError('');
+    try {
+      setHandoff(
+        await issueAccountRecoveryHandoff(token, crypto.randomUUID(), account, {
+          expectedVersion: account.version,
+          reason: reason.trim(),
+        }),
+      );
+    } catch (failure) {
+      setError(apiMessage(failure));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Drawer
+      onClose={onClose}
+      subtitle={handoff ? 'Share this code through an approved channel.' : 'Verify identity first.'}
+      title={handoff ? 'Recovery handoff issued' : `Recover ${account.displayName}'s access`}
+    >
+      {handoff ? (
+        <section className="security-recovery-issued" aria-live="polite">
+          <InlineAlert title="Show this code once" tone="warning">
+            The code is valid until {formatDate(handoff.expiresAt)}. It will not be shown again
+            after this panel is closed.
+          </InlineAlert>
+          <div className="security-recovery-recipient">
+            <span>Employee</span>
+            <strong>{handoff.email}</strong>
+          </div>
+          <div className="security-recovery-code">
+            <span>One-time recovery code</span>
+            <code>{handoff.recoveryCode}</code>
+          </div>
+          <div className="security-drawer-actions">
+            <Button onClick={onClose}>Close handoff</Button>
+          </div>
+        </section>
+      ) : (
+        <form
+          className="security-admin-form security-recovery-form"
+          onSubmit={(event) => void issue(event)}
+        >
+          {error ? <InlineAlert tone="error">{error}</InlineAlert> : null}
+          <div className="security-recovery-recipient">
+            <span>Employee</span>
+            <strong>{account.email}</strong>
+          </div>
+          <div className="vista-field">
+            <label htmlFor="recovery-handoff-reason">Identity verification note</label>
+            <div className="vista-field-control">
+              <textarea
+                className="vista-field-input security-recovery-note"
+                id="recovery-handoff-reason"
+                maxLength={1000}
+                minLength={8}
+                onChange={(event) => setReason(event.target.value)}
+                required
+                rows={4}
+                value={reason}
+              />
+            </div>
+            <p className="vista-field-message">
+              Record how the employee’s identity was verified. Do not enter a password or recovery
+              code here.
+            </p>
+          </div>
+          <div className="security-drawer-actions">
+            <Button disabled={busy} onClick={onClose} variant="quiet">
+              Cancel
+            </Button>
+            <Button busy={busy} busyLabel="Issuing code" type="submit">
+              Issue recovery code
+            </Button>
+          </div>
+        </form>
+      )}
     </Drawer>
   );
 }
@@ -977,6 +1112,10 @@ function humanAction(action: string): string {
         'auth.login.succeeded': 'Signed in',
         'auth.password.change_rejected': 'Password change declined',
         'auth.password.changed': 'Password changed',
+        'auth.recovery.completed': 'Account recovery completed',
+        'auth.recovery.factor_enrolled': 'Recovery authenticator enrolled',
+        'auth.recovery.factor_enrollment_started': 'Recovery authenticator setup started',
+        'auth.recovery.handoff_issued': 'Recovery handoff issued',
         'auth.session.revoked': 'Signed out',
         'auth.session.revoked_by_administrator': 'Session revoked by administrator',
         'iam.account_roles.replaced': 'Employee roles changed',

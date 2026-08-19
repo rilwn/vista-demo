@@ -1,6 +1,10 @@
+import { useBrowserSession } from '@vista/auth/browser-session';
+import type { AuthenticationContextResponse, LoginRequest, LoginResponse } from '@vista/contracts';
+import { AuthenticationForm, Button } from '@vista/ui';
 import { useActiveItemVisibility } from '@vista/ui/navigation';
 import { useState } from 'react';
 
+import { ApiClientError, authenticate, getCurrentAccount, revokeSession } from './api/auth';
 import { messages } from './messages';
 
 type BackupScreen =
@@ -72,6 +76,52 @@ const screenOrder: BackupScreen[] = [
 ];
 
 export function App() {
+  const authentication = useBrowserSession<
+    LoginRequest,
+    LoginResponse,
+    AuthenticationContextResponse
+  >({
+    authenticate,
+    getCurrentAccount,
+    isContextValid: isAuthenticationContext,
+    revokeSession,
+    storageKey: 'vista.backup-control.session.v1',
+  });
+  const session = authentication.session;
+
+  if (authentication.status === 'checking') {
+    return <ApplicationLoading label="Restoring backup access" />;
+  }
+  if (authentication.status === 'anonymous') {
+    return (
+      <AuthenticationForm
+        applicationName="Vista Recovery"
+        eyebrow="Backup and recovery"
+        errorMessage={signInError}
+        onAuthenticate={authentication.login}
+        subtitle="Controlled access to Vista Service backup and disaster-recovery operations."
+        supportText="Contact a Vista Service administrator if you cannot sign in."
+      />
+    );
+  }
+  if (!session) {
+    return <ApplicationLoading label="Preparing backup access" />;
+  }
+  if (!hasBackupAccess(session.context)) {
+    return <AccessUnavailable onSignOut={authentication.logout} />;
+  }
+  return (
+    <BackupConsole employeeName={session.context.displayName} onSignOut={authentication.logout} />
+  );
+}
+
+function BackupConsole({
+  employeeName,
+  onSignOut,
+}: {
+  employeeName: string;
+  onSignOut: () => Promise<void>;
+}) {
   const [screen, setScreen] = useState<BackupScreen>('overview');
   const active = screens[screen];
   const navigation = useActiveItemVisibility<HTMLElement>(screen);
@@ -124,6 +174,10 @@ export function App() {
             <span>
               <i className="backup-risk-dot" /> Setup incomplete
             </span>
+            <span className="backup-signed-in">{employeeName}</span>
+            <Button className="backup-sign-out" onClick={() => void onSignOut()} variant="quiet">
+              Sign out
+            </Button>
           </div>
         </header>
         <section className="backup-page-heading">
@@ -186,6 +240,59 @@ export function App() {
       </main>
     </div>
   );
+}
+
+function ApplicationLoading({ label }: { label: string }) {
+  return (
+    <main className="backup-application-state" aria-live="polite">
+      <span aria-hidden="true">VS</span>
+      <strong>{label}</strong>
+      <p>Checking the current browser session.</p>
+    </main>
+  );
+}
+
+function AccessUnavailable({ onSignOut }: { onSignOut: () => Promise<void> }) {
+  return (
+    <main className="backup-application-state backup-application-state--restricted">
+      <span aria-hidden="true">VS</span>
+      <p>Vista Recovery</p>
+      <h1>Backup access is not assigned</h1>
+      <p>Use an account with backup access, then sign in again.</p>
+      <Button onClick={() => void onSignOut()} variant="secondary">
+        Sign out
+      </Button>
+    </main>
+  );
+}
+
+function hasBackupAccess(context: AuthenticationContextResponse | undefined): boolean {
+  return (
+    context?.permissions.some(
+      (permission) =>
+        (permission.module === '*' || permission.module === 'backup') &&
+        (permission.action === '*' || permission.action === 'view'),
+    ) ?? false
+  );
+}
+
+function isAuthenticationContext(value: unknown): value is AuthenticationContextResponse {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
+  const context = value as Record<string, unknown>;
+  return typeof context['accountId'] === 'string' && Array.isArray(context['permissions']);
+}
+
+function signInError(error: unknown): string {
+  if (!(error instanceof ApiClientError))
+    return 'The service is unavailable. Check your connection and try again.';
+  if (error.code === 'TWO_FACTOR_ENROLLMENT_REQUIRED') {
+    return 'This administrative account must enroll an authenticator before it can sign in.';
+  }
+  if (error.code === 'PASSWORD_EXPIRED') {
+    return 'This password has expired. Contact a Vista Service administrator.';
+  }
+  if (error.code === 'RATE_LIMITED') return 'Too many attempts. Wait a moment and try again.';
+  return 'The email, password, or authentication code is incorrect.';
 }
 
 type BackupIconName =

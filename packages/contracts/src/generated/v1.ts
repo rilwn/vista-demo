@@ -116,6 +116,118 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/auth/me/totp': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['AuthController_totpStatus'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/auth/me/totp/disable': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['AuthController_disableTotp'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/auth/me/totp/enrollment': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['AuthController_startTotpEnrollment'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/auth/me/totp/enrollment/{enrollmentId}/verify': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['AuthController_verifyTotpEnrollment'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/auth/recovery/complete': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['AuthController_completeRecovery'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/auth/recovery/totp/enrollment': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['AuthController_startRecoveryTotpEnrollment'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/auth/recovery/totp/enrollment/{enrollmentId}/verify': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['AuthController_verifyRecoveryTotpEnrollment'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/finance/documents': {
     parameters: {
       query?: never;
@@ -847,6 +959,22 @@ export interface paths {
     get?: never;
     put?: never;
     post: operations['SecurityAdministrationController_reactivateAccount'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/platform/security/accounts/{id}/recovery-handoff': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['SecurityAdministrationController_issueAccountRecoveryHandoff'];
     delete?: never;
     options?: never;
     head?: never;
@@ -1886,6 +2014,14 @@ export interface components {
       acceptedByName: string;
       expectedVersion: number;
     };
+    AccountRecoveryHandoffDto: {
+      /** Format: email */
+      email: string;
+      /** Format: date-time */
+      expiresAt: string;
+      /** @description One-time recovery code. It is returned only when issued. */
+      recoveryCode: string;
+    };
     ApiPermissionDto: {
       /** @enum {string} */
       action: 'view' | 'create' | 'edit' | 'delete' | 'approve' | '*';
@@ -2077,6 +2213,19 @@ export interface components {
       /** Format: date-time */
       expiresAt?: string;
       revokedOtherSessionCount: number;
+    };
+    CompleteAccountRecoveryRequestDto: {
+      /** Format: email */
+      email: string;
+      /** Format: password */
+      newPassword: string;
+      /** Format: password */
+      recoveryCode: string;
+    };
+    CompleteAccountRecoveryResponseDto: {
+      /** Format: date-time */
+      expiresAt?: string;
+      requiresTotpEnrollment: boolean;
     };
     CompleteServiceWorkOrderDto: {
       completionNotes: string;
@@ -2495,6 +2644,18 @@ export interface components {
       updatedAt: string;
       version: number;
     };
+    DisableTotpRequestDto: {
+      /** @example 123456 */
+      code: string;
+      /** Format: password */
+      currentPassword: string;
+    };
+    DisableTotpResponseDto: {
+      enrolled: boolean;
+      /** Format: date-time */
+      enrolledAt?: string;
+      revokedOtherSessionCount: number;
+    };
     FinanceCustomerDocumentDto: {
       allocatedTotal: string;
       bgnTotal: string;
@@ -2707,6 +2868,10 @@ export interface components {
       publishing: number;
       /** Format: date-time */
       timestamp: string;
+    };
+    IssueAccountRecoveryHandoffDto: {
+      expectedVersion: number;
+      reason: string;
     };
     IssueStockDto: {
       batchNumber?: string;
@@ -3764,8 +3929,38 @@ export interface components {
       /** Format: date */
       workDate: string;
     };
+    StartAccountRecoveryTotpRequestDto: {
+      /** Format: email */
+      email: string;
+      /** Format: password */
+      recoveryCode: string;
+    };
+    StartAccountRecoveryTotpResponseDto: {
+      /** Format: uuid */
+      enrollmentId: string;
+      /** Format: date-time */
+      expiresAt: string;
+      /** @description One-time manual key for the employee authenticator. */
+      manualEntryKey: string;
+      /** @description One-time TOTP provisioning URI. */
+      provisioningUri: string;
+    };
     StartServiceWorkOrderDto: {
       expectedVersion: number;
+    };
+    StartTotpEnrollmentRequestDto: {
+      /** Format: password */
+      currentPassword: string;
+    };
+    StartTotpEnrollmentResponseDto: {
+      /** Format: uuid */
+      enrollmentId: string;
+      /** Format: date-time */
+      expiresAt: string;
+      /** @description One-time manual key for the employee authenticator. */
+      manualEntryKey: string;
+      /** @description One-time TOTP provisioning URI. */
+      provisioningUri: string;
     };
     StockBalanceDto: {
       availableQuantity: string;
@@ -4030,6 +4225,11 @@ export interface components {
       quantity: string;
       unitPrice: string;
     };
+    TotpEnrollmentStatusDto: {
+      enrolled: boolean;
+      /** Format: date-time */
+      enrolledAt?: string;
+    };
     TransferStockDto: {
       batchNumber?: string;
       /** Format: uuid */
@@ -4156,6 +4356,29 @@ export interface components {
       deliveryTerms?: string;
       expectedVersion: number;
       paymentTermsDays?: number;
+    };
+    VerifyAccountRecoveryTotpRequestDto: {
+      /** @example 123456 */
+      code: string;
+      /** Format: email */
+      email: string;
+      /** Format: password */
+      recoveryCode: string;
+    };
+    VerifyAccountRecoveryTotpResponseDto: {
+      enrolled: boolean;
+      /** Format: date-time */
+      enrolledAt?: string;
+    };
+    VerifyTotpEnrollmentRequestDto: {
+      /** @example 123456 */
+      code: string;
+    };
+    VerifyTotpEnrollmentResponseDto: {
+      enrolled: boolean;
+      /** Format: date-time */
+      enrolledAt?: string;
+      revokedOtherSessionCount: number;
     };
     WarehouseDto: {
       active: boolean;
@@ -4429,6 +4652,328 @@ export interface operations {
         content: {
           'application/json': components['schemas']['ApiPermissionDto'][];
         };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  AuthController_totpStatus: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['TotpEnrollmentStatusDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  AuthController_disableTotp: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['DisableTotpRequestDto'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['DisableTotpResponseDto'];
+        };
+      };
+      /** @description The current password or authenticator code is invalid. */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description An administrative account must retain an authenticator. */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  AuthController_startTotpEnrollment: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['StartTotpEnrollmentRequestDto'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['StartTotpEnrollmentResponseDto'];
+        };
+      };
+      /** @description The current password must be confirmed. */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description An authenticator is already enrolled. */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  AuthController_verifyTotpEnrollment: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        enrollmentId: unknown;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['VerifyTotpEnrollmentRequestDto'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['VerifyTotpEnrollmentResponseDto'];
+        };
+      };
+      /** @description The six-digit authenticator code is invalid. */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The authenticator setup expired. */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  AuthController_completeRecovery: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['CompleteAccountRecoveryRequestDto'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CompleteAccountRecoveryResponseDto'];
+        };
+      };
+      /** @description The recovery code or replacement password is invalid. */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  AuthController_startRecoveryTotpEnrollment: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['StartAccountRecoveryTotpRequestDto'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['StartAccountRecoveryTotpResponseDto'];
+        };
+      };
+      /** @description The recovery code is invalid or unavailable. */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  AuthController_verifyRecoveryTotpEnrollment: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        enrollmentId: unknown;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['VerifyAccountRecoveryTotpRequestDto'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['VerifyAccountRecoveryTotpResponseDto'];
+        };
+      };
+      /** @description The recovery code or authenticator code is invalid. */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
       };
       /** @description The endpoint request limit was exceeded. */
       429: {
@@ -6500,6 +7045,47 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['SecurityAccountDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  SecurityAdministrationController_issueAccountRecoveryHandoff: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path: {
+        id: unknown;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['IssueAccountRecoveryHandoffDto'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['AccountRecoveryHandoffDto'];
         };
       };
       /** @description The endpoint request limit was exceeded. */

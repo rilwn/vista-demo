@@ -2706,6 +2706,162 @@ select.vista-field-input {
   line-height: 1.55;
 }
 
+.login-support a {
+  color: var(--vista-accent-strong);
+  font-weight: 720;
+  text-decoration: none;
+}
+
+.login-support a:hover {
+  text-decoration: underline;
+}
+
+.recovery-form-wrap {
+  width: min(100%, 29rem);
+}
+
+.recovery-page .login-context-copy h1 {
+  max-width: 10ch;
+}
+
+.recovery-status {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.recovery-status-mark {
+  display: grid;
+  width: 2.75rem;
+  height: 2.75rem;
+  place-items: center;
+  border: 1px solid #cbdccf;
+  border-radius: 0.8rem;
+  color: var(--vista-forest);
+  background: #f4f8f5;
+}
+
+.recovery-status .page-eyebrow {
+  margin: 1.05rem 0 0;
+}
+
+.recovery-status > p:not(.page-eyebrow) {
+  max-width: 27rem;
+  margin: 0;
+  color: var(--vista-muted);
+  font-size: 0.9rem;
+  line-height: 1.65;
+}
+
+.recovery-status-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 0.55rem;
+}
+
+.recovery-sign-in {
+  display: inline-flex;
+  justify-content: center;
+  text-decoration: none;
+}
+
+.recovery-expiry {
+  margin: -0.35rem 0 0;
+  color: var(--vista-muted);
+  font-size: 0.72rem;
+}
+
+.security-account-recovery {
+  display: grid;
+  gap: 0.9rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+  margin-top: 1rem;
+  padding: 0.9rem;
+  border: 1px solid #d5e0d7;
+  border-radius: 0.8rem;
+  background: #f7faf7;
+}
+
+.security-account-recovery > div {
+  display: grid;
+  gap: 0.28rem;
+}
+
+.security-account-recovery strong {
+  color: var(--vista-ink);
+  font-size: 0.82rem;
+}
+
+.security-account-recovery span {
+  color: var(--vista-muted);
+  font-size: 0.75rem;
+  line-height: 1.5;
+}
+
+.security-account-recovery .vista-button {
+  align-self: center;
+}
+
+.security-recovery-form,
+.security-recovery-issued {
+  display: grid;
+  gap: 1rem;
+}
+
+.security-recovery-recipient,
+.security-recovery-code {
+  display: grid;
+  gap: 0.35rem;
+  padding: 0.85rem 0.9rem;
+  border: 1px solid var(--vista-line);
+  border-radius: 0.72rem;
+  background: var(--vista-surface-muted);
+}
+
+.security-recovery-recipient > span,
+.security-recovery-code > span {
+  color: var(--vista-muted);
+  font-size: 0.68rem;
+  font-weight: 720;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.security-recovery-recipient strong {
+  overflow-wrap: anywhere;
+  color: var(--vista-ink);
+  font-size: 0.84rem;
+}
+
+.security-recovery-code {
+  border-color: #cbdccf;
+  background: #f4f8f5;
+}
+
+.security-recovery-code code {
+  overflow-wrap: anywhere;
+  color: var(--vista-ink);
+  font-family: var(--vista-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 0.93rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
+
+.security-recovery-note {
+  min-height: 6.5rem;
+  resize: vertical;
+}
+
+@media (max-width: 560px) {
+  .security-account-recovery {
+    grid-template-columns: 1fr;
+  }
+
+  .security-account-recovery .vista-button {
+    width: 100%;
+  }
+}
+
 /* Authenticated workspace */
 
 .workspace-shell {
@@ -4080,6 +4236,42 @@ select.vista-field-input {
   display: grid;
   align-content: start;
   gap: 1rem;
+}
+
+.access-authenticator-drawer .security-drawer-body {
+  display: grid;
+  align-content: start;
+  gap: 1rem;
+}
+
+.access-authenticator-form > .vista-alert p {
+  margin: 0;
+}
+
+.authenticator-setup-key {
+  display: grid;
+  gap: 0.42rem;
+  padding: 0.9rem 0.95rem;
+  border: 1px solid #cbdccf;
+  border-radius: 0.75rem;
+  background: #f4f8f5;
+}
+
+.authenticator-setup-key > span {
+  color: var(--vista-muted);
+  font-size: 0.68rem;
+  font-weight: 720;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.authenticator-setup-key code {
+  overflow-wrap: anywhere;
+  color: var(--vista-ink);
+  font-family: var(--vista-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 0.86rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
 }
 
 .access-password-policy {

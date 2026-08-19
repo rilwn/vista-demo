@@ -1,6 +1,6 @@
 # Vista Integrated Information System — Remaining Implementation Plan
 
-Status date: 2026-08-17
+Status date: 2026-08-18
 Project: `BG16RFPR001-1.012-1324-C01`
 
 [`AGENTS.md`](AGENTS.md) is authoritative. This file contains only unfinished
@@ -56,12 +56,10 @@ enabled; every requirement remains traceable.
 
 **Remaining**
 
-- Deliver protected 2FA enrolment/provisioning, recovery, and controlled
-  password-reset flows; apply approved role assignments, password-policy values,
-  and non-administrator 2FA policy.
+- Apply approved role assignments, password-policy values, and
+  non-administrator 2FA policy.
 - Deliver approved AD, LDAP, Entra ID, SAML, and OAuth/OIDC adapters and group
-  mapping; complete shared authenticated-session use in ERP/CRM, POS, and Backup
-  Control.
+  mapping.
 - Deliver secure file upload/download with type and size validation, quarantine
   or scanning hooks, versioning, controlled storage, and inherited parent-record
   authorization.

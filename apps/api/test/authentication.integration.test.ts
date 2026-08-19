@@ -14,6 +14,7 @@ import { AppModule } from '../src/app.module.js';
 import { AuditService } from '../src/audit/audit.service.js';
 import { AuthController } from '../src/auth/auth.controller.js';
 import { AuthService } from '../src/auth/auth.service.js';
+import { provisionInitialAdministrator } from '../src/auth/initial-administrator-provisioning.js';
 import { LoginRateLimitGuard } from '../src/auth/login-rate-limit.guard.js';
 import { PasswordService } from '../src/auth/password.service.js';
 import { TotpService } from '../src/auth/totp.service.js';
@@ -49,6 +50,7 @@ describe.skipIf(!runInfrastructureTests)(
     let administratorEmail: string;
     let totp: TotpService;
     let totpSecret: string;
+    let totpToken: string;
 
     beforeAll(async () => {
       const sourceDatabaseUrl = process.env['DATABASE_URL'];
@@ -73,21 +75,24 @@ describe.skipIf(!runInfrastructureTests)(
         new URL('../src/database/migrations', import.meta.url),
       );
       await migrateUp(database, migrationDirectory);
-      const salesRolledBack = await migrateDown(database, migrationDirectory);
-      if (salesRolledBack !== '0026_sales_workflow_foundation') {
-        throw new Error('Expected to roll back migration 0026 before supplier controls');
-      }
-      const supplierControlsRolledBack = await migrateDown(database, migrationDirectory);
-      if (supplierControlsRolledBack !== '0025_procurement_supplier_controls') {
-        throw new Error('Expected to roll back migration 0025 before procurement receiving');
-      }
-      const procurementRolledBack = await migrateDown(database, migrationDirectory);
-      if (procurementRolledBack !== '0024_procurement_purchase_receiving') {
-        throw new Error('Expected to roll back migration 0024 before the password migration');
-      }
-      const rolledBack = await migrateDown(database, migrationDirectory);
-      if (rolledBack !== '0023_employee_password_change') {
-        throw new Error(`Expected to roll back migration 0023, received ${rolledBack ?? 'none'}`);
+      for (const expectedMigration of [
+        '0032_account_recovery_handoffs',
+        '0031_totp_enrollment_lifecycle',
+        '0030_service_work_orders_core',
+        '0029_finance_collections_foundation',
+        '0028_sales_subscriptions_handover',
+        '0027_sales_pricing_foundation',
+        '0026_sales_workflow_foundation',
+        '0025_procurement_supplier_controls',
+        '0024_procurement_purchase_receiving',
+        '0023_employee_password_change',
+      ]) {
+        const rolledBack = await migrateDown(database, migrationDirectory);
+        if (rolledBack !== expectedMigration) {
+          throw new Error(
+            `Expected to roll back ${expectedMigration}, received ${rolledBack ?? 'none'}`,
+          );
+        }
       }
       await migrateUp(database, migrationDirectory);
       Object.assign(process.env, {
@@ -130,12 +135,19 @@ describe.skipIf(!runInfrastructureTests)(
       lockoutEmail = `lockout-${runId}@example.invalid`;
       const employeeId = await createAccount(database, 'employee', employeeEmail, passwordHash);
       const deniedId = await createAccount(database, 'denied', deniedEmail, passwordHash);
-      adminAccountId = await createAccount(
+      const provisionedAdministrator = await provisionInitialAdministratorInTransaction(
         database,
-        'administrator',
-        administratorEmail,
-        passwordHash,
+        {
+          displayName: 'Test administrator',
+          email: administratorEmail,
+          employeeNumber: `administrator-${runId.slice(0, 12)}`,
+          passwordExpiresAt: passwords.passwordExpiresAt() ?? null,
+          passwordHash,
+        },
+        totp,
       );
+      adminAccountId = provisionedAdministrator.accountId;
+      totpSecret = provisionedAdministrator.enrollmentKey;
       await createAccount(database, 'expired', expiredEmail, passwordHash);
       lockoutAccountId = await createAccount(database, 'lockout', lockoutEmail, passwordHash);
       await database.query(
@@ -147,14 +159,27 @@ describe.skipIf(!runInfrastructureTests)(
         [expiredEmail],
       );
       await grantPlatformView(database, employeeId);
-      await grantAdministrativeRole(database, adminAccountId);
 
       expect(deniedId).not.toBe(employeeId);
+      expect(provisionedAdministrator.provisioningUri).toContain('otpauth://totp/');
+      await expect(
+        provisionInitialAdministratorInTransaction(
+          database,
+          {
+            displayName: 'Second administrator',
+            email: `second-${runId}@example.invalid`,
+            employeeNumber: `second-${runId.slice(0, 12)}`,
+            passwordExpiresAt: passwords.passwordExpiresAt() ?? null,
+            passwordHash,
+          },
+          totp,
+        ),
+      ).rejects.toThrow('An administrative account already exists');
     }, 30_000);
 
     afterAll(async () => {
       if (application) {
-        for (const token of [adminToken, deniedToken]) {
+        for (const token of [adminToken, deniedToken, totpToken]) {
           if (token) {
             await request(application.getHttpServer())
               .post('/api/v1/auth/logout')
@@ -421,6 +446,111 @@ describe.skipIf(!runInfrastructureTests)(
       expect(evidence.rows[0]).toEqual({ changed: '1', history_count: '1', rejected: '2' });
     });
 
+    it('enrols, requires, and removes a verified authenticator without exposing its stored secret', async () => {
+      const initialStatus = await request(application.getHttpServer())
+        .get('/api/v1/auth/me/totp')
+        .set('authorization', `Bearer ${deniedToken}`)
+        .expect(200);
+      expect(initialStatus.body).toEqual({ enrolled: false });
+
+      const rejectedStart = await request(application.getHttpServer())
+        .post('/api/v1/auth/me/totp/enrollment')
+        .set('authorization', `Bearer ${deniedToken}`)
+        .send({ currentPassword: 'Wrong-Current-Password-9!' })
+        .expect(400);
+      expect(rejectedStart.body).toMatchObject({ error: { code: 'CURRENT_PASSWORD_INVALID' } });
+
+      const enrollment = await request(application.getHttpServer())
+        .post('/api/v1/auth/me/totp/enrollment')
+        .set('authorization', `Bearer ${deniedToken}`)
+        .send({ currentPassword: password })
+        .expect(201);
+      const enrollmentBody = readTotpEnrollment(enrollment.body as unknown);
+      expect(enrollmentBody.enrollmentId).toMatch(/^[a-f0-9-]{36}$/u);
+      expect(enrollmentBody.expiresAt).toMatch(/^\d{4}-\d{2}-\d{2}T/u);
+      expect(enrollmentBody.manualEntryKey).toMatch(/^[A-Z2-7]+$/u);
+      expect(enrollmentBody.provisioningUri).toContain('otpauth://totp/');
+      expect(JSON.stringify(enrollment.body)).not.toContain(password);
+
+      const repeatedEnrollment = await request(application.getHttpServer())
+        .post('/api/v1/auth/me/totp/enrollment')
+        .set('authorization', `Bearer ${deniedToken}`)
+        .send({ currentPassword: password })
+        .expect(201);
+      expect(repeatedEnrollment.body).toEqual(enrollment.body);
+
+      const rejectedCode = await request(application.getHttpServer())
+        .post(`/api/v1/auth/me/totp/enrollment/${enrollmentBody.enrollmentId}/verify`)
+        .set('authorization', `Bearer ${deniedToken}`)
+        .send({ code: '000000' })
+        .expect(400);
+      expect(rejectedCode.body).toMatchObject({ error: { code: 'TOTP_CODE_INVALID' } });
+
+      const verified = await request(application.getHttpServer())
+        .post(`/api/v1/auth/me/totp/enrollment/${enrollmentBody.enrollmentId}/verify`)
+        .set('authorization', `Bearer ${deniedToken}`)
+        .send({ code: totp.generateCode(enrollmentBody.manualEntryKey) })
+        .expect(200);
+      expect(verified.body).toMatchObject({ enrolled: true, revokedOtherSessionCount: 0 });
+
+      const encryptedFactor = await database.query<{ encrypted_secret: Buffer }>(
+        `SELECT encrypted_secret
+         FROM identity.authentication_factors factor
+         JOIN identity.user_accounts account ON account.id = factor.account_id
+         JOIN identity.employees employee ON employee.id = account.employee_id
+         WHERE employee.email = $1
+           AND factor.factor_type = 'totp'
+           AND factor.enabled = true`,
+        [deniedEmail],
+      );
+      expect(encryptedFactor.rows[0]?.encrypted_secret.toString('utf8')).not.toContain(
+        enrollmentBody.manualEntryKey,
+      );
+
+      const challenged = await request(application.getHttpServer())
+        .post('/api/v1/auth/login')
+        .send({ email: deniedEmail, password })
+        .expect(401);
+      expect(challenged.body).toMatchObject({ error: { code: 'TWO_FACTOR_REQUIRED' } });
+
+      const authenticated = await request(application.getHttpServer())
+        .post('/api/v1/auth/login')
+        .send({
+          email: deniedEmail,
+          password,
+          totpCode: totp.generateCode(enrollmentBody.manualEntryKey),
+        })
+        .expect(200);
+      totpToken = authenticated.body.sessionToken as string;
+      expect(
+        (
+          await request(application.getHttpServer())
+            .get('/api/v1/auth/me')
+            .set('authorization', `Bearer ${totpToken}`)
+            .expect(200)
+        ).body,
+      ).toMatchObject({ twoFactorVerified: true });
+
+      const disabled = await request(application.getHttpServer())
+        .post('/api/v1/auth/me/totp/disable')
+        .set('authorization', `Bearer ${totpToken}`)
+        .send({
+          code: totp.generateCode(enrollmentBody.manualEntryKey),
+          currentPassword: password,
+        })
+        .expect(200);
+      expect(disabled.body).toMatchObject({ enrolled: false, revokedOtherSessionCount: 1 });
+      await request(application.getHttpServer())
+        .get('/api/v1/auth/me')
+        .set('authorization', `Bearer ${deniedToken}`)
+        .expect(401);
+      const passwordOnlyLogin = await request(application.getHttpServer())
+        .post('/api/v1/auth/login')
+        .send({ email: deniedEmail, password })
+        .expect(200);
+      deniedToken = passwordOnlyLogin.body.sessionToken as string;
+    });
+
     it('revokes the current session', async () => {
       await request(application.getHttpServer())
         .post('/api/v1/auth/logout')
@@ -432,27 +562,14 @@ describe.skipIf(!runInfrastructureTests)(
         .expect(401);
     });
 
-    it('requires an enrolled and verified second factor for administrators', async () => {
-      const unenrolled = await request(application.getHttpServer())
-        .post('/api/v1/auth/login')
-        .send({ email: administratorEmail, password })
-        .expect(403);
-      expect(unenrolled.body).toMatchObject({
-        error: { code: 'TWO_FACTOR_ENROLLMENT_REQUIRED' },
-      });
-
-      totpSecret = totp.generateSecret();
-      await database.query(
-        `INSERT INTO identity.authentication_factors (
-         account_id, factor_type, encrypted_secret, enabled, verified_at
-       ) VALUES ($1, 'totp', $2, true, now())`,
-        [adminAccountId, totp.encryptSecret(totpSecret)],
-      );
+    it('requires a verified second factor for the provisioned administrator', async () => {
       const challenged = await request(application.getHttpServer())
         .post('/api/v1/auth/login')
         .send({ email: administratorEmail, password })
         .expect(401);
-      expect(challenged.body).toMatchObject({ error: { code: 'TWO_FACTOR_REQUIRED' } });
+      expect(challenged.body).toMatchObject({
+        error: { code: 'TWO_FACTOR_REQUIRED' },
+      });
 
       const authenticated = await request(application.getHttpServer())
         .post('/api/v1/auth/login')
@@ -469,6 +586,148 @@ describe.skipIf(!runInfrastructureTests)(
         .set('authorization', `Bearer ${adminToken}`)
         .expect(200);
       expect(profile.body).toMatchObject({ isAdministrative: true, twoFactorVerified: true });
+      const storedFactor = await database.query<{ encrypted_secret: Buffer }>(
+        `SELECT encrypted_secret
+         FROM identity.authentication_factors
+         WHERE account_id = $1 AND factor_type = 'totp' AND enabled = true`,
+        [adminAccountId],
+      );
+      expect(storedFactor.rows[0]?.encrypted_secret.toString('utf8')).not.toContain(totpSecret);
+    });
+
+    it('recovers standard and administrative accounts without exposing recovery codes in audit data', async () => {
+      const standardTarget = await accountForEmail(database, deniedEmail);
+      const standardKey = `recovery-standard-${randomUUID()}`;
+      const handoff = await request(application.getHttpServer())
+        .post(`/api/v1/platform/security/accounts/${standardTarget.id}/recovery-handoff`)
+        .set('authorization', `Bearer ${adminToken}`)
+        .set('idempotency-key', standardKey)
+        .send({
+          expectedVersion: standardTarget.version,
+          reason: 'Employee identity verified in person.',
+        })
+        .expect(201);
+      expect(handoff.body).toMatchObject({ email: deniedEmail });
+      expect(handoff.body.recoveryCode).toMatch(/^[A-Za-z0-9_-]{43}$/u);
+      const standardRecoveryCode = handoff.body.recoveryCode as string;
+
+      const replay = await request(application.getHttpServer())
+        .post(`/api/v1/platform/security/accounts/${standardTarget.id}/recovery-handoff`)
+        .set('authorization', `Bearer ${adminToken}`)
+        .set('idempotency-key', standardKey)
+        .send({
+          expectedVersion: standardTarget.version,
+          reason: 'Employee identity verified in person.',
+        })
+        .expect(201);
+      expect(replay.body).toEqual(handoff.body);
+
+      const standardPassword = 'Vista-Recovered-Password-9!';
+      const completed = await request(application.getHttpServer())
+        .post('/api/v1/auth/recovery/complete')
+        .send({
+          email: deniedEmail,
+          newPassword: standardPassword,
+          recoveryCode: standardRecoveryCode,
+        })
+        .expect(200);
+      expect(completed.body).toEqual({ requiresTotpEnrollment: false });
+      await request(application.getHttpServer())
+        .get('/api/v1/auth/me')
+        .set('authorization', `Bearer ${deniedToken}`)
+        .expect(401);
+      try {
+        await authenticationService.login(
+          { email: deniedEmail, password },
+          { correlationId: randomUUID() },
+        );
+        expect.fail('Expected the previous password to be rejected after recovery');
+      } catch (error) {
+        expect(apiErrorCode(error)).toBe('AUTHENTICATION_FAILED');
+      }
+      deniedToken = (
+        await authenticationService.login(
+          { email: deniedEmail, password: standardPassword },
+          { correlationId: randomUUID() },
+        )
+      ).sessionToken;
+      const consumed = await request(application.getHttpServer())
+        .post('/api/v1/auth/recovery/complete')
+        .send({
+          email: deniedEmail,
+          newPassword: 'Vista-Another-Password-9!',
+          recoveryCode: standardRecoveryCode,
+        })
+        .expect(400);
+      expect(consumed.body).toMatchObject({ error: { code: 'RECOVERY_CODE_INVALID' } });
+
+      const recoveryAdministratorEmail = `recovery-admin-${randomUUID()}@example.invalid`;
+      const recoveryAdministratorId = await createAccount(
+        database,
+        'recovery-administrator',
+        recoveryAdministratorEmail,
+        await application.get(PasswordService).hash(password),
+      );
+      await grantAdministrativeRole(database, recoveryAdministratorId);
+      const administrativeTarget = await accountForEmail(database, recoveryAdministratorEmail);
+      const administrativeHandoff = await request(application.getHttpServer())
+        .post(`/api/v1/platform/security/accounts/${administrativeTarget.id}/recovery-handoff`)
+        .set('authorization', `Bearer ${adminToken}`)
+        .set('idempotency-key', `recovery-administrator-${randomUUID()}`)
+        .send({
+          expectedVersion: administrativeTarget.version,
+          reason: 'Administrator identity verified in person.',
+        })
+        .expect(201);
+      const administrativeRecoveryCode = administrativeHandoff.body.recoveryCode as string;
+      const administrativePassword = 'Vista-Admin-Recovered-9!';
+      const administrativeComplete = await request(application.getHttpServer())
+        .post('/api/v1/auth/recovery/complete')
+        .send({
+          email: recoveryAdministratorEmail,
+          newPassword: administrativePassword,
+          recoveryCode: administrativeRecoveryCode,
+        })
+        .expect(200);
+      expect(administrativeComplete.body).toMatchObject({ requiresTotpEnrollment: true });
+      await request(application.getHttpServer())
+        .post('/api/v1/auth/login')
+        .send({ email: recoveryAdministratorEmail, password: administrativePassword })
+        .expect(403);
+
+      const enrollment = await request(application.getHttpServer())
+        .post('/api/v1/auth/recovery/totp/enrollment')
+        .send({ email: recoveryAdministratorEmail, recoveryCode: administrativeRecoveryCode })
+        .expect(201);
+      const enrollmentBody = readTotpEnrollment(enrollment.body as unknown);
+      await request(application.getHttpServer())
+        .post(`/api/v1/auth/recovery/totp/enrollment/${enrollmentBody.enrollmentId}/verify`)
+        .send({
+          code: totp.generateCode(enrollmentBody.manualEntryKey),
+          email: recoveryAdministratorEmail,
+          recoveryCode: administrativeRecoveryCode,
+        })
+        .expect(200);
+      const recoveredAdminLogin = await request(application.getHttpServer())
+        .post('/api/v1/auth/login')
+        .send({
+          email: recoveryAdministratorEmail,
+          password: administrativePassword,
+          totpCode: totp.generateCode(enrollmentBody.manualEntryKey),
+        })
+        .expect(200);
+      expect(recoveredAdminLogin.body.account).toMatchObject({ isAdministrative: true });
+
+      const auditData = await database.query<{ payload: string }>(
+        `SELECT concat_ws(' ', before_data::text, after_data::text, metadata::text) AS payload
+         FROM audit.events
+         WHERE action LIKE 'auth.recovery.%'`,
+      );
+      const serializedAudit = auditData.rows.map((row) => row.payload).join('\n');
+      expect(serializedAudit).not.toContain(standardRecoveryCode);
+      expect(serializedAudit).not.toContain(administrativeRecoveryCode);
+      expect(serializedAudit).not.toContain(standardPassword);
+      expect(serializedAudit).not.toContain(administrativePassword);
     });
 
     it('administers employee access, roles, sessions, and audit integrity through protected APIs', async () => {
@@ -660,17 +919,21 @@ async function createAccount(
 
 async function grantPlatformView(pool: Pool, accountId: string): Promise<void> {
   const roleId = randomUUID();
-  const permissionId = randomUUID();
   await pool.query(
     `INSERT INTO iam.roles (id, code, name)
      VALUES ($1, $2, 'Integration test platform viewer')`,
     [roleId, `test-platform-viewer-${randomUUID()}`],
   );
   await pool.query(
-    `INSERT INTO iam.permissions (id, module, action)
-     VALUES ($1, 'platform', 'view')`,
-    [permissionId],
+    `INSERT INTO iam.permissions (module, action)
+     VALUES ('platform', 'view')
+     ON CONFLICT (module, action) DO NOTHING`,
   );
+  const permission = await pool.query<{ id: string }>(
+    "SELECT id FROM iam.permissions WHERE module = 'platform' AND action = 'view'",
+  );
+  const permissionId = permission.rows[0]?.id;
+  if (!permissionId) throw new Error('Missing platform:view permission');
   await pool.query('INSERT INTO iam.role_permissions (role_id, permission_id) VALUES ($1, $2)', [
     roleId,
     permissionId,
@@ -708,6 +971,44 @@ async function grantAdministrativeRole(pool: Pool, accountId: string): Promise<v
   }
 }
 
+async function accountForEmail(
+  pool: Pool,
+  email: string,
+): Promise<{ id: string; version: number }> {
+  const result = await pool.query<{ id: string; version: number }>(
+    `SELECT account.id, account.version
+     FROM identity.user_accounts account
+     JOIN identity.employees employee ON employee.id = account.employee_id
+     WHERE employee.email = $1`,
+    [email],
+  );
+  const account = result.rows[0];
+  if (!account) throw new Error(`Missing account for ${email}`);
+  return account;
+}
+
+async function provisionInitialAdministratorInTransaction(
+  pool: Pool,
+  input: Parameters<typeof provisionInitialAdministrator>[1],
+  totp: TotpService,
+): Promise<Awaited<ReturnType<typeof provisionInitialAdministrator>>> {
+  const client = await pool.connect();
+  let transactionOpen = false;
+  try {
+    await client.query('BEGIN');
+    transactionOpen = true;
+    const result = await provisionInitialAdministrator(client, input, totp);
+    await client.query('COMMIT');
+    transactionOpen = false;
+    return result;
+  } catch (error) {
+    if (transactionOpen) await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 function assertTemporaryDatabaseName(value: string): void {
   if (!/^vista_auth_test_[a-f0-9]{32}$/u.test(value)) {
     throw new Error('Refusing to operate on an unexpected authentication test database');
@@ -724,4 +1025,29 @@ function apiErrorCode(error: unknown): string | undefined {
   }
   const code = (response as Record<string, unknown>)['code'];
   return typeof code === 'string' ? code : undefined;
+}
+
+function readTotpEnrollment(value: unknown): {
+  enrollmentId: string;
+  expiresAt: string;
+  manualEntryKey: string;
+  provisioningUri: string;
+} {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    throw new Error('Expected a TOTP enrollment response object');
+  }
+  const body = value as Record<string, unknown>;
+  const enrollmentId = body['enrollmentId'];
+  const expiresAt = body['expiresAt'];
+  const manualEntryKey = body['manualEntryKey'];
+  const provisioningUri = body['provisioningUri'];
+  if (
+    typeof enrollmentId !== 'string' ||
+    typeof expiresAt !== 'string' ||
+    typeof manualEntryKey !== 'string' ||
+    typeof provisioningUri !== 'string'
+  ) {
+    throw new Error('Expected a complete TOTP enrollment response');
+  }
+  return { enrollmentId, expiresAt, manualEntryKey, provisioningUri };
 }

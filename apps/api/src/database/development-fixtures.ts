@@ -19,6 +19,8 @@ export const developmentFixtureAccountKeys = [
   'finance',
   'dispatcher',
   'technician',
+  'pos-operator',
+  'backup-operator',
   'viewer',
 ] as const;
 
@@ -210,6 +212,16 @@ export const developmentFixtureAccounts: readonly DevelopmentFixtureAccount[] = 
     'Vista Demo Service Technician',
     'technician@vista.local',
     [grant('erp.service', 'view'), grant('erp.service', 'edit')],
+  ),
+  account('pos-operator', 'DEV-POS', 'Vista Demo POS Operator', 'pos.operator@vista.local', [
+    grant('pos', 'view'),
+  ]),
+  account(
+    'backup-operator',
+    'DEV-BACKUP',
+    'Vista Demo Backup Operator',
+    'backup.operator@vista.local',
+    [grant('backup', 'view')],
   ),
   account(
     'viewer',

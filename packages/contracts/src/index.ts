@@ -350,6 +350,81 @@ export interface ChangePasswordResponse {
   revokedOtherSessionCount: number;
 }
 
+export interface TotpEnrollmentStatus {
+  enrolled: boolean;
+  enrolledAt?: string;
+}
+
+export interface StartTotpEnrollmentRequest {
+  currentPassword: string;
+}
+
+export interface StartTotpEnrollmentResponse {
+  enrollmentId: string;
+  expiresAt: string;
+  manualEntryKey: string;
+  provisioningUri: string;
+}
+
+export interface VerifyTotpEnrollmentRequest {
+  code: string;
+}
+
+export interface VerifyTotpEnrollmentResponse extends TotpEnrollmentStatus {
+  revokedOtherSessionCount: number;
+}
+
+export interface DisableTotpRequest {
+  code: string;
+  currentPassword: string;
+}
+
+export interface DisableTotpResponse extends TotpEnrollmentStatus {
+  revokedOtherSessionCount: number;
+}
+
+export interface IssueAccountRecoveryHandoffRequest {
+  expectedVersion: number;
+  reason: string;
+}
+
+export interface AccountRecoveryHandoff {
+  email: string;
+  expiresAt: string;
+  recoveryCode: string;
+}
+
+export interface CompleteAccountRecoveryRequest {
+  email: string;
+  newPassword: string;
+  recoveryCode: string;
+}
+
+export interface CompleteAccountRecoveryResponse {
+  expiresAt?: string;
+  requiresTotpEnrollment: boolean;
+}
+
+export interface StartAccountRecoveryTotpRequest {
+  email: string;
+  recoveryCode: string;
+}
+
+export interface StartAccountRecoveryTotpResponse {
+  enrollmentId: string;
+  expiresAt: string;
+  manualEntryKey: string;
+  provisioningUri: string;
+}
+
+export interface VerifyAccountRecoveryTotpRequest {
+  code: string;
+  email: string;
+  recoveryCode: string;
+}
+
+export type VerifyAccountRecoveryTotpResponse = TotpEnrollmentStatus;
+
 export const partnerKinds = ['legal_entity', 'individual'] as const;
 export type PartnerKind = (typeof partnerKinds)[number];
 

@@ -49,11 +49,16 @@ describe('HTTP rate-limit coverage', () => {
       })),
     );
 
-    expect(assignments).toHaveLength(112);
+    expect(assignments).toHaveLength(120);
     expect(assignments.filter(({ policy }) => policy === undefined)).toEqual([]);
     expect(assignments).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ controller: 'AuthController', name: 'login', policy: 'public' }),
+        expect.objectContaining({
+          controller: 'AuthController',
+          name: 'completeRecovery',
+          policy: 'sensitive',
+        }),
         expect.objectContaining({
           controller: 'AuthController',
           name: 'logout',
@@ -62,6 +67,11 @@ describe('HTTP rate-limit coverage', () => {
         expect.objectContaining({
           controller: 'AuthController',
           name: 'changePassword',
+          policy: 'sensitive',
+        }),
+        expect.objectContaining({
+          controller: 'AuthController',
+          name: 'startTotpEnrollment',
           policy: 'sensitive',
         }),
         expect.objectContaining({
@@ -108,7 +118,14 @@ function expectedPolicy(assignment: {
   if (assignment.controller === 'AuthController' && assignment.name === 'login') return 'public';
   if (
     assignment.controller === 'AuthController' &&
-    (assignment.name === 'logout' || assignment.name === 'changePassword')
+    (assignment.name === 'logout' ||
+      assignment.name === 'completeRecovery' ||
+      assignment.name === 'startRecoveryTotpEnrollment' ||
+      assignment.name === 'verifyRecoveryTotpEnrollment' ||
+      assignment.name === 'changePassword' ||
+      assignment.name === 'startTotpEnrollment' ||
+      assignment.name === 'verifyTotpEnrollment' ||
+      assignment.name === 'disableTotp')
   ) {
     return 'sensitive';
   }

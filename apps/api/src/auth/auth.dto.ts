@@ -3,11 +3,24 @@ import type {
   ApiPermission,
   AuthenticationAccountSummary,
   AuthenticationContextResponse,
+  CompleteAccountRecoveryRequest,
+  CompleteAccountRecoveryResponse,
   ChangePasswordRequest,
   ChangePasswordResponse,
+  DisableTotpRequest,
+  DisableTotpResponse,
   LoginRequest,
   LoginResponse,
   PasswordPolicyResponse,
+  StartTotpEnrollmentRequest,
+  StartTotpEnrollmentResponse,
+  StartAccountRecoveryTotpRequest,
+  StartAccountRecoveryTotpResponse,
+  TotpEnrollmentStatus,
+  VerifyAccountRecoveryTotpRequest,
+  VerifyAccountRecoveryTotpResponse,
+  VerifyTotpEnrollmentRequest,
+  VerifyTotpEnrollmentResponse,
 } from '@vista/contracts';
 import { IsEmail, IsOptional, IsString, Matches, MaxLength, MinLength } from 'class-validator';
 
@@ -156,3 +169,139 @@ export class PasswordPolicyResponseDto implements PasswordPolicyResponse {
   @ApiProperty({ type: Boolean })
   requireUppercase!: boolean;
 }
+
+export class TotpEnrollmentStatusDto implements TotpEnrollmentStatus {
+  @ApiProperty({ type: Boolean })
+  enrolled!: boolean;
+
+  @ApiPropertyOptional({ format: 'date-time', type: String })
+  enrolledAt?: string;
+}
+
+export class StartTotpEnrollmentRequestDto implements StartTotpEnrollmentRequest {
+  @ApiProperty({ format: 'password', maxLength: 128, type: String, writeOnly: true })
+  @IsString()
+  @MinLength(1)
+  @MaxLength(128)
+  currentPassword!: string;
+}
+
+export class StartTotpEnrollmentResponseDto implements StartTotpEnrollmentResponse {
+  @ApiProperty({ format: 'uuid', type: String })
+  enrollmentId!: string;
+
+  @ApiProperty({ format: 'date-time', type: String })
+  expiresAt!: string;
+
+  @ApiProperty({ description: 'One-time manual key for the employee authenticator.', type: String })
+  manualEntryKey!: string;
+
+  @ApiProperty({ description: 'One-time TOTP provisioning URI.', type: String })
+  provisioningUri!: string;
+}
+
+export class VerifyTotpEnrollmentRequestDto implements VerifyTotpEnrollmentRequest {
+  @ApiProperty({ example: '123456', pattern: '^\\d{6}$', type: String, writeOnly: true })
+  @IsString()
+  @Matches(/^\d{6}$/u)
+  code!: string;
+}
+
+export class VerifyTotpEnrollmentResponseDto
+  extends TotpEnrollmentStatusDto
+  implements VerifyTotpEnrollmentResponse
+{
+  @ApiProperty({ minimum: 0, type: Number })
+  revokedOtherSessionCount!: number;
+}
+
+export class DisableTotpRequestDto implements DisableTotpRequest {
+  @ApiProperty({ example: '123456', pattern: '^\\d{6}$', type: String, writeOnly: true })
+  @IsString()
+  @Matches(/^\d{6}$/u)
+  code!: string;
+
+  @ApiProperty({ format: 'password', maxLength: 128, type: String, writeOnly: true })
+  @IsString()
+  @MinLength(1)
+  @MaxLength(128)
+  currentPassword!: string;
+}
+
+export class DisableTotpResponseDto extends TotpEnrollmentStatusDto implements DisableTotpResponse {
+  @ApiProperty({ minimum: 0, type: Number })
+  revokedOtherSessionCount!: number;
+}
+
+export class CompleteAccountRecoveryRequestDto implements CompleteAccountRecoveryRequest {
+  @ApiProperty({ format: 'email', maxLength: 320, type: String })
+  @IsEmail()
+  @MaxLength(320)
+  email!: string;
+
+  @ApiProperty({ format: 'password', maxLength: 128, type: String, writeOnly: true })
+  @IsString()
+  @MinLength(1)
+  @MaxLength(128)
+  newPassword!: string;
+
+  @ApiProperty({ format: 'password', maxLength: 128, minLength: 43, type: String, writeOnly: true })
+  @IsString()
+  @Matches(/^[A-Za-z0-9_-]{43}$/u)
+  recoveryCode!: string;
+}
+
+export class CompleteAccountRecoveryResponseDto implements CompleteAccountRecoveryResponse {
+  @ApiPropertyOptional({ format: 'date-time', type: String })
+  expiresAt?: string;
+
+  @ApiProperty({ type: Boolean })
+  requiresTotpEnrollment!: boolean;
+}
+
+export class StartAccountRecoveryTotpRequestDto implements StartAccountRecoveryTotpRequest {
+  @ApiProperty({ format: 'email', maxLength: 320, type: String })
+  @IsEmail()
+  @MaxLength(320)
+  email!: string;
+
+  @ApiProperty({ format: 'password', maxLength: 128, minLength: 43, type: String, writeOnly: true })
+  @IsString()
+  @Matches(/^[A-Za-z0-9_-]{43}$/u)
+  recoveryCode!: string;
+}
+
+export class StartAccountRecoveryTotpResponseDto implements StartAccountRecoveryTotpResponse {
+  @ApiProperty({ format: 'uuid', type: String })
+  enrollmentId!: string;
+
+  @ApiProperty({ format: 'date-time', type: String })
+  expiresAt!: string;
+
+  @ApiProperty({ description: 'One-time manual key for the employee authenticator.', type: String })
+  manualEntryKey!: string;
+
+  @ApiProperty({ description: 'One-time TOTP provisioning URI.', type: String })
+  provisioningUri!: string;
+}
+
+export class VerifyAccountRecoveryTotpRequestDto implements VerifyAccountRecoveryTotpRequest {
+  @ApiProperty({ example: '123456', pattern: '^\\d{6}$', type: String, writeOnly: true })
+  @IsString()
+  @Matches(/^\d{6}$/u)
+  code!: string;
+
+  @ApiProperty({ format: 'email', maxLength: 320, type: String })
+  @IsEmail()
+  @MaxLength(320)
+  email!: string;
+
+  @ApiProperty({ format: 'password', maxLength: 128, minLength: 43, type: String, writeOnly: true })
+  @IsString()
+  @Matches(/^[A-Za-z0-9_-]{43}$/u)
+  recoveryCode!: string;
+}
+
+export class VerifyAccountRecoveryTotpResponseDto
+  extends TotpEnrollmentStatusDto
+  implements VerifyAccountRecoveryTotpResponse {}

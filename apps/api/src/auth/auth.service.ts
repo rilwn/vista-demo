@@ -3,7 +3,14 @@ import type { AppEnvironment } from '@vista/config';
 import type {
   ChangePasswordRequest,
   ChangePasswordResponse,
+  DisableTotpRequest,
+  DisableTotpResponse,
   PasswordPolicyResponse,
+  StartTotpEnrollmentRequest,
+  StartTotpEnrollmentResponse,
+  TotpEnrollmentStatus,
+  VerifyTotpEnrollmentRequest,
+  VerifyTotpEnrollmentResponse,
 } from '@vista/contracts';
 import type { PoolClient } from 'pg';
 
@@ -52,6 +59,18 @@ interface PasswordAccountRow {
   status: 'active' | 'disabled' | 'locked';
 }
 
+interface TotpEnrollmentAccountRow extends PasswordAccountRow {
+  email: string;
+}
+
+interface TotpFactorRow {
+  enabled: boolean;
+  encrypted_secret: Buffer;
+  expires_at: Date | null;
+  id: string;
+  verified_at: Date | null;
+}
+
 @Injectable()
 export class AuthService {
   constructor(
@@ -66,6 +85,368 @@ export class AuthService {
 
   passwordPolicy(): PasswordPolicyResponse {
     return this.passwords.policySummary();
+  }
+
+  async totpStatus(actor: AuthenticationContext): Promise<TotpEnrollmentStatus> {
+    const result = await this.database.getPool().query<{ enrolled_at: Date | null }>(
+      `SELECT max(verified_at) AS enrolled_at
+       FROM identity.authentication_factors
+       WHERE account_id = $1
+         AND factor_type = 'totp'
+         AND enabled = true
+         AND verified_at IS NOT NULL`,
+      [actor.accountId],
+    );
+    const enrolledAt = result.rows[0]?.enrolled_at;
+    return enrolledAt
+      ? { enrolled: true, enrolledAt: enrolledAt.toISOString() }
+      : { enrolled: false };
+  }
+
+  async startTotpEnrollment(
+    input: StartTotpEnrollmentRequest,
+    actor: AuthenticationContext,
+    metadata: RequestSecurityMetadata,
+  ): Promise<StartTotpEnrollmentResponse> {
+    const client = await this.database.getPool().connect();
+    let enrollment: StartTotpEnrollmentResponse | undefined;
+    let rejectionReason: string | undefined;
+    let transactionOpen = false;
+    try {
+      await client.query('BEGIN');
+      transactionOpen = true;
+      const account = await this.lockTotpEnrollmentAccount(client, actor.accountId);
+      if (!(await this.passwords.verify(input.currentPassword, account.password_hash))) {
+        rejectionReason = 'current_credential_invalid';
+        throw new ApiErrorException(
+          'CURRENT_PASSWORD_INVALID',
+          'The current password is incorrect',
+          HttpStatus.BAD_REQUEST,
+          [{ field: 'currentPassword', message: 'Enter your current password' }],
+        );
+      }
+
+      const active = await client.query<{ id: string }>(
+        `SELECT id
+         FROM identity.authentication_factors
+         WHERE account_id = $1
+           AND factor_type = 'totp'
+           AND enabled = true
+           AND verified_at IS NOT NULL
+         FOR UPDATE`,
+        [actor.accountId],
+      );
+      if (active.rowCount) {
+        throw new ApiErrorException(
+          'TOTP_ALREADY_ENROLLED',
+          'An authenticator is already enrolled. Verify it before replacing or removing it.',
+          HttpStatus.CONFLICT,
+        );
+      }
+
+      await client.query(
+        `DELETE FROM identity.authentication_factors
+         WHERE account_id = $1
+           AND factor_type = 'totp'
+           AND enabled = false
+           AND verified_at IS NULL
+           AND (expires_at IS NULL OR expires_at <= now())`,
+        [actor.accountId],
+      );
+      const pending = await client.query<TotpFactorRow>(
+        `SELECT id, encrypted_secret, enabled, expires_at, verified_at
+         FROM identity.authentication_factors
+         WHERE account_id = $1
+           AND factor_type = 'totp'
+           AND enabled = false
+           AND verified_at IS NULL
+           AND expires_at > now()
+         ORDER BY created_at DESC
+         LIMIT 1
+         FOR UPDATE`,
+        [actor.accountId],
+      );
+
+      if (pending.rows[0]) {
+        enrollment = this.totpEnrollmentResponse(
+          pending.rows[0].id,
+          account.email,
+          this.totp.decryptSecret(pending.rows[0].encrypted_secret),
+          pending.rows[0].expires_at!,
+        );
+      } else {
+        await client.query(
+          `DELETE FROM identity.authentication_factors
+           WHERE account_id = $1
+             AND factor_type = 'totp'
+             AND enabled = false
+             AND verified_at IS NULL`,
+          [actor.accountId],
+        );
+        const secret = this.totp.generateSecret();
+        const expiresAt = new Date(
+          Date.now() + this.environment.TOTP_ENROLLMENT_TTL_SECONDS * 1_000,
+        );
+        const inserted = await client.query<{ id: string }>(
+          `INSERT INTO identity.authentication_factors (
+             account_id, factor_type, encrypted_secret, enabled, expires_at
+           ) VALUES ($1, 'totp', $2, false, $3)
+           RETURNING id`,
+          [actor.accountId, this.totp.encryptSecret(secret), expiresAt],
+        );
+        const enrollmentId = inserted.rows[0]?.id;
+        if (!enrollmentId) throw new Error('TOTP enrollment factor was not created');
+        enrollment = this.totpEnrollmentResponse(enrollmentId, account.email, secret, expiresAt);
+        await this.audit.append(
+          {
+            action: 'auth.two_factor.enrollment_started',
+            actorAccountId: actor.accountId,
+            after: { enrollmentId, expiresAt: expiresAt.toISOString(), factorType: 'totp' },
+            correlationId: metadata.correlationId,
+            targetId: actor.accountId,
+            targetType: 'user_account',
+            ...(metadata.sourceIp ? { sourceIp: metadata.sourceIp } : {}),
+            ...(metadata.userAgent ? { userAgent: metadata.userAgent } : {}),
+          },
+          client,
+        );
+      }
+      await client.query('COMMIT');
+      transactionOpen = false;
+    } catch (error) {
+      if (transactionOpen) await client.query('ROLLBACK');
+      if (rejectionReason) await this.recordTotpRejection(actor, metadata, rejectionReason);
+      throw error;
+    } finally {
+      client.release();
+    }
+    if (!enrollment) throw new Error('TOTP enrollment response was not created');
+    return enrollment;
+  }
+
+  async verifyTotpEnrollment(
+    enrollmentId: string,
+    input: VerifyTotpEnrollmentRequest,
+    actor: AuthenticationContext,
+    metadata: RequestSecurityMetadata,
+  ): Promise<VerifyTotpEnrollmentResponse> {
+    const client = await this.database.getPool().connect();
+    let revokedDigests: string[] = [];
+    let response: VerifyTotpEnrollmentResponse | undefined;
+    let rejectionReason: string | undefined;
+    let transactionOpen = false;
+    try {
+      await client.query('BEGIN');
+      transactionOpen = true;
+      await this.lockTotpEnrollmentAccount(client, actor.accountId);
+      const factor = await this.findTotpFactorForUpdate(client, actor.accountId, enrollmentId);
+      if (!factor) {
+        throw new ApiErrorException(
+          'TOTP_ENROLLMENT_NOT_FOUND',
+          'This authenticator setup is no longer available. Start setup again.',
+          HttpStatus.NOT_FOUND,
+        );
+      }
+      if (factor.enabled && factor.verified_at) {
+        await client.query('COMMIT');
+        transactionOpen = false;
+        return {
+          enrolled: true,
+          enrolledAt: factor.verified_at.toISOString(),
+          revokedOtherSessionCount: 0,
+        };
+      }
+      if (!factor.expires_at || factor.expires_at.getTime() <= Date.now()) {
+        await client.query('DELETE FROM identity.authentication_factors WHERE id = $1', [
+          factor.id,
+        ]);
+        rejectionReason = 'enrollment_expired';
+        throw new ApiErrorException(
+          'TOTP_ENROLLMENT_EXPIRED',
+          'This authenticator setup expired. Start setup again.',
+          HttpStatus.CONFLICT,
+        );
+      }
+      if (!this.verifyTotp(input.code, factor.encrypted_secret)) {
+        rejectionReason = 'code_invalid';
+        throw new ApiErrorException(
+          'TOTP_CODE_INVALID',
+          'The authenticator code is invalid or has expired.',
+          HttpStatus.BAD_REQUEST,
+          [{ field: 'code', message: 'Enter the current six-digit authenticator code' }],
+        );
+      }
+
+      const verifiedAt = new Date();
+      await client.query(
+        `UPDATE identity.authentication_factors
+         SET enabled = true, verified_at = $2, expires_at = NULL
+         WHERE id = $1`,
+        [factor.id, verifiedAt],
+      );
+      await client.query(
+        `UPDATE identity.user_accounts
+         SET two_factor_enrolled_at = COALESCE(two_factor_enrolled_at, $2), updated_at = $2
+         WHERE id = $1`,
+        [actor.accountId, verifiedAt],
+      );
+      const revoked = await client.query<{ redis_key_digest: string }>(
+        `UPDATE identity.session_records
+         SET revoked_at = now()
+         WHERE account_id = $1
+           AND id <> $2
+           AND revoked_at IS NULL
+         RETURNING redis_key_digest`,
+        [actor.accountId, actor.sessionId],
+      );
+      revokedDigests = revoked.rows.map((row) => row.redis_key_digest);
+      await this.audit.append(
+        {
+          action: 'auth.two_factor.enrolled',
+          actorAccountId: actor.accountId,
+          after: {
+            factorType: 'totp',
+            revokedOtherSessionCount: revokedDigests.length,
+            verifiedAt: verifiedAt.toISOString(),
+          },
+          correlationId: metadata.correlationId,
+          targetId: actor.accountId,
+          targetType: 'user_account',
+          ...(metadata.sourceIp ? { sourceIp: metadata.sourceIp } : {}),
+          ...(metadata.userAgent ? { userAgent: metadata.userAgent } : {}),
+        },
+        client,
+      );
+      await client.query('COMMIT');
+      transactionOpen = false;
+      response = {
+        enrolled: true,
+        enrolledAt: verifiedAt.toISOString(),
+        revokedOtherSessionCount: revokedDigests.length,
+      };
+    } catch (error) {
+      if (transactionOpen) await client.query('ROLLBACK');
+      if (rejectionReason) await this.recordTotpRejection(actor, metadata, rejectionReason);
+      throw error;
+    } finally {
+      client.release();
+    }
+    await this.removeRevokedSessionTokens(revokedDigests, actor.accountId);
+    if (!response) throw new Error('TOTP enrollment verification response was not created');
+    return response;
+  }
+
+  async disableTotp(
+    input: DisableTotpRequest,
+    actor: AuthenticationContext,
+    metadata: RequestSecurityMetadata,
+  ): Promise<DisableTotpResponse> {
+    const client = await this.database.getPool().connect();
+    let revokedDigests: string[] = [];
+    let response: DisableTotpResponse | undefined;
+    let rejectionReason: string | undefined;
+    let transactionOpen = false;
+    try {
+      await client.query('BEGIN');
+      transactionOpen = true;
+      const account = await this.lockTotpEnrollmentAccount(client, actor.accountId);
+      if (!(await this.passwords.verify(input.currentPassword, account.password_hash))) {
+        rejectionReason = 'current_credential_invalid';
+        throw new ApiErrorException(
+          'CURRENT_PASSWORD_INVALID',
+          'The current password is incorrect',
+          HttpStatus.BAD_REQUEST,
+          [{ field: 'currentPassword', message: 'Enter your current password' }],
+        );
+      }
+      const factors = await client.query<TotpFactorRow>(
+        `SELECT id, encrypted_secret, enabled, expires_at, verified_at
+         FROM identity.authentication_factors
+         WHERE account_id = $1
+           AND factor_type = 'totp'
+           AND enabled = true
+           AND verified_at IS NOT NULL
+         ORDER BY verified_at
+         FOR UPDATE`,
+        [actor.accountId],
+      );
+      if (!factors.rowCount) {
+        await client.query('COMMIT');
+        transactionOpen = false;
+        return { enrolled: false, revokedOtherSessionCount: 0 };
+      }
+      const factor = factors.rows.find((candidate) =>
+        this.verifyTotp(input.code, candidate.encrypted_secret),
+      );
+      if (!factor) {
+        rejectionReason = 'code_invalid';
+        throw new ApiErrorException(
+          'TOTP_CODE_INVALID',
+          'The authenticator code is invalid or has expired.',
+          HttpStatus.BAD_REQUEST,
+          [{ field: 'code', message: 'Enter the current six-digit authenticator code' }],
+        );
+      }
+      if (actor.isAdministrative && factors.rowCount === 1) {
+        throw new ApiErrorException(
+          'TOTP_REQUIRED_FOR_ADMINISTRATOR',
+          'Administrative access must retain an enrolled authenticator.',
+          HttpStatus.CONFLICT,
+        );
+      }
+
+      await client.query('DELETE FROM identity.authentication_factors WHERE id = $1', [factor.id]);
+      const remaining = factors.rows.filter((candidate) => candidate.id !== factor.id);
+      if (!remaining.length) {
+        await client.query(
+          `UPDATE identity.user_accounts
+           SET two_factor_enrolled_at = NULL, updated_at = now()
+           WHERE id = $1`,
+          [actor.accountId],
+        );
+      }
+      const revoked = await client.query<{ redis_key_digest: string }>(
+        `UPDATE identity.session_records
+         SET revoked_at = now()
+         WHERE account_id = $1
+           AND id <> $2
+           AND revoked_at IS NULL
+         RETURNING redis_key_digest`,
+        [actor.accountId, actor.sessionId],
+      );
+      revokedDigests = revoked.rows.map((row) => row.redis_key_digest);
+      await this.audit.append(
+        {
+          action: 'auth.two_factor.disabled',
+          actorAccountId: actor.accountId,
+          after: { factorType: 'totp', revokedOtherSessionCount: revokedDigests.length },
+          correlationId: metadata.correlationId,
+          targetId: actor.accountId,
+          targetType: 'user_account',
+          ...(metadata.sourceIp ? { sourceIp: metadata.sourceIp } : {}),
+          ...(metadata.userAgent ? { userAgent: metadata.userAgent } : {}),
+        },
+        client,
+      );
+      await client.query('COMMIT');
+      transactionOpen = false;
+      response = {
+        enrolled: remaining.length > 0,
+        ...(remaining[0]?.verified_at
+          ? { enrolledAt: remaining[0].verified_at.toISOString() }
+          : {}),
+        revokedOtherSessionCount: revokedDigests.length,
+      };
+    } catch (error) {
+      if (transactionOpen) await client.query('ROLLBACK');
+      if (rejectionReason) await this.recordTotpRejection(actor, metadata, rejectionReason);
+      throw error;
+    } finally {
+      client.release();
+    }
+    await this.removeRevokedSessionTokens(revokedDigests, actor.accountId);
+    if (!response) throw new Error('TOTP disable response was not created');
+    return response;
   }
 
   async changePassword(
@@ -154,6 +535,14 @@ export class AuthService {
              updated_at = $3
          WHERE id = $1`,
         [actor.accountId, passwordHash, changedAt, expiresAt ?? null],
+      );
+      await client.query(
+        `DELETE FROM identity.authentication_factors
+         WHERE account_id = $1
+           AND factor_type = 'totp'
+           AND enabled = false
+           AND verified_at IS NULL`,
+        [actor.accountId],
       );
       const revoked = await client.query<{ redis_key_digest: string }>(
         `UPDATE identity.session_records
@@ -313,6 +702,91 @@ export class AuthService {
       [email],
     );
     return result.rows[0];
+  }
+
+  private async lockTotpEnrollmentAccount(
+    client: PoolClient,
+    accountId: string,
+  ): Promise<TotpEnrollmentAccountRow> {
+    const result = await client.query<TotpEnrollmentAccountRow>(
+      `SELECT account.password_hash, account.status, employee.email
+       FROM identity.user_accounts account
+       JOIN identity.employees employee ON employee.id = account.employee_id
+       WHERE account.id = $1
+         AND employee.active = true
+       FOR UPDATE`,
+      [accountId],
+    );
+    const account = result.rows[0];
+    if (!account || account.status !== 'active') {
+      throw new ApiErrorException(
+        'AUTHENTICATION_REQUIRED',
+        'Authentication is required',
+        HttpStatus.UNAUTHORIZED,
+      );
+    }
+    return account;
+  }
+
+  private async findTotpFactorForUpdate(
+    client: PoolClient,
+    accountId: string,
+    factorId: string,
+  ): Promise<TotpFactorRow | undefined> {
+    const result = await client.query<TotpFactorRow>(
+      `SELECT id, encrypted_secret, enabled, expires_at, verified_at
+       FROM identity.authentication_factors
+       WHERE id = $1
+         AND account_id = $2
+         AND factor_type = 'totp'
+       FOR UPDATE`,
+      [factorId, accountId],
+    );
+    return result.rows[0];
+  }
+
+  private totpEnrollmentResponse(
+    enrollmentId: string,
+    email: string,
+    secret: string,
+    expiresAt: Date,
+  ): StartTotpEnrollmentResponse {
+    return {
+      enrollmentId,
+      expiresAt: expiresAt.toISOString(),
+      manualEntryKey: secret,
+      provisioningUri: this.totp.createEnrollmentUri(email, secret),
+    };
+  }
+
+  private async recordTotpRejection(
+    actor: AuthenticationContext,
+    metadata: RequestSecurityMetadata,
+    reason: string,
+  ): Promise<void> {
+    await this.audit.append({
+      action: 'auth.two_factor.enrollment_rejected',
+      actorAccountId: actor.accountId,
+      correlationId: metadata.correlationId,
+      metadata: { reason },
+      targetId: actor.accountId,
+      targetType: 'user_account',
+      ...(metadata.sourceIp ? { sourceIp: metadata.sourceIp } : {}),
+      ...(metadata.userAgent ? { userAgent: metadata.userAgent } : {}),
+    });
+  }
+
+  private async removeRevokedSessionTokens(digests: string[], accountId: string): Promise<void> {
+    if (!digests.length) return;
+    try {
+      await this.sessions.removeRevokedSessionTokens(digests);
+    } catch (error) {
+      this.logger.event('warn', 'auth.two_factor.revoked_token_cleanup_failed', {
+        accountId,
+        count: digests.length,
+        errorType: error instanceof Error ? error.constructor.name : 'UnknownError',
+      });
+    }
   }
 
   private async recordFailedLogin(

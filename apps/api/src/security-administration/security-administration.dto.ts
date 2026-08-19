@@ -8,6 +8,8 @@ import type {
   ChangeAccountStatusRequest,
   CreateSecurityAccountRequest,
   CreateSecurityRoleRequest,
+  AccountRecoveryHandoff,
+  IssueAccountRecoveryHandoffRequest,
   ReplaceAccountRolesRequest,
   RolePermission,
   SecurityAccount,
@@ -148,6 +150,33 @@ export class ChangeAccountStatusDto implements ChangeAccountStatusRequest {
   @IsInt()
   @Min(1)
   expectedVersion!: number;
+}
+
+export class IssueAccountRecoveryHandoffDto implements IssueAccountRecoveryHandoffRequest {
+  @ApiProperty({ minimum: 1, type: Number })
+  @IsInt()
+  @Min(1)
+  expectedVersion!: number;
+
+  @ApiProperty({ maxLength: 1000, minLength: 3, type: String })
+  @IsString()
+  @MinLength(3)
+  @MaxLength(1000)
+  reason!: string;
+}
+
+export class AccountRecoveryHandoffDto implements AccountRecoveryHandoff {
+  @ApiProperty({ format: 'email', type: String })
+  email!: string;
+
+  @ApiProperty({ format: 'date-time', type: String })
+  expiresAt!: string;
+
+  @ApiProperty({
+    description: 'One-time recovery code. It is returned only when issued.',
+    type: String,
+  })
+  recoveryCode!: string;
 }
 
 export class SecuritySessionListQueryDto {

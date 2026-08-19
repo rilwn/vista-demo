@@ -55,7 +55,7 @@ async function run(): Promise<void> {
     await client.query('COMMIT');
     transactionOpen = false;
     process.stdout.write(
-      `Development fixtures ready for ${result.accountEmails.length} ERP/CRM accounts.\n`,
+      `Development fixtures ready for ${result.accountEmails.length} local test accounts.\n`,
     );
   } catch (error) {
     if (client && transactionOpen) await client.query('ROLLBACK');

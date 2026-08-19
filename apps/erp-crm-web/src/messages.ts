@@ -16,6 +16,7 @@ export const messages = {
     errorTitle: 'Sign-in unsuccessful',
     hidePassword: 'Hide',
     passwordLabel: 'Password',
+    recoveryLink: 'Use a recovery code',
     securityNote: 'Secure sign-in · Access based on your role',
     showPassword: 'Show',
     signIn: 'Sign in',
@@ -40,7 +41,7 @@ export const messages = {
       'This account is temporarily locked after repeated attempts. Wait before trying again or contact an administrator.',
     AUTHENTICATION_FAILED: 'The email, password, or authentication code is incorrect.',
     PASSWORD_EXPIRED:
-      'Your password has expired. Contact an administrator until password recovery is available.',
+      'Your password has expired. Ask a Vista Service administrator for a recovery code.',
     RATE_LIMITED: 'Too many sign-in attempts. Wait a moment before trying again.',
     TWO_FACTOR_ENROLLMENT_REQUIRED:
       'This administrative account must enroll a second factor before it can sign in.',
@@ -186,6 +187,31 @@ export const messages = {
   access: {
     accessLevel: 'Access level',
     action: 'Action',
+    authenticatorCode: 'Authentication code',
+    authenticatorCodeHint: 'Enter the current six-digit code from the app.',
+    authenticatorCodeInvalid: 'Enter the current six-digit code from your authenticator app.',
+    authenticatorDisableError:
+      'The authenticator could not be removed. Check the details and try again.',
+    authenticatorDisableSuccess: 'Authenticator removed. Other active sessions were signed out.',
+    authenticatorDisableTitle: 'Remove authenticator',
+    authenticatorEnrolled: 'An authenticator app protects your next sign-in.',
+    authenticatorEnrollmentError: 'Authenticator setup could not be completed. Try again.',
+    authenticatorEnrollmentSuccess:
+      'Authenticator enrolled. It will be required at your next sign-in.',
+    authenticatorNotEnrolled: 'Add an authenticator app to protect future sign-ins.',
+    authenticatorSecurityDescription:
+      'Use a time-based code from an authenticator app in addition to your password.',
+    authenticatorSecurityTitle: 'Authenticator app',
+    authenticatorSetupCode: 'Setup key',
+    authenticatorSetupError:
+      'Authenticator setup could not be started. Check your password and try again.',
+    authenticatorSetupInstructions:
+      'In your authenticator app, add a time-based code and enter this setup key. Then enter its current code below.',
+    authenticatorSetupLink: 'Setup link',
+    authenticatorSetupLinkHint:
+      'Use this link only if your authenticator app supports setup links.',
+    authenticatorSetupTitle: 'Set up authenticator',
+    cancelAuthenticator: 'Cancel',
     cancelPassword: 'Cancel',
     changePassword: 'Change password',
     changingPassword: 'Updating password',
@@ -193,6 +219,8 @@ export const messages = {
     confirmPassword: 'Confirm new password',
     currentPassword: 'Current password',
     currentPasswordInvalid: 'Enter the correct current password.',
+    disableAuthenticator: 'Remove authenticator',
+    disablingAuthenticator: 'Removing authenticator',
     email: 'Email',
     employee: 'Employee',
     empty: 'No explicit permissions are assigned to this account.',
@@ -222,10 +250,16 @@ export const messages = {
     passwordSubtitle:
       'Enter your current password, then choose a new password that meets your company policy.',
     passwordTitle: 'Change your password',
+    removeAuthenticatorWarning:
+      'Removing this factor makes future sign-ins rely on your password only. Confirm with your password and current code.',
     retryPolicy: 'Try again',
     savePassword: 'Update password',
+    setUpAuthenticator: 'Set up authenticator',
+    settingUpAuthenticator: 'Preparing setup',
     subtitle: 'Review the areas and actions assigned to your account.',
     title: 'My access',
+    verifyAuthenticator: 'Verify authenticator',
+    verifyingAuthenticator: 'Verifying authenticator',
     wildcard: 'All',
   },
   states: {

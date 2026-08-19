@@ -46,9 +46,11 @@ import {
   AuditEventPageDto,
   AuditIntegrityResultDto,
   ChangeAccountStatusDto,
+  AccountRecoveryHandoffDto,
   CreateSecurityAccountDto,
   CreateSecurityRoleDto,
   ReplaceAccountRolesDto,
+  IssueAccountRecoveryHandoffDto,
   SecurityAccountDto,
   SecurityAccountListQueryDto,
   SecurityAccountPageDto,
@@ -138,6 +140,27 @@ export class SecurityAdministrationController {
       id,
       'active',
       input.expectedVersion,
+      key,
+      request.authentication,
+      requestMetadata(request),
+    );
+  }
+
+  @Post('accounts/:id/recovery-handoff')
+  @RequirePermissions({ action: 'approve', module: 'platform' })
+  @ApiBody({ type: IssueAccountRecoveryHandoffDto })
+  @ApiHeader({ name: 'Idempotency-Key', required: true })
+  @ApiParam({ format: 'uuid', name: 'id' })
+  @ApiCreatedResponse({ type: AccountRecoveryHandoffDto })
+  issueAccountRecoveryHandoff(
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Body() input: IssueAccountRecoveryHandoffDto,
+    @Headers('idempotency-key') key: string | undefined,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<AccountRecoveryHandoffDto> {
+    return this.security.issueAccountRecoveryHandoff(
+      id,
+      input,
       key,
       request.authentication,
       requestMetadata(request),
