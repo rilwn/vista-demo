@@ -1,5 +1,9 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import type { ProcurementSupplierRecord, SalesWorkflow } from '@vista/contracts';
+import type {
+  FinanceBankStatement,
+  ProcurementSupplierRecord,
+  SalesWorkflow,
+} from '@vista/contracts';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { App } from './App';
@@ -587,6 +591,93 @@ describe('ERP and CRM authenticated workspace', () => {
     expect(new Headers((listRequest?.[1] as RequestInit).headers).get('Authorization')).toBe(
       `Bearer ${loginResponse.sessionToken}`,
     );
+  });
+
+  it('uploads an immutable partner document from the nested partner view', async () => {
+    const contextWithEdit = {
+      ...authenticationContext,
+      permissions: [...authenticationContext.permissions, { action: 'edit', module: 'crm' }],
+    };
+    const managedFile = {
+      byteSize: 31,
+      checksumSha256: '1'.repeat(64),
+      createdAt: '2026-08-19T10:00:00.000Z',
+      id: 'de1c9adf-cf80-427d-9865-fbb9899e4d4d',
+      inspectionMethod: 'structural-signature',
+      isCurrent: true,
+      issuerAccountId: contextWithEdit.accountId,
+      mediaType: 'application/pdf',
+      originalName: 'service-agreement.pdf',
+      parentId: partner.id,
+      parentType: 'partner',
+      scannedAt: '2026-08-19T10:00:00.000Z',
+      status: 'available',
+      version: 1,
+      versionCount: 1,
+      versionGroupId: '85e019a1-16dc-4639-aeb4-b64cf58e90a0',
+    };
+    let fileListCalls = 0;
+    const fetchMock = vi.fn((input: string, options?: RequestInit) => {
+      if (input.endsWith('/auth/me')) return Promise.resolve(jsonResponse(contextWithEdit));
+      if (input.includes('/master-data/partners?'))
+        return Promise.resolve(jsonResponse(partnerPage));
+      if (input.endsWith(`/partners/${partner.id}/profile`))
+        return Promise.resolve(jsonResponse(partnerProfile));
+      if (input.endsWith(`/partners/${partner.id}/locations`))
+        return Promise.resolve(jsonResponse([]));
+      if (input.endsWith('/files') && options?.method === 'POST')
+        return Promise.resolve(jsonResponse(managedFile, 201));
+      if (input.includes('/files?')) {
+        fileListCalls += 1;
+        return Promise.resolve(
+          jsonResponse({
+            items: fileListCalls === 1 ? [] : [managedFile],
+            page: 1,
+            pageSize: 100,
+            total: fileListCalls === 1 ? 0 : 1,
+            totalPages: fileListCalls === 1 ? 0 : 1,
+          }),
+        );
+      }
+      return Promise.resolve(jsonResponse({}));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    storeAuthenticatedSession(contextWithEdit);
+
+    renderApplication(['/partners']);
+    fireEvent.click(await screen.findByRole('button', { name: /Vista Retail Partner Ltd\./u }));
+    fireEvent.click(screen.getByRole('button', { name: messages.partners.documents.open }));
+    expect(
+      await screen.findByRole('dialog', { name: messages.partners.documents.title }),
+    ).toBeTruthy();
+    expect(await screen.findByText(messages.partners.documents.emptyTitle)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: messages.partners.documents.add }));
+    const selected = new File(['%PDF-1.4\nVista service agreement'], managedFile.originalName, {
+      type: managedFile.mediaType,
+    });
+    fireEvent.change(screen.getByLabelText(messages.partners.documents.chooseFile), {
+      target: { files: [selected] },
+    });
+    fireEvent.click(screen.getByRole('button', { name: messages.partners.documents.upload }));
+
+    expect(await screen.findByText(managedFile.originalName)).toBeTruthy();
+    expect(screen.getByText(messages.partners.documents.version(1), { exact: false })).toBeTruthy();
+    const uploadRequest = fetchMock.mock.calls.find(
+      ([url, options]) => url.endsWith('/files') && options?.method === 'POST',
+    );
+    const uploadOptions = uploadRequest?.[1] as RequestInit;
+    expect(new Headers(uploadOptions.headers).get('Authorization')).toBe(
+      `Bearer ${loginResponse.sessionToken}`,
+    );
+    expect(new Headers(uploadOptions.headers).get('Idempotency-Key')).toMatch(/^[0-9a-f-]{36}$/u);
+    expect(uploadOptions.body).toBeInstanceOf(FormData);
+    expect((uploadOptions.body as FormData).get('parentType')).toBe('partner');
+    expect((uploadOptions.body as FormData).get('parentId')).toBe(partner.id);
+    expect((uploadOptions.body as FormData).get('file')).toEqual(selected);
+
+    fireEvent.click(screen.getByRole('button', { name: messages.partners.documents.back }));
+    expect(screen.getByRole('dialog', { name: messages.partners.detailsTitle })).toBeTruthy();
   });
 
   it('shows the warehouse catalog hierarchy and makes category creation permission-aware', async () => {
@@ -2771,8 +2862,8 @@ describe('ERP and CRM authenticated workspace', () => {
 
     renderApplication(['/modules/erp.finance']);
     expect(await screen.findByRole('heading', { name: 'Finance' })).toBeTruthy();
-    fireEvent.click(screen.getByRole('link', { name: /Invoices Issue and manage/u }));
-    expect(await screen.findByRole('heading', { name: 'Invoices' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('link', { name: /Payments & allocations Track partial/u }));
+    expect(await screen.findByRole('heading', { name: 'Payments & allocations' })).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Back to Finance' })).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: 'Add to collections' }));
@@ -2797,9 +2888,329 @@ describe('ERP and CRM authenticated workspace', () => {
     expect(within(dialog).getAllByText('Partially paid')).toHaveLength(2);
     expect(within(dialog).getByText('PAY-2026-000001')).toBeTruthy();
     fireEvent.click(within(dialog).getByRole('button', { name: 'Back to finance list' }));
-    fireEvent.click(screen.getByRole('link', { name: 'Payments & allocations' }));
+    fireEvent.click(screen.getByRole('link', { name: 'Collections & payments' }));
     expect(await screen.findByRole('heading', { name: 'Payments & allocations' })).toBeTruthy();
     expect(screen.getByText('1 payment')).toBeTruthy();
+  });
+
+  it('prepares and reviews a structured financial document from a Sales draft', async () => {
+    const financeContext = {
+      ...authenticationContext,
+      permissions: [
+        ...authenticationContext.permissions,
+        { action: 'view', module: 'erp.finance' },
+        { action: 'create', module: 'erp.finance' },
+        { action: 'edit', module: 'erp.finance' },
+      ],
+    };
+    storeAuthenticatedSession(financeContext);
+    const customerId = 'a46f4919-aa4c-48bf-9a4d-52171402be3a';
+    const productId = '820e681c-7f92-4c93-8b69-46eec9755140';
+    const locationId = 'e4ac37f5-f248-43f9-89bd-075789c04867';
+    const entityId = '3672be17-7f40-4181-96e2-b91c2f7508a5';
+    const sourceId = '5adb13c9-fe79-451a-9ebd-0832b5fa63f1';
+    const references = {
+      businessTimezone: 'Europe/Sofia',
+      correctionDocuments: [],
+      customers: [{ id: customerId, name: 'River Market Ltd.', uic: '207000111' }],
+      products: [
+        {
+          code: 'ROLL-80',
+          id: productId,
+          name: 'Receipt paper roll',
+          unitCode: 'PCS',
+          unitName: 'Pieces',
+        },
+      ],
+      salesDrafts: [
+        {
+          currencyCode: 'BGN',
+          customerName: 'River Market Ltd.',
+          customerPartnerId: customerId,
+          id: sourceId,
+          linkedDocumentTypes: [],
+          lines: [
+            {
+              description: 'Receipt paper roll',
+              discountPercent: '0.0000',
+              productId,
+              quantity: '2.0000',
+              unitCode: 'PCS',
+              unitPrice: '50.0000',
+              vatTreatment: 'standard_20',
+            },
+          ],
+          number: 'INV-DRAFT-2026-000014',
+          total: '120.0000',
+        },
+      ],
+      scopes: [
+        {
+          branchId: '02bdb60e-8565-4725-896f-8c21cd7238ec',
+          branchName: 'Vratsa Operations',
+          cashRegisters: [],
+          legalEntityId: entityId,
+          legalEntityName: 'Vista Service Demo Ltd.',
+          locationId,
+          locationName: 'Vratsa Service Centre',
+          operators: [],
+        },
+      ],
+    };
+    const document = {
+      bgnGrossTotal: '120.0000',
+      bgnNetTotal: '100.0000',
+      bgnVatTotal: '20.0000',
+      branchName: 'Vratsa Operations',
+      businessLocationId: locationId,
+      businessLocationName: 'Vratsa Service Centre',
+      createdAt: '2026-08-19T08:00:00.000Z',
+      currencyCode: 'BGN',
+      customerPartnerId: customerId,
+      customerSnapshot: {
+        address: '1 Customer Street, Vratsa, BG',
+        name: 'River Market Ltd.',
+        uic: '207000111',
+      },
+      documentType: 'invoice',
+      dueDate: '2026-09-02',
+      exchangeRate: '1.00000000',
+      grossTotal: '120.0000',
+      id: 'af33b448-171a-4a18-8fdf-afb12968ee76',
+      issueDate: '2026-08-19',
+      issuerSnapshot: {
+        address: '1 Service Street, Vratsa, BG',
+        name: 'Vista Service Demo Ltd.',
+        uic: '207000222',
+      },
+      legalEntityId: entityId,
+      lines: [
+        {
+          description: 'Receipt paper roll',
+          discountPercent: '0.0000',
+          grossTotal: '120.0000',
+          id: '3a12e929-a6f8-47c2-a0ec-f6d46a35ea20',
+          lineNumber: 1,
+          netTotal: '100.0000',
+          productId,
+          quantity: '2.0000',
+          unitCode: 'PCS',
+          unitPrice: '50.0000',
+          vatAmount: '20.0000',
+          vatRate: '20.0000',
+          vatTreatment: 'standard_20',
+        },
+      ],
+      netTotal: '100.0000',
+      number: 'DINV-VRATSA-2026-000001',
+      rateDate: '2026-08-19',
+      rateSource: 'internal_bgn',
+      sourceSalesInvoiceId: sourceId,
+      sourceSalesInvoiceNumber: 'INV-DRAFT-2026-000014',
+      status: 'draft',
+      taxEventDate: '2026-08-19',
+      vatSummary: [
+        {
+          netTotal: '100.0000',
+          vatAmount: '20.0000',
+          vatRate: '20.0000',
+          vatTreatment: 'standard_20',
+        },
+      ],
+      vatTotal: '20.0000',
+      version: 1,
+    };
+    let documents: unknown[] = [];
+    const fetchMock = vi.fn((input: string, options?: RequestInit) => {
+      if (input.endsWith('/auth/me')) return Promise.resolve(jsonResponse(financeContext));
+      if (input.endsWith('/finance/financial-documents/reference-data'))
+        return Promise.resolve(jsonResponse(references));
+      if (input.endsWith('/finance/financial-documents') && options?.method === 'POST') {
+        documents = [document];
+        return Promise.resolve(jsonResponse(document, 201));
+      }
+      if (input.endsWith('/finance/financial-documents'))
+        return Promise.resolve(
+          jsonResponse({
+            items: documents,
+            page: 1,
+            pageSize: 25,
+            totalItems: documents.length,
+            totalPages: 1,
+          }),
+        );
+      return Promise.resolve(jsonResponse({}));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderApplication(['/modules/erp.finance/invoices']);
+    expect(await screen.findByRole('heading', { name: 'Financial documents' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'New financial document' }));
+    const dialog = await screen.findByRole('dialog', { name: 'New financial document' });
+    expect(within(dialog).getByText('Receipt paper roll')).toBeTruthy();
+    expect(within(dialog).getAllByText(/120\.00/u).length).toBeGreaterThan(0);
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Prepare draft' }));
+
+    expect(await screen.findByText('DINV-VRATSA-2026-000001 was prepared.')).toBeTruthy();
+    const preview = await screen.findByRole('dialog', { name: 'DINV-VRATSA-2026-000001' });
+    expect(within(preview).getByText('No official number allocated')).toBeTruthy();
+    expect(within(preview).getByText('INV-DRAFT-2026-000014')).toBeTruthy();
+    expect(within(preview).getByText('Standard 20% (20.0000%)')).toBeTruthy();
+    expect(
+      within(preview).getByRole('button', { name: 'Back to financial documents' }),
+    ).toBeTruthy();
+  });
+
+  it('keeps statement lines separate and automatically matches only an exact reference', async () => {
+    const financeContext = {
+      ...authenticationContext,
+      permissions: [
+        ...authenticationContext.permissions,
+        { action: 'view', module: 'erp.finance' },
+        { action: 'create', module: 'erp.finance' },
+        { action: 'edit', module: 'erp.finance' },
+      ],
+    };
+    storeAuthenticatedSession(financeContext);
+    const statement: FinanceBankStatement = {
+      accountIban: 'BG76DEMO00000000000000',
+      bankName: 'Demo Bank',
+      closingBalance: '140.0000',
+      createdAt: '2026-08-19T09:00:00.000Z',
+      currencyCode: 'BGN',
+      id: '19e23adf-78dd-4f87-b680-e6254dfb6d17',
+      incomingTotal: '40.0000',
+      matchedIncomingCount: 1,
+      number: 'BST-2026-000001',
+      openingBalance: '100.0000',
+      outgoingTotal: '0.0000',
+      statementDate: '2026-08-19',
+      statementReference: 'DEMO-STATEMENT-0819',
+      status: 'open',
+      transactionCount: 2,
+      transactions: [
+        {
+          amount: '15.0000',
+          counterpartyName: 'Alfa Market Demo Ltd.',
+          direction: 'incoming',
+          id: '8e087e25-8240-430e-9256-7090270e3d19',
+          lineNumber: 1,
+          match: {
+            customerDocumentId: '31a738e3-117e-4eab-b528-513230f482f9',
+            customerName: 'Alfa Market Demo Ltd.',
+            documentNumber: 'DEV-FIN-REV-0001',
+            matchedAt: '2026-08-19T09:00:00.000Z',
+            method: 'automatic_reference',
+            paymentNumber: 'PAY-2026-000002',
+          },
+          matchStatus: 'matched',
+          paymentReference: 'Payment for DEV-FIN-REV-0001',
+          transactionDate: '2026-08-19',
+          valueDate: '2026-08-19',
+          version: 2,
+        },
+        {
+          amount: '25.0000',
+          counterpartyName: 'Alfa Market Demo Ltd.',
+          direction: 'incoming',
+          id: '4afbfa44-b764-4da2-84f4-d8a4edf784c0',
+          lineNumber: 2,
+          matchStatus: 'unmatched',
+          paymentReference: 'August customer transfer',
+          transactionDate: '2026-08-19',
+          valueDate: '2026-08-19',
+          version: 1,
+        },
+      ],
+      unmatchedIncomingCount: 1,
+      version: 2,
+    };
+    let saved = false;
+    let submittedLines: { amount: string; paymentReference: string }[] = [];
+    const fetchMock = vi.fn((input: string, options?: RequestInit) => {
+      if (input.endsWith('/auth/me')) return Promise.resolve(jsonResponse(financeContext));
+      if (input.endsWith('/finance/bank-statements') && options?.method === 'POST') {
+        if (typeof options.body !== 'string') throw new Error('Expected a JSON request body');
+        const submitted = JSON.parse(options.body) as {
+          lines: { amount: string; paymentReference: string }[];
+        };
+        submittedLines = submitted.lines;
+        saved = true;
+        return Promise.resolve(jsonResponse(statement, 201));
+      }
+      if (input.endsWith('/finance/bank-statements'))
+        return Promise.resolve(
+          jsonResponse({
+            items: saved ? [statement] : [],
+            page: 1,
+            pageSize: 20,
+            totalItems: saved ? 1 : 0,
+            totalPages: 1,
+          }),
+        );
+      return Promise.resolve(jsonResponse({}));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderApplication(['/modules/erp.finance/cash-bank']);
+    expect(await screen.findByRole('heading', { name: 'Bank reconciliation' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'New statement' }));
+    const dialog = await screen.findByRole('dialog', { name: 'New bank statement' });
+    fireEvent.change(within(dialog).getByLabelText('Bank name'), {
+      target: { value: 'Demo Bank' },
+    });
+    fireEvent.change(within(dialog).getByLabelText('Statement reference'), {
+      target: { value: 'DEMO-STATEMENT-0819' },
+    });
+    fireEvent.change(within(dialog).getByLabelText('Company account IBAN'), {
+      target: { value: statement.accountIban },
+    });
+    fireEvent.change(within(dialog).getByLabelText('Opening balance'), {
+      target: { value: '100' },
+    });
+    fireEvent.change(within(dialog).getByLabelText('Transaction 1 amount'), {
+      target: { value: '15' },
+    });
+    fireEvent.change(within(dialog).getByLabelText('Transaction 1 counterparty'), {
+      target: { value: 'Alfa Market Demo Ltd.' },
+    });
+    fireEvent.change(within(dialog).getByLabelText('Transaction 1 payment reference'), {
+      target: { value: 'Payment for DEV-FIN-REV-0001' },
+    });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Add line' }));
+    fireEvent.change(within(dialog).getByLabelText('Transaction 2 amount'), {
+      target: { value: '25' },
+    });
+    fireEvent.change(within(dialog).getByLabelText('Transaction 2 counterparty'), {
+      target: { value: 'Alfa Market Demo Ltd.' },
+    });
+    fireEvent.change(within(dialog).getByLabelText('Transaction 2 payment reference'), {
+      target: { value: 'August customer transfer' },
+    });
+    expect(within(dialog).getByText('Reference: August customer transfer')).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Use calculated balance' }));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Add statement' }));
+
+    expect(
+      await screen.findByText('BST-2026-000001 was added with 1 transfer requiring review.'),
+    ).toBeTruthy();
+    expect(submittedLines).toEqual([
+      expect.objectContaining({
+        amount: '15',
+        paymentReference: 'Payment for DEV-FIN-REV-0001',
+      }),
+      expect.objectContaining({ amount: '25', paymentReference: 'August customer transfer' }),
+    ]);
+    const preview = await screen.findByRole('dialog', { name: 'BST-2026-000001' });
+    expect(
+      within(preview).getByText(
+        (_content, element) =>
+          element?.tagName === 'P' &&
+          element.textContent?.includes('Reference matched automatically') === true,
+      ),
+    ).toBeTruthy();
+    expect(within(preview).getByText('PAY-2026-000002', { exact: false })).toBeTruthy();
+    expect(within(preview).getByText('Needs review')).toBeTruthy();
   });
 
   it('navigates from ERP Service to request intake and creates a dispatch-ready service request', async () => {

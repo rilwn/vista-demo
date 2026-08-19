@@ -6,6 +6,7 @@ import { messages } from './messages';
 import { AccessPage } from './pages/AccessPage';
 import { CatalogPage } from './pages/CatalogPage';
 import { type FinanceView, FinancePage } from './pages/FinancePage';
+import { FinanceBankPage } from './pages/FinanceBankPage';
 import { HomePage } from './pages/HomePage';
 import { ModulePage } from './pages/ModulePage';
 import { NotFoundPage } from './pages/NotFoundPage';
@@ -89,6 +90,9 @@ function pageForPath(
     ) : (
       <NotFoundPage />
     );
+  }
+  if (pathname === '/modules/erp.finance/cash-bank') {
+    return hasPermission('erp.finance') ? <FinanceBankPage /> : <NotFoundPage />;
   }
   const servicePath = /^\/modules\/erp\.service\/(requests|work-orders|schedule|devices)$/u.exec(
     pathname,

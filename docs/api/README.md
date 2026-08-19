@@ -264,6 +264,32 @@ and lifecycle responses use optimistic versions and preserve inactive history.
 Hard deletion, equipment moves, serial/product identity changes, and merges are
 not exposed.
 
+## Managed partner files
+
+The first shared managed-file parent is the canonical partner record:
+
+- `GET /api/v1/files?parentType=partner&parentId=<uuid>` returns only the latest
+  immutable version of each logical file with bounded pagination.
+- `GET /api/v1/files/:id/versions` returns the retained version history.
+- `GET /api/v1/files/:id/content` returns authorized private content with
+  `no-store`, attachment, and `nosniff` headers after size and SHA-256 verification.
+- `POST /api/v1/files` accepts multipart `parentType`, `parentId`, and `file`.
+- `POST /api/v1/files/:id/versions` appends a replacement without overwriting the
+  prior object.
+
+Listing, history, and download inherit `crm:view` from the partner; upload and
+replacement inherit `crm:edit`. Both commands require an `Idempotency-Key` and
+an exact retry returns the original metadata without writing another object,
+audit event, or outbox event. The configurable allowlist currently supports PDF,
+JPEG, PNG, and WebP, with a 10 MB development default and 25 MB hard ceiling.
+Declared media type must match the file signature. Content stays in private
+S3-compatible storage while PostgreSQL retains metadata and checksums only.
+
+There is deliberately no delete endpoint before the approved retention policy.
+The current `structural-signature` inspection rejects disguised content but is
+not a malware scan; the approved production scanner/quarantine adapter and the
+remaining attachment parents stay pending.
+
 ## Product category master data
 
 The catalog hierarchy currently exposes:
@@ -473,10 +499,35 @@ stock, duplicate serial selection, and invalid batches are rejected before the
 workflow advances.
 
 The final operation creates an invoice draft, not a legally issued invoice.
-Official scoped numbering, BNB conversion snapshots, accounting/fiscal posting,
-PDF/email delivery, corrections, and payment status remain controlled Finance
-work. Internal workflow references must not be presented as fiscal or accounting
-document numbers.
+Finance can now prepare a structured financial-document draft from that Sales
+record. Official issuance, automatic BNB retrieval, accounting/fiscal posting,
+and PDF/email delivery remain controlled later work. Internal workflow references
+must not be presented as fiscal or accounting document numbers.
+
+## Structured financial-document drafts
+
+The protected `/api/v1/finance/financial-documents` surface provides:
+
+- `GET /reference-data` for active issuing scopes, customers, products, eligible
+  Sales drafts, and original invoice drafts available for a correction;
+- paginated `GET /` with status, type, customer, and date filters, plus `GET /:id`;
+- idempotent `POST /` for an invoice, proforma, credit note, or debit note from a
+  prepared Sales draft or controlled manual lines; and
+- version-checked, reasoned `POST /:id/cancel` for an unissued draft.
+
+Each draft snapshots the issuer, customer, line prices and discounts, VAT
+treatment, currency rate/date/source, BGN equivalent, source Sales record, and
+correction link. Fixed-point domain calculation supports 20%, 9%, 0%, exempt,
+and explicitly rated intra-community acquisition lines. Internal `DINV`, `DPRO`,
+`DCN`, and `DDN` references are allocated transactionally per issuing location,
+optional register/operator, document type, and year; concurrent requests cannot
+receive the same reference. Commands are permission-protected, idempotent,
+audited, and outbox-backed.
+
+These records remain drafts. `officialNumber` is not assigned, and the API does
+not perform legal issuance, proforma conversion, accounting/VAT posting,
+automatic BNB retrieval, fiscal/POS linkage, PDF/signature generation, or email
+delivery until FIN-001, FIN-002, BUS-002, and DOC-001 are approved.
 
 ## Finance collection records
 
@@ -505,9 +556,33 @@ passed, and is safe to retry.
 
 These records use internal `FIN-REV` and `PAY` references only. They do not
 perform legal/fiscal issuance, official branch/register/operator numbering, VAT
-or accounting posting, BNB conversion, PDF/email delivery, bank import/matching,
-cash vouchers, advances, notifications, or reporting; those remain subsequent
-Finance work.
+or accounting posting, BNB conversion, PDF/email delivery, cash vouchers,
+advances, notifications, or reporting; those remain subsequent Finance work.
+
+## Finance bank reconciliation
+
+The protected manual BGN reconciliation surface provides:
+
+- paginated `GET /api/v1/finance/bank-statements` and detailed
+  `GET /api/v1/finance/bank-statements/:id`;
+- idempotent `POST /api/v1/finance/bank-statements` for a balanced statement and
+  its immutable incoming or outgoing transaction lines;
+- `GET /api/v1/finance/bank-transactions/:id/match-candidates` for ranked open
+  customer-collection suggestions; and
+- version-checked, idempotent
+  `POST /api/v1/finance/bank-transactions/:id/match` for a user-confirmed match.
+
+An incoming line is matched automatically only when its payment reference
+identifies exactly one eligible open collection and its amount fits the remaining
+balance. All other incoming lines remain in **Needs review**; name and amount
+similarity rank candidates but never allocate money without confirmation. A match
+creates the bank-transfer payment, allocation, balance/status history, audit event,
+and outbox event transactionally. A payment or bank line cannot be matched twice.
+
+Reads require `erp.finance:view`, statement entry requires `erp.finance:create`,
+and manual matching requires `erp.finance:edit`. This surface is BGN-only and does
+not claim support for approved Bulgarian statement-file formats, supplier
+payments, advances, offsets, cash vouchers, or accounting posting.
 
 ## Service subscriptions
 

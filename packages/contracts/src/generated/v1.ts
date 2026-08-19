@@ -228,6 +228,118 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/files': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['FilesController_list'];
+    put?: never;
+    post: operations['FilesController_upload'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/files/{id}/content': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['FilesController_content'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/files/{id}/versions': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['FilesController_versions'];
+    put?: never;
+    post: operations['FilesController_uploadVersion'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/finance/bank-statements': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['FinanceBankController_statements'];
+    put?: never;
+    post: operations['FinanceBankController_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/finance/bank-statements/{id}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['FinanceBankController_statement'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/finance/bank-transactions/{id}/match': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['FinanceBankController_match'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/finance/bank-transactions/{id}/match-candidates': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['FinanceBankController_candidates'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/finance/documents': {
     parameters: {
       query?: never;
@@ -286,6 +398,70 @@ export interface paths {
     get?: never;
     put?: never;
     post: operations['FinanceController_recordPayment'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/finance/financial-documents': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['FinancialDocumentsController_list'];
+    put?: never;
+    post: operations['FinancialDocumentsController_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/finance/financial-documents/{id}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['FinancialDocumentsController_document'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/finance/financial-documents/{id}/cancel': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['FinancialDocumentsController_cancel'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/finance/financial-documents/reference-data': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['FinancialDocumentsController_referenceData'];
+    put?: never;
+    post?: never;
     delete?: never;
     options?: never;
     head?: never;
@@ -2183,6 +2359,10 @@ export interface components {
       cancellationReason: string;
       expectedVersion: number;
     };
+    CancelFinancialDocumentDto: {
+      cancellationReason: string;
+      expectedVersion: number;
+    };
     CancelServiceRequestDto: {
       cancellationReason: string;
       expectedVersion: number;
@@ -2320,6 +2500,33 @@ export interface components {
       customerPartnerIds: string[];
       name: string;
     };
+    CreateFinanceBankStatementDto: {
+      accountIban: string;
+      bankName: string;
+      /** @example 140.0000 */
+      closingBalance: string;
+      /** @example BGN */
+      currencyCode: string;
+      lines: components['schemas']['CreateFinanceBankStatementLineDto'][];
+      /** @example 100.0000 */
+      openingBalance: string;
+      /** Format: date */
+      statementDate: string;
+      statementReference: string;
+    };
+    CreateFinanceBankStatementLineDto: {
+      /** @example 100.0000 */
+      amount: string;
+      counterpartyIban?: string;
+      counterpartyName: string;
+      /** @enum {string} */
+      direction: 'incoming' | 'outgoing';
+      paymentReference: string;
+      /** Format: date */
+      transactionDate: string;
+      /** Format: date */
+      valueDate: string;
+    };
     CreateFinanceCustomerDocumentDto: {
       /** Format: date */
       dueDate: string;
@@ -2335,6 +2542,57 @@ export interface components {
       /** @enum {string} */
       paymentMethod: 'cash' | 'bank_transfer' | 'pos_terminal' | 'card' | 'offset';
       paymentReference?: string;
+    };
+    CreateFinancialDocumentDto: {
+      /** Format: uuid */
+      businessLocationId: string;
+      /** Format: uuid */
+      cashRegisterId?: string;
+      /** Format: uuid */
+      correctionOfDocumentId?: string;
+      correctionReason?: string;
+      /** @example BGN */
+      currencyCode: string;
+      /** Format: uuid */
+      customerPartnerId: string;
+      /** @enum {string} */
+      documentType: 'invoice' | 'proforma' | 'credit_note' | 'debit_note';
+      /** Format: date */
+      dueDate?: string;
+      /** @example 1.00000000 */
+      exchangeRate: string;
+      /** Format: date */
+      issueDate: string;
+      /** Format: uuid */
+      legalEntityId: string;
+      lines?: components['schemas']['CreateFinancialDocumentLineDto'][];
+      notes?: string;
+      /** Format: uuid */
+      operatorId?: string;
+      /** Format: date */
+      rateDate: string;
+      rateSource: string;
+      /** Format: uuid */
+      sourceSalesInvoiceId?: string;
+      /** Format: date */
+      taxEventDate: string;
+    };
+    CreateFinancialDocumentLineDto: {
+      description: string;
+      /** @example 0.0000 */
+      discountPercent: string;
+      /** Format: uuid */
+      productId?: string;
+      /** @example 1.0000 */
+      quantity: string;
+      /** @example PCS */
+      unitCode: string;
+      /** @example 100.0000 */
+      unitPrice: string;
+      /** @example 20.0000 */
+      vatRate?: string;
+      /** @enum {string} */
+      vatTreatment: 'standard_20' | 'reduced_9' | 'zero' | 'exempt' | 'ica';
     };
     CreateLegalBusinessEntityDto: {
       code: string;
@@ -2656,6 +2914,102 @@ export interface components {
       enrolledAt?: string;
       revokedOtherSessionCount: number;
     };
+    FinanceBankMatchCandidateDto: {
+      /** Format: uuid */
+      customerDocumentId: string;
+      customerName: string;
+      documentNumber: string;
+      /** Format: date */
+      dueDate: string;
+      outstandingTotal: string;
+      referenceMatched: boolean;
+      score: number;
+      sourceInvoiceNumber: string;
+    };
+    FinanceBankStatementDto: {
+      accountIban: string;
+      bankName: string;
+      closingBalance: string;
+      /** Format: date-time */
+      createdAt: string;
+      currencyCode: string;
+      /** Format: uuid */
+      id: string;
+      incomingTotal: string;
+      matchedIncomingCount: number;
+      number: string;
+      openingBalance: string;
+      outgoingTotal: string;
+      /** Format: date */
+      statementDate: string;
+      statementReference: string;
+      /** @enum {string} */
+      status: 'open' | 'reconciled';
+      transactionCount: number;
+      transactions: components['schemas']['FinanceBankTransactionDto'][];
+      unmatchedIncomingCount: number;
+      version: number;
+    };
+    FinanceBankStatementPageDto: {
+      items: components['schemas']['FinanceBankStatementSummaryDto'][];
+      page: number;
+      pageSize: number;
+      totalItems: number;
+      totalPages: number;
+    };
+    FinanceBankStatementSummaryDto: {
+      accountIban: string;
+      bankName: string;
+      closingBalance: string;
+      /** Format: date-time */
+      createdAt: string;
+      currencyCode: string;
+      /** Format: uuid */
+      id: string;
+      incomingTotal: string;
+      matchedIncomingCount: number;
+      number: string;
+      openingBalance: string;
+      outgoingTotal: string;
+      /** Format: date */
+      statementDate: string;
+      statementReference: string;
+      /** @enum {string} */
+      status: 'open' | 'reconciled';
+      transactionCount: number;
+      unmatchedIncomingCount: number;
+      version: number;
+    };
+    FinanceBankTransactionDto: {
+      amount: string;
+      counterpartyIban?: string;
+      counterpartyName: string;
+      /** @enum {string} */
+      direction: 'incoming' | 'outgoing';
+      /** Format: uuid */
+      id: string;
+      lineNumber: number;
+      match?: components['schemas']['FinanceBankTransactionMatchDto'];
+      /** @enum {string} */
+      matchStatus: 'matched' | 'unmatched';
+      paymentReference: string;
+      /** Format: date */
+      transactionDate: string;
+      /** Format: date */
+      valueDate: string;
+      version: number;
+    };
+    FinanceBankTransactionMatchDto: {
+      /** Format: uuid */
+      customerDocumentId: string;
+      customerName: string;
+      documentNumber: string;
+      /** Format: date-time */
+      matchedAt: string;
+      /** @enum {string} */
+      method: 'automatic_reference' | 'manual';
+      paymentNumber: string;
+    };
     FinanceCustomerDocumentDto: {
       allocatedTotal: string;
       bgnTotal: string;
@@ -2737,6 +3091,171 @@ export interface components {
       overdueOutstanding: string;
       paidDocuments: number;
       totalOutstanding: string;
+    };
+    FinancialDocumentCorrectionReferenceDto: {
+      currencyCode: string;
+      customerName: string;
+      /** Format: uuid */
+      customerPartnerId: string;
+      /** Format: uuid */
+      id: string;
+      number: string;
+      /** @enum {string} */
+      type: 'invoice';
+    };
+    FinancialDocumentCustomerReferenceDto: {
+      /** Format: uuid */
+      id: string;
+      name: string;
+      uic?: string;
+      vatNumber?: string;
+    };
+    FinancialDocumentDto: {
+      bgnGrossTotal: string;
+      bgnNetTotal: string;
+      bgnVatTotal: string;
+      branchName: string;
+      /** Format: uuid */
+      businessLocationId: string;
+      businessLocationName: string;
+      cancellationReason?: string;
+      cashRegisterName?: string;
+      correctionOf?: components['schemas']['FinancialDocumentCorrectionReferenceDto'];
+      correctionReason?: string;
+      /** Format: date-time */
+      createdAt: string;
+      currencyCode: string;
+      /** Format: uuid */
+      customerPartnerId: string;
+      customerSnapshot: components['schemas']['FinancialDocumentPartySnapshotDto'];
+      /** @enum {string} */
+      documentType: 'invoice' | 'proforma' | 'credit_note' | 'debit_note';
+      /** Format: date */
+      dueDate?: string;
+      exchangeRate: string;
+      grossTotal: string;
+      /** Format: uuid */
+      id: string;
+      /** Format: date */
+      issueDate: string;
+      issuerSnapshot: components['schemas']['FinancialDocumentPartySnapshotDto'];
+      /** Format: uuid */
+      legalEntityId: string;
+      lines: components['schemas']['FinancialDocumentLineDto'][];
+      netTotal: string;
+      notes?: string;
+      number: string;
+      officialNumber?: string;
+      operatorName?: string;
+      /** Format: date */
+      rateDate: string;
+      rateSource: string;
+      /** Format: uuid */
+      sourceSalesInvoiceId?: string;
+      sourceSalesInvoiceNumber?: string;
+      /** @enum {string} */
+      status: 'draft' | 'cancelled';
+      /** Format: date */
+      taxEventDate: string;
+      vatSummary: components['schemas']['FinancialDocumentVatSummaryDto'][];
+      vatTotal: string;
+      version: number;
+    };
+    FinancialDocumentLineDto: {
+      description: string;
+      discountPercent: string;
+      grossTotal: string;
+      /** Format: uuid */
+      id: string;
+      lineNumber: number;
+      netTotal: string;
+      /** Format: uuid */
+      productId?: string;
+      quantity: string;
+      unitCode: string;
+      unitPrice: string;
+      vatAmount: string;
+      vatRate: string;
+      /** @enum {string} */
+      vatTreatment: 'standard_20' | 'reduced_9' | 'zero' | 'exempt' | 'ica';
+    };
+    FinancialDocumentNamedReferenceDto: {
+      /** Format: uuid */
+      id: string;
+      name: string;
+    };
+    FinancialDocumentPageDto: {
+      items: components['schemas']['FinancialDocumentDto'][];
+      page: number;
+      pageSize: number;
+      totalItems: number;
+      totalPages: number;
+    };
+    FinancialDocumentPartySnapshotDto: {
+      address: string;
+      name: string;
+      uic?: string;
+      vatNumber?: string;
+    };
+    FinancialDocumentProductReferenceDto: {
+      code: string;
+      /** Format: uuid */
+      id: string;
+      name: string;
+      unitCode: string;
+      unitName: string;
+    };
+    FinancialDocumentReferenceDataDto: {
+      /** @example Europe/Sofia */
+      businessTimezone: string;
+      correctionDocuments: components['schemas']['FinancialDocumentCorrectionReferenceDto'][];
+      customers: components['schemas']['FinancialDocumentCustomerReferenceDto'][];
+      products: components['schemas']['FinancialDocumentProductReferenceDto'][];
+      salesDrafts: components['schemas']['FinancialDocumentSalesDraftReferenceDto'][];
+      scopes: components['schemas']['FinancialDocumentScopeReferenceDto'][];
+    };
+    FinancialDocumentSalesDraftLineReferenceDto: {
+      description: string;
+      discountPercent: string;
+      /** Format: uuid */
+      productId: string;
+      quantity: string;
+      unitCode: string;
+      unitPrice: string;
+      /** @enum {string} */
+      vatTreatment: 'standard_20' | 'reduced_9' | 'zero' | 'exempt' | 'ica';
+    };
+    FinancialDocumentSalesDraftReferenceDto: {
+      currencyCode: string;
+      customerName: string;
+      /** Format: uuid */
+      customerPartnerId: string;
+      /** Format: uuid */
+      id: string;
+      lines: components['schemas']['FinancialDocumentSalesDraftLineReferenceDto'][];
+      linkedDocumentTypes: ('invoice' | 'proforma' | 'credit_note' | 'debit_note')[];
+      number: string;
+      total: string;
+    };
+    FinancialDocumentScopeReferenceDto: {
+      /** Format: uuid */
+      branchId: string;
+      branchName: string;
+      cashRegisters: components['schemas']['FinancialDocumentNamedReferenceDto'][];
+      /** Format: uuid */
+      legalEntityId: string;
+      legalEntityName: string;
+      /** Format: uuid */
+      locationId: string;
+      locationName: string;
+      operators: components['schemas']['FinancialDocumentNamedReferenceDto'][];
+    };
+    FinancialDocumentVatSummaryDto: {
+      netTotal: string;
+      vatAmount: string;
+      vatRate: string;
+      /** @enum {string} */
+      vatTreatment: 'standard_20' | 'reduced_9' | 'zero' | 'exempt' | 'ica';
     };
     GoodsReceiptDto: {
       /** Format: uuid */
@@ -2923,6 +3442,44 @@ export interface components {
       expiresAt: string;
       /** @description Opaque bearer token. It is returned only once. */
       sessionToken: string;
+    };
+    ManagedFileDto: {
+      byteSize: number;
+      checksumSha256: string;
+      /** Format: date-time */
+      createdAt: string;
+      /** Format: uuid */
+      id: string;
+      inspectionMethod?: string;
+      isCurrent: boolean;
+      /** Format: uuid */
+      issuerAccountId: string;
+      mediaType: string;
+      originalName: string;
+      /** Format: uuid */
+      parentId: string;
+      /** @enum {string} */
+      parentType: 'partner';
+      /** Format: date-time */
+      scannedAt?: string;
+      /** @enum {string} */
+      status: 'available' | 'deleted' | 'quarantined' | 'rejected';
+      version: number;
+      versionCount: number;
+      /** Format: uuid */
+      versionGroupId: string;
+    };
+    ManagedFilePageDto: {
+      items: components['schemas']['ManagedFileDto'][];
+      page: number;
+      pageSize: number;
+      total: number;
+      totalPages: number;
+    };
+    MatchFinanceBankTransactionDto: {
+      /** Format: uuid */
+      customerDocumentId: string;
+      expectedVersion: number;
     };
     NotificationMessageDto: {
       /** @enum {string} */
@@ -4991,6 +5548,391 @@ export interface operations {
       };
     };
   };
+  FilesController_list: {
+    parameters: {
+      query: {
+        page?: number;
+        pageSize?: number;
+        parentId: string;
+        parentType: 'partner';
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ManagedFilePageDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  FilesController_upload: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'multipart/form-data': {
+          /** Format: binary */
+          file: string;
+          /** Format: uuid */
+          parentId: string;
+          /** @enum {string} */
+          parentType: 'partner';
+        };
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ManagedFileDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  FilesController_content: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: unknown;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Authorized content for an available managed file. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/pdf': string;
+          'image/jpeg': string;
+          'image/png': string;
+          'image/webp': string;
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  FilesController_versions: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: unknown;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ManagedFileDto'][];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  FilesController_uploadVersion: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path: {
+        id: unknown;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'multipart/form-data': {
+          /** Format: binary */
+          file: string;
+        };
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ManagedFileDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  FinanceBankController_statements: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['FinanceBankStatementPageDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  FinanceBankController_create: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['CreateFinanceBankStatementDto'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['FinanceBankStatementDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  FinanceBankController_statement: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: unknown;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['FinanceBankStatementDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  FinanceBankController_match: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path: {
+        id: unknown;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['MatchFinanceBankTransactionDto'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['FinanceBankStatementDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  FinanceBankController_candidates: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: unknown;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['FinanceBankMatchCandidateDto'][];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
   FinanceController_documents: {
     parameters: {
       query?: never;
@@ -5162,6 +6104,195 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['FinanceCustomerDocumentDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  FinancialDocumentsController_list: {
+    parameters: {
+      query?: {
+        customerPartnerId?: string;
+        dateFrom?: string;
+        dateTo?: string;
+        page?: number;
+        pageSize?: number;
+        status?: 'draft' | 'cancelled';
+        type?: 'invoice' | 'proforma' | 'credit_note' | 'debit_note';
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['FinancialDocumentPageDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  FinancialDocumentsController_create: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['CreateFinancialDocumentDto'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['FinancialDocumentDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  FinancialDocumentsController_document: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: unknown;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['FinancialDocumentDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  FinancialDocumentsController_cancel: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path: {
+        id: unknown;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['CancelFinancialDocumentDto'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['FinancialDocumentDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  FinancialDocumentsController_referenceData: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['FinancialDocumentReferenceDataDto'];
         };
       };
       /** @description The endpoint request limit was exceeded. */

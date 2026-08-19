@@ -77,24 +77,24 @@ const reports = (
 export const workflowPages: WorkflowPageDefinition[] = [
   finance(
     'invoices',
-    'Invoices',
-    'Issue and manage sales invoices, proformas, credit notes, debit notes, VAT treatment, and document links.',
-    'New invoice',
+    'Financial documents',
+    'Prepare structured invoice, proforma, credit-note, and debit-note drafts without assigning an official number.',
+    'New financial document',
     [
       {
-        title: 'Invoice records',
+        title: 'Controlled drafts',
         items: [
-          'Draft and issue states',
-          'Original and correction document links',
-          'Branch, location, register, and operator numbering',
+          'Sales-draft or manual preparation',
+          'Original invoice and correction links',
+          'Concurrency-safe internal references by issuing scope',
         ],
       },
       {
-        title: 'Compliance detail',
+        title: 'Review detail',
         items: [
           'VAT 20%, 9%, 0%, exempt, and intra-community treatment',
-          'Currency rate and converted BGN amount',
-          'PDF, signature, and email delivery',
+          'Fixed currency-rate and converted BGN snapshot',
+          'Issuer and customer snapshot',
         ],
       },
     ],
@@ -102,7 +102,7 @@ export const workflowPages: WorkflowPageDefinition[] = [
   finance(
     'payments',
     'Payments & allocations',
-    'Track partial payments, balances, advances, offsets, and matching against invoices.',
+    'Track partial payments, balances, and allocations against collection records.',
     'Record payment',
     [
       {
@@ -110,39 +110,39 @@ export const workflowPages: WorkflowPageDefinition[] = [
         items: [
           'Cash, bank transfer, POS terminal, card, and compensation methods',
           'Partial allocation and remaining balance',
-          'Payment reference matching',
+          'Linked payment evidence',
         ],
       },
       {
         title: 'Collections',
         items: [
           'Unpaid, partially paid, paid, overdue, and cancelled statuses',
-          'Upcoming and overdue notifications',
-          'Auditable manual matching exceptions',
+          'Scheduled overdue detection',
+          'Auditable status history',
         ],
       },
     ],
   ),
   finance(
     'cash-bank',
-    'Cash & bank',
-    'Operate cash vouchers, daily cash reporting, imported bank statements, and manual entries.',
-    'Add bank entry',
+    'Bank reconciliation',
+    'Enter balanced BGN bank statements and reconcile incoming transfers with customer collections.',
+    'New statement',
     [
       {
-        title: 'Cash control',
+        title: 'Statement control',
         items: [
-          'Cash receipt and payment vouchers',
-          'Daily cash report',
-          'Register and operator details',
+          'Manual BGN statement entry',
+          'Opening and closing balance validation',
+          'Immutable bank transaction lines',
         ],
       },
       {
         title: 'Bank reconciliation',
         items: [
-          'Bulgarian bank statement import',
-          'Manual statement entry',
-          'Matching queue and exception review',
+          'Exact-reference automatic matching',
+          'Ranked manual match review',
+          'Payment and allocation creation',
         ],
       },
     ],

@@ -239,6 +239,21 @@ equipment deactivation requires `crm:delete`; reactivation and edits require
 `crm:edit`. Hard deletion, moving devices between locations, and identity changes
 are not available.
 
+### Partner documents
+
+From **Customers & CRM → Partner registry**, open a partner and select
+**Documents**. Employees with `crm:view` can download current or retained older
+versions. Employees with `crm:edit` can select **Add document** for a PDF, JPEG,
+PNG, or WebP file (10 MB development default), or **Replace** to append an
+immutable version. **Back to partner** returns to the same partner record.
+
+The screen displays stored names, size, upload date, and version count; the API
+verifies content type on upload and checksum/size on download. Replacing a file
+never overwrites its history. Deletion is not available until the retention
+policy is approved. The current structural file check is not a production
+malware scanner, so only approved test documents should be used during local
+development.
+
 ## Product categories
 
 Employees with `erp.warehouse:view` can open **Warehouse** to see the configured
@@ -407,11 +422,36 @@ The draft is ready for final review and issuance in Finance. It is not yet a
 fiscal or accounting document and must not be sent to a customer as an issued
 invoice.
 
+### Financial-document drafts
+
+1. From the left navigation, choose **ERP → Finance**, then select
+   **Financial documents**.
+2. Select **New financial document**. Choose invoice, proforma, credit note, or
+   debit note and select either a prepared Sales draft or manual entry.
+3. Select the issuing location and customer. For BGN, the rate is fixed at 1
+   with the internal BGN source. For another currency, enter the published rate,
+   rate date, and source used for this draft.
+4. For manual entry, add each product or service, quantity, unit, price,
+   discount, and VAT treatment. Intra-community acquisition requires its
+   explicit VAT rate. Credit and debit notes also require the original invoice
+   draft and a correction reason.
+5. Review the live net, VAT, gross, and BGN totals, then select **Prepare draft**.
+6. Select **Preview** to review fixed issuer/customer, line, VAT, rate, source,
+   and correction snapshots. Use **Back to financial documents** to preserve the
+   register context. An unissued draft can be cancelled with a reason.
+
+The displayed `DINV`, `DPRO`, `DCN`, or `DDN` value is a concurrency-safe
+internal reference, not an official invoice number. Legal issuance, automatic
+BNB retrieval, accounting/VAT posting, fiscal/POS linkage, PDF/signature output,
+and email delivery are intentionally unavailable pending the approved finance,
+numbering, and document configuration.
+
 ### Finance collections
 
 Use only the visible application navigation:
 
-1. From the left navigation, choose **ERP → Finance**, then select **Invoices**.
+1. From the left navigation, choose **ERP → Finance**, then select
+   **Collections & payments**.
 2. Select **Add to collections**. Choose a BGN sales invoice draft and set the
    payment due date. The panel shows the customer and collection amount before
    you save.
@@ -425,8 +465,32 @@ Use only the visible application navigation:
    review the same customer record from the payment view.
 
 This workflow records BGN collection activity only. It does not issue a legal or
-fiscal invoice, post VAT/accounting entries, calculate BNB rates, import or match
-bank statements, or send payment reminders.
+fiscal invoice, post VAT/accounting entries, calculate BNB rates, or send payment
+reminders.
+
+### Bank reconciliation
+
+1. From the left navigation, choose **ERP → Finance**, then select
+   **Bank reconciliation**.
+2. Select **New statement** and enter the bank name, bank statement reference,
+   company IBAN, statement date, and opening balance. Entry is currently limited
+   to BGN.
+3. Add each incoming or outgoing transaction with its dates, amount,
+   counterparty, and bank payment reference. Select **Use calculated balance** to
+   copy the transaction total into the closing balance, then select
+   **Add statement**.
+4. Select **Preview**. An incoming transfer with one exact collection reference
+   is marked **Matched** automatically. Ambiguous or generic references remain
+   **Needs review** and do not move money automatically.
+5. For a transfer needing review, select **Review match**, compare the ranked open
+   collection records, and select **Confirm match**. Return to
+   **Collections & payments** to verify the generated bank-transfer payment,
+   allocation, outstanding balance, and payment status.
+
+Statement entry must balance and a transfer cannot be matched twice. Bank-specific
+file import, supplier-payment matching, advances, cash vouchers, and accounting
+posting remain unavailable pending the required business decisions and later
+Finance work.
 
 ### Prices and promotions
 

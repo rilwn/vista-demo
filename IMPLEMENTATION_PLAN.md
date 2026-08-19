@@ -1,6 +1,6 @@
 # Vista Integrated Information System — Remaining Implementation Plan
 
-Status date: 2026-08-18
+Status date: 2026-08-19
 Project: `BG16RFPR001-1.012-1324-C01`
 
 [`AGENTS.md`](AGENTS.md) is authoritative. This file contains only unfinished
@@ -60,9 +60,9 @@ enabled; every requirement remains traceable.
   non-administrator 2FA policy.
 - Deliver approved AD, LDAP, Entra ID, SAML, and OAuth/OIDC adapters and group
   mapping.
-- Deliver secure file upload/download with type and size validation, quarantine
-  or scanning hooks, versioning, controlled storage, and inherited parent-record
-  authorization.
+- Complete the approved production storage, encryption, retention, malware-scan,
+  and quarantine policy, plus managed attachments for financial documents, CRM
+  interactions, and warranty records.
 - Deliver approved email and backup-SMS adapters, notification preferences,
   retry/reconciliation behavior, monitoring, alert hooks, and operational
   runbooks.
@@ -99,13 +99,13 @@ proven under concurrency; no production topology or tracking rule is inferred.
 
 **Remaining**
 
-- Deliver legally compliant sales invoices, proformas and conversion, credit and
-  debit notes, branch/location/register/operator numbering, all required VAT
-  treatments, BGN/BNB currency-rate snapshots, fiscal/POS links, PDF documents
-  with approved logo/signature, and email delivery.
-- Complete payment reminders, bank statement import and manual entry/matching,
-  advances, offsets, cash receipt/payment vouchers, daily cash reports, and
-  accounting posting.
+- Complete approved legal financial-document issuance: official invoices,
+  proforma conversion, official credit/debit notes, scoped numbering, legally
+  required states and fields, approved VAT/accounting treatment, automatic BNB
+  rates, fiscal/POS links, PDF with approved logo/signature, and email delivery.
+- Complete payment reminders, approved bank statement format adapters, supplier
+  payment matching, advances, offsets, cash receipt/payment vouchers, daily cash
+  reports, and accounting posting.
 - Deliver receivables/payables registers, aging, turnover, sales/purchase
   journals, VAT reports, structured accounting exports, controlled report
   definitions, the required revenue/service/warranty/receivables dashboard KPIs,

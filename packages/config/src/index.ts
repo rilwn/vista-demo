@@ -41,6 +41,25 @@ const environmentSchema = z
     FEATURE_FIFO_COSTING: booleanString.default(false),
     FEATURE_POS_BACKUP_ROUTER: booleanString.default(false),
     FEATURE_POS_KIOSK: booleanString.default(false),
+    FILE_ALLOWED_MEDIA_TYPES: z
+      .string()
+      .min(1)
+      .default('application/pdf,image/jpeg,image/png,image/webp')
+      .transform((value) => value.split(',').map((entry) => entry.trim().toLowerCase()))
+      .refine(
+        (values) =>
+          values.length > 0 &&
+          values.every((value) =>
+            ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'].includes(value),
+          ),
+        'Only the currently inspected PDF, JPEG, PNG, and WebP media types are supported',
+      ),
+    FILE_UPLOAD_MAX_BYTES: z.coerce
+      .number()
+      .int()
+      .positive()
+      .max(25 * 1024 * 1024)
+      .default(10 * 1024 * 1024),
     FINANCE_PAYMENT_STATUS_CRON: z.string().min(1).default('0 25 1 * * *'),
     IDEMPOTENCY_TTL_SECONDS: z.coerce.number().int().positive().default(86_400),
     INTEGRATION_OUTBOX_BATCH_SIZE: z.coerce.number().int().positive().max(500).default(100),

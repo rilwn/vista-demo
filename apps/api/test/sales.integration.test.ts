@@ -15,6 +15,7 @@ import type {
   SalesResolvedPrice,
   SalesWorkflow,
   ServiceSubscriptionContract,
+  FinanceBankStatement,
   FinanceCustomerDocument,
   FinanceReferenceData,
   ServiceEquipmentHistory,
@@ -24,6 +25,8 @@ import type {
   ServiceWorkOrder,
   ServiceWorkOrderPhoto,
   ServiceWorkOrderPage,
+  FinancialDocument,
+  FinancialDocumentReferenceData,
 } from '@vista/contracts';
 import { Pool } from 'pg';
 import request from 'supertest';
@@ -76,9 +79,11 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
       new URL('../src/database/migrations', import.meta.url),
     );
     await migrateUp(database, migrationDirectory);
-    expect(await migrateDown(database, migrationDirectory)).toBe('0030_service_work_orders_core');
+    expect(await migrateDown(database, migrationDirectory)).toBe(
+      '0035_finance_bank_reconciliation',
+    );
     expect(await migrateUp(database, migrationDirectory)).toContain(
-      '0030_service_work_orders_core',
+      '0035_finance_bank_reconciliation',
     );
 
     Object.assign(process.env, {
@@ -377,23 +382,102 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
       .expect(200);
     expect((overdueResponse.body as FinanceCustomerDocument).paymentStatus).toBe('overdue');
 
-    const finalResponse = await request(application.getHttpServer())
-      .post(`/api/v1/finance/documents/${created.id}/payments`)
+    await request(application.getHttpServer())
+      .post('/api/v1/finance/bank-statements')
+      .set('authorization', `Bearer ${viewerToken}`)
+      .set('idempotency-key', `finance-bank-viewer-${runId}`)
+      .send({})
+      .expect(403);
+    const statementInput = {
+      accountIban: 'BG76DEMO00000000000000',
+      bankName: 'Vista integration bank',
+      closingBalance: '1173.6',
+      currencyCode: 'BGN',
+      lines: [
+        {
+          amount: '160',
+          counterpartyName: `Sales Customer ${runId}`,
+          direction: 'incoming',
+          paymentReference: `Payment for ${created.number}`,
+          transactionDate: dueDate,
+          valueDate: dueDate,
+        },
+        {
+          amount: '13.6',
+          counterpartyName: `Sales Customer ${runId}`,
+          direction: 'incoming',
+          paymentReference: `Customer transfer ${runId}`,
+          transactionDate: dueDate,
+          valueDate: dueDate,
+        },
+      ],
+      openingBalance: '1000',
+      statementDate: dueDate,
+      statementReference: `STATEMENT-${runId}`,
+    };
+    const bankKey = `finance-bank-create-${runId}`;
+    const statementResponse = await request(application.getHttpServer())
+      .post('/api/v1/finance/bank-statements')
       .set('authorization', `Bearer ${token}`)
-      .set('idempotency-key', `finance-payment-final-${runId}`)
-      .send({
-        amount: '173.6',
-        paymentDate: dueDate,
-        paymentMethod: 'card',
-      })
+      .set('idempotency-key', bankKey)
+      .send(statementInput)
       .expect(201);
-    const settled = finalResponse.body as FinanceCustomerDocument;
+    const statement = statementResponse.body as FinanceBankStatement;
+    expect(statement).toMatchObject({
+      incomingTotal: '173.6000',
+      matchedIncomingCount: 1,
+      status: 'open',
+      unmatchedIncomingCount: 1,
+    });
+    expect(statement.transactions[0]).toMatchObject({
+      match: { documentNumber: created.number, method: 'automatic_reference' },
+      matchStatus: 'matched',
+    });
+    const replay = await request(application.getHttpServer())
+      .post('/api/v1/finance/bank-statements')
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', bankKey)
+      .send(statementInput)
+      .expect(201);
+    expect((replay.body as FinanceBankStatement).id).toBe(statement.id);
+    const unmatched = statement.transactions[1];
+    expect(unmatched).toMatchObject({ amount: '13.6000', matchStatus: 'unmatched' });
+    if (!unmatched) throw new Error('Expected an unmatched bank transaction');
+    const candidates = await request(application.getHttpServer())
+      .get(`/api/v1/finance/bank-transactions/${unmatched.id}/match-candidates`)
+      .set('authorization', `Bearer ${token}`)
+      .expect(200);
+    expect(candidates.body).toEqual(
+      expect.arrayContaining([expect.objectContaining({ customerDocumentId: created.id })]),
+    );
+    const matchedResponse = await request(application.getHttpServer())
+      .post(`/api/v1/finance/bank-transactions/${unmatched.id}/match`)
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', `finance-bank-match-${runId}`)
+      .send({ customerDocumentId: created.id, expectedVersion: unmatched.version })
+      .expect(200);
+    expect(matchedResponse.body as FinanceBankStatement).toMatchObject({
+      matchedIncomingCount: 2,
+      status: 'reconciled',
+      unmatchedIncomingCount: 0,
+    });
+    const settledResponse = await request(application.getHttpServer())
+      .get(`/api/v1/finance/documents/${created.id}`)
+      .set('authorization', `Bearer ${token}`)
+      .expect(200);
+    const settled = settledResponse.body as FinanceCustomerDocument;
     expect(settled).toMatchObject({
       allocatedTotal: '273.6000',
       outstandingTotal: '0.0000',
       paymentStatus: 'paid',
-      payments: [expect.any(Object), expect.any(Object)],
     });
+    expect(settled.payments).toHaveLength(3);
+    expect(settled.payments).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ amount: '160.0000', paymentMethod: 'bank_transfer' }),
+        expect.objectContaining({ amount: '13.6000', paymentMethod: 'bank_transfer' }),
+      ]),
+    );
     await request(application.getHttpServer())
       .post(`/api/v1/finance/documents/${created.id}/cancel`)
       .set('authorization', `Bearer ${token}`)
@@ -416,10 +500,192 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
       [created.id],
     );
     expect(evidence.rows[0]).toEqual({
-      allocation_count: '2',
-      audit_count: '4',
-      outbox_count: '4',
+      allocation_count: '3',
+      audit_count: '6',
+      outbox_count: '6',
     });
+  });
+
+  it('prepares structured invoice and correction drafts with immutable VAT and rate snapshots', async () => {
+    await request(application.getHttpServer())
+      .post('/api/v1/finance/financial-documents')
+      .set('authorization', `Bearer ${viewerToken}`)
+      .set('idempotency-key', `financial-document-viewer-${runId}`)
+      .send({})
+      .expect(403);
+
+    const referenceResponse = await request(application.getHttpServer())
+      .get('/api/v1/finance/financial-documents/reference-data')
+      .set('authorization', `Bearer ${token}`)
+      .expect(200);
+    const references = referenceResponse.body as FinancialDocumentReferenceData;
+    const scope = references.scopes[0];
+    expect(scope).toBeDefined();
+    expect(references.salesDrafts.some((draft) => draft.id === salesInvoiceId)).toBe(true);
+    if (!scope) throw new Error('Financial document test scope was not created');
+
+    const businessDateResult = await database.query<{ date: string }>(
+      "SELECT (now() AT TIME ZONE 'Europe/Sofia')::date::text AS date",
+    );
+    const issueDate = businessDateResult.rows[0]?.date;
+    if (!issueDate) throw new Error('Could not determine the financial document business date');
+    const invoiceInput = {
+      businessLocationId: scope.locationId,
+      currencyCode: 'BGN',
+      customerPartnerId: customerId,
+      documentType: 'invoice',
+      dueDate: issueDate,
+      exchangeRate: '1',
+      issueDate,
+      legalEntityId: scope.legalEntityId,
+      rateDate: issueDate,
+      rateSource: 'internal_bgn',
+      sourceSalesInvoiceId: salesInvoiceId,
+      taxEventDate: issueDate,
+    };
+    const key = `financial-document-invoice-${runId}`;
+    const createdResponse = await request(application.getHttpServer())
+      .post('/api/v1/finance/financial-documents')
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', key)
+      .send(invoiceInput)
+      .expect(201);
+    const invoice = createdResponse.body as FinancialDocument;
+    expect(invoice).toMatchObject({
+      currencyCode: 'BGN',
+      documentType: 'invoice',
+      exchangeRate: '1.00000000',
+      grossTotal: '273.6000',
+      sourceSalesInvoiceId: salesInvoiceId,
+      status: 'draft',
+    });
+    expect(invoice).not.toHaveProperty('officialNumber');
+    expect(invoice.number).toMatch(/^DINV-/u);
+    expect(invoice.vatSummary).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ vatRate: '20.0000', vatTreatment: 'standard_20' }),
+      ]),
+    );
+
+    const replay = await request(application.getHttpServer())
+      .post('/api/v1/finance/financial-documents')
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', key)
+      .send(invoiceInput)
+      .expect(201);
+    expect((replay.body as FinancialDocument).id).toBe(invoice.id);
+    const refreshedReferences = (
+      await request(application.getHttpServer())
+        .get('/api/v1/finance/financial-documents/reference-data')
+        .set('authorization', `Bearer ${token}`)
+        .expect(200)
+    ).body as FinancialDocumentReferenceData;
+    expect(
+      refreshedReferences.salesDrafts.find((draft) => draft.id === salesInvoiceId)
+        ?.linkedDocumentTypes,
+    ).toContain('invoice');
+
+    const unitCode = references.products.find((product) => product.id === productId)?.unitCode;
+    if (!unitCode) throw new Error('Financial document test product unit was not found');
+    const correctionResponse = await request(application.getHttpServer())
+      .post('/api/v1/finance/financial-documents')
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', `financial-document-credit-${runId}`)
+      .send({
+        businessLocationId: scope.locationId,
+        correctionOfDocumentId: invoice.id,
+        correctionReason: 'One damaged unit was returned before legal issuance.',
+        currencyCode: 'BGN',
+        customerPartnerId: customerId,
+        documentType: 'credit_note',
+        exchangeRate: '1',
+        issueDate,
+        legalEntityId: scope.legalEntityId,
+        lines: [
+          {
+            description: 'Receipt rolls',
+            discountPercent: '0',
+            productId,
+            quantity: '1',
+            unitCode,
+            unitPrice: '10',
+            vatTreatment: 'standard_20',
+          },
+        ],
+        rateDate: issueDate,
+        rateSource: 'internal_bgn',
+        taxEventDate: issueDate,
+      })
+      .expect(201);
+    const correction = correctionResponse.body as FinancialDocument;
+    expect(correction).toMatchObject({
+      correctionOf: { id: invoice.id },
+      documentType: 'credit_note',
+      grossTotal: '12.0000',
+      status: 'draft',
+    });
+
+    const cancelledResponse = await request(application.getHttpServer())
+      .post(`/api/v1/finance/financial-documents/${correction.id}/cancel`)
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', `financial-document-cancel-${runId}`)
+      .send({ cancellationReason: 'Test correction no longer required.', expectedVersion: 1 })
+      .expect(200);
+    expect(cancelledResponse.body as FinancialDocument).toMatchObject({
+      cancellationReason: 'Test correction no longer required.',
+      status: 'cancelled',
+      version: 2,
+    });
+
+    const concurrentProformas = await Promise.all(
+      Array.from({ length: 4 }, (_, index) =>
+        request(application.getHttpServer())
+          .post('/api/v1/finance/financial-documents')
+          .set('authorization', `Bearer ${token}`)
+          .set('idempotency-key', `financial-document-proforma-${index}-${runId}`)
+          .send({
+            ...invoiceInput,
+            documentType: 'proforma',
+            lines: [
+              {
+                description: `Concurrent numbering check ${index + 1}`,
+                discountPercent: '0',
+                productId,
+                quantity: '1',
+                unitCode,
+                unitPrice: '10',
+                vatTreatment: 'standard_20',
+              },
+            ],
+            sourceSalesInvoiceId: undefined,
+          })
+          .expect(201),
+      ),
+    );
+    const proformaNumbers = concurrentProformas.map(
+      ({ body }) => (body as FinancialDocument).number,
+    );
+    expect(new Set(proformaNumbers).size).toBe(4);
+    expect(
+      proformaNumbers
+        .map((number) => Number(number.slice(number.lastIndexOf('-') + 1)))
+        .sort((left, right) => left - right),
+    ).toEqual([1, 2, 3, 4]);
+
+    const register = await request(application.getHttpServer())
+      .get('/api/v1/finance/financial-documents?page=1&pageSize=10')
+      .set('authorization', `Bearer ${token}`)
+      .expect(200);
+    expect(register.body).toMatchObject({ page: 1, pageSize: 10, totalItems: 6 });
+
+    const evidence = await database.query<{ audit_count: string; outbox_count: string }>(
+      `SELECT
+         (SELECT count(*)::text FROM audit.events
+          WHERE action LIKE 'finance.financial-document.%') AS audit_count,
+         (SELECT count(*)::text FROM integration.outbox_events
+          WHERE event_type LIKE 'finance.financial-document.%') AS outbox_count`,
+    );
+    expect(evidence.rows[0]).toEqual({ audit_count: '7', outbox_count: '7' });
   });
 
   it('maintains scoped price lists and resolves one deterministic future price', async () => {
@@ -1383,6 +1649,12 @@ async function seedSalesData(pool: Pool, actorId: string, runId: string) {
   await pool.query(
     "INSERT INTO master_data.partner_roles (partner_id, role, assigned_by) VALUES ($1, 'customer', $2)",
     [customerId, actorId],
+  );
+  await pool.query(
+    `INSERT INTO master_data.partner_addresses (
+       partner_id, address_type, address_line_1, city, country_code
+     ) VALUES ($1, 'billing', '1 Customer Street', 'Vratsa', 'BG')`,
+    [customerId],
   );
   await pool.query(
     `INSERT INTO master_data.warehouses (id, code, name, created_by, updated_by)

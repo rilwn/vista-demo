@@ -32,7 +32,7 @@ export class CreateFinanceCustomerDocumentDto implements CreateFinanceCustomerDo
   dueDate!: string;
 
   @ApiProperty({ format: 'uuid', type: String })
-  @IsUUID('4')
+  @IsUUID('loose')
   salesInvoiceId!: string;
 }
 

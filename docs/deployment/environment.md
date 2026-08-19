@@ -31,6 +31,8 @@ environment and injected by an approved secret manager; never commit `.env`.
 | `S3_ENDPOINT`, `S3_REGION`, `S3_BUCKET`    | S3-compatible storage destination                        | yes for current foundation configuration     |
 | `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | storage credentials                                      | yes; secret manager in deployed environments |
 | `S3_FORCE_PATH_STYLE`                      | enables MinIO-compatible addressing                      | yes; true by default                         |
+| `FILE_ALLOWED_MEDIA_TYPES`                 | managed-file upload allowlist                            | yes; structurally inspected types only       |
+| `FILE_UPLOAD_MAX_BYTES`                    | managed-file application size ceiling                    | yes; 10 MB development default, 25 MB max    |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_FROM`      | email transport and sender                               | yes                                          |
 | `SESSION_SECRET`                           | reserved application session security material           | yes; at least 32 characters                  |
 | `SESSION_TTL_SECONDS`                      | Absolute opaque-session lifetime                         | yes; production value requires IAM-001       |
@@ -53,6 +55,12 @@ the exact trusted hop count. See
 should contain stable record identifiers, not credentials or full
 financial/customer records; completed and failed jobs are retained until an
 approved operational retention policy is implemented.
+
+Managed uploads are held in the configured private S3-compatible bucket. The
+application validates the configured size and allowlist, verifies PDF/image
+signatures, and records `structural-signature` as the inspection method. That is
+not malware scanning. Production enablement requires the approved scanner,
+quarantine, encryption, retention, and deletion policy recorded by `FILE-001`.
 
 Authentication uses opaque bearer tokens. Only a SHA-256 digest is retained in
 PostgreSQL metadata and live session state is stored in Redis with an absolute

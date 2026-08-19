@@ -1,4 +1,10 @@
-import { HeadBucketCommand, S3Client } from '@aws-sdk/client-s3';
+import {
+  DeleteObjectCommand,
+  GetObjectCommand,
+  HeadBucketCommand,
+  PutObjectCommand,
+  S3Client,
+} from '@aws-sdk/client-s3';
 import { Inject, Injectable, type OnApplicationShutdown } from '@nestjs/common';
 import type { AppEnvironment } from '@vista/config';
 
@@ -30,6 +36,38 @@ export class ObjectStorageService implements OnApplicationShutdown {
       abortSignal: AbortSignal.timeout(this.timeoutMs),
     });
     return Math.round(performance.now() - startedAt);
+  }
+
+  async putObject(input: {
+    body: Buffer;
+    checksumSha256: string;
+    key: string;
+    mediaType: string;
+  }): Promise<void> {
+    await this.client.send(
+      new PutObjectCommand({
+        Body: input.body,
+        Bucket: this.bucket,
+        ContentLength: input.body.length,
+        ContentType: input.mediaType,
+        Key: input.key,
+        Metadata: { 'vista-sha256': input.checksumSha256 },
+      }),
+    );
+  }
+
+  async getObject(key: string): Promise<Buffer> {
+    const result = await this.client.send(new GetObjectCommand({ Bucket: this.bucket, Key: key }));
+    if (!result.Body) throw new Error('Object storage returned an empty response body');
+    return Buffer.from(await result.Body.transformToByteArray());
+  }
+
+  async deleteObject(key: string): Promise<void> {
+    await this.client.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: key }));
+  }
+
+  bucketName(): string {
+    return this.bucket;
   }
 
   onApplicationShutdown(): void {

@@ -37,6 +37,13 @@ describe('parseEnvironment', () => {
     expect(environment.DEPENDENCY_HEALTH_TIMEOUT_MS).toBe(2_000);
     expect(environment.FEATURE_CUSTOMER_PORTAL).toBe(false);
     expect(environment.FEATURE_FIFO_COSTING).toBe(false);
+    expect(environment.FILE_ALLOWED_MEDIA_TYPES).toEqual([
+      'application/pdf',
+      'image/jpeg',
+      'image/png',
+      'image/webp',
+    ]);
+    expect(environment.FILE_UPLOAD_MAX_BYTES).toBe(10 * 1024 * 1024);
     expect(environment.IDEMPOTENCY_TTL_SECONDS).toBe(86_400);
     expect(environment.JOB_DEFAULT_ATTEMPTS).toBe(5);
     expect(environment.JOB_QUEUE_NAME).toBe('platform');
@@ -78,6 +85,15 @@ describe('parseEnvironment', () => {
     expect(() => parseEnvironment({ ...validEnvironment, PASSWORD_MIN_LENGTH: '7' })).toThrow(
       'PASSWORD_MIN_LENGTH',
     );
+    expect(() =>
+      parseEnvironment({ ...validEnvironment, FILE_ALLOWED_MEDIA_TYPES: 'text/plain' }),
+    ).toThrow('FILE_ALLOWED_MEDIA_TYPES');
+    expect(() =>
+      parseEnvironment({
+        ...validEnvironment,
+        FILE_UPLOAD_MAX_BYTES: String(25 * 1024 * 1024 + 1),
+      }),
+    ).toThrow('FILE_UPLOAD_MAX_BYTES');
   });
 
   it('requires the distributed Redis limiter in production', () => {

@@ -104,6 +104,37 @@ export interface NotificationPage {
   unreadCount: number;
 }
 
+export const managedFileParentTypes = ['partner'] as const;
+export type ManagedFileParentType = (typeof managedFileParentTypes)[number];
+export type ManagedFileStatus = 'available' | 'deleted' | 'quarantined' | 'rejected';
+
+export interface ManagedFile {
+  byteSize: number;
+  checksumSha256: string;
+  createdAt: string;
+  id: string;
+  inspectionMethod?: string;
+  isCurrent: boolean;
+  issuerAccountId: string;
+  mediaType: string;
+  originalName: string;
+  parentId: string;
+  parentType: ManagedFileParentType;
+  scannedAt?: string;
+  status: ManagedFileStatus;
+  version: number;
+  versionCount: number;
+  versionGroupId: string;
+}
+
+export interface ManagedFilePage {
+  items: ManagedFile[];
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+}
+
 export type BackgroundJobState =
   | 'active'
   | 'completed'
@@ -1267,6 +1298,289 @@ export interface FinanceSummary {
   overdueOutstanding: string;
   paidDocuments: number;
   totalOutstanding: string;
+}
+
+export const financeBankTransactionDirections = ['incoming', 'outgoing'] as const;
+export type FinanceBankTransactionDirection = (typeof financeBankTransactionDirections)[number];
+export type FinanceBankTransactionMatchStatus = 'matched' | 'unmatched';
+
+export interface CreateFinanceBankStatementLineRequest {
+  amount: string;
+  counterpartyIban?: string;
+  counterpartyName: string;
+  direction: FinanceBankTransactionDirection;
+  paymentReference: string;
+  transactionDate: string;
+  valueDate: string;
+}
+
+export interface CreateFinanceBankStatementRequest {
+  accountIban: string;
+  bankName: string;
+  closingBalance: string;
+  currencyCode: string;
+  lines: CreateFinanceBankStatementLineRequest[];
+  openingBalance: string;
+  statementDate: string;
+  statementReference: string;
+}
+
+export interface MatchFinanceBankTransactionRequest {
+  customerDocumentId: string;
+  expectedVersion: number;
+}
+
+export interface FinanceBankTransactionMatch {
+  customerDocumentId: string;
+  customerName: string;
+  documentNumber: string;
+  matchedAt: string;
+  method: 'automatic_reference' | 'manual';
+  paymentNumber: string;
+}
+
+export interface FinanceBankTransaction {
+  amount: string;
+  counterpartyIban?: string;
+  counterpartyName: string;
+  direction: FinanceBankTransactionDirection;
+  id: string;
+  lineNumber: number;
+  match?: FinanceBankTransactionMatch;
+  matchStatus: FinanceBankTransactionMatchStatus;
+  paymentReference: string;
+  transactionDate: string;
+  valueDate: string;
+  version: number;
+}
+
+export interface FinanceBankStatementSummary {
+  accountIban: string;
+  bankName: string;
+  closingBalance: string;
+  createdAt: string;
+  currencyCode: string;
+  id: string;
+  incomingTotal: string;
+  matchedIncomingCount: number;
+  number: string;
+  openingBalance: string;
+  outgoingTotal: string;
+  statementDate: string;
+  statementReference: string;
+  status: 'open' | 'reconciled';
+  transactionCount: number;
+  unmatchedIncomingCount: number;
+  version: number;
+}
+
+export interface FinanceBankStatement extends FinanceBankStatementSummary {
+  transactions: FinanceBankTransaction[];
+}
+
+export interface FinanceBankStatementPage {
+  items: FinanceBankStatementSummary[];
+  page: number;
+  pageSize: number;
+  totalItems: number;
+  totalPages: number;
+}
+
+export interface FinanceBankMatchCandidate {
+  customerDocumentId: string;
+  customerName: string;
+  documentNumber: string;
+  dueDate: string;
+  outstandingTotal: string;
+  referenceMatched: boolean;
+  score: number;
+  sourceInvoiceNumber: string;
+}
+
+export const financialDocumentTypes = ['invoice', 'proforma', 'credit_note', 'debit_note'] as const;
+export type FinancialDocumentType = (typeof financialDocumentTypes)[number];
+
+export const financialDocumentStatuses = ['draft', 'cancelled'] as const;
+export type FinancialDocumentStatus = (typeof financialDocumentStatuses)[number];
+
+export interface FinancialDocumentPartySnapshot {
+  address: string;
+  name: string;
+  uic?: string;
+  vatNumber?: string;
+}
+
+export interface FinancialDocumentScopeReference {
+  branchId: string;
+  branchName: string;
+  cashRegisters: Array<{ id: string; name: string }>;
+  legalEntityId: string;
+  legalEntityName: string;
+  locationId: string;
+  locationName: string;
+  operators: Array<{ id: string; name: string }>;
+}
+
+export interface FinancialDocumentCustomerReference {
+  id: string;
+  name: string;
+  uic?: string;
+  vatNumber?: string;
+}
+
+export interface FinancialDocumentProductReference {
+  code: string;
+  id: string;
+  name: string;
+  unitCode: string;
+  unitName: string;
+}
+
+export interface FinancialDocumentSalesDraftLineReference {
+  description: string;
+  discountPercent: string;
+  productId: string;
+  quantity: string;
+  unitCode: string;
+  unitPrice: string;
+  vatTreatment: VatTreatment;
+}
+
+export interface FinancialDocumentSalesDraftReference {
+  currencyCode: string;
+  customerName: string;
+  customerPartnerId: string;
+  id: string;
+  linkedDocumentTypes: FinancialDocumentType[];
+  lines: FinancialDocumentSalesDraftLineReference[];
+  number: string;
+  total: string;
+}
+
+export interface FinancialDocumentCorrectionReference {
+  currencyCode: string;
+  customerName: string;
+  customerPartnerId: string;
+  id: string;
+  number: string;
+  type: 'invoice';
+}
+
+export interface FinancialDocumentReferenceData {
+  businessTimezone: string;
+  correctionDocuments: FinancialDocumentCorrectionReference[];
+  customers: FinancialDocumentCustomerReference[];
+  products: FinancialDocumentProductReference[];
+  salesDrafts: FinancialDocumentSalesDraftReference[];
+  scopes: FinancialDocumentScopeReference[];
+}
+
+export interface CreateFinancialDocumentLineRequest {
+  description: string;
+  discountPercent: string;
+  productId?: string;
+  quantity: string;
+  unitCode: string;
+  unitPrice: string;
+  vatRate?: string;
+  vatTreatment: VatTreatment;
+}
+
+export interface CreateFinancialDocumentRequest {
+  businessLocationId: string;
+  cashRegisterId?: string;
+  correctionOfDocumentId?: string;
+  correctionReason?: string;
+  currencyCode: string;
+  customerPartnerId: string;
+  documentType: FinancialDocumentType;
+  dueDate?: string;
+  exchangeRate: string;
+  issueDate: string;
+  legalEntityId: string;
+  lines?: CreateFinancialDocumentLineRequest[];
+  notes?: string;
+  operatorId?: string;
+  rateDate: string;
+  rateSource: string;
+  sourceSalesInvoiceId?: string;
+  taxEventDate: string;
+}
+
+export interface CancelFinancialDocumentRequest {
+  cancellationReason: string;
+  expectedVersion: number;
+}
+
+export interface FinancialDocumentLine {
+  description: string;
+  discountPercent: string;
+  grossTotal: string;
+  id: string;
+  lineNumber: number;
+  netTotal: string;
+  productId?: string;
+  quantity: string;
+  unitCode: string;
+  unitPrice: string;
+  vatAmount: string;
+  vatRate: string;
+  vatTreatment: VatTreatment;
+}
+
+export interface FinancialDocumentVatSummary {
+  netTotal: string;
+  vatAmount: string;
+  vatRate: string;
+  vatTreatment: VatTreatment;
+}
+
+export interface FinancialDocument {
+  bgnGrossTotal: string;
+  bgnNetTotal: string;
+  bgnVatTotal: string;
+  branchName: string;
+  businessLocationId: string;
+  businessLocationName: string;
+  cancellationReason?: string;
+  cashRegisterName?: string;
+  correctionOf?: FinancialDocumentCorrectionReference;
+  correctionReason?: string;
+  createdAt: string;
+  currencyCode: string;
+  customerPartnerId: string;
+  customerSnapshot: FinancialDocumentPartySnapshot;
+  documentType: FinancialDocumentType;
+  dueDate?: string;
+  exchangeRate: string;
+  grossTotal: string;
+  id: string;
+  issueDate: string;
+  issuerSnapshot: FinancialDocumentPartySnapshot;
+  legalEntityId: string;
+  lines: FinancialDocumentLine[];
+  netTotal: string;
+  notes?: string;
+  number: string;
+  officialNumber?: string;
+  operatorName?: string;
+  rateDate: string;
+  rateSource: string;
+  sourceSalesInvoiceId?: string;
+  sourceSalesInvoiceNumber?: string;
+  status: FinancialDocumentStatus;
+  taxEventDate: string;
+  vatSummary: FinancialDocumentVatSummary[];
+  vatTotal: string;
+  version: number;
+}
+
+export interface FinancialDocumentPage {
+  items: FinancialDocument[];
+  page: number;
+  pageSize: number;
+  totalItems: number;
+  totalPages: number;
 }
 
 export const serviceRequestChannels = ['telephone', 'email', 'customer_portal', 'on_site'] as const;

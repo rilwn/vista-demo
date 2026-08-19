@@ -28,6 +28,7 @@ import { useAuth } from '../auth/AuthProvider';
 import { Icon } from '../components/Icon';
 import { messages } from '../messages';
 import { CustomerAssetsPanel } from './CustomerAssetsPanel';
+import { PartnerDocumentsPanel } from './PartnerDocumentsPanel';
 
 type OptionalKind = '' | PartnerKind;
 type OptionalRole = '' | PartnerRole;
@@ -538,6 +539,7 @@ function PartnerDetailDrawer({
   const [refresh, setRefresh] = useState(0);
   const [adding, setAdding] = useState<'address' | 'bank' | 'contact' | null>(null);
   const [editing, setEditing] = useState(false);
+  const [documentsOpen, setDocumentsOpen] = useState(false);
   const [statusBusy, setStatusBusy] = useState(false);
   const [statusError, setStatusError] = useState<string | null>(null);
   const statusAttempt = useRef<{ fingerprint: string; key: string } | null>(null);
@@ -602,6 +604,19 @@ function PartnerDetailDrawer({
       setStatusBusy(false);
     }
   }
+  if (documentsOpen && token) {
+    return (
+      <Drawer
+        backLabel={messages.partners.documents.back}
+        className="partner-documents-drawer"
+        onBack={() => setDocumentsOpen(false)}
+        onClose={onClose}
+        title={messages.partners.documents.title}
+      >
+        <PartnerDocumentsPanel canEdit={canEdit} partnerId={current.id} token={token} />
+      </Drawer>
+    );
+  }
   return (
     <Drawer onClose={onClose} title={messages.partners.detailsTitle}>
       <div className="partner-detail-identity">
@@ -629,6 +644,11 @@ function PartnerDetailDrawer({
         ))}
       </dl>
       <div className="partner-maintenance-actions">
+        {token ? (
+          <Button onClick={() => setDocumentsOpen(true)} variant="secondary">
+            {messages.partners.documents.open}
+          </Button>
+        ) : null}
         {canEdit ? (
           <Button onClick={() => setEditing((value) => !value)} variant="secondary">
             {editing ? 'Close editing' : 'Edit partner'}
@@ -1195,11 +1215,17 @@ function addressTypeLabel(type: CreatePartnerAddressRequest['type']): string {
 }
 
 function Drawer({
+  backLabel = 'Back',
   children,
+  className,
+  onBack,
   onClose,
   title,
 }: {
+  backLabel?: string;
   children: React.ReactNode;
+  className?: string;
+  onBack?: () => void;
   onClose: () => void;
   title: string;
 }) {
@@ -1211,16 +1237,21 @@ function Drawer({
         onClick={onClose}
         type="button"
       />
-      <aside aria-label={title} aria-modal="true" className="record-drawer" role="dialog">
+      <aside
+        aria-label={title}
+        aria-modal="true"
+        className={['record-drawer', className].filter(Boolean).join(' ')}
+        role="dialog"
+      >
         <div className="record-drawer-navigation">
           <button
-            aria-label="Back to partners"
+            aria-label={backLabel}
             className="panel-back-button"
-            onClick={onClose}
+            onClick={onBack ?? onClose}
             type="button"
           >
             <Icon name="arrow" size={17} />
-            Back
+            {backLabel}
           </button>
           <button
             aria-label={messages.partners.close}

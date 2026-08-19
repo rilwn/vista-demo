@@ -19,6 +19,7 @@ import { SecurityAdministrationModule } from './security-administration/security
 import { SalesModule } from './sales/sales.module.js';
 import { FinanceModule } from './finance/finance.module.js';
 import { ServiceOperationsModule } from './service/service.module.js';
+import { FilesModule } from './files/files.module.js';
 
 @Module({
   controllers: [RootController],
@@ -41,6 +42,7 @@ import { ServiceOperationsModule } from './service/service.module.js';
     SalesModule,
     FinanceModule,
     ServiceOperationsModule,
+    FilesModule,
   ],
 })
 export class AppModule {}

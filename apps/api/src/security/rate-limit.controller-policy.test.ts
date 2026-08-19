@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 
 import { AuthController } from '../auth/auth.controller.js';
 import { CatalogController } from '../catalog/catalog.controller.js';
+import { FilesController } from '../files/files.controller.js';
 import { InventoryController } from '../inventory/inventory.controller.js';
 import { IntegrationOperationsController } from '../integration/integration-operations.controller.js';
 import { JobsController } from '../jobs/jobs.controller.js';
@@ -21,6 +22,7 @@ import { RATE_LIMIT_POLICY, type RateLimitPolicyName } from './rate-limit.decora
 const controllers = [
   AuthController,
   CatalogController,
+  FilesController,
   InventoryController,
   IntegrationOperationsController,
   JobsController,
@@ -49,7 +51,7 @@ describe('HTTP rate-limit coverage', () => {
       })),
     );
 
-    expect(assignments).toHaveLength(120);
+    expect(assignments).toHaveLength(125);
     expect(assignments.filter(({ policy }) => policy === undefined)).toEqual([]);
     expect(assignments).toEqual(
       expect.arrayContaining([

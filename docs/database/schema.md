@@ -279,6 +279,37 @@ legal, fiscal, accounting, or BNB-posted invoices; future financial documents,
 rates, VAT, bank reconciliation, vouchers, and reports require their own
 approved workflows.
 
+Migration `0034_financial_documents_foundation` adds structured invoice,
+proforma, credit-note, and debit-note drafts without enabling legal issuance.
+`financial_documents` stores immutable issuer/customer, source/correction,
+currency-rate, total, BGN-equivalent, date, and lifecycle snapshots;
+`financial_document_lines` and `financial_document_vat_summary` preserve the
+fixed-precision calculation evidence for 20%, 9%, 0%, exempt, and explicitly
+rated intra-community treatments. Optional register and operator links are
+constrained to the selected business location.
+
+`draft_document_sequences` allocates internal `DINV`, `DPRO`, `DCN`, and `DDN`
+references under transactional row locks for each location, optional
+register/operator, document type, and year. They are workflow references only.
+`official_number` remains null until the approved legal numbering and issuance
+rules are implemented. Draft creation/cancellation is audited and outbox-backed;
+the migration deliberately does not claim BNB retrieval, accounting/VAT posting,
+fiscal/POS linkage, proforma conversion, PDF/signature output, or email delivery.
+
+Migration `0035_finance_bank_reconciliation` adds balanced manual BGN bank
+statements and immutable transaction lines. Incoming lines can be linked once to
+an open customer collection record; the link retains whether the match was an
+exact-reference automatic match or a user-confirmed manual match, and points to
+the generated payment and allocation. Statement and transaction versions protect
+concurrent review, while restrictive relationships prevent a bank transaction or
+payment from being allocated twice.
+
+`internal_document_sequences` also allocates `BST` statement and `PAY` payment
+references under transaction locks. Statement creation and manual matching write
+their business rows, audit records, and outbox events in the same transaction and
+support idempotent replay. This migration does not add bank-specific file parsers,
+supplier payment matching, advances, cash vouchers, or accounting posting.
+
 Migration `0030_service_work_orders_core` adds the `service` schema and its
 operational request-to-completion record chain. `requests` retain the immutable
 canonical customer, location, equipment, optional subscription reference, intake
@@ -301,3 +332,16 @@ operational identifiers, not fiscal or accounting document numbers. The migratio
 does not implement payment documents, warranty claims, inspections, route
 planning, or full sales/supplier serial history; those remain separate required
 workflows.
+
+Migration `0033_managed_file_versions` turns the foundation `files.objects`
+metadata into immutable logical-file histories. Every replacement keeps its own
+object key, checksum, issuer, timestamp, and monotonically increasing version
+under one `version_group_id`; the previous object is retained through
+`replaces_object_id`. The first authorized parent is a canonical partner record.
+Current uploads accept configured PDF/JPEG/PNG/WebP types, enforce a configured
+size ceiling, inspect the file signature, and store content in the private
+S3-compatible bucket. Downloads re-check byte length and SHA-256 before returning
+private, non-cacheable content. File metadata, audit, outbox, and idempotency
+records never contain the uploaded bytes. No delete/retention command is exposed
+before `FILE-001`, and structural signature inspection is not represented as a
+production malware scan.

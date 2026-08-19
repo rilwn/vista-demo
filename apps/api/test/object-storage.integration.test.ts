@@ -1,5 +1,7 @@
 import 'reflect-metadata';
 
+import { createHash, randomUUID } from 'node:crypto';
+
 import { Test, type TestingModule } from '@nestjs/testing';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
@@ -48,5 +50,21 @@ describe.skipIf(!runInfrastructureTests)('S3-compatible object storage readiness
 
   it('verifies that the configured private bucket is reachable', async () => {
     await expect(storage.ping()).resolves.toBeGreaterThanOrEqual(0);
+  });
+
+  it('writes, reads, verifies, and removes a private object', async () => {
+    const body = Buffer.from('%PDF-1.4\nVista object-storage integration test\n');
+    const key = `integration/object-storage/${randomUUID()}`;
+    try {
+      await storage.putObject({
+        body,
+        checksumSha256: createHash('sha256').update(body).digest('hex'),
+        key,
+        mediaType: 'application/pdf',
+      });
+      await expect(storage.getObject(key)).resolves.toEqual(body);
+    } finally {
+      await storage.deleteObject(key);
+    }
   });
 });

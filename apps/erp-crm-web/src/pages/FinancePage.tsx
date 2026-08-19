@@ -20,7 +20,8 @@ import {
 } from '../api/finance';
 import { useAuth } from '../auth/AuthProvider';
 import { Icon } from '../components/Icon';
-import { Link } from '../routing/Router';
+import { FinanceTabs } from './FinanceBankPage';
+import { FinancialDocumentsPage } from './FinancialDocumentsPage';
 
 export type FinanceView = 'invoices' | 'payments';
 
@@ -33,6 +34,10 @@ const emptySummary: FinanceSummary = {
 };
 
 export function FinancePage({ view }: { view: FinanceView }) {
+  return view === 'invoices' ? <FinancialDocumentsPage /> : <FinanceCollectionsPage view={view} />;
+}
+
+function FinanceCollectionsPage({ view }: { view: FinanceView }) {
   const { hasPermission, session } = useAuth();
   const token = session?.sessionToken ?? '';
   const data = useFinanceData(token);
@@ -65,33 +70,18 @@ export function FinancePage({ view }: { view: FinanceView }) {
           <h1>{pageTitle}</h1>
           <p>{pageDescription}</p>
         </div>
-        {canCreate && view === 'invoices' ? (
+        {canCreate ? (
           <Button onClick={() => setCreating(true)}>
             <Icon name="plus" size={17} /> Add to collections
           </Button>
         ) : null}
       </header>
 
-      <nav aria-label="Finance sections" className="finance-tabs">
-        <Link
-          className={({ isActive }) => (isActive ? 'is-active' : undefined)}
-          end
-          to="/modules/erp.finance/invoices"
-        >
-          Invoice drafts
-        </Link>
-        <Link
-          className={({ isActive }) => (isActive ? 'is-active' : undefined)}
-          end
-          to="/modules/erp.finance/payments"
-        >
-          Payments &amp; allocations
-        </Link>
-      </nav>
+      <FinanceTabs />
 
       <InlineAlert tone="info">
-        Collection records are in BGN. Legal invoice issue, tax posting, BNB rates, and bank imports
-        will be available after the finance configuration is approved.
+        Collection records are in BGN. Legal invoice issue, tax posting, automatic BNB rates, and
+        bank-specific file imports require the approved finance configuration.
       </InlineAlert>
 
       <FinanceSummaryCards summary={data.summary} />

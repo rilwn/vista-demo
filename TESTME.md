@@ -1,79 +1,77 @@
-# Test initial administrator access and account recovery
+# Test bank reconciliation
 
-This is the completed first-administrator and controlled account-recovery flow.
-It uses the private development database only. Do not run the provisioning step
-if an administrator already exists.
+This tests only the completed manual BGN statement and customer-payment matching
+flow.
 
-The administrator must be provisioned successfully before attempting the
-administrator sign-in in section 2. The normal development fixture bootstrap
-does not create an administrative account because administrative access must
-have a separately enrolled second factor.
+## Start
 
-## 1. Provision the first administrator once
+1. Run `npm run dev` and wait until the API and ERP/CRM app are ready.
+2. Open `http://localhost:5173` and sign in as `finance@vista.local` using your
+   configured `DEV_FIXTURES_PASSWORD`.
+3. From the sidebar, choose **ERP → Finance → Collections & payments**.
+4. Preview `DEV-FIN-REV-0001`. On a fresh fixture database it has **BGN 40.00
+   remaining**. Select **Back**.
 
-1. Ensure your private `.env` has `NODE_ENV=development`,
-   `DEV_FIXTURES_ENABLED=true`, and your private `DEV_FIXTURES_PASSWORD`.
-2. Add these temporary settings to the same `.env`. For
-   `INITIAL_ADMIN_PASSWORD`, enter the exact private password you already chose
-   for `DEV_FIXTURES_PASSWORD` (it must meet the password policy).
+## Enter and reconcile the statement
 
-   ```dotenv
-   INITIAL_ADMIN_PROVISIONING_ENABLED=true
-   INITIAL_ADMIN_EMAIL=local.admin@vista.local
-   INITIAL_ADMIN_DISPLAY_NAME=Local Vista Administrator
-   INITIAL_ADMIN_EMPLOYEE_NUMBER=LOCAL-ADMIN-001
-   INITIAL_ADMIN_PASSWORD=<your-private-fixture-password>
-   ```
+1. Select the **Bank reconciliation** tab, then **New statement**.
+2. Enter:
+   - Bank name: `Vista Demo Bank`
+   - Statement reference: `TEST-STATEMENT-2026-08-19-01`
+   - Company account IBAN: `BG76DEMO00000000000000`
+   - Statement date: keep today
+   - Opening balance: `1000`
+3. For transaction 1, enter:
+   - Direction: **Incoming**
+   - Amount: `15`
+   - Transaction date / value date: keep today
+   - Counterparty: `Alfa Market Demo Ltd.`
+   - Payment reference: `Payment for DEV-FIN-REV-0001`
+4. Select **Add line**, then scroll to the new, empty **Transaction 2** card.
+   Enter these values in that second card—not in Transaction 1:
+   - Direction: **Incoming**
+   - Amount: `25`
+   - Transaction date / value date: keep today
+   - Counterparty: `Alfa Market Demo Ltd.`
+   - Payment reference: `August customer transfer`
+5. Select **Use calculated balance**. Closing balance must become `1040.0000`.
+   Select **Add statement**.
 
-3. Run `npm run iam:provision-initial-admin`.
-4. Confirm that the terminal says
-   `Initial administrator provisioned for local.admin@vista.local.` If it does
-   not, stop here and use the reported error to correct the setup.
-5. Copy the one-time setup key printed in the terminal into a trusted
-   time-based authenticator app. Do not store that key in a ticket, chat, or
-   source file.
-6. Remove the five `INITIAL_ADMIN_*` settings from `.env` (or at minimum set
-   `INITIAL_ADMIN_PROVISIONING_ENABLED=false`), then start the stack with
-   `npm run dev`.
+Expected: the statement opens with transaction 1 **Matched** and
+**Reference matched automatically**. Transaction 2 shows **Needs review**.
 
-Expected: the command succeeds once only. Re-running it is refused because an
-administrator now exists.
+6. On transaction 2, select **Review match**, choose `DEV-FIN-REV-0001`, and
+   select **Confirm match**.
+7. Select **Back**, then open **Collections & payments** and preview
+   `DEV-FIN-REV-0001`.
 
-## 2. Sign in as the administrator
+Expected: the statement is **Reconciled**; the collection is **Paid**, its
+remaining balance is **BGN 0.00**, and two new bank-transfer payments are listed.
 
-1. Open `http://localhost:5173`.
-2. Enter `local.admin@vista.local` and the password you used above.
-3. Enter the current six-digit code from the authenticator app.
+If that collection is already paid, use another open collection and split its
+displayed remaining balance across the two lines. Use its `FIN-REV-...` number in
+transaction 1, and set closing balance to `1000 + both transaction amounts`.
+Use a new statement reference if the sample reference already exists.
 
-Expected: the Workspace overview opens. **Administration → Security** is
-available.
+If no open collection exists, create one through the UI:
 
-## 3. Recover a standard employee account
+1. From the sidebar, choose **ERP → Sales → Quotations → New quotation**.
+2. Choose **Balkan Retail Demo Ltd.**, **Demo Central Warehouse**, BGN, a future
+   validity date, and **Demo 12 V Power Adapter**. Use quantity `1`, price `50`,
+   discount `0`, and **Standard 20%** VAT, then save.
+3. Preview it and complete **Confirm order and reserve stock → Complete shipment
+   → Record customer acceptance → Prepare invoice draft**. For acceptance, enter
+   customer representative `Test customer`.
+4. Return through the sidebar to **ERP → Finance → Collections & payments**,
+   select **Add to collections**, choose that new Sales draft, keep a future due
+   date, and save. Note the new `FIN-REV-...` number and displayed remaining
+   balance.
+5. Use that number in transaction 1. Split the displayed balance between the two
+   statement lines, and make the closing balance `1000 + the displayed balance`.
 
-1. In the sidebar, choose **Administration → Security**.
-2. In **Employees**, search for **Vista Demo Manager** and select **Manage**.
-3. In **Account recovery**, select **Issue recovery handoff**.
-4. Keep or replace the note with `Identity verified in person.` and select
-   **Issue recovery code**.
-5. Record the code shown in the panel. Close the panel.
-6. Open a private browser window at `http://localhost:5173` and select
-   **Use a recovery code** on the sign-in screen.
-7. Enter:
-   - Work email: `manager@vista.local`
-   - Recovery code: the code from step 5
-   - New password: a new private policy-compliant password
-   - Confirm new password: the same new password
-8. Select **Reset password**, then **Back to sign in**.
-9. Sign in as `manager@vista.local` with the new password.
+## Not ready yet
 
-Expected: recovery reports success, the code cannot be reused, and the manager
-can sign in with the replacement password. The Security activity log records
-the handoff and recovery without showing the code or password.
-
-## Not part of this test
-
-- Email or SMS delivery of recovery messages; approved provider adapters are
-  still pending.
-- Recovering the administrator itself in the browser, because that deliberately
-  closes the current administrator session and requires a fresh authenticator
-  setup. This protected branch is covered by the automated integration suite.
+- Bank statement file import
+- Supplier-payment matching, advances, and offsets
+- Cash vouchers and daily cash reports
+- Legal/accounting posting and statutory reports
