@@ -423,8 +423,39 @@ export class FinanceService {
         await this.systemSideEffects(client, row.id, context);
         documentIds.push(row.id);
       }
+      const supplierResult = await client.query<{
+        id: string;
+        payment_status: FinancePaymentStatus;
+      }>(
+        `SELECT id, payment_status FROM finance.supplier_payables
+         WHERE outstanding_total > 0 AND due_date < $1 AND payment_status <> 'overdue'
+         ORDER BY due_date, id FOR UPDATE SKIP LOCKED`,
+        [asOf],
+      );
+      const supplierPayableIds: string[] = [];
+      for (const row of supplierResult.rows) {
+        await client.query(
+          `UPDATE finance.supplier_payables
+           SET payment_status = 'overdue', version = version + 1, updated_at = now()
+           WHERE id = $1`,
+          [row.id],
+        );
+        await client.query(
+          `INSERT INTO finance.supplier_payment_status_history (
+             id, supplier_payable_id, previous_status, next_status, reason
+           ) VALUES ($1,$2,$3,'overdue','scheduled_due_date_check')`,
+          [randomUUID(), row.id, row.payment_status],
+        );
+        await this.systemSupplierSideEffects(client, row.id, context);
+        supplierPayableIds.push(row.id);
+      }
       await client.query('COMMIT');
-      return { asOf, documentIds, updatedCount: documentIds.length };
+      return {
+        asOf,
+        documentIds,
+        supplierPayableIds,
+        updatedCount: documentIds.length + supplierPayableIds.length,
+      };
     } catch (error) {
       await client.query('ROLLBACK');
       throw error;
@@ -608,7 +639,9 @@ export class FinanceService {
         id,
         eventType,
         context.correlationId,
-        `${eventType}:${context.idempotencyKey}:${id}`,
+        `finance:${createHash('sha256')
+          .update(`${eventType}:${context.idempotencyKey}:${id}`)
+          .digest('hex')}`,
         { documentId: id, scheduledFor: context.payload['scheduledFor'] },
       ],
     );
@@ -620,6 +653,40 @@ export class FinanceService {
         metadata: { jobId: context.jobId, jobName: context.name },
         targetId: id,
         targetType: 'finance_customer_document',
+      },
+      client,
+    );
+  }
+
+  private async systemSupplierSideEffects(
+    client: PoolClient,
+    id: string,
+    context: BackgroundJobContext,
+  ) {
+    const eventType = 'finance.supplier-payable.overdue';
+    await client.query(
+      `INSERT INTO integration.outbox_events (
+         id, aggregate_type, aggregate_id, event_type, event_version,
+         correlation_id, idempotency_key, payload
+       ) VALUES ($1, 'finance_supplier_payable', $2, $3, 1, $4, $5, $6)
+       ON CONFLICT (idempotency_key) DO NOTHING`,
+      [
+        randomUUID(),
+        id,
+        eventType,
+        context.correlationId,
+        `${eventType}:${context.idempotencyKey}:${id}`,
+        { supplierPayableId: id, scheduledFor: context.payload['scheduledFor'] },
+      ],
+    );
+    await this.audit.append(
+      {
+        action: eventType,
+        after: { status: 'overdue' },
+        correlationId: context.correlationId,
+        metadata: { jobId: context.jobId, jobName: context.name },
+        targetId: id,
+        targetType: 'finance_supplier_payable',
       },
       client,
     );

@@ -481,16 +481,47 @@ reminders.
    **Add statement**.
 4. Select **Preview**. An incoming transfer with one exact collection reference
    is marked **Matched** automatically. Ambiguous or generic references remain
-   **Needs review** and do not move money automatically.
-5. For a transfer needing review, select **Review match**, compare the ranked open
-   collection records, and select **Confirm match**. Return to
+   **Needs review** and do not move money automatically. Outgoing supplier lines
+   always require review.
+5. For an incoming transfer needing review, select **Review match**, compare the
+   ranked open collection records, and select **Confirm match**. Return to
    **Collections & payments** to verify the generated bank-transfer payment,
    allocation, outstanding balance, and payment status.
+6. For an outgoing transfer, select **Review match**. In the
+   **Review supplier transfer** panel, choose the matching supplier payable, or
+   deliberately keep the transfer as an available supplier advance, then
+   confirm. The statement reconciles only after every incoming and outgoing line
+   has been matched.
 
 Statement entry must balance and a transfer cannot be matched twice. Bank-specific
-file import, supplier-payment matching, advances, cash vouchers, and accounting
-posting remain unavailable pending the required business decisions and later
-Finance work.
+file import and accounting posting remain unavailable pending the required
+business decisions and later Finance work.
+
+### Supplier payables, advances, and offsets
+
+1. From the left navigation, choose **ERP → Finance**, then select
+   **Supplier payables**.
+2. Select **Add supplier invoice**. Choose a recorded BGN supplier invoice and
+   review the due date suggested from the supplier terms. Select **Add payable**.
+3. In the payable preview, review the source invoice, total, due date, status,
+   remaining amount, and payment trail. Select **Record payment** to allocate a
+   partial or complete supplier payment. The amount cannot exceed the balance.
+4. Select **New advance** to record money sent before an invoice is allocated.
+   Open the saved advance from **Advances & offsets**, select
+   **Apply to payable**, and choose an open payable for the same supplier.
+5. When the same canonical partner has both an open customer receivable and an
+   open supplier payable, preview the payable and select **Create offset**. Choose
+   both balances, enter the amount and reason, then save. Both balances are
+   reduced in one transaction and the compensation record remains in
+   **Advances & offsets**.
+6. Use **Bank reconciliation** for outgoing bank lines. Supplier transfers are
+   manually confirmed against a payable or retained as an advance; they are
+   never posted from a name similarity alone.
+
+The supplier subledger uses internal operational references and BGN evidence.
+It does not issue a legal supplier document, post deductible VAT or general-ledger
+entries, import an approved bank file, or directly connect a cash payment voucher
+to a supplier payable.
 
 ### Prices and promotions
 

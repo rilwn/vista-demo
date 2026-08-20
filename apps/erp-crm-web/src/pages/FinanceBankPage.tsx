@@ -6,6 +6,8 @@ import type {
   FinanceBankStatement,
   FinanceBankStatementSummary,
   FinanceBankTransaction,
+  FinanceSupplierBankMatchCandidate,
+  FinanceSupplierReferenceData,
 } from '@vista/contracts';
 import { type FormEvent, type ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
 
@@ -14,8 +16,11 @@ import {
   createFinanceBankStatement,
   getFinanceBankMatchCandidates,
   getFinanceBankStatement,
+  getFinanceSupplierBankMatchCandidates,
+  getFinanceSupplierReferenceData,
   listFinanceBankStatements,
   matchFinanceBankTransaction,
+  matchFinanceSupplierBankTransaction,
 } from '../api/finance';
 import { useAuth } from '../auth/AuthProvider';
 import { Icon } from '../components/Icon';
@@ -53,8 +58,14 @@ export function FinanceBankPage() {
 
   const statements = data.items;
   const incoming = statements.reduce((total, item) => total + Number(item.incomingTotal), 0);
-  const unmatched = statements.reduce((total, item) => total + item.unmatchedIncomingCount, 0);
-  const matched = statements.reduce((total, item) => total + item.matchedIncomingCount, 0);
+  const unmatched = statements.reduce(
+    (total, item) => total + item.unmatchedIncomingCount + item.unmatchedOutgoingCount,
+    0,
+  );
+  const matched = statements.reduce(
+    (total, item) => total + item.matchedIncomingCount + item.matchedOutgoingCount,
+    0,
+  );
 
   return (
     <div className="page-stack bank-workspace">
@@ -81,7 +92,7 @@ export function FinanceBankPage() {
       <section aria-label="Bank reconciliation summary" className="bank-summary">
         <BankMetric label="Statements" value={String(data.totalItems)} />
         <BankMetric label="Incoming shown" value={formatMoney(String(incoming))} />
-        <BankMetric label="Matched transfers" value={String(matched)} />
+        <BankMetric label="Matched transactions" value={String(matched)} />
         <BankMetric
           label="Needs review"
           {...(unmatched ? { tone: 'warning' as const } : {})}
@@ -146,12 +157,14 @@ export function FinanceBankPage() {
         <CreateBankStatementDrawer
           onBack={() => setCreating(false)}
           onSaved={(statement) => {
+            const unmatchedCount =
+              statement.unmatchedIncomingCount + statement.unmatchedOutgoingCount;
             setCreating(false);
             setSelected(statement);
             setNotice(
-              statement.unmatchedIncomingCount
-                ? `${statement.number} was added with ${statement.unmatchedIncomingCount} transfer requiring review.`
-                : `${statement.number} was added and its incoming transfers were matched.`,
+              unmatchedCount
+                ? `${statement.number} was added with ${unmatchedCount} ${unmatchedCount === 1 ? 'transaction' : 'transactions'} requiring review.`
+                : `${statement.number} was added and its transactions were matched.`,
             );
             data.reload();
           }}
@@ -164,7 +177,7 @@ export function FinanceBankPage() {
           onBack={() => setSelected(null)}
           onSaved={(statement) => {
             setSelected(statement);
-            setNotice('The bank transfer was matched and the collection balance was updated.');
+            setNotice('The bank transaction was matched and the connected balance was updated.');
             data.reload();
           }}
           statement={selected}
@@ -191,6 +204,20 @@ export function FinanceTabs() {
         to="/modules/erp.finance/payments"
       >
         Collections &amp; payments
+      </Link>
+      <Link
+        className={({ isActive }) => (isActive ? 'is-active' : undefined)}
+        end
+        to="/modules/erp.finance/payables"
+      >
+        Supplier payables
+      </Link>
+      <Link
+        className={({ isActive }) => (isActive ? 'is-active' : undefined)}
+        end
+        to="/modules/erp.finance/cash"
+      >
+        Cash operations
       </Link>
       <Link
         className={({ isActive }) => (isActive ? 'is-active' : undefined)}
@@ -355,7 +382,10 @@ function CreateBankStatementDrawer({
             <span>2</span>
             <div>
               <h3>Transactions</h3>
-              <p>Incoming references are checked against open collection records.</p>
+              <p>
+                Incoming references are checked against receivables; outgoing lines enter supplier
+                review.
+              </p>
             </div>
             <Button
               onClick={() => setLines((current) => [...current, newLine()])}
@@ -500,11 +530,23 @@ function BankStatementDrawer({
   token: string;
 }) {
   const [matching, setMatching] = useState<FinanceBankTransaction | null>(null);
+  const finishMatching = (next: FinanceBankStatement) => {
+    setMatching(null);
+    onSaved(next);
+  };
   if (matching)
-    return (
+    return matching.direction === 'incoming' ? (
       <BankMatchDrawer
         onBack={() => setMatching(null)}
-        onSaved={onSaved}
+        onSaved={finishMatching}
+        token={token}
+        transaction={matching}
+      />
+    ) : (
+      <SupplierBankMatchDrawer
+        onBack={() => setMatching(null)}
+        onSaved={finishMatching}
+        statementId={statement.id}
         token={token}
         transaction={matching}
       />
@@ -569,6 +611,15 @@ function BankStatementDrawer({
                         : 'Matched manually'}
                     </p>
                   ) : null}
+                  {transaction.supplierMatch ? (
+                    <p>
+                      Matched to{' '}
+                      <strong>
+                        {transaction.supplierMatch.supplierPayableNumber ?? 'supplier advance'}
+                      </strong>{' '}
+                      · {transaction.supplierMatch.paymentNumber} · Matched manually
+                    </p>
+                  ) : null}
                 </div>
                 <div className="bank-transaction-value">
                   <strong>
@@ -580,15 +631,9 @@ function BankStatementDrawer({
                       transaction.matchStatus === 'matched' ? 'is-matched' : 'is-unmatched'
                     }
                   >
-                    {transaction.matchStatus === 'matched'
-                      ? 'Matched'
-                      : transaction.direction === 'incoming'
-                        ? 'Needs review'
-                        : 'Outgoing'}
+                    {transaction.matchStatus === 'matched' ? 'Matched' : 'Needs review'}
                   </span>
-                  {canEdit &&
-                  transaction.direction === 'incoming' &&
-                  transaction.matchStatus === 'unmatched' ? (
+                  {canEdit && transaction.matchStatus === 'unmatched' ? (
                     <Button onClick={() => setMatching(transaction)} variant="quiet">
                       Review match
                     </Button>
@@ -711,7 +756,11 @@ function BankMatchDrawer({
                   </small>
                 </div>
                 <span>
-                  {candidate.referenceMatched ? 'Reference match' : `${candidate.score}% match`}
+                  {candidate.referenceMatched
+                    ? 'Reference match'
+                    : candidate.score > 0
+                      ? `${candidate.score}% match`
+                      : 'Manual review'}
                 </span>
               </label>
             ))
@@ -725,6 +774,202 @@ function BankMatchDrawer({
         <div className="bank-drawer-actions">
           <Button busy={busy} disabled={!selectedId} onClick={() => void match()}>
             Confirm match
+          </Button>
+          <Button disabled={busy} onClick={onBack} variant="secondary">
+            Back
+          </Button>
+        </div>
+      </div>
+    </BankDrawer>
+  );
+}
+
+function SupplierBankMatchDrawer({
+  onBack,
+  onSaved,
+  statementId,
+  token,
+  transaction,
+}: {
+  onBack: () => void;
+  onSaved: (statement: FinanceBankStatement) => void;
+  statementId: string;
+  token: string;
+  transaction: FinanceBankTransaction;
+}) {
+  const [candidates, setCandidates] = useState<FinanceSupplierBankMatchCandidate[]>([]);
+  const [references, setReferences] = useState<FinanceSupplierReferenceData>({
+    businessDate: '',
+    openReceivables: [],
+    supplierInvoices: [],
+    suppliers: [],
+  });
+  const [mode, setMode] = useState<'advance' | 'payable'>('payable');
+  const [selectedPayableId, setSelectedPayableId] = useState('');
+  const [supplierId, setSupplierId] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    Promise.all([
+      getFinanceSupplierBankMatchCandidates(token, transaction.id),
+      getFinanceSupplierReferenceData(token),
+    ])
+      .then(([items, nextReferences]) => {
+        if (!active) return;
+        setCandidates(items);
+        setReferences(nextReferences);
+        setSelectedPayableId(items[0]?.supplierPayableId ?? '');
+        setSupplierId(items[0]?.supplierPartnerId ?? nextReferences.suppliers[0]?.id ?? '');
+        if (!items.length) setMode('advance');
+      })
+      .catch((caught) => {
+        if (active) setError(apiMessage(caught, 'Supplier match suggestions could not be loaded.'));
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [token, transaction.id]);
+
+  async function match() {
+    if ((mode === 'payable' && !selectedPayableId) || (mode === 'advance' && !supplierId)) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await matchFinanceSupplierBankTransaction(token, transaction.id, crypto.randomUUID(), {
+        expectedVersion: transaction.version,
+        mode,
+        ...(mode === 'payable'
+          ? { supplierPayableId: selectedPayableId }
+          : { supplierPartnerId: supplierId }),
+      });
+      onSaved(await getFinanceBankStatement(token, statementId));
+    } catch (caught) {
+      setError(apiMessage(caught, 'The outgoing bank transfer could not be matched.'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <BankDrawer
+      busy={busy}
+      onBack={onBack}
+      subtitle={`${transaction.counterpartyName} · ${formatMoney(transaction.amount)}`}
+      title="Review supplier transfer"
+    >
+      <div className="bank-match-review supplier-bank-match-review">
+        {error ? <InlineAlert tone="error">{error}</InlineAlert> : null}
+        <section className="bank-match-source">
+          <span>Payment reference</span>
+          <strong>{transaction.paymentReference}</strong>
+          <dl>
+            <div>
+              <dt>Outgoing amount</dt>
+              <dd>{formatMoney(transaction.amount)}</dd>
+            </div>
+            <div>
+              <dt>Value date</dt>
+              <dd>{formatDate(transaction.valueDate)}</dd>
+            </div>
+          </dl>
+        </section>
+        <div aria-label="Supplier match type" className="bank-match-mode">
+          <button
+            className={mode === 'payable' ? 'is-active' : undefined}
+            disabled={!candidates.length}
+            onClick={() => setMode('payable')}
+            type="button"
+          >
+            Match a payable
+          </button>
+          <button
+            className={mode === 'advance' ? 'is-active' : undefined}
+            onClick={() => setMode('advance')}
+            type="button"
+          >
+            Keep as advance
+          </button>
+        </div>
+        {loading ? (
+          <p>Loading supplier balances…</p>
+        ) : mode === 'payable' ? (
+          <section className="bank-match-candidates">
+            <header>
+              <h3>Possible supplier payables</h3>
+              <p>
+                Reference, supplier, and amount rank the suggestions. You confirm the allocation.
+              </p>
+            </header>
+            {candidates.map((candidate) => (
+              <label
+                className={
+                  selectedPayableId === candidate.supplierPayableId ? 'is-selected' : undefined
+                }
+                key={candidate.supplierPayableId}
+              >
+                <input
+                  checked={selectedPayableId === candidate.supplierPayableId}
+                  name="supplier-candidate"
+                  onChange={() => {
+                    setSelectedPayableId(candidate.supplierPayableId);
+                    setSupplierId(candidate.supplierPartnerId);
+                  }}
+                  type="radio"
+                />
+                <div>
+                  <strong>{candidate.payableNumber}</strong>
+                  <span>
+                    {candidate.supplierName} · Invoice {candidate.sourceSupplierInvoiceNumber}
+                  </span>
+                  <small>
+                    Due {formatDate(candidate.dueDate)} · {formatMoney(candidate.outstandingTotal)}{' '}
+                    outstanding
+                  </small>
+                </div>
+                <span>
+                  {candidate.referenceMatched
+                    ? 'Reference match'
+                    : candidate.score > 0
+                      ? `${candidate.score}% match`
+                      : 'Manual review'}
+                </span>
+              </label>
+            ))}
+          </section>
+        ) : (
+          <section className="supplier-bank-advance-choice">
+            <header>
+              <h3>Supplier advance</h3>
+              <p>
+                The complete transfer remains available until it is deliberately applied to a
+                payable.
+              </p>
+            </header>
+            <label>
+              <span>Supplier</span>
+              <select onChange={(event) => setSupplierId(event.target.value)} value={supplierId}>
+                {references.suppliers.map((supplier) => (
+                  <option key={supplier.id} value={supplier.id}>
+                    {supplier.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </section>
+        )}
+        <div className="bank-drawer-actions">
+          <Button
+            busy={busy}
+            disabled={loading || (mode === 'payable' ? !selectedPayableId : !supplierId)}
+            onClick={() => void match()}
+          >
+            {mode === 'payable' ? 'Confirm supplier match' : 'Record supplier advance'}
           </Button>
           <Button disabled={busy} onClick={onBack} variant="secondary">
             Back

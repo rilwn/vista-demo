@@ -153,6 +153,18 @@ class FinanceBankTransactionMatchDto {
   @ApiProperty({ type: String }) paymentNumber!: string;
 }
 
+class FinanceSupplierBankTransactionMatchDto {
+  @ApiProperty({ enum: ['advance', 'payment'] }) kind!: 'advance' | 'payment';
+  @ApiProperty({ format: 'date-time', type: String }) matchedAt!: string;
+  @ApiProperty({ enum: ['automatic_reference', 'manual'] })
+  method!: 'automatic_reference' | 'manual';
+  @ApiProperty({ type: String }) paymentNumber!: string;
+  @ApiProperty({ type: String }) supplierName!: string;
+  @ApiProperty({ format: 'uuid', type: String }) supplierPartnerId!: string;
+  @ApiPropertyOptional({ format: 'uuid', type: String }) supplierPayableId?: string;
+  @ApiPropertyOptional({ type: String }) supplierPayableNumber?: string;
+}
+
 class FinanceBankTransactionDto implements FinanceBankTransaction {
   @ApiProperty({ type: String }) amount!: string;
   @ApiPropertyOptional({ type: String }) counterpartyIban?: string;
@@ -167,6 +179,8 @@ class FinanceBankTransactionDto implements FinanceBankTransaction {
   matchStatus!: FinanceBankTransaction['matchStatus'];
   @ApiProperty({ type: String }) paymentReference!: string;
   @ApiProperty({ format: 'date', type: String }) transactionDate!: string;
+  @ApiPropertyOptional({ type: FinanceSupplierBankTransactionMatchDto })
+  supplierMatch?: NonNullable<FinanceBankTransaction['supplierMatch']>;
   @ApiProperty({ format: 'date', type: String }) valueDate!: string;
   @ApiProperty({ minimum: 1, type: Number }) version!: number;
 }
@@ -180,6 +194,7 @@ export class FinanceBankStatementSummaryDto implements FinanceBankStatementSumma
   @ApiProperty({ format: 'uuid', type: String }) id!: string;
   @ApiProperty({ type: String }) incomingTotal!: string;
   @ApiProperty({ type: Number }) matchedIncomingCount!: number;
+  @ApiProperty({ type: Number }) matchedOutgoingCount!: number;
   @ApiProperty({ type: String }) number!: string;
   @ApiProperty({ type: String }) openingBalance!: string;
   @ApiProperty({ type: String }) outgoingTotal!: string;
@@ -188,6 +203,7 @@ export class FinanceBankStatementSummaryDto implements FinanceBankStatementSumma
   @ApiProperty({ enum: ['open', 'reconciled'] }) status!: FinanceBankStatementSummary['status'];
   @ApiProperty({ type: Number }) transactionCount!: number;
   @ApiProperty({ type: Number }) unmatchedIncomingCount!: number;
+  @ApiProperty({ type: Number }) unmatchedOutgoingCount!: number;
   @ApiProperty({ minimum: 1, type: Number }) version!: number;
 }
 

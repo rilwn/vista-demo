@@ -1,6 +1,10 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type {
   FinanceBankStatement,
+  FinanceCashVoucher,
+  FinanceSupplierOffset,
+  FinanceSupplierPayable,
+  FinanceSupplierPayment,
   ProcurementSupplierRecord,
   SalesWorkflow,
 } from '@vista/contracts';
@@ -2893,6 +2897,252 @@ describe('ERP and CRM authenticated workspace', () => {
     expect(screen.getByText('1 payment')).toBeTruthy();
   });
 
+  it('moves a supplier invoice through payable, payment, advance allocation, and offset screens', async () => {
+    const financeContext = {
+      ...authenticationContext,
+      permissions: [
+        ...authenticationContext.permissions,
+        { action: 'view', module: 'erp.finance' },
+        { action: 'create', module: 'erp.finance' },
+        { action: 'edit', module: 'erp.finance' },
+      ],
+    };
+    storeAuthenticatedSession(financeContext);
+    const supplierId = 'd761e9db-721e-48a7-bca9-0a28e29161de';
+    const supplierInvoiceId = '1956c116-32ad-4c92-a2c2-7de4e0732fee';
+    const payableId = '888f4b93-7c3c-47b4-9b94-075ae83891a8';
+    const receivableId = 'b17772ac-4e25-4ab2-81fa-c566bb01673b';
+    const references = {
+      businessDate: '2026-08-20',
+      openReceivables: [
+        {
+          customerName: 'Dual-role Technical Supply Ltd.',
+          customerPartnerId: supplierId,
+          dueDate: '2026-09-03',
+          id: receivableId,
+          number: 'FIN-REV-2026-000041',
+          outstandingTotal: '24.0000',
+          sourceInvoiceNumber: 'INV-DRAFT-2026-000041',
+          version: 1,
+        },
+      ],
+      supplierInvoices: [
+        {
+          currencyCode: 'BGN',
+          id: supplierInvoiceId,
+          invoiceDate: '2026-08-18',
+          invoiceNumber: 'SUP-2026-0042',
+          paymentTermsDays: 14,
+          suggestedDueDate: '2026-09-01',
+          supplierName: 'Dual-role Technical Supply Ltd.',
+          supplierPartnerId: supplierId,
+          total: '80.0000',
+        },
+      ],
+      suppliers: [{ id: supplierId, name: 'Dual-role Technical Supply Ltd.' }],
+    };
+    let payable: FinanceSupplierPayable | undefined;
+    let advances: FinanceSupplierPayment[] = [];
+    let offsets: FinanceSupplierOffset[] = [];
+
+    const paymentFor = (
+      overrides: Partial<FinanceSupplierPayment> = {},
+    ): FinanceSupplierPayment => ({
+      allocatedTotal: '20.0000',
+      allocations: [
+        {
+          allocatedAt: '2026-08-20T10:05:00.000Z',
+          amount: '20.0000',
+          id: 'c726dd2c-ce40-4c41-a66f-eb84cc720c5d',
+          payableNumber: 'SP-2026-000001',
+          supplierPayableId: payableId,
+        },
+      ],
+      amount: '20.0000',
+      availableTotal: '0.0000',
+      id: '73132729-d025-41c1-9536-84c92187ff0e',
+      kind: 'payment',
+      number: 'SPAY-2026-000001',
+      paymentDate: '2026-08-20',
+      paymentMethod: 'bank_transfer',
+      paymentReference: 'SUP-2026-0042',
+      recordedAt: '2026-08-20T10:05:00.000Z',
+      supplierName: 'Dual-role Technical Supply Ltd.',
+      supplierPartnerId: supplierId,
+      version: 1,
+      ...overrides,
+    });
+    const payableFor = (
+      allocatedTotal: string,
+      outstandingTotal: string,
+      payments: FinanceSupplierPayment[],
+      version: number,
+    ): FinanceSupplierPayable => ({
+      allocatedTotal,
+      bgnTotal: '80.0000',
+      createdAt: '2026-08-20T10:00:00.000Z',
+      currencyCode: 'BGN',
+      documentDate: '2026-08-18',
+      dueDate: '2026-09-01',
+      exchangeRate: '1.00000000',
+      id: payableId,
+      number: 'SP-2026-000001',
+      outstandingTotal,
+      paymentStatus: allocatedTotal === '0.0000' ? 'unpaid' : 'partially_paid',
+      payments,
+      rateDate: '2026-08-18',
+      rateSource: 'internal_bgn_review',
+      sourceSupplierInvoiceId: supplierInvoiceId,
+      sourceSupplierInvoiceNumber: 'SUP-2026-0042',
+      supplierName: 'Dual-role Technical Supply Ltd.',
+      supplierPartnerId: supplierId,
+      total: '80.0000',
+      version,
+    });
+    const page = <T,>(items: T[]) => ({
+      items,
+      page: 1,
+      pageSize: 25,
+      totalItems: items.length,
+      totalPages: 1,
+    });
+
+    const fetchMock = vi.fn((input: string, options?: RequestInit) => {
+      if (input.endsWith('/auth/me')) return Promise.resolve(jsonResponse(financeContext));
+      if (input.endsWith('/finance/supplier-reference-data'))
+        return Promise.resolve(
+          jsonResponse({
+            ...references,
+            supplierInvoices: payable ? [] : references.supplierInvoices,
+          }),
+        );
+      if (input.endsWith('/finance/supplier-payables') && options?.method === 'POST') {
+        payable = payableFor('0.0000', '80.0000', [], 1);
+        return Promise.resolve(jsonResponse(payable, 201));
+      }
+      if (input.endsWith('/finance/supplier-payables'))
+        return Promise.resolve(jsonResponse(page(payable ? [payable] : [])));
+      if (input.endsWith(`/finance/supplier-payables/${payableId}/payments`)) {
+        payable = payableFor('20.0000', '60.0000', [paymentFor()], 2);
+        return Promise.resolve(jsonResponse(payable, 201));
+      }
+      if (input.endsWith(`/finance/supplier-payables/${payableId}`))
+        return Promise.resolve(jsonResponse(payable));
+      if (input.endsWith('/finance/supplier-advances') && options?.method === 'POST') {
+        advances = [
+          paymentFor({
+            allocatedTotal: '0.0000',
+            allocations: [],
+            amount: '15.0000',
+            availableTotal: '15.0000',
+            id: '28b57f4b-d43a-47c7-bc99-90c90aad9fd5',
+            kind: 'advance',
+            number: 'SADV-2026-000001',
+            paymentReference: 'ADV-2026-08',
+          }),
+        ];
+        return Promise.resolve(jsonResponse(advances[0], 201));
+      }
+      if (input.endsWith('/finance/supplier-advances'))
+        return Promise.resolve(jsonResponse(page(advances)));
+      if (input.includes('/finance/supplier-advances/') && input.endsWith('/allocations')) {
+        advances = [
+          {
+            ...advances[0]!,
+            allocatedTotal: '15.0000',
+            allocations: [
+              {
+                allocatedAt: '2026-08-20T10:10:00.000Z',
+                amount: '15.0000',
+                id: '1ce27336-43dc-4296-bbb6-4171989bfa4e',
+                payableNumber: 'SP-2026-000001',
+                supplierPayableId: payableId,
+              },
+            ],
+            availableTotal: '0.0000',
+            version: 2,
+          },
+        ];
+        payable = payableFor('35.0000', '45.0000', [paymentFor(), advances[0]!], 3);
+        return Promise.resolve(jsonResponse(advances[0]));
+      }
+      if (input.endsWith('/finance/supplier-offsets') && options?.method === 'POST') {
+        offsets = [
+          {
+            amount: '10.0000',
+            createdAt: '2026-08-20T10:15:00.000Z',
+            customerDocumentId: receivableId,
+            customerDocumentNumber: 'FIN-REV-2026-000041',
+            id: 'c0dc3143-9926-4788-a54b-ddaf856349fb',
+            number: 'OFF-2026-000001',
+            offsetDate: '2026-08-20',
+            partnerId: supplierId,
+            partnerName: 'Dual-role Technical Supply Ltd.',
+            reason: 'Mutual balance compensation',
+            supplierPayableId: payableId,
+            supplierPayableNumber: 'SP-2026-000001',
+          },
+        ];
+        payable = payableFor('45.0000', '35.0000', payable?.payments ?? [], 4);
+        return Promise.resolve(jsonResponse(offsets[0], 201));
+      }
+      if (input.endsWith('/finance/supplier-offsets'))
+        return Promise.resolve(jsonResponse(page(offsets)));
+      return Promise.resolve(jsonResponse({}));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderApplication(['/modules/erp.finance']);
+    expect(await screen.findByRole('heading', { name: 'Finance' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('link', { name: /Supplier payables Track supplier/u }));
+    expect(await screen.findByRole('heading', { name: 'Supplier payables' })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add supplier invoice' }));
+    let dialog = await screen.findByRole('dialog', { name: 'Add supplier invoice' });
+    expect(within(dialog).getByLabelText<HTMLInputElement>('Due date').value).toBe('2026-09-01');
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Add payable' }));
+    expect(await screen.findByText('SP-2026-000001 was added to supplier payables.')).toBeTruthy();
+
+    dialog = await screen.findByRole('dialog', { name: 'SP-2026-000001' });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Record payment' }));
+    fireEvent.change(within(dialog).getByLabelText(/^Amount/u), { target: { value: '20' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Record payment' }));
+    expect(await screen.findByText('Payment applied to SP-2026-000001.')).toBeTruthy();
+    expect(
+      within(await screen.findByRole('dialog', { name: 'SP-2026-000001' })).getByText(
+        'SPAY-2026-000001',
+      ),
+    ).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Back to supplier payables' }));
+
+    fireEvent.click(screen.getByRole('button', { name: 'New advance' }));
+    dialog = await screen.findByRole('dialog', { name: 'New supplier advance' });
+    fireEvent.change(within(dialog).getByLabelText(/^Amount/u), { target: { value: '15' } });
+    fireEvent.change(within(dialog).getByLabelText('Reference (optional)'), {
+      target: { value: 'ADV-2026-08' },
+    });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Record advance' }));
+    expect(
+      await screen.findByText('SADV-2026-000001 was recorded as an available supplier advance.'),
+    ).toBeTruthy();
+    dialog = await screen.findByRole('dialog', { name: 'SADV-2026-000001' });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Apply to payable' }));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Apply advance' }));
+    expect(await screen.findByText('SADV-2026-000001 was allocated.')).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Back to supplier payables' }));
+
+    fireEvent.click(screen.getByRole('button', { name: /Payable register/u }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Preview' }));
+    dialog = await screen.findByRole('dialog', { name: 'SP-2026-000001' });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Create offset' }));
+    dialog = await screen.findByRole('dialog', { name: 'New compensation offset' });
+    fireEvent.change(within(dialog).getByLabelText('Offset amount'), {
+      target: { value: '10' },
+    });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Create offset' }));
+    expect(await screen.findByText('OFF-2026-000001 settled both partner balances.')).toBeTruthy();
+  });
+
   it('prepares and reviews a structured financial document from a Sales draft', async () => {
     const financeContext = {
       ...authenticationContext,
@@ -3061,6 +3311,150 @@ describe('ERP and CRM authenticated workspace', () => {
     ).toBeTruthy();
   });
 
+  it('issues a collection-linked cash receipt and shows it in the daily cash report', async () => {
+    const financeContext = {
+      ...authenticationContext,
+      permissions: [
+        ...authenticationContext.permissions,
+        { action: 'view', module: 'erp.finance' },
+        { action: 'create', module: 'erp.finance' },
+        { action: 'edit', module: 'erp.finance' },
+      ],
+    };
+    storeAuthenticatedSession(financeContext);
+    const registerId = '8412cc12-9766-49b6-9fd8-b54f92714a61';
+    const operatorId = '54218542-85e8-44e2-b103-c0ace9e6ca3f';
+    const collectionId = '409053c3-4538-41fb-9830-6439245b3efd';
+    const customerId = '9043e858-019b-4ec4-b059-9b08afe5034d';
+    const references = {
+      businessDate: '2026-08-20',
+      cashRegisters: [
+        {
+          branchName: 'Vratsa Operations',
+          businessLocationId: 'abf5cd43-bc29-45e4-bbe8-421dbdc97ee5',
+          businessLocationName: 'Vratsa Service & Retail Centre',
+          code: 'POS-01',
+          id: registerId,
+          name: 'Demo POS terminal',
+          operators: [{ code: 'MGR-01', id: operatorId, name: 'Vista Demo Manager' }],
+        },
+      ],
+      openCollections: [
+        {
+          customerName: 'Balkan Retail Demo Ltd.',
+          customerPartnerId: customerId,
+          dueDate: '2026-09-03',
+          id: collectionId,
+          number: 'FIN-REV-2026-000002',
+          outstandingTotal: '60.0000',
+          sourceInvoiceNumber: 'INV-DRAFT-2026-000002',
+        },
+      ],
+      partners: [{ id: customerId, name: 'Balkan Retail Demo Ltd.', roles: ['customer'] }],
+    };
+    const voucher: FinanceCashVoucher = {
+      amount: '60.0000',
+      branchName: 'Vratsa Operations',
+      businessLocationId: references.cashRegisters[0]!.businessLocationId,
+      businessLocationName: references.cashRegisters[0]!.businessLocationName,
+      cashRegisterCode: 'POS-01',
+      cashRegisterId: registerId,
+      cashRegisterName: 'Demo POS terminal',
+      collectionNumber: 'FIN-REV-2026-000002',
+      counterpartyName: 'Balkan Retail Demo Ltd.',
+      counterpartyPartnerId: customerId,
+      createdAt: '2026-08-20T10:00:00.000Z',
+      currencyCode: 'BGN',
+      customerDocumentId: collectionId,
+      direction: 'receipt',
+      id: '5048ff04-f004-4462-a4be-dcd160bda357',
+      issuedByName: 'Mila Petrova',
+      number: 'CRV-POS-01-MGR-01-2026-000001',
+      operatorCode: 'MGR-01',
+      operatorId,
+      operatorName: 'Vista Demo Manager',
+      paymentNumber: 'PAY-2026-000007',
+      paymentReference: 'Cash payment for FIN-REV-2026-000002',
+      purpose: 'Customer cash payment',
+      status: 'issued',
+      version: 1,
+      voucherDate: '2026-08-20',
+    };
+    let vouchers: FinanceCashVoucher[] = [];
+    let submitted: Record<string, unknown> | undefined;
+    const fetchMock = vi.fn((input: string, options?: RequestInit) => {
+      if (input.endsWith('/auth/me')) return Promise.resolve(jsonResponse(financeContext));
+      if (input.endsWith('/finance/cash/reference-data'))
+        return Promise.resolve(jsonResponse(references));
+      if (input.includes('/finance/cash/daily-report'))
+        return Promise.resolve(
+          jsonResponse({
+            cashRegisterCode: 'POS-01',
+            cashRegisterId: registerId,
+            cashRegisterName: 'Demo POS terminal',
+            closingBalance: vouchers.length ? '60.0000' : '0.0000',
+            generatedAt: '2026-08-20T10:01:00.000Z',
+            openingBalance: '0.0000',
+            paymentCount: 0,
+            paymentTotal: '0.0000',
+            receiptCount: vouchers.length,
+            receiptTotal: vouchers.length ? '60.0000' : '0.0000',
+            reportDate: '2026-08-20',
+            vouchers,
+          }),
+        );
+      if (input.endsWith('/finance/cash/vouchers') && options?.method === 'POST') {
+        if (typeof options.body !== 'string') throw new Error('Expected a JSON request body');
+        submitted = JSON.parse(options.body) as Record<string, unknown>;
+        vouchers = [voucher];
+        return Promise.resolve(jsonResponse(voucher, 201));
+      }
+      if (input.endsWith(`/finance/cash/vouchers/${voucher.id}`))
+        return Promise.resolve(jsonResponse(voucher));
+      if (input.endsWith('/finance/cash/vouchers'))
+        return Promise.resolve(
+          jsonResponse({
+            items: vouchers,
+            page: 1,
+            pageSize: 25,
+            totalItems: vouchers.length,
+            totalPages: 1,
+          }),
+        );
+      return Promise.resolve(jsonResponse({}));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderApplication(['/modules/erp.finance/cash']);
+    expect(await screen.findByRole('heading', { name: 'Cash operations' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /New cash voucher/u }));
+    const dialog = await screen.findByRole('dialog', { name: 'New cash voucher' });
+    fireEvent.change(within(dialog).getByLabelText('Customer collection (optional)'), {
+      target: { value: collectionId },
+    });
+    fireEvent.change(within(dialog).getByLabelText('Reason'), {
+      target: { value: 'Customer cash payment' },
+    });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Issue voucher' }));
+
+    expect(await screen.findByText(`${voucher.number} was issued.`)).toBeTruthy();
+    expect(submitted).toMatchObject({
+      amount: '60.0000',
+      cashRegisterId: registerId,
+      customerDocumentId: collectionId,
+      direction: 'receipt',
+      operatorId,
+      purpose: 'Customer cash payment',
+    });
+    const preview = await screen.findByRole('dialog', { name: voucher.number });
+    expect(within(preview).getByText('PAY-2026-000007')).toBeTruthy();
+    expect(within(preview).queryByRole('button', { name: 'Cancel voucher' })).toBeNull();
+    fireEvent.click(within(preview).getByRole('button', { name: 'Back' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Daily cash report' }));
+    expect(await screen.findByText('1 receipt')).toBeTruthy();
+    expect(screen.getAllByText(/BGN\s*60\.00/u).length).toBeGreaterThan(0);
+  });
+
   it('keeps statement lines separate and automatically matches only an exact reference', async () => {
     const financeContext = {
       ...authenticationContext,
@@ -3081,6 +3475,7 @@ describe('ERP and CRM authenticated workspace', () => {
       id: '19e23adf-78dd-4f87-b680-e6254dfb6d17',
       incomingTotal: '40.0000',
       matchedIncomingCount: 1,
+      matchedOutgoingCount: 0,
       number: 'BST-2026-000001',
       openingBalance: '100.0000',
       outgoingTotal: '0.0000',
@@ -3123,6 +3518,7 @@ describe('ERP and CRM authenticated workspace', () => {
         },
       ],
       unmatchedIncomingCount: 1,
+      unmatchedOutgoingCount: 0,
       version: 2,
     };
     let saved = false;
@@ -3192,7 +3588,7 @@ describe('ERP and CRM authenticated workspace', () => {
     fireEvent.click(within(dialog).getByRole('button', { name: 'Add statement' }));
 
     expect(
-      await screen.findByText('BST-2026-000001 was added with 1 transfer requiring review.'),
+      await screen.findByText('BST-2026-000001 was added with 1 transaction requiring review.'),
     ).toBeTruthy();
     expect(submittedLines).toEqual([
       expect.objectContaining({
@@ -3211,6 +3607,159 @@ describe('ERP and CRM authenticated workspace', () => {
     ).toBeTruthy();
     expect(within(preview).getByText('PAY-2026-000002', { exact: false })).toBeTruthy();
     expect(within(preview).getByText('Needs review')).toBeTruthy();
+  });
+
+  it('confirms an outgoing bank transfer against a supplier payable', async () => {
+    const financeContext = {
+      ...authenticationContext,
+      permissions: [
+        ...authenticationContext.permissions,
+        { action: 'view', module: 'erp.finance' },
+        { action: 'create', module: 'erp.finance' },
+        { action: 'edit', module: 'erp.finance' },
+      ],
+    };
+    storeAuthenticatedSession(financeContext);
+    const transactionId = '42ff637e-d520-4c76-95ca-974c00f80efb';
+    const payableId = '79e11300-0268-42c4-9846-334a15c61122';
+    const supplierId = '267f244f-7ac1-4db3-a749-975f8acc28be';
+    const statementId = '37f38c1d-0691-4fe3-b7be-9bdaee3a33ed';
+    let statement: FinanceBankStatement = {
+      accountIban: 'BG76DEMO00000000000000',
+      bankName: 'Vista Demo Bank',
+      closingBalance: '87.0000',
+      createdAt: '2026-08-20T11:00:00.000Z',
+      currencyCode: 'BGN',
+      id: statementId,
+      incomingTotal: '0.0000',
+      matchedIncomingCount: 0,
+      matchedOutgoingCount: 0,
+      number: 'BST-2026-000009',
+      openingBalance: '100.0000',
+      outgoingTotal: '13.0000',
+      statementDate: '2026-08-20',
+      statementReference: 'SUPPLIER-PAYMENT-TEST',
+      status: 'open',
+      transactionCount: 1,
+      transactions: [
+        {
+          amount: '13.0000',
+          counterpartyName: 'TechSupply Demo Ltd.',
+          direction: 'outgoing',
+          id: transactionId,
+          lineNumber: 1,
+          matchStatus: 'unmatched',
+          paymentReference: 'Payment for SP-2026-000001',
+          transactionDate: '2026-08-20',
+          valueDate: '2026-08-20',
+          version: 1,
+        },
+      ],
+      unmatchedIncomingCount: 0,
+      unmatchedOutgoingCount: 1,
+      version: 1,
+    };
+    const fetchMock = vi.fn((input: string, options?: RequestInit) => {
+      if (input.endsWith('/auth/me')) return Promise.resolve(jsonResponse(financeContext));
+      if (input.endsWith('/finance/supplier-reference-data'))
+        return Promise.resolve(
+          jsonResponse({
+            businessDate: '2026-08-20',
+            openReceivables: [],
+            supplierInvoices: [],
+            suppliers: [{ id: supplierId, name: 'TechSupply Demo Ltd.' }],
+          }),
+        );
+      if (input.endsWith(`/finance/bank-transactions/${transactionId}/supplier-match-candidates`))
+        return Promise.resolve(
+          jsonResponse([
+            {
+              dueDate: '2026-09-15',
+              outstandingTotal: '13.0000',
+              payableNumber: 'SP-2026-000001',
+              referenceMatched: true,
+              score: 100,
+              sourceSupplierInvoiceNumber: 'DEV-SUP-INV-001',
+              supplierName: 'TechSupply Demo Ltd.',
+              supplierPartnerId: supplierId,
+              supplierPayableId: payableId,
+            },
+          ]),
+        );
+      if (
+        input.endsWith(`/finance/bank-transactions/${transactionId}/supplier-match`) &&
+        options?.method === 'POST'
+      ) {
+        statement = {
+          ...statement,
+          matchedOutgoingCount: 1,
+          status: 'reconciled',
+          transactions: [
+            {
+              ...statement.transactions[0]!,
+              matchStatus: 'matched',
+              supplierMatch: {
+                kind: 'payment',
+                matchedAt: '2026-08-20T11:05:00.000Z',
+                method: 'manual',
+                paymentNumber: 'SPAY-2026-000002',
+                supplierName: 'TechSupply Demo Ltd.',
+                supplierPartnerId: supplierId,
+                supplierPayableId: payableId,
+                supplierPayableNumber: 'SP-2026-000001',
+              },
+              version: 2,
+            },
+          ],
+          unmatchedOutgoingCount: 0,
+          version: 2,
+        };
+        return Promise.resolve(
+          jsonResponse({
+            allocatedTotal: '13.0000',
+            allocations: [],
+            amount: '13.0000',
+            availableTotal: '0.0000',
+            id: '5d29ab7a-ebeb-4df2-ac34-58b8de8e7e32',
+            kind: 'payment',
+            number: 'SPAY-2026-000002',
+            paymentDate: '2026-08-20',
+            paymentMethod: 'bank_transfer',
+            paymentReference: 'Payment for SP-2026-000001',
+            recordedAt: '2026-08-20T11:05:00.000Z',
+            supplierName: 'TechSupply Demo Ltd.',
+            supplierPartnerId: supplierId,
+            version: 1,
+          }),
+        );
+      }
+      if (input.endsWith(`/finance/bank-statements/${statementId}`))
+        return Promise.resolve(jsonResponse(statement));
+      if (input.endsWith('/finance/bank-statements'))
+        return Promise.resolve(
+          jsonResponse({
+            items: [statement],
+            page: 1,
+            pageSize: 20,
+            totalItems: 1,
+            totalPages: 1,
+          }),
+        );
+      return Promise.resolve(jsonResponse({}));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderApplication(['/modules/erp.finance/cash-bank']);
+    fireEvent.click(await screen.findByRole('button', { name: 'Preview' }));
+    let dialog = await screen.findByRole('dialog', { name: 'BST-2026-000009' });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Review match' }));
+    dialog = await screen.findByRole('dialog', { name: 'Review supplier transfer' });
+    expect(within(dialog).getByText('Reference match')).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Confirm supplier match' }));
+
+    dialog = await screen.findByRole('dialog', { name: 'BST-2026-000009' });
+    expect(within(dialog).getByText('SPAY-2026-000002', { exact: false })).toBeTruthy();
+    expect(within(dialog).getAllByText('Matched').length).toBeGreaterThan(0);
   });
 
   it('navigates from ERP Service to request intake and creates a dispatch-ready service request', async () => {

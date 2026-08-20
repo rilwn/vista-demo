@@ -647,7 +647,7 @@ function CatalogDrawer({
             <h2>{title}</h2>
           </div>
         </header>
-        {children}
+        <div className="catalog-drawer-body">{children}</div>
       </aside>
     </div>
   );

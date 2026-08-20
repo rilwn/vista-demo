@@ -124,6 +124,54 @@ export const workflowPages: WorkflowPageDefinition[] = [
     ],
   ),
   finance(
+    'payables',
+    'Supplier payables',
+    'Track supplier balances, payments, advances, and compensation offsets.',
+    'Add supplier invoice',
+    [
+      {
+        title: 'Supplier subledger',
+        items: [
+          'Supplier invoice and due-date register',
+          'Partial payments and remaining balance',
+          'Outgoing bank-transfer matching',
+        ],
+      },
+      {
+        title: 'Balance control',
+        items: [
+          'Explicit unallocated advances',
+          'Advance allocation trail',
+          'Atomic receivable and payable offsets',
+        ],
+      },
+    ],
+  ),
+  finance(
+    'cash',
+    'Cash operations',
+    'Issue cash receipt and payment vouchers and review daily register movement.',
+    'New cash voucher',
+    [
+      {
+        title: 'Cash vouchers',
+        items: [
+          'Receipt and payment voucher register',
+          'Location, cash register, and operator numbering',
+          'Customer collection allocation for cash receipts',
+        ],
+      },
+      {
+        title: 'Daily review',
+        items: [
+          'Opening and closing cash position',
+          'Receipt and payment totals',
+          'Cancelled voucher visibility',
+        ],
+      },
+    ],
+  ),
+  finance(
     'cash-bank',
     'Bank reconciliation',
     'Enter balanced BGN bank statements and reconcile incoming transfers with customer collections.',

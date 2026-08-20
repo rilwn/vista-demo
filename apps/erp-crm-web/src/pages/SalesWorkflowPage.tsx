@@ -1010,5 +1010,5 @@ function formatMoney(value: string, currency: string) {
   return new Intl.NumberFormat('en-GB', { currency, style: 'currency' }).format(Number(value));
 }
 function errorText(error: unknown, fallback: string) {
-  return error instanceof ApiClientError ? error.message : fallback;
+  return error instanceof ApiClientError ? (error.details[0]?.message ?? error.message) : fallback;
 }

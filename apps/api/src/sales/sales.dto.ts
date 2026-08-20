@@ -47,7 +47,7 @@ export class CreateSalesQuotationLineDto implements CreateSalesQuotationLineRequ
   discountPercent!: string;
 
   @ApiProperty({ format: 'uuid', type: String })
-  @IsUUID('4')
+  @IsUUID('loose')
   productId!: string;
 
   @ApiProperty({ example: '1.0000', type: String })
@@ -72,7 +72,7 @@ export class CreateSalesQuotationDto implements CreateSalesQuotationRequest {
   currencyCode!: string;
 
   @ApiProperty({ format: 'uuid', type: String })
-  @IsUUID('4')
+  @IsUUID('loose')
   customerPartnerId!: string;
 
   @ApiProperty({ isArray: true, type: CreateSalesQuotationLineDto })
@@ -93,13 +93,13 @@ export class CreateSalesQuotationDto implements CreateSalesQuotationRequest {
   validUntil!: string;
 
   @ApiProperty({ format: 'uuid', type: String })
-  @IsUUID('4')
+  @IsUUID('loose')
   warehouseId!: string;
 }
 
 export class ConfirmSalesQuotationLineDto implements ConfirmSalesQuotationLineRequest {
   @ApiProperty({ format: 'uuid', type: String })
-  @IsUUID('4')
+  @IsUUID('loose')
   quotationLineId!: string;
 
   @ApiPropertyOptional({ isArray: true, maxItems: 500, type: String })
@@ -129,7 +129,7 @@ export class CreateSalesShipmentLineDto implements CreateSalesShipmentLineReques
   batchNumber?: string;
 
   @ApiProperty({ format: 'uuid', type: String })
-  @IsUUID('4')
+  @IsUUID('loose')
   orderLineId!: string;
 }
 

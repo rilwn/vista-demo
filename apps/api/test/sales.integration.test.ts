@@ -16,7 +16,14 @@ import type {
   SalesWorkflow,
   ServiceSubscriptionContract,
   FinanceBankStatement,
+  FinanceCashDailyReport,
+  FinanceCashReferenceData,
+  FinanceCashVoucher,
   FinanceCustomerDocument,
+  FinanceSupplierPayable,
+  FinanceSupplierOffset,
+  FinanceSupplierPayment,
+  FinanceSupplierReferenceData,
   FinanceReferenceData,
   ServiceEquipmentHistory,
   ServiceReferenceData,
@@ -52,6 +59,8 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
   let viewerToken: string;
   let customerId: string;
   let customerLocationId: string;
+  let cashOperatorId: string;
+  let cashRegisterId: string;
   let equipmentId: string;
   let productId: string;
   let serialProductId: string;
@@ -79,11 +88,9 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
       new URL('../src/database/migrations', import.meta.url),
     );
     await migrateUp(database, migrationDirectory);
-    expect(await migrateDown(database, migrationDirectory)).toBe(
-      '0035_finance_bank_reconciliation',
-    );
+    expect(await migrateDown(database, migrationDirectory)).toBe('0037_finance_supplier_subledger');
     expect(await migrateUp(database, migrationDirectory)).toContain(
-      '0035_finance_bank_reconciliation',
+      '0037_finance_supplier_subledger',
     );
 
     Object.assign(process.env, {
@@ -131,12 +138,8 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
       serialProductId,
       warehouseId,
     } = await seedSalesData(database, creatorId, runId));
-    technicianWarehouseId = await seedServiceTechnicianWarehouse(
-      database,
-      creatorId,
-      productId,
-      runId,
-    );
+    ({ cashOperatorId, cashRegisterId, technicianWarehouseId } =
+      await seedServiceTechnicianWarehouse(database, creatorId, productId, runId));
     token = await login(application, `sales-${runId}@example.invalid`);
     viewerToken = await login(application, `sales-viewer-${runId}@example.invalid`);
   }, 30_000);
@@ -328,6 +331,168 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
       .expect(201);
     expect((createReplay.body as FinanceCustomerDocument).id).toBe(created.id);
 
+    const supplierInvoiceId = await seedSupplierInvoiceEvidence(
+      database,
+      creatorAccountId,
+      customerId,
+      warehouseId,
+      productId,
+      dueDate,
+      runId,
+    );
+    const supplierReferencesResponse = await request(application.getHttpServer())
+      .get('/api/v1/finance/supplier-reference-data')
+      .set('authorization', `Bearer ${token}`)
+      .expect(200);
+    const supplierReferences = supplierReferencesResponse.body as FinanceSupplierReferenceData;
+    expect(supplierReferences.supplierInvoices).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: supplierInvoiceId, supplierPartnerId: customerId }),
+      ]),
+    );
+    await request(application.getHttpServer())
+      .post('/api/v1/finance/supplier-payables')
+      .set('authorization', `Bearer ${viewerToken}`)
+      .set('idempotency-key', `finance-supplier-viewer-${runId}`)
+      .send({ dueDate, supplierInvoiceId })
+      .expect(403);
+    const payableKey = `finance-supplier-payable-${runId}`;
+    const payableResponse = await request(application.getHttpServer())
+      .post('/api/v1/finance/supplier-payables')
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', payableKey)
+      .send({ dueDate, supplierInvoiceId })
+      .expect(201);
+    let supplierPayable = payableResponse.body as FinanceSupplierPayable;
+    expect(supplierPayable).toMatchObject({
+      allocatedTotal: '0.0000',
+      outstandingTotal: '80.0000',
+      paymentStatus: 'unpaid',
+      sourceSupplierInvoiceId: supplierInvoiceId,
+      supplierPartnerId: customerId,
+      total: '80.0000',
+    });
+    const payableReplay = await request(application.getHttpServer())
+      .post('/api/v1/finance/supplier-payables')
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', payableKey)
+      .send({ dueDate, supplierInvoiceId })
+      .expect(201);
+    expect((payableReplay.body as FinanceSupplierPayable).id).toBe(supplierPayable.id);
+
+    const advanceResponse = await request(application.getHttpServer())
+      .post('/api/v1/finance/supplier-advances')
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', `finance-supplier-advance-${runId}`)
+      .send({
+        amount: '30',
+        paymentDate: dueDate,
+        paymentMethod: 'bank_transfer',
+        paymentReference: `ADVANCE-${runId}`,
+        supplierPartnerId: customerId,
+      })
+      .expect(201);
+    let advance = advanceResponse.body as FinanceSupplierPayment;
+    expect(advance).toMatchObject({
+      allocatedTotal: '0.0000',
+      amount: '30.0000',
+      availableTotal: '30.0000',
+      kind: 'advance',
+    });
+    const allocatedAdvanceResponse = await request(application.getHttpServer())
+      .post(`/api/v1/finance/supplier-advances/${advance.id}/allocations`)
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', `finance-supplier-advance-allocation-${runId}`)
+      .send({
+        amount: '20',
+        expectedAdvanceVersion: advance.version,
+        expectedPayableVersion: supplierPayable.version,
+        supplierPayableId: supplierPayable.id,
+      })
+      .expect(200);
+    advance = allocatedAdvanceResponse.body as FinanceSupplierPayment;
+    expect(advance).toMatchObject({
+      allocatedTotal: '20.0000',
+      availableTotal: '10.0000',
+      version: 2,
+    });
+
+    const payableAfterAdvanceResponse = await request(application.getHttpServer())
+      .get(`/api/v1/finance/supplier-payables/${supplierPayable.id}`)
+      .set('authorization', `Bearer ${token}`)
+      .expect(200);
+    supplierPayable = payableAfterAdvanceResponse.body as FinanceSupplierPayable;
+    expect(supplierPayable).toMatchObject({
+      allocatedTotal: '20.0000',
+      outstandingTotal: '60.0000',
+      paymentStatus: 'partially_paid',
+    });
+
+    const supplierPaymentResponse = await request(application.getHttpServer())
+      .post(`/api/v1/finance/supplier-payables/${supplierPayable.id}/payments`)
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', `finance-supplier-payment-${runId}`)
+      .send({
+        amount: '20',
+        paymentDate: dueDate,
+        paymentMethod: 'card',
+        paymentReference: `SUPPLIER-CARD-${runId}`,
+      })
+      .expect(201);
+    supplierPayable = supplierPaymentResponse.body as FinanceSupplierPayable;
+    expect(supplierPayable).toMatchObject({
+      allocatedTotal: '40.0000',
+      outstandingTotal: '40.0000',
+      paymentStatus: 'partially_paid',
+    });
+
+    const offsetResponse = await request(application.getHttpServer())
+      .post('/api/v1/finance/supplier-offsets')
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', `finance-supplier-offset-${runId}`)
+      .send({
+        amount: '10',
+        customerDocumentId: created.id,
+        expectedCustomerDocumentVersion: created.version,
+        expectedSupplierPayableVersion: supplierPayable.version,
+        offsetDate: dueDate,
+        reason: 'Integration-test bilateral compensation',
+        supplierPayableId: supplierPayable.id,
+      })
+      .expect(201);
+    const offset = offsetResponse.body as FinanceSupplierOffset;
+    expect(offset).toMatchObject({
+      amount: '10.0000',
+      customerDocumentId: created.id,
+      supplierPayableId: supplierPayable.id,
+    });
+    const offsetReplay = await request(application.getHttpServer())
+      .post('/api/v1/finance/supplier-offsets')
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', `finance-supplier-offset-${runId}`)
+      .send({
+        amount: '10',
+        customerDocumentId: created.id,
+        expectedCustomerDocumentVersion: created.version,
+        expectedSupplierPayableVersion: supplierPayable.version,
+        offsetDate: dueDate,
+        reason: 'Integration-test bilateral compensation',
+        supplierPayableId: supplierPayable.id,
+      })
+      .expect(201);
+    const replayedOffset = offsetReplay.body as FinanceSupplierOffset;
+    expect(replayedOffset.id).toBe(offset.id);
+    supplierPayable = (
+      await request(application.getHttpServer())
+        .get(`/api/v1/finance/supplier-payables/${supplierPayable.id}`)
+        .set('authorization', `Bearer ${token}`)
+        .expect(200)
+    ).body as FinanceSupplierPayable;
+    expect(supplierPayable).toMatchObject({
+      allocatedTotal: '50.0000',
+      outstandingTotal: '30.0000',
+    });
+
     const partialPayment = {
       amount: '100',
       notes: 'Customer paid the first instalment.',
@@ -343,16 +508,160 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
       .expect(201);
     const partiallyPaid = partialResponse.body as FinanceCustomerDocument;
     expect(partiallyPaid).toMatchObject({
-      allocatedTotal: '100.0000',
-      outstandingTotal: '173.6000',
+      allocatedTotal: '110.0000',
+      outstandingTotal: '163.6000',
       paymentStatus: 'partially_paid',
-      payments: [expect.objectContaining({ amount: '100.0000', paymentMethod: 'bank_transfer' })],
+    });
+    expect(partiallyPaid.payments).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ amount: '100.0000', paymentMethod: 'bank_transfer' }),
+        expect.objectContaining({ amount: '10.0000', paymentMethod: 'offset' }),
+      ]),
+    );
+
+    const cashReferencesResponse = await request(application.getHttpServer())
+      .get('/api/v1/finance/cash/reference-data')
+      .set('authorization', `Bearer ${token}`)
+      .expect(200);
+    const cashReferences = cashReferencesResponse.body as FinanceCashReferenceData;
+    const cashRegister = cashReferences.cashRegisters.find((item) => item.id === cashRegisterId);
+    expect(cashRegister?.operators.some((item) => item.id === cashOperatorId)).toBe(true);
+    expect(cashReferences.openCollections).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: created.id, outstandingTotal: '163.6000' }),
+      ]),
+    );
+    await request(application.getHttpServer())
+      .post('/api/v1/finance/cash/vouchers')
+      .set('authorization', `Bearer ${viewerToken}`)
+      .set('idempotency-key', `finance-cash-viewer-${runId}`)
+      .send({})
+      .expect(403);
+
+    const cashReceiptInput = {
+      amount: '20',
+      cashRegisterId,
+      customerDocumentId: created.id,
+      direction: 'receipt',
+      operatorId: cashOperatorId,
+      paymentReference: `CASH-${runId}`,
+      purpose: 'Customer cash instalment',
+      voucherDate: dueDate,
+    };
+    const cashReceiptResponse = await request(application.getHttpServer())
+      .post('/api/v1/finance/cash/vouchers')
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', `finance-cash-receipt-${runId}`)
+      .send(cashReceiptInput)
+      .expect(201);
+    const cashReceipt = cashReceiptResponse.body as FinanceCashVoucher;
+    expect(cashReceipt).toMatchObject({
+      amount: '20.0000',
+      collectionNumber: created.number,
+      customerDocumentId: created.id,
+      direction: 'receipt',
+      status: 'issued',
+    });
+    expect(cashReceipt.number).toMatch(/^CRV-/u);
+    expect(cashReceipt.paymentNumber).toMatch(/^PAY-/u);
+    const cashReceiptReplay = await request(application.getHttpServer())
+      .post('/api/v1/finance/cash/vouchers')
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', `finance-cash-receipt-${runId}`)
+      .send(cashReceiptInput)
+      .expect(201);
+    expect((cashReceiptReplay.body as FinanceCashVoucher).id).toBe(cashReceipt.id);
+    await request(application.getHttpServer())
+      .post(`/api/v1/finance/cash/vouchers/${cashReceipt.id}/cancel`)
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', `finance-cash-linked-cancel-${runId}`)
+      .send({ cancellationReason: 'Linked receipts require reversal.', expectedVersion: 1 })
+      .expect(409);
+
+    const concurrentReceipts = await Promise.all(
+      ['A', 'B'].map((suffix) =>
+        request(application.getHttpServer())
+          .post('/api/v1/finance/cash/vouchers')
+          .set('authorization', `Bearer ${token}`)
+          .set('idempotency-key', `finance-cash-concurrent-${suffix}-${runId}`)
+          .send({
+            amount: '1',
+            cashRegisterId,
+            counterpartyName: `Walk-in customer ${suffix}`,
+            direction: 'receipt',
+            operatorId: cashOperatorId,
+            purpose: 'Counter receipt',
+            voucherDate: dueDate,
+          })
+          .expect(201),
+      ),
+    );
+    expect(
+      new Set(concurrentReceipts.map(({ body }) => (body as FinanceCashVoucher).number)).size,
+    ).toBe(2);
+
+    const cashPaymentResponse = await request(application.getHttpServer())
+      .post('/api/v1/finance/cash/vouchers')
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', `finance-cash-payment-${runId}`)
+      .send({
+        amount: '5',
+        cashRegisterId,
+        counterpartyName: 'Office supplier',
+        direction: 'payment',
+        operatorId: cashOperatorId,
+        purpose: 'Office supplies',
+        voucherDate: dueDate,
+      })
+      .expect(201);
+    const cashPayment = cashPaymentResponse.body as FinanceCashVoucher;
+    expect(cashPayment.number).toMatch(/^CPV-/u);
+    const cancelledCashPaymentResponse = await request(application.getHttpServer())
+      .post(`/api/v1/finance/cash/vouchers/${cashPayment.id}/cancel`)
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', `finance-cash-payment-cancel-${runId}`)
+      .send({ cancellationReason: 'Entered against the wrong expense.', expectedVersion: 1 })
+      .expect(200);
+    expect(cancelledCashPaymentResponse.body as FinanceCashVoucher).toMatchObject({
+      cancellationReason: 'Entered against the wrong expense.',
+      status: 'cancelled',
+      version: 2,
+    });
+
+    const dailyReportResponse = await request(application.getHttpServer())
+      .get(`/api/v1/finance/cash/daily-report?cashRegisterId=${cashRegisterId}&date=${dueDate}`)
+      .set('authorization', `Bearer ${token}`)
+      .expect(200);
+    const dailyReport = dailyReportResponse.body as FinanceCashDailyReport;
+    expect(dailyReport).toMatchObject({
+      cashRegisterId,
+      closingBalance: '22.0000',
+      openingBalance: '0.0000',
+      paymentCount: 0,
+      paymentTotal: '0.0000',
+      receiptCount: 3,
+      receiptTotal: '22.0000',
+    });
+    expect(dailyReport.vouchers).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: cashPayment.id, status: 'cancelled' }),
+      ]),
+    );
+
+    const afterCashResponse = await request(application.getHttpServer())
+      .get(`/api/v1/finance/documents/${created.id}`)
+      .set('authorization', `Bearer ${token}`)
+      .expect(200);
+    expect(afterCashResponse.body as FinanceCustomerDocument).toMatchObject({
+      allocatedTotal: '130.0000',
+      outstandingTotal: '143.6000',
+      paymentStatus: 'partially_paid',
     });
     await request(application.getHttpServer())
       .post(`/api/v1/finance/documents/${created.id}/payments`)
       .set('authorization', `Bearer ${token}`)
       .set('idempotency-key', `finance-overpayment-${runId}`)
-      .send({ ...partialPayment, amount: '174', paymentReference: `OVER-${runId}` })
+      .send({ ...partialPayment, amount: '144', paymentReference: `OVER-${runId}` })
       .expect(409);
 
     await database.query(
@@ -391,11 +700,11 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
     const statementInput = {
       accountIban: 'BG76DEMO00000000000000',
       bankName: 'Vista integration bank',
-      closingBalance: '1173.6',
+      closingBalance: '1113.6',
       currencyCode: 'BGN',
       lines: [
         {
-          amount: '160',
+          amount: '130',
           counterpartyName: `Sales Customer ${runId}`,
           direction: 'incoming',
           paymentReference: `Payment for ${created.number}`,
@@ -403,10 +712,26 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
           valueDate: dueDate,
         },
         {
-          amount: '13.6',
-          counterpartyName: `Sales Customer ${runId}`,
+          amount: '13.5',
+          counterpartyName: `Unrecognized remitter ${runId}`,
           direction: 'incoming',
-          paymentReference: `Customer transfer ${runId}`,
+          paymentReference: `Opaque transfer ${runId}`,
+          transactionDate: dueDate,
+          valueDate: dueDate,
+        },
+        {
+          amount: '0.1',
+          counterpartyName: `Unrecognized remitter ${runId}`,
+          direction: 'incoming',
+          paymentReference: `Second opaque transfer ${runId}`,
+          transactionDate: dueDate,
+          valueDate: dueDate,
+        },
+        {
+          amount: '30',
+          counterpartyName: `Sales Customer ${runId}`,
+          direction: 'outgoing',
+          paymentReference: `Payment for ${supplierPayable.number}`,
           transactionDate: dueDate,
           valueDate: dueDate,
         },
@@ -424,12 +749,15 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
       .expect(201);
     const statement = statementResponse.body as FinanceBankStatement;
     expect(statement).toMatchObject({
-      incomingTotal: '173.6000',
+      incomingTotal: '143.6000',
       matchedIncomingCount: 1,
+      matchedOutgoingCount: 0,
       status: 'open',
-      unmatchedIncomingCount: 1,
+      unmatchedIncomingCount: 2,
+      unmatchedOutgoingCount: 1,
     });
     expect(statement.transactions[0]).toMatchObject({
+      amount: '130.0000',
       match: { documentNumber: created.number, method: 'automatic_reference' },
       matchStatus: 'matched',
     });
@@ -441,25 +769,106 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
       .expect(201);
     expect((replay.body as FinanceBankStatement).id).toBe(statement.id);
     const unmatched = statement.transactions[1];
-    expect(unmatched).toMatchObject({ amount: '13.6000', matchStatus: 'unmatched' });
+    expect(unmatched).toMatchObject({ amount: '13.5000', matchStatus: 'unmatched' });
     if (!unmatched) throw new Error('Expected an unmatched bank transaction');
     const candidates = await request(application.getHttpServer())
       .get(`/api/v1/finance/bank-transactions/${unmatched.id}/match-candidates`)
       .set('authorization', `Bearer ${token}`)
       .expect(200);
     expect(candidates.body).toEqual(
-      expect.arrayContaining([expect.objectContaining({ customerDocumentId: created.id })]),
+      expect.arrayContaining([
+        expect.objectContaining({
+          customerDocumentId: created.id,
+          referenceMatched: false,
+          score: 0,
+        }),
+      ]),
     );
-    const matchedResponse = await request(application.getHttpServer())
+    const partialMatchResponse = await request(application.getHttpServer())
       .post(`/api/v1/finance/bank-transactions/${unmatched.id}/match`)
       .set('authorization', `Bearer ${token}`)
       .set('idempotency-key', `finance-bank-match-${runId}`)
       .send({ customerDocumentId: created.id, expectedVersion: unmatched.version })
       .expect(200);
-    expect(matchedResponse.body as FinanceBankStatement).toMatchObject({
+    const partiallyMatchedStatement = partialMatchResponse.body as FinanceBankStatement;
+    expect(partiallyMatchedStatement).toMatchObject({
       matchedIncomingCount: 2,
-      status: 'reconciled',
+      status: 'open',
+      unmatchedIncomingCount: 1,
+    });
+    const lastUnmatched = partiallyMatchedStatement.transactions[2];
+    if (!lastUnmatched) throw new Error('Expected a second unmatched bank transaction');
+    const matchedResponse = await request(application.getHttpServer())
+      .post(`/api/v1/finance/bank-transactions/${lastUnmatched.id}/match`)
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', `finance-bank-final-match-${runId}`)
+      .send({ customerDocumentId: created.id, expectedVersion: lastUnmatched.version })
+      .expect(200);
+    expect(matchedResponse.body as FinanceBankStatement).toMatchObject({
+      matchedIncomingCount: 3,
+      status: 'open',
       unmatchedIncomingCount: 0,
+      unmatchedOutgoingCount: 1,
+    });
+    const outgoing = (matchedResponse.body as FinanceBankStatement).transactions.find(
+      (transaction) => transaction.direction === 'outgoing',
+    );
+    if (!outgoing) throw new Error('Expected an outgoing supplier transaction');
+    const supplierCandidates = await request(application.getHttpServer())
+      .get(`/api/v1/finance/bank-transactions/${outgoing.id}/supplier-match-candidates`)
+      .set('authorization', `Bearer ${token}`)
+      .expect(200);
+    expect(supplierCandidates.body).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          referenceMatched: true,
+          supplierPayableId: supplierPayable.id,
+        }),
+      ]),
+    );
+    const supplierBankMatchResponse = await request(application.getHttpServer())
+      .post(`/api/v1/finance/bank-transactions/${outgoing.id}/supplier-match`)
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', `finance-bank-supplier-match-${runId}`)
+      .send({
+        expectedVersion: outgoing.version,
+        mode: 'payable',
+        supplierPayableId: supplierPayable.id,
+      })
+      .expect(200);
+    expect(supplierBankMatchResponse.body as FinanceSupplierPayment).toMatchObject({
+      amount: '30.0000',
+      availableTotal: '0.0000',
+      kind: 'payment',
+      sourceBankTransactionId: outgoing.id,
+    });
+    const reconciledBankResponse = await request(application.getHttpServer())
+      .get(`/api/v1/finance/bank-statements/${statement.id}`)
+      .set('authorization', `Bearer ${token}`)
+      .expect(200);
+    expect(reconciledBankResponse.body as FinanceBankStatement).toMatchObject({
+      matchedOutgoingCount: 1,
+      status: 'reconciled',
+      unmatchedOutgoingCount: 0,
+    });
+    const matchedOutgoing = (reconciledBankResponse.body as FinanceBankStatement).transactions.find(
+      (transaction) => transaction.id === outgoing.id,
+    );
+    expect(matchedOutgoing).toMatchObject({
+      matchStatus: 'matched',
+    });
+    expect(matchedOutgoing?.supplierMatch?.paymentNumber).toMatch(/^SPAY-/u);
+    expect(matchedOutgoing?.supplierMatch?.supplierPayableId).toBe(supplierPayable.id);
+    const paidSupplierPayable = (
+      await request(application.getHttpServer())
+        .get(`/api/v1/finance/supplier-payables/${supplierPayable.id}`)
+        .set('authorization', `Bearer ${token}`)
+        .expect(200)
+    ).body as FinanceSupplierPayable;
+    expect(paidSupplierPayable).toMatchObject({
+      allocatedTotal: '80.0000',
+      outstandingTotal: '0.0000',
+      paymentStatus: 'paid',
     });
     const settledResponse = await request(application.getHttpServer())
       .get(`/api/v1/finance/documents/${created.id}`)
@@ -471,11 +880,14 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
       outstandingTotal: '0.0000',
       paymentStatus: 'paid',
     });
-    expect(settled.payments).toHaveLength(3);
+    expect(settled.payments).toHaveLength(6);
     expect(settled.payments).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ amount: '160.0000', paymentMethod: 'bank_transfer' }),
-        expect.objectContaining({ amount: '13.6000', paymentMethod: 'bank_transfer' }),
+        expect.objectContaining({ amount: '20.0000', paymentMethod: 'cash' }),
+        expect.objectContaining({ amount: '130.0000', paymentMethod: 'bank_transfer' }),
+        expect.objectContaining({ amount: '10.0000', paymentMethod: 'offset' }),
+        expect.objectContaining({ amount: '13.5000', paymentMethod: 'bank_transfer' }),
+        expect.objectContaining({ amount: '0.1000', paymentMethod: 'bank_transfer' }),
       ]),
     );
     await request(application.getHttpServer())
@@ -500,9 +912,9 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
       [created.id],
     );
     expect(evidence.rows[0]).toEqual({
-      allocation_count: '3',
-      audit_count: '6',
-      outbox_count: '6',
+      allocation_count: '6',
+      audit_count: '18',
+      outbox_count: '18',
     });
   });
 
@@ -1295,18 +1707,20 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
     );
     await grantServicePermissions(database, firstTechnicianAccountId, ['edit', 'view']);
     await grantServicePermissions(database, secondTechnicianAccountId, ['edit', 'view']);
-    const firstTechnicianWarehouseId = await seedServiceTechnicianWarehouse(
-      database,
-      firstTechnicianAccountId,
-      productId,
-      `scope-one-${runId}`,
-    );
-    const secondTechnicianWarehouseId = await seedServiceTechnicianWarehouse(
-      database,
-      secondTechnicianAccountId,
-      productId,
-      `scope-two-${runId}`,
-    );
+    const { technicianWarehouseId: firstTechnicianWarehouseId } =
+      await seedServiceTechnicianWarehouse(
+        database,
+        firstTechnicianAccountId,
+        productId,
+        `scope-one-${runId}`,
+      );
+    const { technicianWarehouseId: secondTechnicianWarehouseId } =
+      await seedServiceTechnicianWarehouse(
+        database,
+        secondTechnicianAccountId,
+        productId,
+        `scope-two-${runId}`,
+      );
     const firstTechnicianToken = await login(
       application,
       `service-tech-one-${runId}@example.invalid`,
@@ -1630,6 +2044,56 @@ async function grantServicePermissions(
   ]);
 }
 
+async function seedSupplierInvoiceEvidence(
+  pool: Pool,
+  actorId: string,
+  supplierPartnerId: string,
+  warehouseId: string,
+  productId: string,
+  invoiceDate: string,
+  runId: string,
+) {
+  const purchaseOrderId = randomUUID();
+  const purchaseOrderLineId = randomUUID();
+  const supplierInvoiceId = randomUUID();
+
+  await pool.query(
+    `INSERT INTO master_data.partner_roles (partner_id, role, assigned_by)
+     VALUES ($1, 'supplier', $2)
+     ON CONFLICT DO NOTHING`,
+    [supplierPartnerId, actorId],
+  );
+  await pool.query(
+    `INSERT INTO procurement.purchase_orders (
+       id, supplier_partner_id, warehouse_id, currency_code, status, created_by, updated_by
+     ) VALUES ($1, $2, $3, 'BGN', 'received', $4, $4)`,
+    [purchaseOrderId, supplierPartnerId, warehouseId, actorId],
+  );
+  await pool.query(
+    `INSERT INTO procurement.purchase_order_lines (
+       id, purchase_order_id, product_id, ordered_quantity, delivered_quantity,
+       invoiced_quantity, unit_price, expected_delivery_date
+     ) VALUES ($1, $2, $3, 1, 1, 1, 80, $4)`,
+    [purchaseOrderLineId, purchaseOrderId, productId, invoiceDate],
+  );
+  await pool.query(
+    `INSERT INTO procurement.supplier_invoices (
+       id, purchase_order_id, supplier_partner_id, supplier_invoice_number,
+       invoice_date, currency_code, recorded_by
+     ) VALUES ($1, $2, $3, $4, $5, 'BGN', $6)`,
+    [supplierInvoiceId, purchaseOrderId, supplierPartnerId, `SUP-${runId}`, invoiceDate, actorId],
+  );
+  await pool.query(
+    `INSERT INTO procurement.supplier_invoice_lines (
+       id, supplier_invoice_id, purchase_order_id, purchase_order_line_id,
+       quantity, unit_price
+     ) VALUES ($1, $2, $3, $4, 1, 80)`,
+    [randomUUID(), supplierInvoiceId, purchaseOrderId, purchaseOrderLineId],
+  );
+
+  return supplierInvoiceId;
+}
+
 async function seedSalesData(pool: Pool, actorId: string, runId: string) {
   const customerId = randomUUID();
   const customerLocationId = randomUUID();
@@ -1762,6 +2226,7 @@ async function seedServiceTechnicianWarehouse(
   const branchId = randomUUID();
   const locationId = randomUUID();
   const operatorId = randomUUID();
+  const cashRegisterId = randomUUID();
   const warehouseId = randomUUID();
   await pool.query(
     `INSERT INTO organization.legal_entities (id, code, name, created_by, updated_by)
@@ -1787,6 +2252,18 @@ async function seedServiceTechnicianWarehouse(
     [operatorId, locationId, accountId, `TECH-${runId.slice(0, 8).toUpperCase()}`],
   );
   await pool.query(
+    `INSERT INTO organization.cash_registers (
+       id, business_location_id, code, name, created_by, updated_by
+     ) VALUES ($1, $2, $3, 'Finance test cash register', $4, $4)`,
+    [cashRegisterId, locationId, `CASH-${runId.slice(0, 8).toUpperCase()}`, accountId],
+  );
+  await pool.query(
+    `INSERT INTO organization.cash_register_operators (
+       cash_register_id, operator_id, business_location_id, assigned_by
+     ) VALUES ($1, $2, $3, $4)`,
+    [cashRegisterId, operatorId, locationId, accountId],
+  );
+  await pool.query(
     `INSERT INTO master_data.warehouses (
        id, code, name, warehouse_type, business_location_id, technician_operator_id, created_by, updated_by
      ) VALUES ($1, $2, 'Service technician warehouse', 'technician', $3, $4, $5, $5)`,
@@ -1805,7 +2282,11 @@ async function seedServiceTechnicianWarehouse(
      VALUES ($1, $2, 5, 7)`,
     [warehouseId, productId],
   );
-  return warehouseId;
+  return {
+    cashOperatorId: operatorId,
+    cashRegisterId,
+    technicianWarehouseId: warehouseId,
+  };
 }
 
 const tinyPng = Buffer.from(

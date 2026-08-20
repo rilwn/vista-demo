@@ -33,6 +33,7 @@ interface StatementSummaryRow {
   id: string;
   incoming_total: string;
   matched_incoming_count: string;
+  matched_outgoing_count: string;
   opening_balance: string;
   outgoing_total: string;
   statement_date: string;
@@ -40,6 +41,7 @@ interface StatementSummaryRow {
   statement_reference: string;
   transaction_count: string;
   unmatched_incoming_count: string;
+  unmatched_outgoing_count: string;
   version: number;
 }
 
@@ -56,8 +58,15 @@ interface TransactionRow {
   matched_at: string | Date | null;
   matched_customer_document_id: string | null;
   matched_payment_id: string | null;
+  matched_supplier_payable_id: string | null;
+  matched_supplier_payment_id: string | null;
   payment_number: string | null;
   payment_reference: string;
+  supplier_name: string | null;
+  supplier_partner_id: string | null;
+  supplier_payable_number: string | null;
+  supplier_payment_kind: 'advance' | 'offset' | 'payment' | null;
+  supplier_payment_number: string | null;
   transaction_date: string;
   value_date: string;
   version: number;
@@ -142,14 +151,10 @@ export class FinanceBankService {
        JOIN sales.invoices source ON source.id = document.source_sales_invoice_id
        JOIN master_data.partners customer ON customer.id = document.customer_partner_id
        WHERE document.review_state = 'pending_finance_review'
+         AND document.currency_code = 'BGN'
          AND document.outstanding_total >= $2::numeric
-         AND (
-           $1 ILIKE ('%' || document.document_number || '%')
-           OR $1 ILIKE ('%' || source.invoice_number || '%')
-           OR lower(customer.display_name) = lower($3)
-           OR document.outstanding_total = $2::numeric
-         )
        ORDER BY reference_matched DESC,
+                (lower(customer.display_name) = lower($3)) DESC,
                 (document.outstanding_total = $2::numeric) DESC,
                 document.due_date, document.id
        LIMIT 50`,
@@ -594,6 +599,7 @@ async function exactReferenceCandidates(client: PoolClient, reference: string, a
      FROM finance.customer_documents document
      JOIN sales.invoices source ON source.id = document.source_sales_invoice_id
      WHERE document.review_state = 'pending_finance_review'
+       AND document.currency_code = 'BGN'
        AND document.outstanding_total >= $2::numeric
        AND ($1 ILIKE ('%' || document.document_number || '%')
          OR $1 ILIKE ('%' || source.invoice_number || '%'))
@@ -643,13 +649,25 @@ async function loadStatement(client: PoolClient, id: string): Promise<FinanceBan
             transaction.counterparty_name, transaction.counterparty_iban,
             transaction.payment_reference, transaction.match_status, transaction.match_method,
             transaction.matched_customer_document_id, transaction.matched_payment_id,
+            transaction.matched_supplier_payable_id, transaction.matched_supplier_payment_id,
             transaction.matched_at, transaction.version, document.document_number,
-            customer.display_name AS customer_name, payment.payment_number
+            customer.display_name AS customer_name, payment.payment_number,
+            supplier_payable.payable_number AS supplier_payable_number,
+            supplier_payment.payment_number AS supplier_payment_number,
+            supplier_payment.payment_kind AS supplier_payment_kind,
+            supplier_payment.supplier_partner_id,
+            supplier.display_name AS supplier_name
      FROM finance.bank_transactions transaction
      LEFT JOIN finance.customer_documents document
        ON document.id = transaction.matched_customer_document_id
      LEFT JOIN master_data.partners customer ON customer.id = document.customer_partner_id
      LEFT JOIN finance.payments payment ON payment.id = transaction.matched_payment_id
+     LEFT JOIN finance.supplier_payables supplier_payable
+       ON supplier_payable.id = transaction.matched_supplier_payable_id
+     LEFT JOIN finance.supplier_payments supplier_payment
+       ON supplier_payment.id = transaction.matched_supplier_payment_id
+     LEFT JOIN master_data.partners supplier
+       ON supplier.id = supplier_payment.supplier_partner_id
      WHERE transaction.bank_statement_id = $1
      ORDER BY transaction.line_number`,
     [id],
@@ -671,8 +689,14 @@ function statementSummaryQuery() {
                  count(transaction.id) FILTER (
                    WHERE transaction.direction = 'incoming' AND transaction.match_status = 'unmatched'
                  )::text AS unmatched_incoming_count,
+                 count(transaction.id) FILTER (
+                   WHERE transaction.direction = 'outgoing' AND transaction.match_status = 'matched'
+                 )::text AS matched_outgoing_count,
+                 count(transaction.id) FILTER (
+                   WHERE transaction.direction = 'outgoing' AND transaction.match_status = 'unmatched'
+                 )::text AS unmatched_outgoing_count,
                  CASE WHEN count(transaction.id) FILTER (
-                   WHERE transaction.direction = 'incoming' AND transaction.match_status = 'unmatched'
+                   WHERE transaction.match_status = 'unmatched'
                  ) = 0 THEN 'reconciled' ELSE 'open' END AS status
           FROM finance.bank_statements statement
           LEFT JOIN finance.bank_transactions transaction ON transaction.bank_statement_id = statement.id
@@ -681,6 +705,7 @@ function statementSummaryQuery() {
 
 function mapStatementSummary(row: StatementSummaryRow): FinanceBankStatementSummary {
   const unmatchedIncomingCount = Number(row.unmatched_incoming_count);
+  const unmatchedOutgoingCount = Number(row.unmatched_outgoing_count);
   return {
     accountIban: row.account_iban,
     bankName: row.bank_name,
@@ -690,14 +715,16 @@ function mapStatementSummary(row: StatementSummaryRow): FinanceBankStatementSumm
     id: row.id,
     incomingTotal: row.incoming_total,
     matchedIncomingCount: Number(row.matched_incoming_count),
+    matchedOutgoingCount: Number(row.matched_outgoing_count),
     number: row.statement_number,
     openingBalance: row.opening_balance,
     outgoingTotal: row.outgoing_total,
     statementDate: row.statement_date,
     statementReference: row.statement_reference,
-    status: unmatchedIncomingCount === 0 ? 'reconciled' : 'open',
+    status: unmatchedIncomingCount + unmatchedOutgoingCount === 0 ? 'reconciled' : 'open',
     transactionCount: Number(row.transaction_count),
     unmatchedIncomingCount,
+    unmatchedOutgoingCount,
     version: row.version,
   };
 }
@@ -725,6 +752,32 @@ function mapTransaction(row: TransactionRow): FinanceBankTransaction {
             matchedAt: asIso(row.matched_at),
             method: row.match_method,
             paymentNumber: row.payment_number,
+          },
+        }
+      : {}),
+    ...(row.match_status === 'matched' &&
+    row.matched_supplier_payment_id &&
+    row.supplier_payment_number &&
+    row.supplier_payment_kind &&
+    row.supplier_partner_id &&
+    row.supplier_name &&
+    row.matched_at &&
+    row.match_method
+      ? {
+          supplierMatch: {
+            kind:
+              row.supplier_payment_kind === 'advance' ? ('advance' as const) : ('payment' as const),
+            matchedAt: asIso(row.matched_at),
+            method: row.match_method,
+            paymentNumber: row.supplier_payment_number,
+            supplierName: row.supplier_name,
+            supplierPartnerId: row.supplier_partner_id,
+            ...(row.matched_supplier_payable_id
+              ? { supplierPayableId: row.matched_supplier_payable_id }
+              : {}),
+            ...(row.supplier_payable_number
+              ? { supplierPayableNumber: row.supplier_payable_number }
+              : {}),
           },
         }
       : {}),

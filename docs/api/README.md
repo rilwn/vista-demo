@@ -556,8 +556,8 @@ passed, and is safe to retry.
 
 These records use internal `FIN-REV` and `PAY` references only. They do not
 perform legal/fiscal issuance, official branch/register/operator numbering, VAT
-or accounting posting, BNB conversion, PDF/email delivery, cash vouchers,
-advances, notifications, or reporting; those remain subsequent Finance work.
+or accounting posting, BNB conversion, PDF/email delivery, customer advances,
+notifications, or statutory reporting; those remain subsequent Finance work.
 
 ## Finance bank reconciliation
 
@@ -570,7 +570,13 @@ The protected manual BGN reconciliation surface provides:
 - `GET /api/v1/finance/bank-transactions/:id/match-candidates` for ranked open
   customer-collection suggestions; and
 - version-checked, idempotent
-  `POST /api/v1/finance/bank-transactions/:id/match` for a user-confirmed match.
+  `POST /api/v1/finance/bank-transactions/:id/match` for a user-confirmed
+  incoming match;
+- `GET /api/v1/finance/bank-transactions/:id/supplier-match-candidates` for open
+  supplier payables ranked by exact reference, amount, and due date; and
+- version-checked, idempotent
+  `POST /api/v1/finance/bank-transactions/:id/supplier-match` to allocate an
+  outgoing line to a supplier payable or retain it as an explicit advance.
 
 An incoming line is matched automatically only when its payment reference
 identifies exactly one eligible open collection and its amount fits the remaining
@@ -578,11 +584,72 @@ balance. All other incoming lines remain in **Needs review**; name and amount
 similarity rank candidates but never allocate money without confirmation. A match
 creates the bank-transfer payment, allocation, balance/status history, audit event,
 and outbox event transactionally. A payment or bank line cannot be matched twice.
+Outgoing lines are never auto-posted: a Finance employee must confirm a supplier
+payable or deliberately keep the transfer as an unallocated supplier advance.
 
 Reads require `erp.finance:view`, statement entry requires `erp.finance:create`,
 and manual matching requires `erp.finance:edit`. This surface is BGN-only and does
-not claim support for approved Bulgarian statement-file formats, supplier
-payments, advances, offsets, cash vouchers, or accounting posting.
+not claim support for approved Bulgarian statement-file formats or accounting
+posting.
+
+## Finance supplier subledger
+
+The protected supplier Finance surface provides:
+
+- `GET /api/v1/finance/supplier-reference-data` for unregistered BGN supplier
+  invoices, supplier choices, bilateral open customer balances, and the business
+  date;
+- paginated supplier payable, advance, and offset registers plus detailed
+  `GET /api/v1/finance/supplier-payables/:id`;
+- idempotent payable creation from one Procurement supplier invoice and
+  idempotent partial supplier-payment allocation;
+- idempotent unallocated supplier advances and version-checked allocation to an
+  open payable for the same supplier; and
+- an atomic bilateral offset that reduces one customer receivable and one
+  supplier payable belonging to the same canonical partner.
+
+`SP`, `SPAY`, `SADV`, and `OFF` are concurrency-safe operational references.
+Every command locks the affected balance/version, rejects over-allocation and
+cross-supplier allocation, and commits payment evidence, balance history, audit,
+and outbox records together. Exact idempotency replays return the original result;
+a bank transaction, supplier invoice, payment, or offset cannot post twice.
+
+Reads require `erp.finance:view`, creation/payment/advance/offset commands require
+`erp.finance:create`, and advance or outgoing-bank allocation requires
+`erp.finance:edit`. The current subledger is BGN-only. It is operational payment
+control, not legal supplier-invoice issuance, deductible-VAT or general-ledger
+posting, or a replacement for an approved accounting export.
+
+## Finance cash operations
+
+The protected `/api/v1/finance/cash` surface provides:
+
+- `GET /reference-data` for active cash registers, their assigned operators,
+  known partners, open BGN customer collections, and the business date;
+- paginated `GET /vouchers`, detailed `GET /vouchers/:id`, and
+  `GET /daily-report` for one cash register and date;
+- idempotent `POST /vouchers` for BGN cash receipt and payment vouchers; and
+- version-checked, reasoned `POST /vouchers/:id/cancel` for an independent
+  voucher that has not created a customer payment allocation.
+
+Numbers are allocated transactionally by business location, cash register,
+operator, direction, and year. A receipt can be linked to one open customer
+collection; issuance then creates its cash payment, allocation, balance/status
+history, voucher, audit event, and outbox event in the same transaction. The
+receipt cannot exceed the outstanding balance. Linked receipts require a future
+approved payment-reversal workflow and are therefore not cancelled by the simple
+voucher cancellation command.
+
+The daily report calculates opening balance, issued receipts, issued payments,
+and closing balance from the voucher register. Cancelled vouchers remain visible
+for audit review but do not contribute to totals. This is an operational daily
+cash report, not a statutory posting or finalized day-close. Reads require
+`erp.finance:view`, issuance requires `erp.finance:create`, and cancellation
+requires `erp.finance:edit`.
+
+The surface does not yet implement opening-float approval, negative-cash policy,
+formal day closing, linked-payment reversal, direct cash-voucher allocation to a
+supplier payable, or accounting posting.
 
 ## Service subscriptions
 

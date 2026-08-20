@@ -1300,6 +1300,186 @@ export interface FinanceSummary {
   totalOutstanding: string;
 }
 
+export type FinanceSupplierPayableStatus = 'overdue' | 'paid' | 'partially_paid' | 'unpaid';
+export type FinanceSupplierPaymentKind = 'advance' | 'offset' | 'payment';
+
+export interface FinanceSupplierInvoiceReference {
+  currencyCode: string;
+  id: string;
+  invoiceDate: string;
+  invoiceNumber: string;
+  paymentTermsDays?: number;
+  suggestedDueDate: string;
+  supplierName: string;
+  supplierPartnerId: string;
+  total: string;
+}
+
+export interface FinanceSupplierReference {
+  id: string;
+  name: string;
+}
+
+export interface FinanceOffsetReceivableReference {
+  customerName: string;
+  customerPartnerId: string;
+  dueDate: string;
+  id: string;
+  number: string;
+  outstandingTotal: string;
+  sourceInvoiceNumber: string;
+  version: number;
+}
+
+export interface FinanceSupplierReferenceData {
+  businessDate: string;
+  openReceivables: FinanceOffsetReceivableReference[];
+  supplierInvoices: FinanceSupplierInvoiceReference[];
+  suppliers: FinanceSupplierReference[];
+}
+
+export interface CreateFinanceSupplierPayableRequest {
+  dueDate: string;
+  supplierInvoiceId: string;
+}
+
+export interface CreateFinanceSupplierPaymentRequest {
+  amount: string;
+  notes?: string;
+  paymentDate: string;
+  paymentMethod: Exclude<FinancePaymentMethod, 'offset'>;
+  paymentReference?: string;
+}
+
+export interface CreateFinanceSupplierAdvanceRequest extends CreateFinanceSupplierPaymentRequest {
+  supplierPartnerId: string;
+}
+
+export interface AllocateFinanceSupplierAdvanceRequest {
+  amount: string;
+  expectedAdvanceVersion: number;
+  expectedPayableVersion: number;
+  supplierPayableId: string;
+}
+
+export interface CreateFinanceSupplierOffsetRequest {
+  amount: string;
+  customerDocumentId: string;
+  expectedCustomerDocumentVersion: number;
+  expectedSupplierPayableVersion: number;
+  offsetDate: string;
+  reason: string;
+  supplierPayableId: string;
+}
+
+export interface FinanceSupplierPaymentAllocation {
+  allocatedAt: string;
+  amount: string;
+  id: string;
+  payableNumber: string;
+  supplierPayableId: string;
+}
+
+export interface FinanceSupplierPayment {
+  allocatedTotal: string;
+  allocations: FinanceSupplierPaymentAllocation[];
+  amount: string;
+  availableTotal: string;
+  id: string;
+  kind: FinanceSupplierPaymentKind;
+  notes?: string;
+  number: string;
+  paymentDate: string;
+  paymentMethod: FinancePaymentMethod;
+  paymentReference?: string;
+  recordedAt: string;
+  sourceBankTransactionId?: string;
+  supplierName: string;
+  supplierPartnerId: string;
+  version: number;
+}
+
+export interface FinanceSupplierPayable {
+  allocatedTotal: string;
+  bgnTotal: string;
+  createdAt: string;
+  currencyCode: string;
+  documentDate: string;
+  dueDate: string;
+  exchangeRate: string;
+  id: string;
+  number: string;
+  outstandingTotal: string;
+  paymentStatus: FinanceSupplierPayableStatus;
+  payments: FinanceSupplierPayment[];
+  rateDate: string;
+  rateSource: string;
+  sourceSupplierInvoiceId: string;
+  sourceSupplierInvoiceNumber: string;
+  supplierName: string;
+  supplierPartnerId: string;
+  total: string;
+  version: number;
+}
+
+export interface FinanceSupplierPayablePage {
+  items: FinanceSupplierPayable[];
+  page: number;
+  pageSize: number;
+  totalItems: number;
+  totalPages: number;
+}
+
+export interface FinanceSupplierAdvancePage {
+  items: FinanceSupplierPayment[];
+  page: number;
+  pageSize: number;
+  totalItems: number;
+  totalPages: number;
+}
+
+export interface FinanceSupplierOffset {
+  amount: string;
+  createdAt: string;
+  customerDocumentId: string;
+  customerDocumentNumber: string;
+  id: string;
+  number: string;
+  offsetDate: string;
+  partnerId: string;
+  partnerName: string;
+  reason: string;
+  supplierPayableId: string;
+  supplierPayableNumber: string;
+}
+
+export interface FinanceSupplierOffsetPage {
+  items: FinanceSupplierOffset[];
+  page: number;
+  pageSize: number;
+  totalItems: number;
+  totalPages: number;
+}
+
+export interface FinanceSupplierBankMatchCandidate {
+  dueDate: string;
+  outstandingTotal: string;
+  payableNumber: string;
+  referenceMatched: boolean;
+  score: number;
+  sourceSupplierInvoiceNumber: string;
+  supplierName: string;
+  supplierPartnerId: string;
+  supplierPayableId: string;
+}
+
+export interface MatchFinanceSupplierBankTransactionRequest {
+  expectedVersion: number;
+  mode: 'advance' | 'payable';
+  supplierPartnerId?: string;
+  supplierPayableId?: string;
+}
+
 export const financeBankTransactionDirections = ['incoming', 'outgoing'] as const;
 export type FinanceBankTransactionDirection = (typeof financeBankTransactionDirections)[number];
 export type FinanceBankTransactionMatchStatus = 'matched' | 'unmatched';
@@ -1339,6 +1519,17 @@ export interface FinanceBankTransactionMatch {
   paymentNumber: string;
 }
 
+export interface FinanceSupplierBankTransactionMatch {
+  kind: 'advance' | 'payment';
+  matchedAt: string;
+  method: 'automatic_reference' | 'manual';
+  paymentNumber: string;
+  supplierName: string;
+  supplierPartnerId: string;
+  supplierPayableId?: string;
+  supplierPayableNumber?: string;
+}
+
 export interface FinanceBankTransaction {
   amount: string;
   counterpartyIban?: string;
@@ -1347,6 +1538,7 @@ export interface FinanceBankTransaction {
   id: string;
   lineNumber: number;
   match?: FinanceBankTransactionMatch;
+  supplierMatch?: FinanceSupplierBankTransactionMatch;
   matchStatus: FinanceBankTransactionMatchStatus;
   paymentReference: string;
   transactionDate: string;
@@ -1363,6 +1555,7 @@ export interface FinanceBankStatementSummary {
   id: string;
   incomingTotal: string;
   matchedIncomingCount: number;
+  matchedOutgoingCount: number;
   number: string;
   openingBalance: string;
   outgoingTotal: string;
@@ -1371,6 +1564,7 @@ export interface FinanceBankStatementSummary {
   status: 'open' | 'reconciled';
   transactionCount: number;
   unmatchedIncomingCount: number;
+  unmatchedOutgoingCount: number;
   version: number;
 }
 
@@ -1395,6 +1589,124 @@ export interface FinanceBankMatchCandidate {
   referenceMatched: boolean;
   score: number;
   sourceInvoiceNumber: string;
+}
+
+export const financeCashVoucherDirections = ['receipt', 'payment'] as const;
+export type FinanceCashVoucherDirection = (typeof financeCashVoucherDirections)[number];
+export const financeCashVoucherStatuses = ['issued', 'cancelled'] as const;
+export type FinanceCashVoucherStatus = (typeof financeCashVoucherStatuses)[number];
+
+export interface FinanceCashOperatorReference {
+  code: string;
+  id: string;
+  name: string;
+}
+
+export interface FinanceCashRegisterReference {
+  branchName: string;
+  businessLocationId: string;
+  businessLocationName: string;
+  code: string;
+  id: string;
+  name: string;
+  operators: FinanceCashOperatorReference[];
+}
+
+export interface FinanceCashPartnerReference {
+  id: string;
+  name: string;
+  roles: Array<'customer' | 'supplier'>;
+}
+
+export interface FinanceCashCollectionReference {
+  customerName: string;
+  customerPartnerId: string;
+  dueDate: string;
+  id: string;
+  number: string;
+  outstandingTotal: string;
+  sourceInvoiceNumber: string;
+}
+
+export interface FinanceCashReferenceData {
+  businessDate: string;
+  cashRegisters: FinanceCashRegisterReference[];
+  openCollections: FinanceCashCollectionReference[];
+  partners: FinanceCashPartnerReference[];
+}
+
+export interface CreateFinanceCashVoucherRequest {
+  amount: string;
+  cashRegisterId: string;
+  counterpartyName?: string;
+  counterpartyPartnerId?: string;
+  customerDocumentId?: string;
+  direction: FinanceCashVoucherDirection;
+  notes?: string;
+  operatorId: string;
+  paymentReference?: string;
+  purpose: string;
+  voucherDate: string;
+}
+
+export interface CancelFinanceCashVoucherRequest {
+  cancellationReason: string;
+  expectedVersion: number;
+}
+
+export interface FinanceCashVoucher {
+  amount: string;
+  branchName: string;
+  businessLocationId: string;
+  businessLocationName: string;
+  cancelledAt?: string;
+  cancellationReason?: string;
+  cashRegisterCode: string;
+  cashRegisterId: string;
+  cashRegisterName: string;
+  collectionNumber?: string;
+  counterpartyName: string;
+  counterpartyPartnerId?: string;
+  createdAt: string;
+  currencyCode: string;
+  customerDocumentId?: string;
+  direction: FinanceCashVoucherDirection;
+  id: string;
+  issuedByName: string;
+  notes?: string;
+  number: string;
+  operatorCode: string;
+  operatorId: string;
+  operatorName: string;
+  paymentNumber?: string;
+  paymentReference?: string;
+  purpose: string;
+  status: FinanceCashVoucherStatus;
+  version: number;
+  voucherDate: string;
+}
+
+export interface FinanceCashVoucherPage {
+  items: FinanceCashVoucher[];
+  page: number;
+  pageSize: number;
+  totalItems: number;
+  totalPages: number;
+}
+
+export interface FinanceCashDailyReport {
+  cashRegisterCode: string;
+  cashRegisterId: string;
+  cashRegisterName: string;
+  closingBalance: string;
+  generatedAt: string;
+  openingBalance: string;
+  paymentCount: number;
+  paymentTotal: string;
+  receiptCount: number;
+  receiptTotal: string;
+  reportDate: string;
+  vouchers: FinanceCashVoucher[];
 }
 
 export const financialDocumentTypes = ['invoice', 'proforma', 'credit_note', 'debit_note'] as const;

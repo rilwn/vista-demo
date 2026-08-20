@@ -20,6 +20,7 @@ import {
 } from '../api/finance';
 import { useAuth } from '../auth/AuthProvider';
 import { Icon } from '../components/Icon';
+import { Link } from '../routing/Router';
 import { FinanceTabs } from './FinanceBankPage';
 import { FinancialDocumentsPage } from './FinancialDocumentsPage';
 
@@ -46,6 +47,7 @@ function FinanceCollectionsPage({ view }: { view: FinanceView }) {
   const [notice, setNotice] = useState<string | null>(null);
   const canCreate = hasPermission('erp.finance', 'create');
   const canEdit = hasPermission('erp.finance', 'edit');
+  const canPrepareSales = hasPermission('erp.sales', 'create');
   const pageTitle = view === 'invoices' ? 'Invoices' : 'Payments & allocations';
   const pageDescription =
     view === 'invoices'
@@ -99,6 +101,7 @@ function FinanceCollectionsPage({ view }: { view: FinanceView }) {
 
       {creating ? (
         <FinanceDocumentDrawer
+          canPrepareSales={canPrepareSales}
           onBack={() => setCreating(false)}
           onSaved={(document) => {
             setCreating(false);
@@ -230,11 +233,13 @@ function PaymentStatus({ status }: { status: FinanceCustomerDocument['paymentSta
 }
 
 function FinanceDocumentDrawer({
+  canPrepareSales,
   onBack,
   onSaved,
   references,
   token,
 }: {
+  canPrepareSales: boolean;
   onBack: () => void;
   onSaved: (document: FinanceCustomerDocument) => void;
   references: FinanceReferenceData;
@@ -271,8 +276,21 @@ function FinanceDocumentDrawer({
         {error ? <InlineAlert tone="error">{error}</InlineAlert> : null}
         {!references.invoiceDrafts.length ? (
           <InlineAlert tone="warning">
-            There are no BGN invoice drafts ready for collection. Complete a shipment and prepare
-            its invoice draft in Sales first.
+            <div className="finance-prerequisite">
+              <div>
+                <strong>No Sales invoice draft is ready</strong>
+                <span>
+                  Complete a shipment and prepare its invoice draft before adding it to collections.
+                </span>
+              </div>
+              {canPrepareSales ? (
+                <Link to="/modules/erp.sales/quotations">
+                  Prepare Sales invoice draft <Icon name="arrow" size={15} />
+                </Link>
+              ) : (
+                <small>Ask a Sales user to prepare the invoice draft, then return here.</small>
+              )}
+            </div>
           </InlineAlert>
         ) : (
           <>

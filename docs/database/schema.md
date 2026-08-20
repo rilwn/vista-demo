@@ -310,6 +310,25 @@ their business rows, audit records, and outbox events in the same transaction an
 support idempotent replay. This migration does not add bank-specific file parsers,
 supplier payment matching, advances, cash vouchers, or accounting posting.
 
+Migration `0036_finance_cash_operations` adds BGN cash receipt/payment vouchers,
+scoped register/operator/location/year sequences, reversible standalone voucher
+status, and operational daily report evidence. A receipt linked to a customer
+collection creates the payment and allocation in the same transaction. Linked
+receipts cannot use the simple cancellation path because payment reversal remains
+a separate pending workflow; cancelled standalone vouchers remain auditable and
+are excluded from daily totals.
+
+Migration `0037_finance_supplier_subledger` adds BGN supplier payables sourced
+once from Procurement supplier invoices, supplier payments and allocations,
+unallocated advances, balance-status history, and bilateral customer/supplier
+offsets. It extends bank transactions with a single outgoing supplier-payment
+link, allowing a Finance employee to allocate the line to a payable or preserve
+it as an advance. Restrictive foreign keys, fixed-precision balance checks,
+optimistic versions, transaction locks, and concurrency-safe `SP`, `SPAY`,
+`SADV`, and `OFF` references prevent duplicate or cross-supplier allocation.
+These records are an operational supplier subledger, not deductible-VAT or
+general-ledger posting.
+
 Migration `0030_service_work_orders_core` adds the `service` schema and its
 operational request-to-completion record chain. `requests` retain the immutable
 canonical customer, location, equipment, optional subscription reference, intake

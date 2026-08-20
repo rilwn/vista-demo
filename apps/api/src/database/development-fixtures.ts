@@ -1056,7 +1056,7 @@ async function ensurePartnerFixtures(
     'TechSupply Demo Ltd.',
     '205555558',
     'BG205555558',
-    ['supplier'],
+    ['customer', 'supplier'],
   );
 
   const alfaContactId = fixtureId('partner-contact:alfa');

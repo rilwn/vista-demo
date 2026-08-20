@@ -43,18 +43,18 @@ export class CreateServiceSubscriptionDto implements CreateServiceSubscriptionRe
   currencyCode!: string;
 
   @ApiProperty({ format: 'uuid', type: String })
-  @IsUUID('4')
+  @IsUUID('loose')
   customerLocationId!: string;
 
   @ApiProperty({ format: 'uuid', type: String })
-  @IsUUID('4')
+  @IsUUID('loose')
   customerPartnerId!: string;
 
   @ApiProperty({ format: 'uuid', isArray: true, maxItems: 100, minItems: 1, type: String })
   @IsArray()
   @ArrayMinSize(1)
   @ArrayMaxSize(100)
-  @IsUUID('4', { each: true })
+  @IsUUID('loose', { each: true })
   equipmentIds!: string[];
 
   @ApiProperty({ isArray: true, maxItems: 50, minItems: 1, type: String })

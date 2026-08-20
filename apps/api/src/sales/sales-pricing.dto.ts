@@ -48,7 +48,7 @@ export class CreateCustomerPriceGroupDto implements CreateCustomerPriceGroupRequ
   @IsArray()
   @ArrayMaxSize(500)
   @ArrayUnique()
-  @IsUUID('4', { each: true })
+  @IsUUID('loose', { each: true })
   customerPartnerIds!: string[];
 
   @ApiProperty({ maxLength: 150, type: String })
@@ -66,7 +66,7 @@ export class UpdateCustomerPriceGroupDto implements UpdateCustomerPriceGroupRequ
   @IsArray()
   @ArrayMaxSize(500)
   @ArrayUnique()
-  @IsUUID('4', { each: true })
+  @IsUUID('loose', { each: true })
   customerPartnerIds!: string[];
 
   @ApiProperty({ maxLength: 150, type: String })
@@ -126,7 +126,7 @@ export class UpdatePromotionalCampaignDto implements UpdatePromotionalCampaignRe
 
 export class CreatePriceListLineDto implements CreatePriceListLineRequest {
   @ApiProperty({ format: 'uuid', type: String })
-  @IsUUID('4')
+  @IsUUID('loose')
   productId!: string;
 
   @ApiProperty({ example: '125.0000', type: String })
@@ -138,7 +138,7 @@ export class CreatePriceListLineDto implements CreatePriceListLineRequest {
 export class CreatePriceListDto implements CreatePriceListRequest {
   @ApiPropertyOptional({ format: 'uuid', type: String })
   @IsOptional()
-  @IsUUID('4')
+  @IsUUID('loose')
   campaignId?: string;
 
   @ApiProperty({ maxLength: 40, type: String })
@@ -153,12 +153,12 @@ export class CreatePriceListDto implements CreatePriceListRequest {
 
   @ApiPropertyOptional({ format: 'uuid', type: String })
   @IsOptional()
-  @IsUUID('4')
+  @IsUUID('loose')
   customerGroupId?: string;
 
   @ApiPropertyOptional({ format: 'uuid', type: String })
   @IsOptional()
-  @IsUUID('4')
+  @IsUUID('loose')
   customerPartnerId?: string;
 
   @ApiProperty({ isArray: true, type: CreatePriceListLineDto })
@@ -210,7 +210,7 @@ export class ResolveSalesPriceQueryDto {
   asOf!: string;
 
   @ApiProperty({ format: 'uuid', type: String })
-  @IsUUID('4')
+  @IsUUID('loose')
   customerPartnerId!: string;
 
   @ApiProperty({ example: 'BGN', maxLength: 3, minLength: 3, type: String })
@@ -219,7 +219,7 @@ export class ResolveSalesPriceQueryDto {
   currencyCode!: string;
 
   @ApiProperty({ format: 'uuid', type: String })
-  @IsUUID('4')
+  @IsUUID('loose')
   productId!: string;
 }
 

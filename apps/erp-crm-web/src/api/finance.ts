@@ -1,17 +1,37 @@
 import type {
   CancelFinanceCustomerDocumentRequest,
+  CancelFinanceCashVoucherRequest,
   CreateFinanceCustomerDocumentRequest,
   CreateFinanceBankStatementRequest,
+  CreateFinanceCashVoucherRequest,
   CreateFinancePaymentRequest,
   FinanceBankMatchCandidate,
   FinanceBankStatement,
   FinanceBankStatementPage,
+  FinanceCashDailyReport,
+  FinanceCashReferenceData,
+  FinanceCashVoucher,
+  FinanceCashVoucherPage,
   FinanceCustomerDocument,
   FinancialDocument,
   FinancialDocumentPage,
   FinancialDocumentReferenceData,
   FinanceReferenceData,
   FinanceSummary,
+  AllocateFinanceSupplierAdvanceRequest,
+  CreateFinanceSupplierAdvanceRequest,
+  CreateFinanceSupplierOffsetRequest,
+  CreateFinanceSupplierPayableRequest,
+  CreateFinanceSupplierPaymentRequest,
+  FinanceSupplierAdvancePage,
+  FinanceSupplierBankMatchCandidate,
+  FinanceSupplierOffset,
+  FinanceSupplierOffsetPage,
+  FinanceSupplierPayable,
+  FinanceSupplierPayablePage,
+  FinanceSupplierPayment,
+  FinanceSupplierReferenceData,
+  MatchFinanceSupplierBankTransactionRequest,
   MatchFinanceBankTransactionRequest,
   CancelFinancialDocumentRequest,
   CreateFinancialDocumentRequest,
@@ -184,6 +204,218 @@ export function matchFinanceBankTransaction(
 ): Promise<FinanceBankStatement> {
   return unwrapApiResponse(
     apiClient.POST('/api/v1/finance/bank-transactions/{id}/match', {
+      body: input,
+      headers: authorizationHeaders(token),
+      params: { header: idempotencyParameters(key).header, path: { id } },
+    }),
+  );
+}
+
+export function getFinanceCashReferenceData(token: string): Promise<FinanceCashReferenceData> {
+  return unwrapApiResponse(
+    apiClient.GET('/api/v1/finance/cash/reference-data', {
+      headers: authorizationHeaders(token),
+    }),
+  );
+}
+
+export function listFinanceCashVouchers(token: string): Promise<FinanceCashVoucherPage> {
+  return unwrapApiResponse(
+    apiClient.GET('/api/v1/finance/cash/vouchers', {
+      headers: authorizationHeaders(token),
+    }),
+  );
+}
+
+export function getFinanceCashVoucher(token: string, id: string): Promise<FinanceCashVoucher> {
+  return unwrapApiResponse(
+    apiClient.GET('/api/v1/finance/cash/vouchers/{id}', {
+      headers: authorizationHeaders(token),
+      params: { path: { id } },
+    }),
+  );
+}
+
+export function getFinanceCashDailyReport(
+  token: string,
+  cashRegisterId: string,
+  date: string,
+): Promise<FinanceCashDailyReport> {
+  return unwrapApiResponse(
+    apiClient.GET('/api/v1/finance/cash/daily-report', {
+      headers: authorizationHeaders(token),
+      params: { query: { cashRegisterId, date } },
+    }),
+  );
+}
+
+export function createFinanceCashVoucher(
+  token: string,
+  key: string,
+  input: CreateFinanceCashVoucherRequest,
+): Promise<FinanceCashVoucher> {
+  return unwrapApiResponse(
+    apiClient.POST('/api/v1/finance/cash/vouchers', {
+      body: input,
+      headers: authorizationHeaders(token),
+      params: { header: idempotencyParameters(key).header },
+    }),
+  );
+}
+
+export function cancelFinanceCashVoucher(
+  token: string,
+  id: string,
+  key: string,
+  input: CancelFinanceCashVoucherRequest,
+): Promise<FinanceCashVoucher> {
+  return unwrapApiResponse(
+    apiClient.POST('/api/v1/finance/cash/vouchers/{id}/cancel', {
+      body: input,
+      headers: authorizationHeaders(token),
+      params: { header: idempotencyParameters(key).header, path: { id } },
+    }),
+  );
+}
+
+export function getFinanceSupplierReferenceData(
+  token: string,
+): Promise<FinanceSupplierReferenceData> {
+  return unwrapApiResponse(
+    apiClient.GET('/api/v1/finance/supplier-reference-data', {
+      headers: authorizationHeaders(token),
+    }),
+  );
+}
+
+export function listFinanceSupplierPayables(token: string): Promise<FinanceSupplierPayablePage> {
+  return unwrapApiResponse(
+    apiClient.GET('/api/v1/finance/supplier-payables', {
+      headers: authorizationHeaders(token),
+    }),
+  );
+}
+
+export function getFinanceSupplierPayable(
+  token: string,
+  id: string,
+): Promise<FinanceSupplierPayable> {
+  return unwrapApiResponse(
+    apiClient.GET('/api/v1/finance/supplier-payables/{id}', {
+      headers: authorizationHeaders(token),
+      params: { path: { id } },
+    }),
+  );
+}
+
+export function createFinanceSupplierPayable(
+  token: string,
+  key: string,
+  input: CreateFinanceSupplierPayableRequest,
+): Promise<FinanceSupplierPayable> {
+  return unwrapApiResponse(
+    apiClient.POST('/api/v1/finance/supplier-payables', {
+      body: input,
+      headers: authorizationHeaders(token),
+      params: { header: idempotencyParameters(key).header },
+    }),
+  );
+}
+
+export function recordFinanceSupplierPayment(
+  token: string,
+  id: string,
+  key: string,
+  input: CreateFinanceSupplierPaymentRequest,
+): Promise<FinanceSupplierPayable> {
+  return unwrapApiResponse(
+    apiClient.POST('/api/v1/finance/supplier-payables/{id}/payments', {
+      body: input,
+      headers: authorizationHeaders(token),
+      params: { header: idempotencyParameters(key).header, path: { id } },
+    }),
+  );
+}
+
+export function listFinanceSupplierAdvances(token: string): Promise<FinanceSupplierAdvancePage> {
+  return unwrapApiResponse(
+    apiClient.GET('/api/v1/finance/supplier-advances', {
+      headers: authorizationHeaders(token),
+    }),
+  );
+}
+
+export function createFinanceSupplierAdvance(
+  token: string,
+  key: string,
+  input: CreateFinanceSupplierAdvanceRequest,
+): Promise<FinanceSupplierPayment> {
+  return unwrapApiResponse(
+    apiClient.POST('/api/v1/finance/supplier-advances', {
+      body: input,
+      headers: authorizationHeaders(token),
+      params: { header: idempotencyParameters(key).header },
+    }),
+  );
+}
+
+export function allocateFinanceSupplierAdvance(
+  token: string,
+  id: string,
+  key: string,
+  input: AllocateFinanceSupplierAdvanceRequest,
+): Promise<FinanceSupplierPayment> {
+  return unwrapApiResponse(
+    apiClient.POST('/api/v1/finance/supplier-advances/{id}/allocations', {
+      body: input,
+      headers: authorizationHeaders(token),
+      params: { header: idempotencyParameters(key).header, path: { id } },
+    }),
+  );
+}
+
+export function listFinanceSupplierOffsets(token: string): Promise<FinanceSupplierOffsetPage> {
+  return unwrapApiResponse(
+    apiClient.GET('/api/v1/finance/supplier-offsets', {
+      headers: authorizationHeaders(token),
+    }),
+  );
+}
+
+export function createFinanceSupplierOffset(
+  token: string,
+  key: string,
+  input: CreateFinanceSupplierOffsetRequest,
+): Promise<FinanceSupplierOffset> {
+  return unwrapApiResponse(
+    apiClient.POST('/api/v1/finance/supplier-offsets', {
+      body: input,
+      headers: authorizationHeaders(token),
+      params: { header: idempotencyParameters(key).header },
+    }),
+  );
+}
+
+export function getFinanceSupplierBankMatchCandidates(
+  token: string,
+  id: string,
+): Promise<FinanceSupplierBankMatchCandidate[]> {
+  return unwrapApiResponse(
+    apiClient.GET('/api/v1/finance/bank-transactions/{id}/supplier-match-candidates', {
+      headers: authorizationHeaders(token),
+      params: { path: { id } },
+    }),
+  );
+}
+
+export function matchFinanceSupplierBankTransaction(
+  token: string,
+  id: string,
+  key: string,
+  input: MatchFinanceSupplierBankTransactionRequest,
+): Promise<FinanceSupplierPayment> {
+  return unwrapApiResponse(
+    apiClient.POST('/api/v1/finance/bank-transactions/{id}/supplier-match', {
       body: input,
       headers: authorizationHeaders(token),
       params: { header: idempotencyParameters(key).header, path: { id } },
