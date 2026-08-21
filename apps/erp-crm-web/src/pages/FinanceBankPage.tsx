@@ -226,6 +226,13 @@ export function FinanceTabs() {
       >
         Bank reconciliation
       </Link>
+      <Link
+        className={({ isActive }) => (isActive ? 'is-active' : undefined)}
+        end
+        to="/modules/erp.finance/registers"
+      >
+        Balances &amp; turnover
+      </Link>
     </nav>
   );
 }

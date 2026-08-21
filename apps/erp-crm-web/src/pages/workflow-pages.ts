@@ -101,7 +101,7 @@ export const workflowPages: WorkflowPageDefinition[] = [
   ),
   finance(
     'payments',
-    'Payments & allocations',
+    'Collections & payments',
     'Track partial payments, balances, and allocations against collection records.',
     'Record payment',
     [
@@ -197,24 +197,24 @@ export const workflowPages: WorkflowPageDefinition[] = [
   ),
   finance(
     'registers',
-    'Registers & VAT',
-    'Review receivables, payables, turnover, journals, VAT positions, and accounting exports.',
-    'Create export',
+    'Balances & turnover',
+    'Review current receivables, payables, aging, and partner turnover from the Finance subledgers.',
+    'Review reports',
     [
       {
-        title: 'Registers',
+        title: 'Balance control',
         items: [
-          'Customer and supplier balances',
+          'Current customer and supplier balances',
           '0–30, 31–60, 61–90, and over-90 aging',
-          'Sales and purchase journals',
+          'Outstanding document detail',
         ],
       },
       {
-        title: 'Reporting output',
+        title: 'Turnover review',
         items: [
-          'Collected and deductible VAT by period',
-          'Structured accounting formats',
-          'Saved filters and currency-rate details',
+          'Customer turnover by selected period',
+          'Supplier turnover by selected period',
+          'Gross, allocated, and outstanding BGN values',
         ],
       },
     ],

@@ -49,6 +49,16 @@ interface DocumentRow {
   version: number;
 }
 
+interface PaymentReminderRow {
+  counterparty_name: string;
+  due_date: string;
+  id: string;
+  number: string;
+  outstanding_bgn: string;
+  record_type: 'customer_document' | 'supplier_payable';
+  reminder_state: 'overdue' | 'upcoming';
+}
+
 @Injectable()
 export class FinanceService {
   constructor(
@@ -74,7 +84,8 @@ export class FinanceService {
        JOIN master_data.partners customer ON customer.id = invoice.customer_partner_id
        LEFT JOIN finance.customer_documents document
          ON document.source_sales_invoice_id = invoice.id
-       WHERE invoice.status = 'draft' AND invoice.currency_code = 'BGN' AND document.id IS NULL
+       WHERE invoice.status = 'draft' AND invoice.currency_code = 'BGN'
+         AND invoice.total > 0 AND document.id IS NULL
        ORDER BY invoice.recorded_at DESC, invoice.id DESC`,
     );
     return {
@@ -169,6 +180,12 @@ export class FinanceService {
             'Foreign-currency invoice drafts require the approved BNB rate workflow before Finance review.',
             HttpStatus.UNPROCESSABLE_ENTITY,
           );
+        if (decimalUnits(invoice.total) === 0n)
+          throw new ApiErrorException(
+            'FINANCE_ZERO_VALUE_SOURCE',
+            'A zero-value Sales invoice draft does not have a balance to collect.',
+            HttpStatus.UNPROCESSABLE_ENTITY,
+          );
         const documentDate = await this.businessDate(client);
         if (normalized.dueDate < documentDate)
           throw new ApiErrorException(
@@ -217,6 +234,7 @@ export class FinanceService {
           metadata,
           commandKey,
         );
+        await this.enqueuePaymentReminders(client, documentDate);
         return document;
       },
     );
@@ -449,10 +467,13 @@ export class FinanceService {
         await this.systemSupplierSideEffects(client, row.id, context);
         supplierPayableIds.push(row.id);
       }
+      const notificationIds = await this.enqueuePaymentReminders(client, asOf);
       await client.query('COMMIT');
       return {
         asOf,
         documentIds,
+        notificationCount: notificationIds.length,
+        notificationIds,
         supplierPayableIds,
         updatedCount: documentIds.length + supplierPayableIds.length,
       };
@@ -462,6 +483,81 @@ export class FinanceService {
     } finally {
       client.release();
     }
+  }
+
+  async enqueuePaymentReminders(client: PoolClient, asOf: string): Promise<string[]> {
+    const recipients = await client.query<{ id: string }>(
+      `SELECT DISTINCT account.id
+       FROM identity.user_accounts account
+       JOIN iam.account_roles assignment ON assignment.account_id = account.id
+       JOIN iam.role_permissions grant_record ON grant_record.role_id = assignment.role_id
+       JOIN iam.permissions permission ON permission.id = grant_record.permission_id
+       WHERE account.status = 'active' AND permission.module = 'erp.finance'
+         AND permission.action IN ('create', 'edit', 'approve')
+       ORDER BY account.id`,
+    );
+    if (!recipients.rowCount) return [];
+    const reminders = await client.query<PaymentReminderRow>(
+      `SELECT 'customer_document'::text AS record_type, document.id,
+              document.document_number AS number, partner.display_name AS counterparty_name,
+              document.due_date::text,
+              round(document.outstanding_total * document.exchange_rate, 4)::text AS outstanding_bgn,
+              CASE WHEN document.due_date < $1::date THEN 'overdue' ELSE 'upcoming' END AS reminder_state
+       FROM finance.customer_documents document
+       JOIN master_data.partners partner ON partner.id = document.customer_partner_id
+       WHERE document.review_state = 'pending_finance_review' AND document.outstanding_total > 0
+         AND document.due_date <= $1::date + $2::integer
+       UNION ALL
+       SELECT 'supplier_payable'::text AS record_type, payable.id,
+              payable.payable_number AS number, partner.display_name AS counterparty_name,
+              payable.due_date::text,
+              round(payable.outstanding_total * payable.exchange_rate, 4)::text AS outstanding_bgn,
+              CASE WHEN payable.due_date < $1::date THEN 'overdue' ELSE 'upcoming' END AS reminder_state
+       FROM finance.supplier_payables payable
+       JOIN master_data.partners partner ON partner.id = payable.supplier_partner_id
+       WHERE payable.outstanding_total > 0
+         AND payable.due_date <= $1::date + $2::integer
+       ORDER BY due_date, record_type, id`,
+      [asOf, this.environment.FINANCE_PAYMENT_REMINDER_LEAD_DAYS],
+    );
+    const notificationIds: string[] = [];
+    for (const recipient of recipients.rows) {
+      for (const reminder of reminders.rows) {
+        const notificationId = randomUUID();
+        const idempotencyKey = [
+          'finance.payment-reminder',
+          reminder.record_type,
+          reminder.id,
+          reminder.reminder_state,
+          reminder.due_date,
+          recipient.id,
+        ].join(':');
+        const inserted = await client.query<{ id: string }>(
+          `INSERT INTO notifications.messages (
+             id, recipient_account_id, channel, template_key, template_version,
+             payload, idempotency_key
+           ) VALUES ($1, $2, 'in_system', $3, 1, $4, $5)
+           ON CONFLICT (idempotency_key) DO NOTHING
+           RETURNING id`,
+          [
+            notificationId,
+            recipient.id,
+            `finance.payment.${reminder.reminder_state}`,
+            {
+              counterpartyName: reminder.counterparty_name,
+              dueDate: reminder.due_date,
+              number: reminder.number,
+              outstandingBgn: reminder.outstanding_bgn,
+              recordId: reminder.id,
+              recordType: reminder.record_type,
+            },
+            idempotencyKey,
+          ],
+        );
+        if (inserted.rows[0]?.id) notificationIds.push(inserted.rows[0].id);
+      }
+    }
+    return notificationIds;
   }
 
   private async loadDocument(client: PoolClient, id: string): Promise<FinanceCustomerDocument> {

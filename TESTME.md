@@ -1,125 +1,96 @@
-# Test supplier payables
+# Test Finance balances and reminders
 
-This is the complete browser test for the new supplier payable, payment,
-advance, offset, and outgoing-bank matching workflow.
+This is the complete browser test for the Finance aging, partner-turnover, and
+in-system payment-reminder milestone.
 
 ## Start
 
-1. Run `npm run dev`. Startup applies migration `0037` and prepares the local
-   fixtures; do not run a separate seed command.
-2. Open `http://localhost:5173` and sign in as `manager@vista.local` with your
+1. Run `npm run dev`.
+2. Open `http://localhost:5173` and sign in as `finance@vista.local` with your
    configured `DEV_FIXTURES_PASSWORD`.
 
-## 1. Add the supplier payable
+## 1. Review receivable and payable aging
 
-1. From the sidebar choose **ERP → Finance → Supplier payables**.
-2. Select **Add supplier invoice**.
-3. Choose **DEV-SUP-INV-001 · TechSupply Demo Ltd. · BGN 33.00**.
-4. Keep the suggested due date and select **Add payable**.
-5. Note the new `SP-...` number.
+1. From the sidebar choose **ERP → Finance → Balances & turnover**.
+2. Keep **Aging & balances** and **Receivables** selected.
+3. Review the document number, source, customer, due date, aging bucket, and BGN
+   balance for each row.
+4. Select **Payables** and review the same fields for suppliers.
 
-Expected: the preview shows TechSupply, source invoice `DEV-SUP-INV-001`, total
-BGN 33.00, status **Unpaid**, and BGN 33.00 remaining.
+Expected:
 
-If `DEV-SUP-INV-001` is absent, it has already been used in Finance. Create a
-fresh supplier invoice through **ERP → Procurement → Purchase orders**, receive
-it, then record its supplier invoice from **Supplier invoices** before returning
-here.
+- **Total open** equals **Not due** plus the four overdue buckets.
+- A future or current due date is **Not due**.
+- A past due date appears in **0–30**, **31–60**, **61–90**, or **Over 90**
+  according to its age.
+- The report body is solid, aligned, readable, and responsive.
 
-## 2. Record a partial supplier payment
+## 2. Review turnover by partner
 
-1. In the payable preview select **Record payment**.
-2. Enter:
-   - Amount: `5`
-   - Payment date: keep today
-   - Payment method: **Bank transfer**
-   - Reference: `SUP-PARTIAL-2026-08-20-01`
-3. Select **Record payment**.
+1. Select **Turnover by partner**.
+2. Keep **Customers** selected.
+3. Enter:
+   - From: `2026-08-01`
+   - To: `2026-08-21`
+4. Select **Apply**.
+5. Select **Suppliers**, keep the same dates, and select **Apply** again.
 
-Expected: status becomes **Partially paid**, the payment trail contains an
-`SPAY-...` record, and BGN 28.00 remains.
+Expected:
 
-## 3. Record and allocate an advance
+- Documents are grouped by customer or supplier.
+- **Gross turnover** is the value of documents dated inside the selected period.
+- **Allocated** and **Outstanding** show the current state of those documents.
+- Entering a From date after the To date disables **Apply**.
 
-1. Use **Back**, then select **New advance**.
-2. Enter:
-   - Supplier: **TechSupply Demo Ltd.**
-   - Amount: `15`
-   - Payment date: keep today
-   - Payment method: **Bank transfer**
-   - Reference: `SUP-ADVANCE-2026-08-20-01`
-3. Select **Record advance**.
-4. In the advance preview select **Apply to payable**.
-5. Choose the `SP-...` created above, change **Amount to apply** to `5`, and
-   select **Apply advance**.
+## 3. Create and read a due-soon reminder
 
-Expected: the advance shows BGN 10.00 still available. The payable now has
-BGN 23.00 remaining and its payment trail shows the BGN 5.00 advance allocation.
+1. From the Finance tabs choose **Collections & payments**.
+2. Select **Add to collections**.
+3. Choose a prepared Sales invoice draft whose displayed amount is greater than
+   **BGN 0.00**.
+4. Set the due date between one and seven days from today. For example, use
+   `2026-08-27` when testing on `2026-08-21`.
+5. Select **Add record**.
+6. The collection preview opens. Select **Back** and confirm that the new record
+   remains visible in the collection register with `0 payments` and its full
+   outstanding balance.
+7. Wait up to ten seconds, then open the notification bell in the top bar.
 
-## 4. Prepare a matching customer receivable
+Expected: one unread **Payment is due soon** notification shows the Finance
+number, customer, BGN balance, and due date. Opening it marks it read. Closing
+and reopening the notification centre does not create a duplicate.
 
-An offset requires the same partner to be both customer and supplier.
+A zero-value Sales draft is not offered because it has no balance to collect and
+cannot produce a payment reminder.
+
+### If no prepared Sales draft is available
 
 1. From the sidebar choose **ERP → Sales → Quotations → New quotation**.
 2. Enter:
-   - Customer: **TechSupply Demo Ltd.**
+   - Customer: **Alfa Market Demo Ltd.**
    - Warehouse: **Demo Central Warehouse**
+   - Valid until: any future date
+   - Currency: `BGN`
    - Product: **Demo 12 V Power Adapter**
    - Quantity: `1`
    - Unit price: `50`
    - Line discount: `0`
    - VAT: **20% VAT**
    - Overall discount: `0`
-   - Currency: `BGN`
-3. Select **Create quotation → Preview → Confirm order and reserve stock →
-   Complete shipment**.
-4. Enter customer representative `TechSupply test contact`, then select
-   **Record customer acceptance → Prepare invoice draft**.
-5. Go to **ERP → Finance → Collections & payments → Add to collections**.
-6. Choose the new TechSupply invoice draft, keep the suggested due date, select
-   **Add record**, and note its `FIN-REV-...` number.
+3. Select **Create quotation**, then **Preview**.
+4. Select **Confirm order and reserve stock**, then **Complete shipment**.
+5. Enter customer representative `Finance reminder test`, select
+   **Record customer acceptance**, then **Prepare invoice draft**.
+6. Return to **ERP → Finance → Collections & payments** and repeat step 3.
 
-Expected: the customer receivable starts at BGN 60.00.
-
-## 5. Offset both partner balances
-
-1. Return to **ERP → Finance → Supplier payables** and preview your `SP-...`.
-2. Select **Create offset**.
-3. Choose your supplier payable and the new TechSupply `FIN-REV-...`.
-4. Enter:
-   - Offset amount: `10`
-   - Offset date: keep today
-   - Reason: `Mutual balance test`
-5. Select **Create offset**.
-
-Expected: an `OFF-...` record appears under **Advances & offsets**. The supplier
-payable has BGN 13.00 remaining; the customer receivable has BGN 50.00 remaining.
-
-## 6. Match the final outgoing bank payment
-
-1. Choose **Bank reconciliation → New statement**.
-2. Enter:
-   - Bank name: `Vista Demo Bank`
-   - Statement reference: `SUPPLIER-TEST-2026-08-20-01`
-   - Company account IBAN: `BG76DEMO00000000000000`
-   - Opening balance: `100`
-3. For Transaction 1 enter:
-   - Direction: **Outgoing**
-   - Amount: `13`
-   - Dates: keep today
-   - Counterparty: **TechSupply Demo Ltd.**
-   - Payment reference: `Payment for SP-...` using your exact payable number
-4. Select **Use calculated balance**. Expected closing balance: BGN 87.00.
-5. Select **Add statement → Preview → Review match**.
-6. Keep **Match a payable**, select your `SP-...`, and choose
-   **Confirm supplier match**.
-
-Expected: the outgoing line becomes **Matched**, the statement becomes
-**Reconciled**, and the payable becomes **Paid** with BGN 0.00 remaining. The
-unused BGN 10.00 supplier advance remains visible under **Advances & offsets**.
+If confirmation reports insufficient stock, use **ERP → Warehouse → Stock
+movements → Receive** to receive **Demo 12 V Power Adapter** into **Demo Central
+Warehouse**, then return to the quotation and confirm it. Do not rerun the
+fixture seed to replenish stock.
 
 ## Current boundary
 
-This test does not cover legal supplier-invoice issuance, deductible-VAT or
-general-ledger posting, bank-file import, direct cash-voucher allocation to a
-supplier payable, or statutory aging/journal/VAT reports. Those remain pending.
+This milestone does not claim provider-delivered email reminders, legal invoice
+issuance, official sales or purchase journals, VAT reporting, accounting export,
+saved report definitions, or Excel/CSV/PDF report downloads. Those remain
+pending.

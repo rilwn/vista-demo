@@ -123,6 +123,26 @@ and terminal failure codes. In-system delivery is active. Email and SMS messages
 remain failed/observable until their approved adapters and provider credentials
 are configured; they are never reported as delivered without an actual provider.
 
+The Finance due-date lifecycle creates one idempotent in-system reminder per
+eligible Finance operator and record when a customer receivable or supplier
+payable enters the configured upcoming window, and a separate reminder when it
+becomes overdue. The daily business-timezone job also catches existing records
+and performs the overdue status transition. Read-only Finance viewers are not
+operational reminder recipients.
+
+## Finance balance and turnover reports
+
+- `GET /api/v1/finance/reports/aging?kind=receivable|payable` returns the current
+  BGN subledger balance, document detail, and current, 0–30, 31–60, 61–90, and
+  over-90 totals. Results are paginated and use the configured business date.
+- `GET /api/v1/finance/reports/turnover?kind=customer|supplier&dateFrom=...&dateTo=...`
+  groups document turnover by partner for the selected inclusive date range.
+  Gross is period document value; allocated and outstanding values are the
+  current balances of those selected documents.
+
+Both routes require `erp.finance:view`. They are operational subledger reports,
+not official sales/purchase journals, VAT returns, or accounting exports.
+
 ## Protected background-job operations
 
 - `GET /api/v1/platform/jobs/metrics` requires `platform:view` and returns
@@ -534,8 +554,9 @@ delivery until FIN-001, FIN-002, BUS-002, and DOC-001 are approved.
 The current Finance slice provides an auditable BGN collection workflow, not a
 legal, fiscal, or accounting-document workflow:
 
-- `GET /api/v1/finance/reference-data` returns eligible BGN Sales invoice drafts
-  not already added to collections.
+- `GET /api/v1/finance/reference-data` returns eligible positive-value BGN Sales
+  invoice drafts not already added to collections. A direct attempt to add a
+  zero-value draft is rejected because it has no balance to collect.
 - `GET /api/v1/finance/documents`, `/documents/:id`, and `/summary` return the
   collection register, its payment/status history, and balance summary.
 - `POST /api/v1/finance/documents` adds exactly one Sales invoice draft to a
@@ -552,12 +573,14 @@ requires an `Idempotency-Key`, commits its data, audit event, and outbox event i
 one transaction, and preserves status history. `finance.payment-status.detect`
 is scheduled daily by `FINANCE_PAYMENT_STATUS_CRON` in `BUSINESS_TIMEZONE`; it
 marks an unpaid outstanding record overdue only once when its due date has
-passed, and is safe to retry.
+passed, prepares retry-safe in-system reminders for upcoming and overdue
+positive balances, and is safe to retry.
 
 These records use internal `FIN-REV` and `PAY` references only. They do not
 perform legal/fiscal issuance, official branch/register/operator numbering, VAT
 or accounting posting, BNB conversion, PDF/email delivery, customer advances,
-notifications, or statutory reporting; those remain subsequent Finance work.
+provider-delivered email reminders, or statutory reporting; those remain
+subsequent Finance work.
 
 ## Finance bank reconciliation
 

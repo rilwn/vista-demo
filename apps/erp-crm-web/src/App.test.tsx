@@ -1,10 +1,12 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type {
+  FinanceAgingReport,
   FinanceBankStatement,
   FinanceCashVoucher,
   FinanceSupplierOffset,
   FinanceSupplierPayable,
   FinanceSupplierPayment,
+  FinanceTurnoverReport,
   ProcurementSupplierRecord,
   SalesWorkflow,
 } from '@vista/contracts';
@@ -511,10 +513,26 @@ describe('ERP and CRM authenticated workspace', () => {
       templateKey: 'inventory.low_stock',
       templateVersion: 1,
     };
+    const paymentNotification = {
+      channel: 'in_system' as const,
+      createdAt: '2026-08-21T10:00:00.000Z',
+      deliveredAt: '2026-08-21T10:01:00.000Z',
+      id: 'b4ffce3c-bde4-42cc-a20b-4b8cd8ce7a45',
+      payload: {
+        counterpartyName: 'Alfa Market Demo Ltd.',
+        dueDate: '2026-08-27',
+        number: 'FIN-REV-2026-000005',
+        outstandingBgn: '60.0000',
+      },
+      templateKey: 'finance.payment.upcoming',
+      templateVersion: 1,
+    };
     const fetchMock = vi.fn((input: string, options?: RequestInit) => {
       if (input.endsWith('/auth/me')) return Promise.resolve(jsonResponse(authenticationContext));
       if (input.includes('/notifications?'))
-        return Promise.resolve(jsonResponse({ items: [notification], unreadCount: 1 }));
+        return Promise.resolve(
+          jsonResponse({ items: [paymentNotification, notification], unreadCount: 2 }),
+        );
       if (input.endsWith(`/notifications/${notification.id}/read`) && options?.method === 'POST')
         return Promise.resolve(
           jsonResponse({ ...notification, readAt: '2026-08-10T10:02:00.000Z' }),
@@ -527,6 +545,8 @@ describe('ERP and CRM authenticated workspace', () => {
     await screen.findByRole('heading', { name: `${messages.home.title}, Mila.` });
     fireEvent.click(screen.getByRole('button', { name: 'Open notifications' }));
     expect(await screen.findByText('Low stock needs attention')).toBeTruthy();
+    expect(screen.getByText('Payment is due soon')).toBeTruthy();
+    expect(screen.getByText(/FIN-REV-2026-000005 · Alfa Market Demo Ltd\./u)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: /Low stock needs attention/u }));
     await waitFor(() =>
       expect(fetchMock).toHaveBeenCalledWith(
@@ -2287,6 +2307,156 @@ describe('ERP and CRM authenticated workspace', () => {
     ).toBe(true);
   });
 
+  it('reviews Finance aging and partner turnover through visible navigation', async () => {
+    const financeContext = {
+      ...authenticationContext,
+      permissions: [
+        ...authenticationContext.permissions,
+        { action: 'view', module: 'erp.finance' },
+      ],
+    };
+    storeAuthenticatedSession(financeContext);
+    const receivableReport: FinanceAgingReport = {
+      asOf: '2026-08-21',
+      items: [
+        {
+          bucket: 'days_0_30',
+          daysOverdue: 12,
+          documentDate: '2026-07-25',
+          dueDate: '2026-08-09',
+          id: '0cedf0aa-52de-4d51-9685-ff8d52aeb004',
+          number: 'FIN-REV-2026-000014',
+          originalBgnTotal: '180.0000',
+          outstandingBgnTotal: '140.0000',
+          partnerId: '621806be-070c-4cf8-84cc-c1585dad9d3b',
+          partnerName: 'Alfa Market Ltd.',
+          paymentStatus: 'overdue',
+          sourceNumber: 'INV-DRAFT-2026-000014',
+        },
+      ],
+      kind: 'receivable',
+      page: 1,
+      pageSize: 50,
+      totalItems: 1,
+      totalPages: 1,
+      totals: {
+        current: '0.0000',
+        days0To30: '140.0000',
+        days31To60: '0.0000',
+        days61To90: '0.0000',
+        over90: '0.0000',
+        total: '140.0000',
+      },
+    };
+    const payableReport: FinanceAgingReport = {
+      ...receivableReport,
+      items: [
+        {
+          ...receivableReport.items[0]!,
+          bucket: 'current',
+          daysOverdue: 0,
+          id: '7f107f45-14f9-4bb1-a39c-3c0ed3df049f',
+          number: 'PAY-2026-000009',
+          outstandingBgnTotal: '75.0000',
+          partnerId: '54d6b7b1-330e-494f-85c4-2b781755aefd',
+          partnerName: 'TechSupply Ltd.',
+          paymentStatus: 'partially_paid',
+          sourceNumber: 'TS-1094',
+        },
+      ],
+      kind: 'payable',
+      totals: {
+        current: '75.0000',
+        days0To30: '0.0000',
+        days31To60: '0.0000',
+        days61To90: '0.0000',
+        over90: '0.0000',
+        total: '75.0000',
+      },
+    };
+    const customerTurnover: FinanceTurnoverReport = {
+      dateFrom: '2026-08-01',
+      dateTo: '2026-08-21',
+      items: [
+        {
+          allocatedBgnTotal: '40.0000',
+          documentCount: 2,
+          grossBgnTotal: '240.0000',
+          outstandingBgnTotal: '200.0000',
+          partnerId: receivableReport.items[0]!.partnerId,
+          partnerName: 'Alfa Market Ltd.',
+        },
+      ],
+      kind: 'customer',
+      page: 1,
+      pageSize: 50,
+      totalItems: 1,
+      totalPages: 1,
+      totals: {
+        allocatedBgnTotal: '40.0000',
+        documentCount: 2,
+        grossBgnTotal: '240.0000',
+        outstandingBgnTotal: '200.0000',
+      },
+    };
+    const supplierTurnover: FinanceTurnoverReport = {
+      ...customerTurnover,
+      items: [
+        {
+          allocatedBgnTotal: '25.0000',
+          documentCount: 1,
+          grossBgnTotal: '100.0000',
+          outstandingBgnTotal: '75.0000',
+          partnerId: payableReport.items[0]!.partnerId,
+          partnerName: 'TechSupply Ltd.',
+        },
+      ],
+      kind: 'supplier',
+      totals: {
+        allocatedBgnTotal: '25.0000',
+        documentCount: 1,
+        grossBgnTotal: '100.0000',
+        outstandingBgnTotal: '75.0000',
+      },
+    };
+    const fetchMock = vi.fn((input: string) => {
+      if (input.endsWith('/auth/me')) return Promise.resolve(jsonResponse(financeContext));
+      if (input.includes('/finance/reports/aging?'))
+        return Promise.resolve(
+          jsonResponse(input.includes('kind=payable') ? payableReport : receivableReport),
+        );
+      if (input.includes('/finance/reports/turnover?'))
+        return Promise.resolve(
+          jsonResponse(input.includes('kind=supplier') ? supplierTurnover : customerTurnover),
+        );
+      return Promise.resolve(jsonResponse({}));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderApplication(['/modules/erp.finance']);
+    expect(await screen.findByRole('heading', { name: 'Finance' })).toBeTruthy();
+    fireEvent.click(
+      screen.getByRole('link', { name: /Balances & turnover Review current receivables/u }),
+    );
+
+    expect(await screen.findByRole('heading', { name: 'Balances & turnover' })).toBeTruthy();
+    expect(await screen.findByText('Alfa Market Ltd.')).toBeTruthy();
+    expect(screen.getByText('12 days overdue')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Payables' }));
+    expect(await screen.findByText('TechSupply Ltd.')).toBeTruthy();
+    expect(screen.getByText('Not overdue')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Turnover by partner' }));
+    expect(await screen.findByText('Alfa Market Ltd.')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Suppliers' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
+    expect(await screen.findByText('TechSupply Ltd.')).toBeTruthy();
+    expect(
+      fetchMock.mock.calls.some(([url]) => url.includes('/finance/reports/turnover?dateFrom=')),
+    ).toBe(true);
+  });
+
   it('moves through the connected sales workflow using visible navigation and preview actions', async () => {
     const salesContext = {
       ...authenticationContext,
@@ -2466,6 +2636,10 @@ describe('ERP and CRM authenticated workspace', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /New quotation/u }));
     const createDialog = await screen.findByRole('dialog', { name: 'New quotation' });
+    expect(within(createDialog).getByLabelText<HTMLSelectElement>('Product').value).toBe('');
+    fireEvent.change(within(createDialog).getByLabelText('Product'), {
+      target: { value: productId },
+    });
     fireEvent.click(within(createDialog).getByRole('button', { name: 'Use customer price' }));
     expect(await within(createDialog).findByText(/Trade customers applied/u)).toBeTruthy();
     expect(within(createDialog).getByLabelText<HTMLInputElement>('Unit price (BGN)').value).toBe(
@@ -2866,8 +3040,8 @@ describe('ERP and CRM authenticated workspace', () => {
 
     renderApplication(['/modules/erp.finance']);
     expect(await screen.findByRole('heading', { name: 'Finance' })).toBeTruthy();
-    fireEvent.click(screen.getByRole('link', { name: /Payments & allocations Track partial/u }));
-    expect(await screen.findByRole('heading', { name: 'Payments & allocations' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('link', { name: /Collections & payments Track partial/u }));
+    expect(await screen.findByRole('heading', { name: 'Collections & payments' })).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Back to Finance' })).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: 'Add to collections' }));
@@ -2876,6 +3050,12 @@ describe('ERP and CRM authenticated workspace', () => {
     fireEvent.click(within(dialog).getByRole('button', { name: 'Add record' }));
     expect(await screen.findByText('FIN-REV-2026-000001 was added to collections.')).toBeTruthy();
 
+    dialog = await screen.findByRole('dialog', { name: 'FIN-REV-2026-000001' });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Back to finance list' }));
+    const register = await screen.findByRole('region', { name: 'Customer collection register' });
+    expect(within(register).getByText('FIN-REV-2026-000001')).toBeTruthy();
+    expect(within(register).getByText(/0 payments/u)).toBeTruthy();
+    fireEvent.click(within(register).getByRole('button', { name: 'Preview' }));
     dialog = await screen.findByRole('dialog', { name: 'FIN-REV-2026-000001' });
     fireEvent.click(within(dialog).getByRole('button', { name: 'Record payment' }));
     dialog = await screen.findByRole('dialog', { name: 'Record payment' });
@@ -2893,8 +3073,8 @@ describe('ERP and CRM authenticated workspace', () => {
     expect(within(dialog).getByText('PAY-2026-000001')).toBeTruthy();
     fireEvent.click(within(dialog).getByRole('button', { name: 'Back to finance list' }));
     fireEvent.click(screen.getByRole('link', { name: 'Collections & payments' }));
-    expect(await screen.findByRole('heading', { name: 'Payments & allocations' })).toBeTruthy();
-    expect(screen.getByText('1 payment')).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: 'Collections & payments' })).toBeTruthy();
+    expect(screen.getByText(/1 payment/u)).toBeTruthy();
   });
 
   it('moves a supplier invoice through payable, payment, advance allocation, and offset screens', async () => {

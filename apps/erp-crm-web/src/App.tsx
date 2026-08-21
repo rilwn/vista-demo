@@ -9,6 +9,7 @@ import { type FinanceView, FinancePage } from './pages/FinancePage';
 import { FinanceBankPage } from './pages/FinanceBankPage';
 import { FinanceCashPage } from './pages/FinanceCashPage';
 import { FinancePayablesPage } from './pages/FinancePayablesPage';
+import { FinanceReportsPage } from './pages/FinanceReportsPage';
 import { HomePage } from './pages/HomePage';
 import { ModulePage } from './pages/ModulePage';
 import { NotFoundPage } from './pages/NotFoundPage';
@@ -101,6 +102,9 @@ function pageForPath(
   }
   if (pathname === '/modules/erp.finance/payables') {
     return hasPermission('erp.finance') ? <FinancePayablesPage /> : <NotFoundPage />;
+  }
+  if (pathname === '/modules/erp.finance/registers') {
+    return hasPermission('erp.finance') ? <FinanceReportsPage /> : <NotFoundPage />;
   }
   const servicePath = /^\/modules\/erp\.service\/(requests|work-orders|schedule|devices)$/u.exec(
     pathname,

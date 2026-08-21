@@ -17,7 +17,11 @@ import type {
   FinancialDocumentPage,
   FinancialDocumentReferenceData,
   FinanceReferenceData,
+  FinanceAgingKind,
+  FinanceAgingReport,
   FinanceSummary,
+  FinanceTurnoverKind,
+  FinanceTurnoverReport,
   AllocateFinanceSupplierAdvanceRequest,
   CreateFinanceSupplierAdvanceRequest,
   CreateFinanceSupplierOffsetRequest,
@@ -59,6 +63,34 @@ export function listFinanceDocuments(token: string): Promise<FinanceCustomerDocu
 export function getFinanceSummary(token: string): Promise<FinanceSummary> {
   return unwrapApiResponse(
     apiClient.GET('/api/v1/finance/summary', { headers: authorizationHeaders(token) }),
+  );
+}
+
+export function getFinanceAgingReport(
+  token: string,
+  kind: FinanceAgingKind,
+  page = 1,
+): Promise<FinanceAgingReport> {
+  return unwrapApiResponse(
+    apiClient.GET('/api/v1/finance/reports/aging', {
+      headers: authorizationHeaders(token),
+      params: { query: { kind, page, pageSize: 50 } },
+    }),
+  );
+}
+
+export function getFinanceTurnoverReport(
+  token: string,
+  kind: FinanceTurnoverKind,
+  dateFrom: string,
+  dateTo: string,
+  page = 1,
+): Promise<FinanceTurnoverReport> {
+  return unwrapApiResponse(
+    apiClient.GET('/api/v1/finance/reports/turnover', {
+      headers: authorizationHeaders(token),
+      params: { query: { dateFrom, dateTo, kind, page, pageSize: 50 } },
+    }),
   );
 }
 

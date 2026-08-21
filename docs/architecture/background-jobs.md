@@ -39,8 +39,9 @@ upserts its stable daily schedule using `FINANCE_PAYMENT_STATUS_CRON` in
 `BUSINESS_TIMEZONE`. For each occurrence it locks due collection records,
 transitions an outstanding record to `overdue` once, appends status/audit/outbox
 evidence in the same transaction, and returns no further update on replay. It
-does not send payment reminders; notification policy and delivery remain a later
-Finance responsibility.
+also creates idempotent in-system upcoming/overdue reminders for eligible
+operational Finance users. Provider-backed email delivery remains pending
+approval and adapter configuration.
 
 `sales.subscription-invoice.generate` remains an active domain handler. Its
 stable daily schedule creates exactly one review draft for each due

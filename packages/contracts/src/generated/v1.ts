@@ -596,6 +596,38 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/finance/reports/aging': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['FinanceReportsController_aging'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/finance/reports/turnover': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['FinanceReportsController_turnover'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/finance/summary': {
     parameters: {
       query?: never;
@@ -3211,6 +3243,46 @@ export interface components {
       enrolledAt?: string;
       revokedOtherSessionCount: number;
     };
+    FinanceAgingReportDto: {
+      /** Format: date */
+      asOf: string;
+      items: components['schemas']['FinanceAgingReportItemDto'][];
+      /** @enum {string} */
+      kind: 'receivable' | 'payable';
+      page: number;
+      pageSize: number;
+      totalItems: number;
+      totalPages: number;
+      totals: components['schemas']['FinanceAgingTotalsDto'];
+    };
+    FinanceAgingReportItemDto: {
+      /** @enum {string} */
+      bucket: 'current' | 'days_0_30' | 'days_31_60' | 'days_61_90' | 'over_90';
+      daysOverdue: number;
+      /** Format: date */
+      documentDate: string;
+      /** Format: date */
+      dueDate: string;
+      /** Format: uuid */
+      id: string;
+      number: string;
+      originalBgnTotal: string;
+      outstandingBgnTotal: string;
+      /** Format: uuid */
+      partnerId: string;
+      partnerName: string;
+      /** @enum {string} */
+      paymentStatus: 'unpaid' | 'partially_paid' | 'paid' | 'overdue';
+      sourceNumber: string;
+    };
+    FinanceAgingTotalsDto: {
+      current: string;
+      days0To30: string;
+      days31To60: string;
+      days61To90: string;
+      over90: string;
+      total: string;
+    };
     FinanceBankMatchCandidateDto: {
       /** Format: uuid */
       customerDocumentId: string;
@@ -3676,6 +3748,35 @@ export interface components {
       /** Format: uuid */
       id: string;
       name: string;
+    };
+    FinanceTurnoverReportDto: {
+      /** Format: date */
+      dateFrom: string;
+      /** Format: date */
+      dateTo: string;
+      items: components['schemas']['FinanceTurnoverReportItemDto'][];
+      /** @enum {string} */
+      kind: 'customer' | 'supplier';
+      page: number;
+      pageSize: number;
+      totalItems: number;
+      totalPages: number;
+      totals: components['schemas']['FinanceTurnoverTotalsDto'];
+    };
+    FinanceTurnoverReportItemDto: {
+      allocatedBgnTotal: string;
+      documentCount: number;
+      grossBgnTotal: string;
+      outstandingBgnTotal: string;
+      /** Format: uuid */
+      partnerId: string;
+      partnerName: string;
+    };
+    FinanceTurnoverTotalsDto: {
+      allocatedBgnTotal: string;
+      documentCount: number;
+      grossBgnTotal: string;
+      outstandingBgnTotal: string;
     };
     FinancialDocumentCorrectionReferenceDto: {
       currencyCode: string;
@@ -7221,6 +7322,82 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['FinanceReferenceDataDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  FinanceReportsController_aging: {
+    parameters: {
+      query: {
+        kind: 'receivable' | 'payable';
+        page?: number;
+        pageSize?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['FinanceAgingReportDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  FinanceReportsController_turnover: {
+    parameters: {
+      query: {
+        dateFrom?: string;
+        dateTo?: string;
+        kind: 'customer' | 'supplier';
+        page?: number;
+        pageSize?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['FinanceTurnoverReportDto'];
         };
       };
       /** @description The endpoint request limit was exceeded. */

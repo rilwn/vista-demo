@@ -1,6 +1,6 @@
 # Vista Integrated Information System — Remaining Implementation Plan
 
-Status date: 2026-08-20
+Status date: 2026-08-21
 Project: `BG16RFPR001-1.012-1324-C01`
 
 [`AGENTS.md`](AGENTS.md) is authoritative. This file contains only unfinished
@@ -103,12 +103,12 @@ proven under concurrency; no production topology or tracking rule is inferred.
   proforma conversion, official credit/debit notes, scoped numbering, legally
   required states and fields, approved VAT/accounting treatment, automatic BNB
   rates, fiscal/POS links, PDF with approved logo/signature, and email delivery.
-- Complete payment reminders, approved bank statement format adapters, payment
-  reversal, cash-day controls, and accounting posting.
-- Deliver statutory receivable/payable aging, turnover, sales/purchase journals,
-  VAT reports, structured accounting exports, controlled report definitions,
-  the required revenue/service/warranty/receivables dashboard KPIs, and
-  asynchronous Excel, CSV, and PDF exports.
+- Complete approved bank statement format adapters, payment reversal,
+  period-close cash controls, accounting posting, and provider-backed email
+  delivery for payment reminders.
+- Deliver sales/purchase journals, VAT reports, structured accounting exports,
+  controlled report definitions, the required revenue/service/warranty/
+  receivables dashboard KPIs, and asynchronous Excel, CSV, and PDF exports.
 - Deliver company and courier logistics, Econt/Speedy adapters, returns and
   reverse logistics, applicable Service-request creation, and route planning.
 

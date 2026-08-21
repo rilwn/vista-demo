@@ -16,6 +16,7 @@ import type {
   SalesWorkflow,
   ServiceSubscriptionContract,
   FinanceBankStatement,
+  FinanceAgingReport,
   FinanceCashDailyReport,
   FinanceCashReferenceData,
   FinanceCashVoucher,
@@ -25,6 +26,8 @@ import type {
   FinanceSupplierPayment,
   FinanceSupplierReferenceData,
   FinanceReferenceData,
+  FinanceTurnoverReport,
+  NotificationPage,
   ServiceEquipmentHistory,
   ServiceReferenceData,
   ServiceRequest,
@@ -45,6 +48,7 @@ import { configureHttpApplication } from '../src/common/http-application.js';
 import { APP_ENVIRONMENT } from '../src/config/config.module.js';
 import { migrateDown, migrateUp } from '../src/database/migration-runner.js';
 import { JobHandlerRegistry } from '../src/jobs/job-handler-registry.service.js';
+import { NotificationDispatcherService } from '../src/notifications/notification-dispatcher.service.js';
 
 const runInfrastructureTests = process.env['RUN_INFRASTRUCTURE_TESTS'] === 'true';
 const password = 'Vista-Sales-Test-8!';
@@ -294,6 +298,43 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
   });
 
   it('allocates partial payments once, marks overdue balances, and preserves the collection trail', async () => {
+    const originalSalesInvoice = await database.query<{
+      subtotal: string;
+      total: string;
+      vat_total: string;
+    }>(
+      `SELECT subtotal::text, vat_total::text, total::text
+       FROM sales.invoices WHERE id = $1`,
+      [salesInvoiceId],
+    );
+    const originalTotals = originalSalesInvoice.rows[0];
+    if (!originalTotals) throw new Error('Sales invoice totals were not available');
+    await database.query(
+      `UPDATE sales.invoices SET subtotal = 0, vat_total = 0, total = 0 WHERE id = $1`,
+      [salesInvoiceId],
+    );
+    try {
+      const zeroReferencesResponse = await request(application.getHttpServer())
+        .get('/api/v1/finance/reference-data')
+        .set('authorization', `Bearer ${token}`)
+        .expect(200);
+      expect((zeroReferencesResponse.body as FinanceReferenceData).invoiceDrafts).not.toEqual(
+        expect.arrayContaining([expect.objectContaining({ id: salesInvoiceId })]),
+      );
+      const zeroCollectionResponse = await request(application.getHttpServer())
+        .post('/api/v1/finance/documents')
+        .set('authorization', `Bearer ${token}`)
+        .set('idempotency-key', `finance-zero-document-${runId}`)
+        .send({ dueDate: '2099-01-01', salesInvoiceId })
+        .expect(422);
+      expect(zeroCollectionResponse.body.error.code).toBe('FINANCE_ZERO_VALUE_SOURCE');
+    } finally {
+      await database.query(
+        `UPDATE sales.invoices SET subtotal = $2, vat_total = $3, total = $4 WHERE id = $1`,
+        [salesInvoiceId, originalTotals.subtotal, originalTotals.vat_total, originalTotals.total],
+      );
+    }
+
     const referencesResponse = await request(application.getHttpServer())
       .get('/api/v1/finance/reference-data')
       .set('authorization', `Bearer ${token}`)
@@ -671,20 +712,124 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
        WHERE id = $1`,
       [created.id],
     );
+    const receivableAgingResponse = await request(application.getHttpServer())
+      .get('/api/v1/finance/reports/aging?kind=receivable')
+      .set('authorization', `Bearer ${token}`)
+      .expect(200);
+    const receivableAging = receivableAgingResponse.body as FinanceAgingReport;
+    expect(receivableAging).toMatchObject({
+      items: [
+        expect.objectContaining({
+          bucket: 'days_0_30',
+          daysOverdue: 1,
+          id: created.id,
+          outstandingBgnTotal: '143.6000',
+        }),
+      ],
+      kind: 'receivable',
+      totalItems: 1,
+      totals: { days0To30: '143.6000', total: '143.6000' },
+    });
+    const turnoverDateFrom = receivableAging.items[0]?.documentDate;
+    if (!turnoverDateFrom) throw new Error('Receivable report did not return its document date');
+    const payableAgingResponse = await request(application.getHttpServer())
+      .get('/api/v1/finance/reports/aging?kind=payable')
+      .set('authorization', `Bearer ${token}`)
+      .expect(200);
+    expect(payableAgingResponse.body as FinanceAgingReport).toMatchObject({
+      items: [
+        expect.objectContaining({
+          bucket: 'current',
+          id: supplierPayable.id,
+          outstandingBgnTotal: '30.0000',
+        }),
+      ],
+      kind: 'payable',
+      totals: { current: '30.0000', total: '30.0000' },
+    });
+    const customerTurnoverResponse = await request(application.getHttpServer())
+      .get(
+        `/api/v1/finance/reports/turnover?kind=customer&dateFrom=${turnoverDateFrom}&dateTo=${dueDate}`,
+      )
+      .set('authorization', `Bearer ${token}`)
+      .expect(200);
+    expect(customerTurnoverResponse.body as FinanceTurnoverReport).toMatchObject({
+      kind: 'customer',
+      totals: {
+        allocatedBgnTotal: '130.0000',
+        documentCount: 1,
+        grossBgnTotal: '273.6000',
+        outstandingBgnTotal: '143.6000',
+      },
+    });
+    const supplierTurnoverResponse = await request(application.getHttpServer())
+      .get(
+        `/api/v1/finance/reports/turnover?kind=supplier&dateFrom=${turnoverDateFrom}&dateTo=${dueDate}`,
+      )
+      .set('authorization', `Bearer ${viewerToken}`)
+      .expect(200);
+    expect(supplierTurnoverResponse.body as FinanceTurnoverReport).toMatchObject({
+      kind: 'supplier',
+      totals: {
+        allocatedBgnTotal: '50.0000',
+        documentCount: 1,
+        grossBgnTotal: '80.0000',
+        outstandingBgnTotal: '30.0000',
+      },
+    });
+    const remindersBeforeStatusJob = await database.query<{ count: string }>(
+      `SELECT count(*)::text AS count FROM notifications.messages
+       WHERE template_key = 'finance.payment.upcoming'`,
+    );
+    expect(remindersBeforeStatusJob.rows[0]?.count).toBe('2');
+
     const handlers = application.get(JobHandlerRegistry);
-    await expect(
-      handlers.execute({
-        attemptNumber: 1,
-        correlationId: `finance-job-${runId}`,
-        enqueuedAt: '2026-08-14T01:25:00.000Z',
-        idempotencyKey: `finance-status-${runId}`,
-        jobId: `finance-job-${runId}`,
-        maxAttempts: 5,
-        name: 'finance.payment-status.detect',
-        payload: { scheduledFor: '2026-08-14T01:25:00.000Z' },
-        retryAllowed: true,
-      }),
-    ).resolves.toMatchObject({ updatedCount: 1 });
+    const financeJob = {
+      attemptNumber: 1,
+      correlationId: `finance-job-${runId}`,
+      enqueuedAt: '2026-08-14T01:25:00.000Z',
+      idempotencyKey: `finance-status-${runId}`,
+      jobId: `finance-job-${runId}`,
+      maxAttempts: 5,
+      name: 'finance.payment-status.detect',
+      payload: { scheduledFor: '2026-08-14T01:25:00.000Z' },
+      retryAllowed: true,
+    };
+    const financeJobResult = (await handlers.execute(financeJob)) as {
+      notificationCount: number;
+      updatedCount: number;
+    };
+    expect(financeJobResult).toMatchObject({ notificationCount: 1, updatedCount: 1 });
+    const replayedFinanceJob = (await handlers.execute(financeJob)) as {
+      notificationCount: number;
+      updatedCount: number;
+    };
+    expect(replayedFinanceJob).toMatchObject({ notificationCount: 0, updatedCount: 0 });
+    const dispatcher = application.get(NotificationDispatcherService);
+    const pendingNotifications = await database.query<{ id: string }>(
+      `SELECT id FROM notifications.messages
+       WHERE template_key LIKE 'finance.payment.%' AND status = 'pending'
+       ORDER BY id`,
+    );
+    for (const notification of pendingNotifications.rows) {
+      await dispatcher.dispatch(notification.id);
+    }
+    const notificationResponse = await request(application.getHttpServer())
+      .get('/api/v1/notifications')
+      .set('authorization', `Bearer ${token}`)
+      .expect(200);
+    const notifications = notificationResponse.body as NotificationPage;
+    expect(notifications.unreadCount).toBe(3);
+    expect(notifications.items.map((message) => message.templateKey).sort()).toEqual([
+      'finance.payment.overdue',
+      'finance.payment.upcoming',
+      'finance.payment.upcoming',
+    ]);
+    const viewerNotificationResponse = await request(application.getHttpServer())
+      .get('/api/v1/notifications')
+      .set('authorization', `Bearer ${viewerToken}`)
+      .expect(200);
+    expect((viewerNotificationResponse.body as NotificationPage).unreadCount).toBe(0);
     const overdueResponse = await request(application.getHttpServer())
       .get(`/api/v1/finance/documents/${created.id}`)
       .set('authorization', `Bearer ${token}`)

@@ -32,6 +32,7 @@ import { ApiErrorException } from '../common/api-error.exception.js';
 import { APP_ENVIRONMENT } from '../config/config.module.js';
 import { DatabaseService } from '../database/database.service.js';
 import type { FinanceSupplierListQueryDto } from './finance-payables.dto.js';
+import { FinanceService } from './finance.service.js';
 
 interface PayableRow {
   allocated_total: string;
@@ -88,6 +89,7 @@ export class FinancePayablesService {
     @Inject(AuditService) private readonly audit: AuditService,
     @Inject(DatabaseService) private readonly database: DatabaseService,
     @Inject(APP_ENVIRONMENT) private readonly environment: AppEnvironment,
+    @Inject(FinanceService) private readonly finance: FinanceService,
   ) {}
 
   async referenceData(): Promise<FinanceSupplierReferenceData> {
@@ -401,6 +403,7 @@ export class FinancePayablesService {
           metadata,
           idempotencyKey,
         );
+        await this.finance.enqueuePaymentReminders(client, businessDate);
         return result;
       },
     );

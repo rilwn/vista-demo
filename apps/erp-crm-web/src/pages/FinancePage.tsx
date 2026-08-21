@@ -48,11 +48,11 @@ function FinanceCollectionsPage({ view }: { view: FinanceView }) {
   const canCreate = hasPermission('erp.finance', 'create');
   const canEdit = hasPermission('erp.finance', 'edit');
   const canPrepareSales = hasPermission('erp.sales', 'create');
-  const pageTitle = view === 'invoices' ? 'Invoices' : 'Payments & allocations';
+  const pageTitle = view === 'invoices' ? 'Invoices' : 'Collections & payments';
   const pageDescription =
     view === 'invoices'
       ? 'Review sales invoice drafts, follow balances, and keep each customer collection record together.'
-      : 'Record customer payments against a single collection record and keep the balance visible.';
+      : 'Review every customer collection, then record and follow its payment allocations.';
 
   if (data.loading) return <FinanceState title="Loading finance records" />;
   if (data.error)
@@ -97,7 +97,7 @@ function FinanceCollectionsPage({ view }: { view: FinanceView }) {
           </div>
         </InlineAlert>
       ) : null}
-      <FinanceRegister documents={data.documents} onPreview={setSelected} view={view} />
+      <FinanceRegister documents={data.documents} onPreview={setSelected} />
 
       {creating ? (
         <FinanceDocumentDrawer
@@ -158,44 +158,33 @@ function FinanceMetric({ label, tone, value }: { label: string; tone?: 'warning'
 function FinanceRegister({
   documents,
   onPreview,
-  view,
 }: {
   documents: FinanceCustomerDocument[];
   onPreview: (document: FinanceCustomerDocument) => void;
-  view: FinanceView;
 }) {
-  const visibleDocuments =
-    view === 'payments' ? documents.filter((document) => document.payments.length > 0) : documents;
-
-  if (!visibleDocuments.length)
+  if (!documents.length)
     return (
-      <FinanceState
-        title={view === 'invoices' ? 'No collection records yet' : 'No payments recorded yet'}
-      >
+      <FinanceState title="No collection records yet">
         <p>
-          {view === 'invoices'
-            ? 'Complete a sales shipment and prepare its invoice draft before adding it to collections.'
-            : 'Payments will appear here after they are recorded against a collection record.'}
+          Complete a sales shipment and prepare its positive-value invoice draft before adding it to
+          collections.
         </p>
       </FinanceState>
     );
 
   return (
-    <section
-      aria-label={view === 'invoices' ? 'Invoice draft register' : 'Payment allocation register'}
-      className="finance-register"
-    >
+    <section aria-label="Customer collection register" className="finance-register">
       <div className="finance-register-head" role="row">
-        <span>{view === 'invoices' ? 'Collection record' : 'Customer record'}</span>
+        <span>Collection record</span>
         <span>Due date</span>
-        <span>{view === 'invoices' ? 'Outstanding' : 'Payments'}</span>
+        <span>Outstanding</span>
         <span>Status</span>
         <span aria-hidden="true" />
       </div>
-      {visibleDocuments.map((document) => (
+      {documents.map((document) => (
         <article className="finance-register-row" key={document.id}>
           <div className="finance-record-identity">
-            <span className="finance-document-mark">{view === 'invoices' ? 'IN' : 'PM'}</span>
+            <span className="finance-document-mark">CL</span>
             <div>
               <strong>{document.number}</strong>
               <span>{document.customerName}</span>
@@ -207,20 +196,15 @@ function FinanceRegister({
             <span>{dueLabel(document)}</span>
           </div>
           <div className="finance-register-value">
-            <strong>
-              {view === 'invoices'
-                ? formatMoney(document.outstandingTotal)
-                : `${document.payments.length} ${document.payments.length === 1 ? 'payment' : 'payments'}`}
-            </strong>
+            <strong>{formatMoney(document.outstandingTotal)}</strong>
             <span>
-              {view === 'invoices'
-                ? `of ${formatMoney(document.total)}`
-                : `${formatMoney(document.allocatedTotal)} allocated`}
+              of {formatMoney(document.total)} · {document.payments.length}{' '}
+              {document.payments.length === 1 ? 'payment' : 'payments'}
             </span>
           </div>
           <PaymentStatus status={document.paymentStatus} />
           <Button onClick={() => onPreview(document)} variant="quiet">
-            {view === 'invoices' ? 'Preview' : 'Open'}
+            Preview
           </Button>
         </article>
       ))}

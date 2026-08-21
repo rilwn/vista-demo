@@ -94,10 +94,22 @@ administrator issues it.
 
 Select the bell in the top bar to open your delivered operational notifications.
 Unread updates are marked when opened; the system never exposes another employee's
-notifications. The first connected notification is the low-stock alert, which
-shows the available and configured minimum quantity. Email and SMS delivery remain
-dependent on the approved provider configuration and are not represented as sent
-until that adapter is live.
+notifications. Connected notifications include low-stock alerts and upcoming or
+overdue customer/supplier payment reminders for operational Finance users. A
+payment reminder shows the Finance number, counterparty, due date, and BGN balance
+captured when the reminder was prepared. Email and SMS delivery remain dependent
+on the approved provider configuration and are not represented as sent until that
+adapter is live.
+
+### Finance balances and turnover
+
+Open **ERP → Finance → Balances & turnover**. **Aging & balances** switches
+between current customer receivables and supplier payables and groups open BGN
+balances into not-due, 0–30, 31–60, 61–90, and over-90 buckets. **Turnover by
+partner** groups customer or supplier documents within an inclusive date range.
+Gross turnover belongs to that period; allocated and outstanding columns show the
+current state of those selected documents. These operational views do not replace
+official journals, VAT reports, or accounting exports.
 
 ### Platform job operations
 
@@ -452,21 +464,22 @@ Use only the visible application navigation:
 
 1. From the left navigation, choose **ERP → Finance**, then select
    **Collections & payments**.
-2. Select **Add to collections**. Choose a BGN sales invoice draft and set the
-   payment due date. The panel shows the customer and collection amount before
-   you save.
+2. Select **Add to collections**. Choose a positive-value BGN sales invoice
+   draft and set the payment due date. The panel shows the customer and
+   collection amount before you save. Zero-value drafts are not collectible.
 3. The saved record opens in the right-side panel. Review its source, current
    balance, payment list, and record history. Select **Back** to return to the
    unchanged register.
 4. Select **Record payment**. Enter an amount up to the remaining balance, date,
    payment method, and an optional reference or concise note. Save the payment.
    The panel returns to the record with the updated balance and status.
-5. Select **Back**, then open **Payments & allocations** above the register to
-   review the same customer record from the payment view.
+5. Select **Back** and confirm the collection remains in the register whether it
+   has zero, one, or several payments.
 
 This workflow records BGN collection activity only. It does not issue a legal or
 fiscal invoice, post VAT/accounting entries, calculate BNB rates, or send payment
-reminders.
+emails. Eligible Finance users receive retry-safe in-system reminders for
+upcoming and overdue positive balances.
 
 ### Bank reconciliation
 

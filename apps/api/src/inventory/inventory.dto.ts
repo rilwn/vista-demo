@@ -46,7 +46,7 @@ import {
 export class CreateWarehouseDto {
   @ApiPropertyOptional({ type: String, format: 'uuid' })
   @IsOptional()
-  @IsUUID('4')
+  @IsUUID('loose')
   businessLocationId?: string;
 
   @ApiProperty({ type: String, maxLength: 30, minLength: 1 })
@@ -66,7 +66,7 @@ export class CreateWarehouseDto {
 
   @ApiPropertyOptional({ type: String, format: 'uuid' })
   @IsOptional()
-  @IsUUID('4')
+  @IsUUID('loose')
   technicianOperatorId?: string;
 }
 
@@ -80,7 +80,7 @@ export class ReceiveStockDto implements ReceiveStockRequest {
   @IsOptional()
   @IsDateString()
   expiresAt?: string;
-  @ApiProperty({ type: String, format: 'uuid' }) @IsUUID('4') productId!: string;
+  @ApiProperty({ type: String, format: 'uuid' }) @IsUUID('loose') productId!: string;
   @ApiProperty({ type: String, example: '1.0000' })
   @IsString()
   @Matches(/^\d+(\.\d{1,4})?$/u)
@@ -98,14 +98,14 @@ export class ReceiveStockDto implements ReceiveStockRequest {
   serialNumbers?: string[];
   @ApiPropertyOptional({ type: String, format: 'uuid' })
   @IsOptional()
-  @IsUUID('4')
+  @IsUUID('loose')
   supplierPartnerId?: string;
   @ApiPropertyOptional({ type: String, example: '125.5000' })
   @IsOptional()
   @IsString()
   @Matches(/^\d+(\.\d{1,4})?$/u)
   unitCostBgn?: string;
-  @ApiProperty({ type: String, format: 'uuid' }) @IsUUID('4') warehouseId!: string;
+  @ApiProperty({ type: String, format: 'uuid' }) @IsUUID('loose') warehouseId!: string;
 }
 
 export class IssueStockDto implements IssueStockRequest {
@@ -116,10 +116,10 @@ export class IssueStockDto implements IssueStockRequest {
   batchNumber?: string;
   @ApiPropertyOptional({ type: String, format: 'uuid' })
   @IsOptional()
-  @IsUUID('4')
+  @IsUUID('loose')
   customerPartnerId?: string;
   @ApiProperty({ type: String, format: 'uuid' })
-  @IsUUID('4')
+  @IsUUID('loose')
   productId!: string;
   @ApiProperty({ type: String, example: '1.0000' })
   @IsString()
@@ -135,7 +135,7 @@ export class IssueStockDto implements IssueStockRequest {
   referenceId!: string;
   @ApiPropertyOptional({ type: String, format: 'uuid' })
   @IsOptional()
-  @IsUUID('4')
+  @IsUUID('loose')
   reservationId?: string;
   @ApiPropertyOptional({ type: [String], maxItems: 500 })
   @IsOptional()
@@ -145,10 +145,10 @@ export class IssueStockDto implements IssueStockRequest {
   serialNumbers?: string[];
   @ApiPropertyOptional({ type: String, format: 'uuid' })
   @IsOptional()
-  @IsUUID('4')
+  @IsUUID('loose')
   technicianAccountId?: string;
   @ApiProperty({ type: String, format: 'uuid' })
-  @IsUUID('4')
+  @IsUUID('loose')
   warehouseId!: string;
 }
 
@@ -199,7 +199,7 @@ export class StockIssueDto implements StockIssue {
 
 export class ReturnStockDto implements ReturnStockRequest {
   @ApiProperty({ type: String, format: 'uuid' })
-  @IsUUID('4')
+  @IsUUID('loose')
   destinationWarehouseId!: string;
 
   @ApiProperty({ enum: stockReturnDispositions })
@@ -207,7 +207,7 @@ export class ReturnStockDto implements ReturnStockRequest {
   disposition!: ReturnStockRequest['disposition'];
 
   @ApiProperty({ type: String, format: 'uuid' })
-  @IsUUID('4')
+  @IsUUID('loose')
   originalIssueId!: string;
 
   @ApiProperty({ type: String, example: '1.0000' })
@@ -248,8 +248,8 @@ export class TransferStockDto implements TransferStockRequest {
   @IsString()
   @MaxLength(100)
   batchNumber?: string;
-  @ApiProperty({ type: String, format: 'uuid' }) @IsUUID('4') fromWarehouseId!: string;
-  @ApiProperty({ type: String, format: 'uuid' }) @IsUUID('4') productId!: string;
+  @ApiProperty({ type: String, format: 'uuid' }) @IsUUID('loose') fromWarehouseId!: string;
+  @ApiProperty({ type: String, format: 'uuid' }) @IsUUID('loose') productId!: string;
   @ApiProperty({ type: String, example: '1.0000' })
   @IsString()
   @Matches(/^\d+(\.\d{1,4})?$/u)
@@ -265,7 +265,7 @@ export class TransferStockDto implements TransferStockRequest {
   @ArrayMaxSize(500)
   @IsString({ each: true })
   serialNumbers?: string[];
-  @ApiProperty({ type: String, format: 'uuid' }) @IsUUID('4') toWarehouseId!: string;
+  @ApiProperty({ type: String, format: 'uuid' }) @IsUUID('loose') toWarehouseId!: string;
 }
 
 export class StockTransferDto implements StockTransfer {
@@ -288,7 +288,7 @@ export class OpenStocktakeDto implements OpenStocktakeRequest {
   @MinLength(1)
   @MaxLength(120)
   referenceId!: string;
-  @ApiProperty({ type: String, format: 'uuid' }) @IsUUID('4') warehouseId!: string;
+  @ApiProperty({ type: String, format: 'uuid' }) @IsUUID('loose') warehouseId!: string;
 }
 export class RecordStocktakeCountDto implements RecordStocktakeCountRequest {
   @ApiPropertyOptional({ type: () => [StocktakeBatchCountDto], maxItems: 500 })
@@ -302,7 +302,7 @@ export class RecordStocktakeCountDto implements RecordStocktakeCountRequest {
   @IsString()
   @Matches(/^\d+(\.\d{1,4})?$/u)
   countedQuantity!: string;
-  @ApiProperty({ type: String, format: 'uuid' }) @IsUUID('4') productId!: string;
+  @ApiProperty({ type: String, format: 'uuid' }) @IsUUID('loose') productId!: string;
   @ApiPropertyOptional({ type: [String], maxItems: 500 })
   @IsOptional()
   @IsArray()
@@ -333,7 +333,7 @@ export class StocktakeDto implements Stocktake {
 }
 
 export class CreateStockReservationDto implements CreateStockReservationRequest {
-  @ApiProperty({ type: String, format: 'uuid' }) @IsUUID('4') productId!: string;
+  @ApiProperty({ type: String, format: 'uuid' }) @IsUUID('loose') productId!: string;
   @ApiProperty({ type: String, example: '1.0000' })
   @IsString()
   @Matches(/^\d+(\.\d{1,4})?$/u)
@@ -352,7 +352,7 @@ export class CreateStockReservationDto implements CreateStockReservationRequest 
   @ArrayMaxSize(500)
   @IsString({ each: true })
   serialNumbers?: string[];
-  @ApiProperty({ type: String, format: 'uuid' }) @IsUUID('4') warehouseId!: string;
+  @ApiProperty({ type: String, format: 'uuid' }) @IsUUID('loose') warehouseId!: string;
 }
 
 export class StockReservationDto implements StockReservation {
@@ -374,19 +374,19 @@ export class ConfigureStockSettingsDto implements ConfigureStockSettingsRequest 
   @IsOptional()
   @IsArray()
   @ArrayMaxSize(50)
-  @IsUUID('4', { each: true })
+  @IsUUID('loose', { each: true })
   alertRecipientAccountIds?: string[];
 
   @ApiProperty({ type: String, example: '2.0000' })
   @IsString()
   @Matches(/^\d+(\.\d{1,4})?$/u)
   minimumQuantity!: string;
-  @ApiProperty({ type: String, format: 'uuid' }) @IsUUID('4') productId!: string;
+  @ApiProperty({ type: String, format: 'uuid' }) @IsUUID('loose') productId!: string;
   @ApiProperty({ type: String, example: '8.0000' })
   @IsString()
   @Matches(/^\d+(\.\d{1,4})?$/u)
   targetQuantity!: string;
-  @ApiProperty({ type: String, format: 'uuid' }) @IsUUID('4') warehouseId!: string;
+  @ApiProperty({ type: String, format: 'uuid' }) @IsUUID('loose') warehouseId!: string;
 }
 export class StockSettingsDto implements StockSettings {
   @ApiProperty({ type: [String], format: 'uuid' }) alertRecipientAccountIds!: string[];

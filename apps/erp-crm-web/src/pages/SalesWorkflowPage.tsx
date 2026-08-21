@@ -188,7 +188,7 @@ function QuotationDrawer({
   const [validUntil, setValidUntil] = useState(futureDate(14));
   const [currencyCode, setCurrencyCode] = useState('BGN');
   const [overallDiscountPercent, setOverallDiscountPercent] = useState('0');
-  const [lines, setLines] = useState<QuotationLineDraft[]>([quotationLine(references)]);
+  const [lines, setLines] = useState<QuotationLineDraft[]>([quotationLine()]);
   const [busy, setBusy] = useState(false);
   const [priceBusyLineId, setPriceBusyLineId] = useState<string | null>(null);
   const [priceNotices, setPriceNotices] = useState<
@@ -382,6 +382,7 @@ function QuotationDrawer({
                       });
                     }}
                   >
+                    <option value="">Choose product</option>
                     {references.products.map((product) => (
                       <option key={product.id} value={product.id}>
                         {product.name} · {product.productCode}
@@ -467,7 +468,7 @@ function QuotationDrawer({
             ))}
           </div>
           <Button
-            onClick={() => setLines((current) => [...current, quotationLine(references)])}
+            onClick={() => setLines((current) => [...current, quotationLine()])}
             type="button"
             variant="secondary"
           >
@@ -496,7 +497,10 @@ function QuotationDrawer({
           <Button disabled={busy} onClick={onBack} type="button" variant="quiet">
             Back
           </Button>
-          <Button disabled={busy || missingReferences} type="submit">
+          <Button
+            disabled={busy || missingReferences || lines.some((line) => !line.productId)}
+            type="submit"
+          >
             {busy ? 'Creating quotation' : 'Create quotation'}
           </Button>
         </div>
@@ -966,11 +970,11 @@ function useSalesData(token: string) {
   return { error, loading, references, reload, workflows };
 }
 
-function quotationLine(references: SalesReferenceData): QuotationLineDraft {
+function quotationLine(): QuotationLineDraft {
   return {
     discountPercent: '0',
     id: crypto.randomUUID(),
-    productId: references.products[0]?.id ?? '',
+    productId: '',
     quantity: '1',
     unitPrice: '0',
     vatTreatment: 'standard_20',

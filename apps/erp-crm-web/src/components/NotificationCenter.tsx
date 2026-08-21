@@ -117,6 +117,8 @@ export function NotificationCenter() {
 
 function notificationTitle(notification: NotificationMessage): string {
   if (notification.templateKey === 'inventory.low_stock') return 'Low stock needs attention';
+  if (notification.templateKey === 'finance.payment.upcoming') return 'Payment is due soon';
+  if (notification.templateKey === 'finance.payment.overdue') return 'Payment is overdue';
   return 'New notification';
 }
 
@@ -126,7 +128,36 @@ function notificationDetail(notification: NotificationMessage): string {
     const minimum = value(notification.payload, 'minimumQuantity');
     return `Available stock is ${available}; the configured minimum is ${minimum}.`;
   }
+  if (
+    notification.templateKey === 'finance.payment.upcoming' ||
+    notification.templateKey === 'finance.payment.overdue'
+  ) {
+    const number = value(notification.payload, 'number');
+    const counterparty = value(notification.payload, 'counterpartyName');
+    const amount = money(value(notification.payload, 'outstandingBgn'));
+    const dueDate = dateValue(notification.payload, 'dueDate');
+    return `${number} · ${counterparty} · ${amount} outstanding · due ${dueDate}.`;
+  }
   return 'Open this notification for more details.';
+}
+
+function dateValue(payload: Record<string, unknown>, key: string): string {
+  const candidate = payload[key];
+  if (typeof candidate !== 'string') return '—';
+  const date = new Date(`${candidate}T00:00:00+03:00`);
+  return Number.isNaN(date.getTime())
+    ? candidate
+    : new Intl.DateTimeFormat(undefined, {
+        dateStyle: 'medium',
+        timeZone: 'Europe/Sofia',
+      }).format(date);
+}
+
+function money(candidate: string): string {
+  const amount = Number(candidate);
+  return Number.isFinite(amount)
+    ? new Intl.NumberFormat(undefined, { style: 'currency', currency: 'BGN' }).format(amount)
+    : 'BGN —';
 }
 
 function value(payload: Record<string, unknown>, key: string): string {

@@ -47,6 +47,7 @@ describe('parseEnvironment', () => {
     expect(environment.IDEMPOTENCY_TTL_SECONDS).toBe(86_400);
     expect(environment.JOB_DEFAULT_ATTEMPTS).toBe(5);
     expect(environment.JOB_QUEUE_NAME).toBe('platform');
+    expect(environment.FINANCE_PAYMENT_REMINDER_LEAD_DAYS).toBe(7);
     expect(environment.FINANCE_PAYMENT_STATUS_CRON).toBe('0 25 1 * * *');
     expect(environment.SALES_SUBSCRIPTION_INVOICE_CRON).toBe('0 15 1 * * *');
     expect(environment.PASSWORD_EXPIRY_DAYS).toBe(0);
@@ -94,6 +95,9 @@ describe('parseEnvironment', () => {
         FILE_UPLOAD_MAX_BYTES: String(25 * 1024 * 1024 + 1),
       }),
     ).toThrow('FILE_UPLOAD_MAX_BYTES');
+    expect(() =>
+      parseEnvironment({ ...validEnvironment, FINANCE_PAYMENT_REMINDER_LEAD_DAYS: '91' }),
+    ).toThrow('FINANCE_PAYMENT_REMINDER_LEAD_DAYS');
   });
 
   it('requires the distributed Redis limiter in production', () => {

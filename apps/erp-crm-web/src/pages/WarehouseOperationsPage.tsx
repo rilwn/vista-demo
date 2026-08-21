@@ -1773,7 +1773,9 @@ function useStableAttempt() {
   };
 }
 function commandError(caught: unknown, fallback: string) {
-  return caught instanceof ApiClientError ? caught.message : fallback;
+  if (!(caught instanceof ApiClientError)) return fallback;
+  const details = caught.details.map((detail) => detail.message.trim()).filter(Boolean);
+  return details.length ? `${caught.message}: ${details.join('. ')}` : caught.message;
 }
 function quantity(value: string | number) {
   return Number(value).toLocaleString('en-GB', { maximumFractionDigits: 4 });

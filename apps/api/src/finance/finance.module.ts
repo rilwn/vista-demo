@@ -9,6 +9,8 @@ import { FinanceCashService } from './finance-cash.service.js';
 import { FinanceController } from './finance.controller.js';
 import { FinancePayablesController } from './finance-payables.controller.js';
 import { FinancePayablesService } from './finance-payables.service.js';
+import { FinanceReportsController } from './finance-reports.controller.js';
+import { FinanceReportsService } from './finance-reports.service.js';
 import { FinanceService } from './finance.service.js';
 import { FinancialDocumentsController } from './financial-documents.controller.js';
 import { FinancialDocumentsService } from './financial-documents.service.js';
@@ -19,12 +21,14 @@ import { FinancialDocumentsService } from './financial-documents.service.js';
     FinanceCashController,
     FinanceController,
     FinancePayablesController,
+    FinanceReportsController,
     FinancialDocumentsController,
   ],
   exports: [
     FinanceBankService,
     FinanceCashService,
     FinancePayablesService,
+    FinanceReportsService,
     FinanceService,
     FinancialDocumentsService,
   ],
@@ -33,6 +37,7 @@ import { FinancialDocumentsService } from './financial-documents.service.js';
     FinanceBankService,
     FinanceCashService,
     FinancePayablesService,
+    FinanceReportsService,
     FinanceService,
     FinancialDocumentsService,
   ],

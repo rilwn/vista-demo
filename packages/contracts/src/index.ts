@@ -1300,6 +1300,83 @@ export interface FinanceSummary {
   totalOutstanding: string;
 }
 
+export const financeAgingKinds = ['receivable', 'payable'] as const;
+export type FinanceAgingKind = (typeof financeAgingKinds)[number];
+export const financeAgingBuckets = [
+  'current',
+  'days_0_30',
+  'days_31_60',
+  'days_61_90',
+  'over_90',
+] as const;
+export type FinanceAgingBucket = (typeof financeAgingBuckets)[number];
+
+export interface FinanceAgingReportItem {
+  bucket: FinanceAgingBucket;
+  daysOverdue: number;
+  documentDate: string;
+  dueDate: string;
+  id: string;
+  number: string;
+  originalBgnTotal: string;
+  outstandingBgnTotal: string;
+  partnerId: string;
+  partnerName: string;
+  paymentStatus: Exclude<FinancePaymentStatus, 'cancelled'>;
+  sourceNumber: string;
+}
+
+export interface FinanceAgingTotals {
+  current: string;
+  days0To30: string;
+  days31To60: string;
+  days61To90: string;
+  over90: string;
+  total: string;
+}
+
+export interface FinanceAgingReport {
+  asOf: string;
+  items: FinanceAgingReportItem[];
+  kind: FinanceAgingKind;
+  page: number;
+  pageSize: number;
+  totalItems: number;
+  totalPages: number;
+  totals: FinanceAgingTotals;
+}
+
+export const financeTurnoverKinds = ['customer', 'supplier'] as const;
+export type FinanceTurnoverKind = (typeof financeTurnoverKinds)[number];
+
+export interface FinanceTurnoverReportItem {
+  allocatedBgnTotal: string;
+  documentCount: number;
+  grossBgnTotal: string;
+  outstandingBgnTotal: string;
+  partnerId: string;
+  partnerName: string;
+}
+
+export interface FinanceTurnoverTotals {
+  allocatedBgnTotal: string;
+  documentCount: number;
+  grossBgnTotal: string;
+  outstandingBgnTotal: string;
+}
+
+export interface FinanceTurnoverReport {
+  dateFrom: string;
+  dateTo: string;
+  items: FinanceTurnoverReportItem[];
+  kind: FinanceTurnoverKind;
+  page: number;
+  pageSize: number;
+  totalItems: number;
+  totalPages: number;
+  totals: FinanceTurnoverTotals;
+}
+
 export type FinanceSupplierPayableStatus = 'overdue' | 'paid' | 'partially_paid' | 'unpaid';
 export type FinanceSupplierPaymentKind = 'advance' | 'offset' | 'payment';
 
