@@ -3,6 +3,970 @@ body {
   background: var(--vista-canvas);
 }
 
+/* Logistics operations */
+.logistics-workspace {
+  gap: 1rem;
+}
+
+.logistics-page-header {
+  align-items: flex-end;
+}
+
+.logistics-page-header > div:first-child {
+  min-width: 0;
+}
+
+.panel-back-button svg {
+  transform: rotate(180deg);
+}
+
+.logistics-tabs {
+  margin: 0;
+}
+
+.logistics-notice {
+  align-items: center;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  width: 100%;
+}
+
+.logistics-notice button {
+  background: none;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+}
+
+.logistics-summary {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.logistics-summary-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 0.85rem;
+  box-shadow: var(--shadow-xs);
+  display: flex;
+  flex-direction: column;
+  gap: 0.18rem;
+  min-height: 5.7rem;
+  padding: 1rem 1.1rem;
+}
+
+.logistics-summary-card strong {
+  color: var(--color-text);
+  font-size: 1.65rem;
+  letter-spacing: -0.04em;
+  line-height: 1;
+}
+
+.logistics-summary-card span {
+  color: var(--color-text-muted);
+  font-size: 0.82rem;
+  font-weight: 650;
+}
+
+.logistics-summary-card.is-warning {
+  background: color-mix(in srgb, var(--color-warning-soft) 52%, var(--color-surface));
+  border-color: color-mix(in srgb, var(--color-warning) 34%, var(--color-border-subtle));
+}
+
+.logistics-list-panel,
+.logistics-route-panel,
+.courier-connection-panel {
+  overflow: hidden;
+  padding: 0;
+}
+
+.logistics-list-panel > .panel-heading,
+.logistics-route-panel > .panel-heading,
+.courier-connection-panel > .panel-heading {
+  border-bottom: 1px solid var(--color-border-subtle);
+  padding: 1rem 1.15rem;
+}
+
+.record-count {
+  background: var(--color-surface-subtle);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 999px;
+  color: var(--color-text-muted);
+  font-size: 0.74rem;
+  font-weight: 750;
+  padding: 0.32rem 0.58rem;
+}
+
+.logistics-record-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.logistics-record-row {
+  align-items: center;
+  background: var(--color-surface);
+  border: 0;
+  border-bottom: 1px solid var(--color-border-subtle);
+  color: inherit;
+  cursor: pointer;
+  display: grid;
+  font: inherit;
+  gap: 1rem;
+  grid-template-columns: minmax(12rem, 1.5fr) minmax(10rem, 0.9fr) auto 1.2rem;
+  min-height: 4.8rem;
+  padding: 0.82rem 1.15rem;
+  text-align: left;
+  transition: background-color 150ms ease;
+  width: 100%;
+}
+
+.logistics-record-row:last-child {
+  border-bottom: 0;
+}
+
+.logistics-record-row:hover {
+  background: var(--color-surface-subtle);
+}
+
+.logistics-record-row > svg {
+  color: var(--color-text-subtle);
+}
+
+.logistics-record-main,
+.logistics-record-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.logistics-record-main strong,
+.logistics-record-detail strong {
+  color: var(--color-text);
+  font-size: 0.84rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.logistics-record-main small,
+.logistics-record-detail small {
+  color: var(--color-text-muted);
+  font-size: 0.74rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.status-badge {
+  align-items: center;
+  background: var(--color-surface-subtle);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 999px;
+  color: var(--color-text-muted);
+  display: inline-flex;
+  font-size: 0.7rem;
+  font-weight: 760;
+  justify-content: center;
+  line-height: 1;
+  padding: 0.38rem 0.6rem;
+  white-space: nowrap;
+}
+
+.status-badge.status-delivered,
+.status-badge.status-received,
+.status-badge.status-completed,
+.status-badge.is-ready {
+  background: var(--color-success-soft);
+  border-color: color-mix(in srgb, var(--color-success) 28%, transparent);
+  color: var(--color-success-strong);
+}
+
+.status-badge.status-in-transit,
+.status-badge.status-in-progress {
+  background: var(--color-info-soft);
+  border-color: color-mix(in srgb, var(--color-info) 25%, transparent);
+  color: var(--color-info-strong);
+}
+
+.status-badge.status-exception {
+  background: var(--color-warning-soft);
+  border-color: color-mix(in srgb, var(--color-warning) 28%, transparent);
+  color: var(--color-warning-strong);
+}
+
+.status-badge.status-cancelled {
+  opacity: 0.7;
+  text-decoration: line-through;
+}
+
+.logistics-empty-state {
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  min-height: 15rem;
+  padding: 2.5rem 1.25rem;
+  text-align: center;
+}
+
+.logistics-empty-state > span {
+  align-items: center;
+  background: var(--color-primary-soft);
+  border-radius: 0.8rem;
+  color: var(--color-primary-700);
+  display: inline-flex;
+  height: 2.8rem;
+  justify-content: center;
+  margin-bottom: 0.9rem;
+  width: 2.8rem;
+}
+
+.logistics-empty-state h3 {
+  font-size: 0.95rem;
+  margin: 0;
+}
+
+.logistics-empty-state p {
+  color: var(--color-text-muted);
+  font-size: 0.8rem;
+  margin: 0.4rem 0 0;
+  max-width: 28rem;
+}
+
+.courier-card-grid {
+  display: grid;
+  gap: 0.8rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  padding: 1rem 1.15rem;
+}
+
+.courier-card {
+  align-items: center;
+  background: var(--color-surface-subtle);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 0.9rem;
+  display: grid;
+  gap: 0.8rem;
+  grid-template-columns: auto 1fr auto;
+  padding: 1rem;
+}
+
+.courier-mark {
+  align-items: center;
+  background: var(--color-primary-700);
+  border-radius: 0.65rem;
+  color: white;
+  display: inline-flex;
+  font-size: 1.05rem;
+  font-weight: 800;
+  height: 2.6rem;
+  justify-content: center;
+  width: 2.6rem;
+}
+
+.courier-card h3,
+.courier-card p {
+  margin: 0;
+}
+
+.courier-card h3 {
+  font-size: 0.9rem;
+}
+
+.courier-card p {
+  color: var(--color-text-muted);
+  font-size: 0.73rem;
+  line-height: 1.45;
+  margin-top: 0.24rem;
+}
+
+.courier-connection-panel > .vista-alert {
+  margin: 0 1.15rem 1.15rem;
+}
+
+.route-calendar-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.route-day {
+  display: grid;
+  grid-template-columns: 8.5rem 1fr;
+  min-height: 6rem;
+}
+
+.route-day + .route-day {
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+.route-day > header {
+  background: var(--color-surface-subtle);
+  border-right: 1px solid var(--color-border-subtle);
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding: 1rem;
+}
+
+.route-day > header span {
+  color: var(--color-text-muted);
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.route-day > header strong {
+  font-size: 0.8rem;
+}
+
+.route-day > div > button {
+  align-items: center;
+  background: var(--color-surface);
+  border: 0;
+  border-bottom: 1px solid var(--color-border-subtle);
+  color: inherit;
+  cursor: pointer;
+  display: grid;
+  font: inherit;
+  gap: 1rem;
+  grid-template-columns: 1fr auto auto;
+  padding: 0.85rem 1rem;
+  text-align: left;
+  width: 100%;
+}
+
+.route-day > div > button:last-child {
+  border-bottom: 0;
+}
+
+.route-day > div > button:hover {
+  background: var(--color-surface-subtle);
+}
+
+.route-day button > span:first-child {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.route-day button strong {
+  font-size: 0.82rem;
+}
+
+.route-day button small,
+.route-day button > span:nth-child(2) {
+  color: var(--color-text-muted);
+  font-size: 0.72rem;
+}
+
+.logistics-drawer.security-drawer {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  max-width: 42rem;
+  overflow: hidden;
+  padding: 0;
+  width: min(42rem, 100vw);
+}
+
+.logistics-drawer.security-drawer.is-wide {
+  max-width: 54rem;
+  width: min(54rem, 100vw);
+}
+
+.logistics-drawer-header {
+  align-items: center;
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border-subtle);
+  display: grid;
+  gap: 0.75rem 1rem;
+  grid-template-columns: auto 1fr auto;
+  padding: 0.75rem 1.1rem 1rem;
+}
+
+.logistics-drawer-header > div {
+  grid-column: 1 / -1;
+}
+
+.logistics-drawer-header h2,
+.logistics-drawer-header p {
+  margin: 0;
+}
+
+.logistics-drawer-header h2 {
+  font-size: 1.15rem;
+  letter-spacing: -0.02em;
+}
+
+.logistics-drawer-header p {
+  color: var(--color-text-muted);
+  font-size: 0.78rem;
+  line-height: 1.45;
+  margin-top: 0.25rem;
+}
+
+.logistics-drawer-body {
+  background: var(--color-surface-subtle);
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 1rem 1.1rem;
+}
+
+.logistics-drawer-actions {
+  align-items: center;
+  background: var(--color-surface);
+  border-top: 1px solid var(--color-border-subtle);
+  box-shadow: 0 -0.35rem 1rem rgb(15 23 42 / 4%);
+  display: flex;
+  gap: 0.65rem;
+  justify-content: flex-start;
+  min-height: 4.25rem;
+  padding: 0.75rem 1.1rem max(0.75rem, env(safe-area-inset-bottom));
+}
+
+.logistics-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.logistics-form-section {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 0.9rem;
+  overflow: hidden;
+}
+
+.logistics-form-section > header {
+  align-items: center;
+  border-bottom: 1px solid var(--color-border-subtle);
+  display: flex;
+  gap: 0.6rem;
+  padding: 0.7rem 0.85rem;
+}
+
+.logistics-form-section > header > span {
+  align-items: center;
+  background: var(--color-primary-soft);
+  border-radius: 999px;
+  color: var(--color-primary-700);
+  display: inline-flex;
+  font-size: 0.68rem;
+  font-weight: 800;
+  height: 1.55rem;
+  justify-content: center;
+  width: 1.55rem;
+}
+
+.logistics-form-section h3 {
+  font-size: 0.82rem;
+  margin: 0;
+}
+
+.logistics-form-section > div {
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+  padding: 0.85rem;
+}
+
+.logistics-form label,
+.logistics-action-card label {
+  color: var(--color-text);
+  display: flex;
+  flex-direction: column;
+  font-size: 0.74rem;
+  font-weight: 700;
+  gap: 0.34rem;
+}
+
+.logistics-form label small {
+  color: var(--color-text-muted);
+  font-size: 0.67rem;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.logistics-form input,
+.logistics-form select,
+.logistics-form textarea,
+.logistics-action-card input,
+.logistics-action-card textarea {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 0.55rem;
+  color: var(--color-text);
+  font: inherit;
+  font-size: 0.8rem;
+  min-height: 2.65rem;
+  padding: 0.62rem 0.7rem;
+  width: 100%;
+}
+
+.logistics-form textarea,
+.logistics-action-card textarea {
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.logistics-form input:focus,
+.logistics-form select:focus,
+.logistics-form textarea:focus,
+.logistics-action-card input:focus,
+.logistics-action-card textarea:focus {
+  border-color: var(--color-primary-500);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary-500) 14%, transparent);
+  outline: none;
+}
+
+.logistics-form-grid {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.logistics-choice-grid {
+  display: grid;
+  gap: 0.7rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.logistics-choice-grid > button {
+  align-items: flex-start;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 0.7rem;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  display: flex;
+  gap: 0.6rem;
+  padding: 0.75rem;
+  text-align: left;
+}
+
+.logistics-choice-grid > button.is-active {
+  background: var(--color-primary-soft);
+  border-color: var(--color-primary-500);
+  color: var(--color-primary-700);
+}
+
+.logistics-choice-grid button span {
+  display: flex;
+  flex-direction: column;
+  gap: 0.18rem;
+}
+
+.logistics-choice-grid button strong {
+  color: var(--color-text);
+  font-size: 0.76rem;
+}
+
+.logistics-choice-grid button small {
+  color: var(--color-text-muted);
+  font-size: 0.65rem;
+  line-height: 1.35;
+}
+
+.serial-choice-list {
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+
+.serial-choice-list legend {
+  font-size: 0.74rem;
+  font-weight: 700;
+  margin-bottom: 0.4rem;
+}
+
+.serial-choice-list label {
+  align-items: center;
+  background: var(--color-surface-subtle);
+  border-radius: 0.45rem;
+  display: flex;
+  flex-direction: row;
+  gap: 0.5rem;
+  padding: 0.5rem 0.6rem;
+}
+
+.serial-choice-list input {
+  min-height: auto;
+  width: auto;
+}
+
+.route-stop-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.route-stop-editor > section {
+  background: var(--color-surface-subtle);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 0.7rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  padding: 0.75rem;
+}
+
+.route-stop-editor > section > header {
+  align-items: center;
+  display: flex;
+  gap: 0.5rem;
+}
+
+.route-stop-editor > section > header > span {
+  align-items: center;
+  background: var(--color-text);
+  border-radius: 999px;
+  color: var(--color-surface);
+  display: inline-flex;
+  font-size: 0.65rem;
+  font-weight: 800;
+  height: 1.45rem;
+  justify-content: center;
+  width: 1.45rem;
+}
+
+.route-stop-editor > section > header strong {
+  font-size: 0.76rem;
+}
+
+.route-stop-editor > section > header button {
+  background: none;
+  border: 0;
+  color: var(--color-danger);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.68rem;
+  font-weight: 700;
+  margin-left: auto;
+}
+
+.logistics-detail-hero,
+.logistics-detail-grid,
+.logistics-note-card,
+.logistics-timeline,
+.return-line-list,
+.route-stop-timeline,
+.logistics-action-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 0.85rem;
+  padding: 0.9rem;
+}
+
+.logistics-detail-hero h3,
+.logistics-detail-hero p {
+  margin: 0;
+}
+
+.logistics-detail-hero h3 {
+  font-size: 1rem;
+  margin-top: 0.75rem;
+}
+
+.logistics-detail-hero p {
+  color: var(--color-text-muted);
+  font-size: 0.76rem;
+  line-height: 1.5;
+  margin-top: 0.25rem;
+}
+
+.logistics-detail-grid {
+  display: grid;
+  gap: 0.85rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.logistics-detail-grid > div {
+  min-width: 0;
+}
+
+.logistics-detail-grid dt {
+  color: var(--color-text-muted);
+  font-size: 0.66rem;
+  font-weight: 650;
+}
+
+.logistics-detail-grid dd {
+  color: var(--color-text);
+  font-size: 0.78rem;
+  font-weight: 700;
+  margin: 0.22rem 0 0;
+  overflow-wrap: anywhere;
+}
+
+.logistics-note-card strong,
+.logistics-timeline h3,
+.return-line-list h3 {
+  font-size: 0.78rem;
+  margin: 0;
+}
+
+.logistics-note-card p {
+  color: var(--color-text-muted);
+  font-size: 0.74rem;
+  line-height: 1.5;
+  margin: 0.3rem 0 0;
+}
+
+.logistics-note-card.is-success {
+  background: var(--color-success-soft);
+  border-color: color-mix(in srgb, var(--color-success) 26%, transparent);
+}
+
+.logistics-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+}
+
+.logistics-timeline > div {
+  display: grid;
+  gap: 0.65rem;
+  grid-template-columns: auto 1fr;
+}
+
+.logistics-timeline > div > span {
+  background: var(--color-primary-500);
+  border: 3px solid var(--color-primary-soft);
+  border-radius: 999px;
+  height: 0.75rem;
+  margin-top: 0.15rem;
+  width: 0.75rem;
+}
+
+.logistics-timeline > div > div {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.logistics-timeline strong {
+  font-size: 0.74rem;
+}
+
+.logistics-timeline small,
+.logistics-timeline p {
+  color: var(--color-text-muted);
+  font-size: 0.67rem;
+  margin: 0;
+}
+
+.return-line-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+
+.return-line-list article {
+  background: var(--color-surface-subtle);
+  border-radius: 0.6rem;
+  display: grid;
+  gap: 0.55rem;
+  grid-template-columns: 1fr auto;
+  padding: 0.7rem;
+}
+
+.return-line-list article > div {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.return-line-list article strong,
+.return-line-list article > span {
+  font-size: 0.73rem;
+}
+
+.return-line-list article small,
+.return-line-list article p {
+  color: var(--color-text-muted);
+  font-size: 0.67rem;
+  margin: 0;
+}
+
+.return-line-list article code,
+.return-line-list article p {
+  grid-column: 1 / -1;
+}
+
+.return-line-list article code {
+  background: var(--color-surface);
+  border-radius: 0.35rem;
+  font-size: 0.68rem;
+  padding: 0.35rem 0.45rem;
+}
+
+.logistics-action-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.logistics-action-card > header {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+
+.logistics-action-card h3 {
+  font-size: 0.82rem;
+  margin: 0;
+}
+
+.logistics-action-card > header button {
+  align-items: center;
+  background: none;
+  border: 0;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  display: inline-flex;
+}
+
+.text-danger-action {
+  align-self: flex-start;
+  background: none;
+  border: 0;
+  color: var(--color-danger);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 0;
+}
+
+.route-stop-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.route-stop-timeline article {
+  display: grid;
+  gap: 0.7rem;
+  grid-template-columns: auto 1fr;
+  padding: 0.65rem 0;
+}
+
+.route-stop-timeline article + article {
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+.route-stop-timeline article > span {
+  align-items: center;
+  background: var(--color-primary-700);
+  border-radius: 999px;
+  color: white;
+  display: inline-flex;
+  font-size: 0.68rem;
+  font-weight: 800;
+  height: 1.65rem;
+  justify-content: center;
+  width: 1.65rem;
+}
+
+.route-stop-timeline article > div {
+  display: flex;
+  flex-direction: column;
+  gap: 0.16rem;
+}
+
+.route-stop-timeline strong {
+  font-size: 0.78rem;
+}
+
+.route-stop-timeline small,
+.route-stop-timeline p {
+  color: var(--color-text-muted);
+  font-size: 0.68rem;
+  margin: 0;
+}
+
+@media (max-width: 760px) {
+  .logistics-page-header {
+    align-items: stretch;
+  }
+
+  .logistics-summary,
+  .courier-card-grid,
+  .logistics-form-grid,
+  .logistics-choice-grid,
+  .logistics-detail-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .logistics-record-row {
+    gap: 0.55rem;
+    grid-template-columns: 1fr auto;
+    padding: 0.75rem 0.85rem;
+  }
+
+  .logistics-record-detail {
+    grid-column: 1;
+    grid-row: 2;
+  }
+
+  .logistics-record-row > .status-badge {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .logistics-record-row > svg {
+    grid-column: 2;
+    grid-row: 2;
+    justify-self: end;
+  }
+
+  .courier-card {
+    grid-template-columns: auto 1fr;
+  }
+
+  .courier-card > .status-badge {
+    grid-column: 2;
+    justify-self: start;
+  }
+
+  .route-day {
+    grid-template-columns: 1fr;
+  }
+
+  .route-day > header {
+    border-bottom: 1px solid var(--color-border-subtle);
+    border-right: 0;
+    flex-direction: row;
+    justify-content: space-between;
+    padding: 0.65rem 0.85rem;
+  }
+
+  .logistics-drawer.security-drawer,
+  .logistics-drawer.security-drawer.is-wide {
+    max-width: 100vw;
+    width: 100vw;
+  }
+
+  .logistics-drawer-body {
+    padding: 0.8rem;
+  }
+
+  .logistics-drawer-actions {
+    align-items: stretch;
+    flex-direction: column;
+    padding-inline: 0.8rem;
+  }
+
+  .logistics-drawer-actions > button {
+    width: 100%;
+  }
+}
+
 /* Finance balance and turnover reports */
 .finance-report-workspace {
   align-content: start;
@@ -11,6 +975,286 @@ body {
 
 .finance-report-header {
   align-items: flex-end;
+}
+
+.report-export-drawer.security-drawer {
+  max-width: min(100%, 39rem);
+}
+
+.report-export-drawer-body {
+  display: grid;
+  align-content: start;
+  gap: 1rem;
+}
+
+.report-export-form,
+.report-export-history {
+  display: grid;
+  gap: 1rem;
+  padding: 1rem;
+  border: 1px solid var(--vista-line);
+  border-radius: 0.9rem;
+  background: var(--vista-surface);
+}
+
+.report-export-field,
+.report-export-dates label {
+  display: grid;
+  gap: 0.38rem;
+}
+
+.report-export-field > label,
+.report-export-dates label > span,
+.report-export-form legend {
+  color: var(--vista-ink);
+  font-size: 0.72rem;
+  font-weight: 740;
+}
+
+.report-export-form select,
+.report-export-form input[type='date'] {
+  min-height: 2.7rem;
+  width: 100%;
+  padding: 0.58rem 0.72rem;
+  border: 1px solid var(--vista-line-strong);
+  border-radius: 0.65rem;
+  color: var(--vista-ink);
+  background: var(--vista-surface);
+  font: inherit;
+  font-size: 0.8rem;
+}
+
+.report-export-field > small,
+.report-export-format-grid small {
+  color: var(--vista-muted);
+  font-size: 0.68rem;
+  line-height: 1.45;
+}
+
+.report-export-form fieldset {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.report-export-form legend {
+  margin-bottom: 0.45rem;
+}
+
+.report-export-format-grid {
+  display: grid;
+  gap: 0.55rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.report-export-format-grid label {
+  display: grid;
+  position: relative;
+  gap: 0.18rem;
+  min-height: 4.7rem;
+  padding: 0.72rem;
+  border: 1px solid var(--vista-line);
+  border-radius: 0.72rem;
+  background: var(--vista-surface-muted);
+  cursor: pointer;
+}
+
+.report-export-format-grid label:hover {
+  border-color: var(--vista-line-strong);
+}
+
+.report-export-format-grid label.is-selected {
+  border-color: var(--vista-forest-dark);
+  background: color-mix(in srgb, var(--vista-forest-dark) 6%, var(--vista-surface));
+  box-shadow: inset 0 0 0 1px var(--vista-forest-dark);
+}
+
+.report-export-format-grid input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+.report-export-format-grid strong {
+  color: var(--vista-ink);
+  font-size: 0.8rem;
+}
+
+.report-export-dates {
+  display: grid;
+  gap: 0.7rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.report-export-as-of {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin: 0;
+  padding: 0.65rem 0.75rem;
+  border-radius: 0.65rem;
+  color: var(--vista-forest-dark);
+  background: color-mix(in srgb, var(--vista-forest-dark) 7%, var(--vista-surface));
+  font-size: 0.72rem;
+  font-weight: 680;
+}
+
+.report-export-history > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--vista-line);
+}
+
+.report-export-history > header h3,
+.report-export-history > header p {
+  margin: 0;
+}
+
+.report-export-history > header h3 {
+  color: var(--vista-ink);
+  font-size: 0.9rem;
+}
+
+.report-export-history > header p {
+  margin-top: 0.2rem;
+  color: var(--vista-muted);
+  font-size: 0.68rem;
+}
+
+.report-export-history > header button {
+  padding: 0.3rem 0.4rem;
+  border: 0;
+  color: var(--vista-forest-dark);
+  background: transparent;
+  font: inherit;
+  font-size: 0.7rem;
+  font-weight: 720;
+  cursor: pointer;
+}
+
+.report-export-list {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.report-export-list article {
+  display: grid;
+  align-items: center;
+  gap: 0.7rem;
+  min-width: 0;
+  padding: 0.7rem;
+  border: 1px solid var(--vista-line);
+  border-radius: 0.72rem;
+  background: var(--vista-surface-muted);
+  grid-template-columns: 2.55rem minmax(0, 1fr) auto auto;
+}
+
+.report-export-file-mark {
+  display: grid;
+  place-items: center;
+  min-height: 2.35rem;
+  border-radius: 0.55rem;
+  color: var(--vista-forest-dark);
+  background: color-mix(in srgb, var(--vista-forest-dark) 9%, white);
+  font-size: 0.6rem;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+}
+
+.report-export-file-mark.is-pdf {
+  color: #933a2c;
+  background: #fff0ed;
+}
+
+.report-export-file-mark.is-csv {
+  color: #6a5317;
+  background: #fff7da;
+}
+
+.report-export-list article > div:nth-child(2) {
+  display: grid;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.report-export-list article > div:nth-child(2) strong,
+.report-export-list article > div:nth-child(2) span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.report-export-list article > div:nth-child(2) strong {
+  color: var(--vista-ink);
+  font-size: 0.75rem;
+}
+
+.report-export-list article > div:nth-child(2) span {
+  color: var(--vista-muted);
+  font-size: 0.64rem;
+}
+
+.report-export-status {
+  padding: 0.3rem 0.48rem;
+  border-radius: 999px;
+  color: #755b18;
+  background: #fff5d5;
+  font-size: 0.62rem;
+  font-weight: 740;
+  white-space: nowrap;
+}
+
+.report-export-status.is-completed {
+  color: var(--vista-forest-dark);
+  background: color-mix(in srgb, var(--vista-forest-dark) 9%, white);
+}
+
+.report-export-status.is-failed {
+  color: #96382d;
+  background: #fff0ed;
+}
+
+.report-export-empty {
+  display: grid;
+  justify-items: center;
+  gap: 0.25rem;
+  padding: 1.2rem;
+  color: var(--vista-muted);
+  text-align: center;
+}
+
+.report-export-empty strong {
+  color: var(--vista-ink);
+  font-size: 0.78rem;
+}
+
+.report-export-empty span {
+  font-size: 0.67rem;
+}
+
+@media (max-width: 620px) {
+  .finance-report-header {
+    align-items: stretch;
+  }
+
+  .report-export-format-grid,
+  .report-export-dates {
+    grid-template-columns: 1fr;
+  }
+
+  .report-export-list article {
+    grid-template-columns: 2.55rem minmax(0, 1fr) auto;
+  }
+
+  .report-export-list article > .vista-button {
+    grid-column: 2 / -1;
+    justify-self: start;
+  }
 }
 
 .finance-report-switch,
@@ -3935,6 +5179,29 @@ select.vista-field-input {
   }
 
   .security-account-recovery .vista-button {
+    width: 100%;
+  }
+}
+
+/* Logistics drawers keep actions in their own fitted viewport row. */
+.logistics-drawer > .logistics-drawer-actions {
+  bottom: auto;
+  flex: 0 0 auto;
+  justify-content: flex-end;
+  margin: 0;
+  padding: 0.8rem 1.1rem max(0.8rem, env(safe-area-inset-bottom)) !important;
+  position: relative;
+  width: 100%;
+}
+
+@media (max-width: 560px) {
+  .logistics-drawer > .logistics-drawer-actions {
+    align-items: stretch;
+    flex-direction: column-reverse;
+    padding-inline: 0.8rem !important;
+  }
+
+  .logistics-drawer > .logistics-drawer-actions .vista-button {
     width: 100%;
   }
 }

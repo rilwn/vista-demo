@@ -1377,6 +1377,351 @@ export interface FinanceTurnoverReport {
   totals: FinanceTurnoverTotals;
 }
 
+export const logisticsDeliveryMethods = ['company_transport', 'econt', 'speedy'] as const;
+export type LogisticsDeliveryMethod = (typeof logisticsDeliveryMethods)[number];
+export const logisticsDeliveryStatuses = [
+  'planned',
+  'in_transit',
+  'delivered',
+  'exception',
+  'cancelled',
+] as const;
+export type LogisticsDeliveryStatus = (typeof logisticsDeliveryStatuses)[number];
+
+export interface LogisticsShipmentLineReference {
+  id: string;
+  originalIssueMovementId: string;
+  productId: string;
+  productName: string;
+  quantity: string;
+  serialNumbers: string[];
+  trackingMode: ProductTrackingMode;
+}
+
+export interface LogisticsShipmentReference {
+  customerId: string;
+  customerName: string;
+  handoverCertificateId: string;
+  handoverStatus: 'prepared' | 'accepted';
+  handoverVersion: number;
+  id: string;
+  lines: LogisticsShipmentLineReference[];
+  number: string;
+  shippedAt: string;
+}
+
+export interface LogisticsLocationReference {
+  addressLine1: string;
+  addressLine2?: string;
+  city: string;
+  countryCode: string;
+  customerId: string;
+  id: string;
+  name: string;
+  postalCode?: string;
+}
+
+export interface LogisticsWarehouseReference {
+  id: string;
+  name: string;
+  type: string;
+}
+
+export interface LogisticsEquipmentReference {
+  customerId: string;
+  customerLocationId: string;
+  deviceName: string;
+  id: string;
+  serialNumber: string;
+  warrantyEndsOn?: string;
+}
+
+export interface LogisticsAssigneeReference {
+  accountId: string;
+  displayName: string;
+  email: string;
+}
+
+export interface LogisticsServiceStopReference {
+  addressLine: string;
+  city: string;
+  customerName: string;
+  id: string;
+  label: string;
+  scheduledStart: string;
+}
+
+export interface LogisticsCourierConnection {
+  connected: boolean;
+  provider: 'econt' | 'speedy';
+}
+
+export interface LogisticsReferenceData {
+  assignees: LogisticsAssigneeReference[];
+  courierConnections: LogisticsCourierConnection[];
+  equipment: LogisticsEquipmentReference[];
+  locations: LogisticsLocationReference[];
+  serviceStops: LogisticsServiceStopReference[];
+  shipments: LogisticsShipmentReference[];
+  warehouses: LogisticsWarehouseReference[];
+}
+
+export interface LogisticsDeliveryHistoryEntry {
+  changedAt: string;
+  changedBy: string;
+  nextStatus: LogisticsDeliveryStatus;
+  note?: string;
+  previousStatus?: LogisticsDeliveryStatus;
+}
+
+export interface LogisticsDelivery {
+  addressLine1: string;
+  addressLine2?: string;
+  city: string;
+  countryCode: string;
+  createdAt: string;
+  customerId: string;
+  customerLocationId: string;
+  customerLocationName: string;
+  customerName: string;
+  deliveredAt?: string;
+  deliveryMethod: LogisticsDeliveryMethod;
+  exceptionReason?: string;
+  handoverCertificateId: string;
+  handoverStatus: 'prepared' | 'accepted';
+  history: LogisticsDeliveryHistoryEntry[];
+  id: string;
+  instructions?: string;
+  number: string;
+  postalCode?: string;
+  proofNotes?: string;
+  recipientName?: string;
+  scheduledEnd: string;
+  scheduledStart: string;
+  shipmentId: string;
+  shipmentNumber: string;
+  status: LogisticsDeliveryStatus;
+  version: number;
+}
+
+export interface LogisticsDeliveryPage {
+  items: LogisticsDelivery[];
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+}
+
+export interface CreateLogisticsDeliveryRequest {
+  customerLocationId: string;
+  deliveryMethod: LogisticsDeliveryMethod;
+  instructions?: string;
+  scheduledEnd: string;
+  scheduledStart: string;
+  shipmentId: string;
+}
+
+export interface UpdateLogisticsDeliveryStatusRequest {
+  expectedVersion: number;
+  note?: string;
+}
+
+export interface CompleteLogisticsDeliveryRequest {
+  deliveredAt: string;
+  expectedVersion: number;
+  proofNotes?: string;
+  recipientName: string;
+}
+
+export interface ReportLogisticsDeliveryExceptionRequest {
+  expectedVersion: number;
+  reason: string;
+}
+
+export const logisticsReturnTransportMethods = [
+  'company_transport',
+  'customer_dropoff',
+  'econt',
+  'speedy',
+] as const;
+export type LogisticsReturnTransportMethod = (typeof logisticsReturnTransportMethods)[number];
+export const logisticsReturnStatuses = ['registered', 'received', 'cancelled'] as const;
+export type LogisticsReturnStatus = (typeof logisticsReturnStatuses)[number];
+export const logisticsReturnDispositions = ['restock', 'service'] as const;
+export type LogisticsReturnDisposition = (typeof logisticsReturnDispositions)[number];
+
+export interface CreateLogisticsReturnLineRequest {
+  customerEquipmentId?: string;
+  destinationWarehouseId: string;
+  disposition: LogisticsReturnDisposition;
+  quantity: string;
+  serialNumbers?: string[];
+  serviceType?: 'warranty' | 'out_of_warranty';
+  shipmentLineId: string;
+}
+
+export interface CreateLogisticsReturnRequest {
+  customerLocationId: string;
+  lines: CreateLogisticsReturnLineRequest[];
+  originalShipmentId: string;
+  reason: string;
+  scheduledPickupAt?: string;
+  transportMethod: LogisticsReturnTransportMethod;
+}
+
+export interface ReceiveLogisticsReturnRequest {
+  expectedVersion: number;
+}
+
+export interface LogisticsReturnLine {
+  customerEquipmentId?: string;
+  customerEquipmentName?: string;
+  destinationWarehouseId: string;
+  destinationWarehouseName: string;
+  disposition: LogisticsReturnDisposition;
+  id: string;
+  inventoryReturnMovementId?: string;
+  productId: string;
+  productName: string;
+  quantity: string;
+  serialNumbers: string[];
+  serviceRequestId?: string;
+  serviceRequestNumber?: string;
+  serviceType?: 'warranty' | 'out_of_warranty';
+  shipmentLineId: string;
+}
+
+export interface LogisticsReturn {
+  createdAt: string;
+  customerId: string;
+  customerLocationId: string;
+  customerLocationName: string;
+  customerName: string;
+  id: string;
+  lines: LogisticsReturnLine[];
+  number: string;
+  originalShipmentId: string;
+  originalShipmentNumber: string;
+  reason: string;
+  receivedAt?: string;
+  scheduledPickupAt?: string;
+  status: LogisticsReturnStatus;
+  transportMethod: LogisticsReturnTransportMethod;
+  version: number;
+}
+
+export interface LogisticsReturnPage {
+  items: LogisticsReturn[];
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+}
+
+export const logisticsRouteStatuses = ['planned', 'in_progress', 'completed', 'cancelled'] as const;
+export type LogisticsRouteStatus = (typeof logisticsRouteStatuses)[number];
+
+export interface CreateLogisticsRouteStopRequest {
+  deliveryId?: string;
+  plannedArrival: string;
+  plannedDurationMinutes: number;
+  serviceWorkOrderId?: string;
+  stopType: 'delivery' | 'service';
+}
+
+export interface CreateLogisticsRouteRequest {
+  assignedAccountId: string;
+  notes?: string;
+  routeDate: string;
+  stops: CreateLogisticsRouteStopRequest[];
+  title: string;
+}
+
+export interface LogisticsRouteStop {
+  addressLine: string;
+  city: string;
+  deliveryId?: string;
+  id: string;
+  label: string;
+  plannedArrival: string;
+  plannedDurationMinutes: number;
+  position: number;
+  serviceWorkOrderId?: string;
+  stopType: 'delivery' | 'service';
+}
+
+export interface LogisticsRoutePlan {
+  assignedAccountId: string;
+  assignedTo: string;
+  createdAt: string;
+  id: string;
+  notes?: string;
+  number: string;
+  routeDate: string;
+  status: LogisticsRouteStatus;
+  stops: LogisticsRouteStop[];
+  title: string;
+  version: number;
+}
+
+export interface LogisticsRoutePlanPage {
+  items: LogisticsRoutePlan[];
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+}
+
+export const reportExportFormats = ['csv', 'xlsx', 'pdf'] as const;
+export type ReportExportFormat = (typeof reportExportFormats)[number];
+export const reportExportStatuses = ['queued', 'processing', 'completed', 'failed'] as const;
+export type ReportExportStatus = (typeof reportExportStatuses)[number];
+export const financeReportDefinitionKeys = [
+  'finance.receivables-aging',
+  'finance.supplier-payables-aging',
+  'finance.customer-turnover',
+  'finance.supplier-turnover',
+] as const;
+export type FinanceReportDefinitionKey = (typeof financeReportDefinitionKeys)[number];
+
+export interface FinanceReportDefinition {
+  description: string;
+  formats: ReportExportFormat[];
+  key: FinanceReportDefinitionKey;
+  name: string;
+  requiresDateRange: boolean;
+}
+
+export interface CreateFinanceReportExportRequest {
+  dateFrom?: string;
+  dateTo?: string;
+  definitionKey: FinanceReportDefinitionKey;
+  format: ReportExportFormat;
+}
+
+export interface FinanceReportExport {
+  attemptCount: number;
+  completedAt?: string;
+  createdAt: string;
+  definitionKey: FinanceReportDefinitionKey;
+  errorCode?: string;
+  fileName?: string;
+  format: ReportExportFormat;
+  id: string;
+  name: string;
+  rowCount?: number;
+  sizeBytes?: number;
+  status: ReportExportStatus;
+}
+
+export interface FinanceReportExportPage {
+  items: FinanceReportExport[];
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+}
+
 export type FinanceSupplierPayableStatus = 'overdue' | 'paid' | 'partially_paid' | 'unpaid';
 export type FinanceSupplierPaymentKind = 'advance' | 'offset' | 'payment';
 

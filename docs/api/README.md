@@ -143,6 +143,26 @@ operational reminder recipients.
 Both routes require `erp.finance:view`. They are operational subledger reports,
 not official sales/purchase journals, VAT returns, or accounting exports.
 
+## Finance report exports
+
+- `GET /api/v1/finance/report-exports/definitions` lists the controlled Finance
+  reports and their available file types.
+- `GET /api/v1/finance/report-exports` lists only exports requested by the
+  signed-in account.
+- `POST /api/v1/finance/report-exports` accepts one definition key, file type,
+  applicable date filters, and an `Idempotency-Key`, then persists the request
+  before queueing it.
+- `POST /api/v1/finance/report-exports/:id/retry` restarts an unsuccessful export.
+- `GET /api/v1/finance/report-exports/:id/content` downloads a completed,
+  owner-scoped, integrity-checked CSV, Excel, or PDF file.
+
+Reads and downloads require `erp.finance:view`; creating or retrying requires
+`erp.finance:create`. `report.generate` serializes duplicate execution for the
+same export, safely reuses the deterministic object key, and records request,
+completion, retry, and download audit evidence. A database-backed dispatcher
+keeps a saved request recoverable if Redis was temporarily unavailable when it
+was created.
+
 ## Protected background-job operations
 
 - `GET /api/v1/platform/jobs/metrics` requires `platform:view` and returns
@@ -674,6 +694,31 @@ The surface does not yet implement opening-float approval, negative-cash policy,
 formal day closing, linked-payment reversal, direct cash-voucher allocation to a
 supplier payable, or accounting posting.
 
+## Logistics operations
+
+The protected `/api/v1/logistics` surface connects Sales, Warehouse, Service,
+and daily route planning:
+
+- `/reference-data` returns completed Sales shipments and shipped serials,
+  matching customer locations and equipment, active warehouses and employees,
+  scheduled Service stops, and the visible courier connection state;
+- `/deliveries` provides paginated delivery records and retry-safe creation from
+  one shipment and location; detail plus `/dispatch`, `/complete`, `/exception`,
+  and `/cancel` preserve a versioned status history and customer receipt;
+- `/returns` provides paginated return records and retry-safe registration from
+  original shipment lines; `/returns/:id/receive` posts the linked inventory
+  return and opens a Service request for repair dispositions; and
+- `/routes` lists date-filtered route plans and creates one ordered set of
+  customer-delivery and scheduled-Service stops for an active employee.
+
+Reads require `erp.logistics:view`, creation requires `erp.logistics:create`, and
+status/receiving commands require `erp.logistics:edit`. Every command requires an
+`Idempotency-Key`; business changes, audit evidence, and outbox events are
+committed together. Inventory and Service sub-commands use deterministic derived
+keys so a retry after partial processing cannot post stock or create repair work
+twice. Courier methods are rejected with a business-readable message while their
+connections remain unapproved and unconfigured under INT-002.
+
 ## Service subscriptions
 
 The subscription API exposes:
@@ -771,9 +816,10 @@ Completion issues parts from the assigned technician warehouse within the same
 PostgreSQL transaction, so a failed inventory issue rolls back the work
 completion.
 
-Request and appointment display use `BUSINESS_TIMEZONE`. The implementation is
-currently a date-grouped schedule, not capacity/overlap enforcement, route
-planning, or a complete calendar. Payment-document issuance, warranty cards and
-claims, inspection reminders, subscription-generated visits, CRM ticket
-correlation/SLA, reports/exports, and a complete sale-to-service serial timeline
-remain pending.
+Request and appointment display use `BUSINESS_TIMEZONE`. The Service schedule is
+currently date-grouped and does not yet enforce technician capacity or overlap
+rules. Scheduled work is available to the mixed route planner under Logistics,
+but the full technician calendar remains pending. Payment-document issuance,
+warranty cards and claims, inspection reminders, subscription-generated visits,
+CRM ticket correlation/SLA, reports/exports, and a complete sale-to-service
+serial timeline also remain pending.

@@ -1,4 +1,5 @@
 import type {
+  ApiErrorResponse,
   CancelFinanceCustomerDocumentRequest,
   CancelFinanceCashVoucherRequest,
   CreateFinanceCustomerDocumentRequest,
@@ -22,6 +23,10 @@ import type {
   FinanceSummary,
   FinanceTurnoverKind,
   FinanceTurnoverReport,
+  CreateFinanceReportExportRequest,
+  FinanceReportDefinition,
+  FinanceReportExport,
+  FinanceReportExportPage,
   AllocateFinanceSupplierAdvanceRequest,
   CreateFinanceSupplierAdvanceRequest,
   CreateFinanceSupplierOffsetRequest,
@@ -42,6 +47,8 @@ import type {
 } from '@vista/contracts';
 
 import {
+  ApiClientError,
+  apiV1BaseUrl,
   apiClient,
   authorizationHeaders,
   idempotencyParameters,
@@ -92,6 +99,69 @@ export function getFinanceTurnoverReport(
       params: { query: { dateFrom, dateTo, kind, page, pageSize: 50 } },
     }),
   );
+}
+
+export function getFinanceReportDefinitions(token: string): Promise<FinanceReportDefinition[]> {
+  return unwrapApiResponse(
+    apiClient.GET('/api/v1/finance/report-exports/definitions', {
+      headers: authorizationHeaders(token),
+    }),
+  );
+}
+
+export function listFinanceReportExports(
+  token: string,
+  page = 1,
+): Promise<FinanceReportExportPage> {
+  return unwrapApiResponse(
+    apiClient.GET('/api/v1/finance/report-exports', {
+      headers: authorizationHeaders(token),
+      params: { query: { page, pageSize: 20 } },
+    }),
+  );
+}
+
+export function createFinanceReportExport(
+  token: string,
+  key: string,
+  input: CreateFinanceReportExportRequest,
+): Promise<FinanceReportExport> {
+  return unwrapApiResponse(
+    apiClient.POST('/api/v1/finance/report-exports', {
+      body: input,
+      headers: authorizationHeaders(token),
+      params: { header: idempotencyParameters(key).header },
+    }),
+  );
+}
+
+export function retryFinanceReportExport(token: string, id: string): Promise<FinanceReportExport> {
+  return unwrapApiResponse(
+    apiClient.POST('/api/v1/finance/report-exports/{id}/retry', {
+      headers: authorizationHeaders(token),
+      params: { path: { id } },
+    }),
+  );
+}
+
+export async function downloadFinanceReportExport(
+  token: string,
+  report: FinanceReportExport,
+): Promise<Blob> {
+  const response = await fetch(`${apiV1BaseUrl}/finance/report-exports/${report.id}/content`, {
+    headers: authorizationHeaders(token),
+  });
+  if (!response.ok) {
+    const body = (await response.json().catch(() => undefined)) as ApiErrorResponse | undefined;
+    throw new ApiClientError(
+      body?.error.message ?? 'The report could not be downloaded.',
+      body?.error.code ?? 'REPORT_DOWNLOAD_FAILED',
+      response.status,
+      body?.error.correlationId,
+      body?.error.details,
+    );
+  }
+  return response.blob();
 }
 
 export function createFinanceDocument(

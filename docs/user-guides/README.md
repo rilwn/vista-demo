@@ -111,6 +111,13 @@ Gross turnover belongs to that period; allocated and outstanding columns show th
 current state of those selected documents. These operational views do not replace
 official journals, VAT reports, or accounting exports.
 
+Select **Export report** to prepare the current report as Excel, CSV, or PDF. A
+turnover export asks for an inclusive date range; an aging export uses the current
+business date. The panel updates the request automatically and keeps completed
+files under **Recent exports** for the requesting account. Select **Download**
+when the status is **Ready**. If preparation ends unsuccessfully, select **Try
+again**. Leaving or closing the panel does not cancel a saved request.
+
 ### Platform job operations
 
 Employees granted `platform:view` can use the operations integration/API to see
@@ -578,6 +585,32 @@ Use only the visible application navigation:
 Recurring billing drafts appear after the scheduled billing task processes a due
 date. They remain review drafts until Finance performs approved legal issuance.
 
+## Deliveries, returns, and routes
+
+Use the visible application navigation:
+
+1. From the left navigation, choose **ERP → Logistics**, then open
+   **Deliveries**. Select **Plan delivery**, choose a completed Sales shipment,
+   its customer location, and the agreed window, then save.
+2. Preview the delivery to review its Sales and handover links. Select
+   **Dispatch** when the driver leaves. Select **Record delivery** when the
+   customer receives it, enter the recipient and receipt time, and confirm. An
+   issue can be recorded and later resumed without losing the activity history.
+3. Open **Routes** and select **Plan route**. Choose the date and employee, then
+   add delivery stops and any scheduled Service visits in their planned order.
+4. Open **Returns** and select **Register return**. Choose the original shipment,
+   item, quantity, and shipped serials where required. Choose **Return to stock**
+   or **Send to Service**, select the destination warehouse, and enter the reason.
+5. Preview the registered return and select **Receive return**. Stock is returned
+   through the original issue trail. A repair disposition also shows the linked
+   Service request number after receipt.
+6. Use **Back** in every panel to return to the unchanged register, or
+   **Back to Logistics** above the page to return to the Logistics areas.
+
+The **Couriers** page shows Econt and Speedy as unavailable until the approved
+provider products and credentials are configured. The application does not offer
+a booking action or imply that a shipment was sent to a provider before then.
+
 ## Service work
 
 The development fixtures provide an active customer location and device, a
@@ -615,8 +648,9 @@ To test a warranty or subscription request, choose the fixture device with the
 corresponding active coverage. Do not use an expired warranty or a device without
 a matching active subscription; the API correctly prevents that request.
 
-The current Service workspace is intentionally limited to the documented core:
-manual source capture, dispatch, technician work, stock deduction, evidence, and
-service-only history. It does not yet create a payment document, service invoice,
-warranty card or claim, inspection reminder, subscription visit, CRM ticket/SLA,
-route plan, or full sales/supplier serial history.
+The current Service workspace covers manual source capture, dispatch, technician
+work, stock deduction, evidence, and service-only history. Plan mixed delivery
+and Service routes under **ERP → Logistics → Routes**. Payment documents,
+service invoices, warranty cards and claims, inspection reminders, subscription
+visits, CRM ticket/SLA links, the full technician-capacity calendar, and the full
+sales/supplier serial history remain pending.

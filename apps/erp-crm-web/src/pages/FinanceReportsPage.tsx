@@ -1,15 +1,28 @@
 import { Button, InlineAlert } from '@vista/ui';
 import type {
+  CreateFinanceReportExportRequest,
   FinanceAgingKind,
   FinanceAgingReport,
   FinanceAgingReportItem,
+  FinanceReportDefinition,
+  FinanceReportDefinitionKey,
+  FinanceReportExport,
   FinanceTurnoverKind,
   FinanceTurnoverReport,
+  ReportExportFormat,
 } from '@vista/contracts';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { ApiClientError } from '../api/client';
-import { getFinanceAgingReport, getFinanceTurnoverReport } from '../api/finance';
+import {
+  createFinanceReportExport,
+  downloadFinanceReportExport,
+  getFinanceAgingReport,
+  getFinanceReportDefinitions,
+  getFinanceTurnoverReport,
+  listFinanceReportExports,
+  retryFinanceReportExport,
+} from '../api/finance';
 import { useAuth } from '../auth/AuthProvider';
 import { Icon } from '../components/Icon';
 import { FinanceTabs } from './FinanceBankPage';
@@ -25,6 +38,15 @@ export function FinanceReportsPage() {
   const initialDates = useMemo(() => reportDates(), []);
   const [dateFrom, setDateFrom] = useState(initialDates.dateFrom);
   const [dateTo, setDateTo] = useState(initialDates.dateTo);
+  const [exportOpen, setExportOpen] = useState(false);
+  const currentDefinition: FinanceReportDefinitionKey =
+    view === 'aging'
+      ? agingKind === 'receivable'
+        ? 'finance.receivables-aging'
+        : 'finance.supplier-payables-aging'
+      : turnoverKind === 'customer'
+        ? 'finance.customer-turnover'
+        : 'finance.supplier-turnover';
 
   return (
     <div className="page-stack finance-report-workspace">
@@ -34,14 +56,16 @@ export function FinanceReportsPage() {
           <h1>Balances &amp; turnover</h1>
           <p>Review current customer and supplier exposure, then compare document turnover.</p>
         </div>
+        <Button onClick={() => setExportOpen(true)}>
+          <Icon name="chart" size={16} /> Export report
+        </Button>
       </header>
 
       <FinanceTabs />
 
       <InlineAlert tone="info">
-        These are operational BGN subledger reports. Official sales and purchase journals, VAT
-        returns, and accounting exports remain unavailable until the accounting rules and formats
-        are approved.
+        These reports support day-to-day balance checks in BGN. Official sales and purchase
+        journals, VAT reports, and accounting files will be added after their formats are approved.
       </InlineAlert>
 
       <div aria-label="Finance report" className="finance-report-switch" role="tablist">
@@ -78,8 +102,349 @@ export function FinanceReportsPage() {
           token={token}
         />
       )}
+
+      {exportOpen ? (
+        <ReportExportPanel
+          dateFrom={dateFrom}
+          dateTo={dateTo}
+          defaultDefinition={currentDefinition}
+          onBack={() => setExportOpen(false)}
+          token={token}
+        />
+      ) : null}
     </div>
   );
+}
+
+function ReportExportPanel({
+  dateFrom: initialDateFrom,
+  dateTo: initialDateTo,
+  defaultDefinition,
+  onBack,
+  token,
+}: {
+  dateFrom: string;
+  dateTo: string;
+  defaultDefinition: FinanceReportDefinitionKey;
+  onBack: () => void;
+  token: string;
+}) {
+  const [definitions, setDefinitions] = useState<FinanceReportDefinition[]>([]);
+  const [exports, setExports] = useState<FinanceReportExport[]>([]);
+  const [definitionKey, setDefinitionKey] = useState<FinanceReportDefinitionKey>(defaultDefinition);
+  const [format, setFormat] = useState<ReportExportFormat>('xlsx');
+  const [dateFrom, setDateFrom] = useState(initialDateFrom);
+  const [dateTo, setDateTo] = useState(initialDateTo);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const definition = definitions.find((item) => item.key === definitionKey);
+
+  const load = useCallback(async () => {
+    const [available, recent] = await Promise.all([
+      getFinanceReportDefinitions(token),
+      listFinanceReportExports(token),
+    ]);
+    setDefinitions(available);
+    setExports(recent.items);
+  }, [token]);
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    void load()
+      .catch((caught) => {
+        if (active) setError(errorMessage(caught, 'Reports could not be loaded.'));
+      })
+      .finally(() => active && setLoading(false));
+    return () => {
+      active = false;
+    };
+  }, [load]);
+
+  useEffect(() => {
+    if (!exports.some((item) => item.status === 'queued' || item.status === 'processing')) return;
+    const timer = window.setInterval(() => {
+      void listFinanceReportExports(token)
+        .then((page) => setExports(page.items))
+        .catch(() => undefined);
+    }, 2_000);
+    return () => window.clearInterval(timer);
+  }, [exports, token]);
+
+  async function createExport() {
+    if (!definition) return;
+    setBusy(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const input: CreateFinanceReportExportRequest = {
+        definitionKey,
+        format,
+        ...(definition.requiresDateRange ? { dateFrom, dateTo } : {}),
+      };
+      await createFinanceReportExport(token, crypto.randomUUID(), input);
+      const recent = await listFinanceReportExports(token);
+      setExports(recent.items);
+      setMessage('Your report is being prepared. It will appear below when it is ready.');
+    } catch (caught) {
+      setError(errorMessage(caught, 'The report could not be prepared.'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function download(report: FinanceReportExport) {
+    setDownloadingId(report.id);
+    setError(null);
+    try {
+      const blob = await downloadFinanceReportExport(token, report);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = report.fileName ?? `${report.name}.${report.format}`;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (caught) {
+      setError(errorMessage(caught, 'The report could not be downloaded.'));
+    } finally {
+      setDownloadingId(null);
+    }
+  }
+
+  async function retry(report: FinanceReportExport) {
+    setBusy(true);
+    setError(null);
+    try {
+      await retryFinanceReportExport(token, report.id);
+      const recent = await listFinanceReportExports(token);
+      setExports(recent.items);
+      setMessage('We are preparing the report again.');
+    } catch (caught) {
+      setError(errorMessage(caught, 'The report could not be started again.'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const validDates =
+    !definition?.requiresDateRange || (!!dateFrom && !!dateTo && dateFrom <= dateTo);
+
+  return (
+    <div className="security-drawer-layer">
+      <button
+        aria-label="Back to Finance reports"
+        className="security-drawer-scrim"
+        disabled={busy}
+        onClick={onBack}
+        type="button"
+      />
+      <aside
+        aria-label="Export report"
+        aria-modal="true"
+        className="security-drawer report-export-drawer"
+        role="dialog"
+      >
+        <header className="panel-drawer-header">
+          <button
+            aria-label="Back"
+            className="panel-back-button"
+            disabled={busy}
+            onClick={onBack}
+            type="button"
+          >
+            <Icon name="arrow" size={17} /> Back
+          </button>
+          <button
+            aria-label="Close panel"
+            className="panel-close-button"
+            disabled={busy}
+            onClick={onBack}
+            type="button"
+          >
+            <Icon name="close" />
+          </button>
+          <div>
+            <h2>Export report</h2>
+            <p>Choose the report and file type. You can leave this panel while it is prepared.</p>
+          </div>
+        </header>
+        <div className="security-drawer-body report-export-drawer-body">
+          {loading ? <ReportState title="Loading reports" /> : null}
+          {error ? <InlineAlert tone="error">{error}</InlineAlert> : null}
+          {message ? <InlineAlert tone="success">{message}</InlineAlert> : null}
+
+          {!loading ? (
+            <section className="report-export-form" aria-label="Report options">
+              <div className="report-export-field">
+                <label htmlFor="finance-report-export-definition">Report</label>
+                <select
+                  id="finance-report-export-definition"
+                  onChange={(event) =>
+                    setDefinitionKey(event.target.value as FinanceReportDefinitionKey)
+                  }
+                  value={definitionKey}
+                >
+                  {definitions.map((item) => (
+                    <option key={item.key} value={item.key}>
+                      {item.name}
+                    </option>
+                  ))}
+                </select>
+                <small>{definition?.description}</small>
+              </div>
+
+              <fieldset>
+                <legend>File type</legend>
+                <div className="report-export-format-grid">
+                  {(definition?.formats ?? ['xlsx', 'csv', 'pdf']).map((item) => (
+                    <label className={format === item ? 'is-selected' : undefined} key={item}>
+                      <input
+                        checked={format === item}
+                        name="report-format"
+                        onChange={() => setFormat(item)}
+                        type="radio"
+                        value={item}
+                      />
+                      <strong>{formatLabel(item)}</strong>
+                      <small>{formatDescription(item)}</small>
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+
+              {definition?.requiresDateRange ? (
+                <div className="report-export-dates">
+                  <label>
+                    <span>From</span>
+                    <input
+                      onChange={(event) => setDateFrom(event.target.value)}
+                      type="date"
+                      value={dateFrom}
+                    />
+                  </label>
+                  <label>
+                    <span>To</span>
+                    <input
+                      onChange={(event) => setDateTo(event.target.value)}
+                      type="date"
+                      value={dateTo}
+                    />
+                  </label>
+                </div>
+              ) : (
+                <p className="report-export-as-of">
+                  <Icon name="check" size={15} /> Uses today’s open balances
+                </p>
+              )}
+            </section>
+          ) : null}
+
+          <section className="report-export-history" aria-label="Recent exports">
+            <header>
+              <div>
+                <h3>Recent exports</h3>
+                <p>Only reports requested from your account are shown.</p>
+              </div>
+              <button disabled={loading} onClick={() => void load()} type="button">
+                Refresh
+              </button>
+            </header>
+            {!loading && !exports.length ? (
+              <div className="report-export-empty">
+                <Icon name="chart" size={20} />
+                <strong>No exports yet</strong>
+                <span>Your completed reports will stay available here.</span>
+              </div>
+            ) : null}
+            <div className="report-export-list">
+              {exports.map((report) => (
+                <article key={report.id}>
+                  <div className={`report-export-file-mark is-${report.format}`}>
+                    {report.format.toUpperCase()}
+                  </div>
+                  <div>
+                    <strong>{report.name}</strong>
+                    <span>
+                      {formatExportDate(report.createdAt)}
+                      {report.rowCount === undefined ? '' : ` · ${report.rowCount} records`}
+                      {report.sizeBytes === undefined
+                        ? ''
+                        : ` · ${formatFileSize(report.sizeBytes)}`}
+                    </span>
+                  </div>
+                  <ExportStatus status={report.status} />
+                  {report.status === 'completed' ? (
+                    <Button
+                      busy={downloadingId === report.id}
+                      onClick={() => void download(report)}
+                      variant="secondary"
+                    >
+                      Download
+                    </Button>
+                  ) : report.status === 'failed' ? (
+                    <Button disabled={busy} onClick={() => void retry(report)} variant="secondary">
+                      Try again
+                    </Button>
+                  ) : null}
+                </article>
+              ))}
+            </div>
+          </section>
+
+          <div className="security-drawer-actions report-export-actions">
+            <Button
+              busy={busy}
+              disabled={loading || !definition || !validDates}
+              onClick={() => void createExport()}
+            >
+              Prepare export
+            </Button>
+            <Button disabled={busy} onClick={onBack} variant="secondary">
+              Close
+            </Button>
+          </div>
+        </div>
+      </aside>
+    </div>
+  );
+}
+
+function ExportStatus({ status }: { status: FinanceReportExport['status'] }) {
+  const labels: Record<FinanceReportExport['status'], string> = {
+    completed: 'Ready',
+    failed: 'Needs attention',
+    processing: 'Preparing',
+    queued: 'Preparing',
+  };
+  return <span className={`report-export-status is-${status}`}>{labels[status]}</span>;
+}
+
+function formatLabel(format: ReportExportFormat): string {
+  return { csv: 'CSV', pdf: 'PDF', xlsx: 'Excel' }[format];
+}
+
+function formatDescription(format: ReportExportFormat): string {
+  return {
+    csv: 'For data exchange',
+    pdf: 'For sharing or printing',
+    xlsx: 'For working in a spreadsheet',
+  }[format];
+}
+
+function formatExportDate(value: string): string {
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  }).format(new Date(value));
+}
+
+function formatFileSize(value: number): string {
+  if (value < 1024) return `${value} B`;
+  if (value < 1024 * 1024) return `${Math.round(value / 1024)} KB`;
+  return `${(value / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 function AgingView({

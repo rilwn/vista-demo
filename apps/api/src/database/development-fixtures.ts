@@ -128,6 +128,8 @@ const allOperationalPermissions: readonly PermissionGrant[] = [
   grant('erp.service', 'edit'),
   grant('erp.service', 'approve'),
   grant('erp.logistics', 'view'),
+  grant('erp.logistics', 'create'),
+  grant('erp.logistics', 'edit'),
   grant('reports', 'view'),
 ];
 
@@ -1008,6 +1010,7 @@ async function ensureCatalogFixtures(
 }
 
 interface PartnerFixtureIds {
+  adapterEquipment: string;
   alfa: string;
   alfaFuelLocation: string;
   alfaStoreLocation: string;
@@ -1023,6 +1026,7 @@ async function ensurePartnerFixtures(
   catalog: CatalogFixtureIds,
 ): Promise<PartnerFixtureIds> {
   const ids: PartnerFixtureIds = {
+    adapterEquipment: fixtureId('customer-equipment:alfa-adapter'),
     alfa: fixtureId('partner:alfa'),
     alfaFuelLocation: fixtureId('customer-location:alfa-fuel'),
     alfaStoreLocation: fixtureId('customer-location:alfa-store'),
@@ -1197,6 +1201,18 @@ async function ensurePartnerFixtures(
     "CURRENT_DATE - INTERVAL '120 days'",
     "CURRENT_DATE - INTERVAL '120 days'",
     "CURRENT_DATE + INTERVAL '610 days'",
+  );
+  await ensureCustomerEquipment(
+    client,
+    managerId,
+    ids.adapterEquipment,
+    ids.alfaStoreLocation,
+    catalog.adapter,
+    'Demo 12 V Power Adapter',
+    'DEMO-ADAPTER-ALFA-01',
+    "CURRENT_DATE - INTERVAL '40 days'",
+    "CURRENT_DATE - INTERVAL '40 days'",
+    "CURRENT_DATE + INTERVAL '325 days'",
   );
   await ensureCustomerEquipment(
     client,

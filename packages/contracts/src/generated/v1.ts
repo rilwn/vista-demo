@@ -596,6 +596,70 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/finance/report-exports': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['FinanceReportExportsController_list'];
+    put?: never;
+    post: operations['FinanceReportExportsController_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/finance/report-exports/{id}/content': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['FinanceReportExportsController_content'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/finance/report-exports/{id}/retry': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['FinanceReportExportsController_retry'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/finance/report-exports/definitions': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['FinanceReportExportsController_definitions'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/finance/reports/aging': {
     parameters: {
       query?: never;
@@ -780,6 +844,198 @@ export interface paths {
       cookie?: never;
     };
     get: operations['HealthController_readiness'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/logistics/deliveries': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['LogisticsController_deliveries'];
+    put?: never;
+    post: operations['LogisticsController_createDelivery'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/logistics/deliveries/{id}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['LogisticsController_delivery'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/logistics/deliveries/{id}/cancel': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['LogisticsController_cancelDelivery'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/logistics/deliveries/{id}/complete': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['LogisticsController_completeDelivery'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/logistics/deliveries/{id}/dispatch': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['LogisticsController_dispatchDelivery'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/logistics/deliveries/{id}/exception': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['LogisticsController_reportDeliveryException'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/logistics/reference-data': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['LogisticsController_referenceData'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/logistics/returns': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['LogisticsController_returns'];
+    put?: never;
+    post: operations['LogisticsController_createReturn'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/logistics/returns/{id}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['LogisticsController_returnRecord'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/logistics/returns/{id}/receive': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['LogisticsController_receiveReturn'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/logistics/routes': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['LogisticsController_routes'];
+    put?: never;
+    post: operations['LogisticsController_createRoute'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/logistics/routes/{id}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['LogisticsController_route'];
     put?: never;
     post?: never;
     delete?: never;
@@ -2675,6 +2931,13 @@ export interface components {
       expiresAt?: string;
       requiresTotpEnrollment: boolean;
     };
+    CompleteLogisticsDeliveryDto: {
+      /** Format: date-time */
+      deliveredAt: string;
+      expectedVersion: number;
+      proofNotes?: string;
+      recipientName: string;
+    };
     CompleteServiceWorkOrderDto: {
       completionNotes: string;
       expectedVersion: number;
@@ -2831,6 +3094,20 @@ export interface components {
       paymentMethod: 'cash' | 'bank_transfer' | 'pos_terminal' | 'card' | 'offset';
       paymentReference?: string;
     };
+    CreateFinanceReportExportDto: {
+      /** Format: date */
+      dateFrom?: string;
+      /** Format: date */
+      dateTo?: string;
+      /** @enum {string} */
+      definitionKey:
+        | 'finance.receivables-aging'
+        | 'finance.supplier-payables-aging'
+        | 'finance.customer-turnover'
+        | 'finance.supplier-turnover';
+      /** @enum {string} */
+      format: 'csv' | 'xlsx' | 'pdf';
+    };
     CreateFinanceSupplierAdvanceDto: {
       /** @example 125.0000 */
       amount: string;
@@ -2928,6 +3205,66 @@ export interface components {
       name: string;
       uic?: string;
       vatNumber?: string;
+    };
+    CreateLogisticsDeliveryDto: {
+      /** Format: uuid */
+      customerLocationId: string;
+      /** @enum {string} */
+      deliveryMethod: 'company_transport' | 'econt' | 'speedy';
+      instructions?: string;
+      /** Format: date-time */
+      scheduledEnd: string;
+      /** Format: date-time */
+      scheduledStart: string;
+      /** Format: uuid */
+      shipmentId: string;
+    };
+    CreateLogisticsReturnDto: {
+      /** Format: uuid */
+      customerLocationId: string;
+      lines: components['schemas']['CreateLogisticsReturnLineDto'][];
+      /** Format: uuid */
+      originalShipmentId: string;
+      reason: string;
+      /** Format: date-time */
+      scheduledPickupAt?: string;
+      /** @enum {string} */
+      transportMethod: 'company_transport' | 'customer_dropoff' | 'econt' | 'speedy';
+    };
+    CreateLogisticsReturnLineDto: {
+      /** Format: uuid */
+      customerEquipmentId?: string;
+      /** Format: uuid */
+      destinationWarehouseId: string;
+      /** @enum {string} */
+      disposition: 'restock' | 'service';
+      /** @example 1.0000 */
+      quantity: string;
+      serialNumbers?: string[];
+      /** @enum {string} */
+      serviceType?: 'warranty' | 'out_of_warranty';
+      /** Format: uuid */
+      shipmentLineId: string;
+    };
+    CreateLogisticsRouteDto: {
+      /** Format: uuid */
+      assignedAccountId: string;
+      notes?: string;
+      /** Format: date */
+      routeDate: string;
+      stops: components['schemas']['CreateLogisticsRouteStopDto'][];
+      title: string;
+    };
+    CreateLogisticsRouteStopDto: {
+      /** Format: uuid */
+      deliveryId?: string;
+      /** Format: date-time */
+      plannedArrival: string;
+      plannedDurationMinutes: number;
+      /** Format: uuid */
+      serviceWorkOrderId?: string;
+      /** @enum {string} */
+      stopType: 'delivery' | 'service';
     };
     CreatePartnerAddressDto: {
       addressLine1: string;
@@ -3581,6 +3918,49 @@ export interface components {
     FinanceReferenceDataDto: {
       invoiceDrafts: components['schemas']['FinanceInvoiceDraftReferenceDto'][];
     };
+    FinanceReportDefinitionDto: {
+      description: string;
+      formats: ('csv' | 'xlsx' | 'pdf')[];
+      /** @enum {string} */
+      key:
+        | 'finance.receivables-aging'
+        | 'finance.supplier-payables-aging'
+        | 'finance.customer-turnover'
+        | 'finance.supplier-turnover';
+      name: string;
+      requiresDateRange: boolean;
+    };
+    FinanceReportExportDto: {
+      attemptCount: number;
+      /** Format: date-time */
+      completedAt?: string;
+      /** Format: date-time */
+      createdAt: string;
+      /** @enum {string} */
+      definitionKey:
+        | 'finance.receivables-aging'
+        | 'finance.supplier-payables-aging'
+        | 'finance.customer-turnover'
+        | 'finance.supplier-turnover';
+      errorCode?: string;
+      fileName?: string;
+      /** @enum {string} */
+      format: 'csv' | 'xlsx' | 'pdf';
+      /** Format: uuid */
+      id: string;
+      name: string;
+      rowCount?: number;
+      sizeBytes?: number;
+      /** @enum {string} */
+      status: 'queued' | 'processing' | 'completed' | 'failed';
+    };
+    FinanceReportExportPageDto: {
+      items: components['schemas']['FinanceReportExportDto'][];
+      page: number;
+      pageSize: number;
+      total: number;
+      totalPages: number;
+    };
     FinanceSummaryDto: {
       activeDocuments: number;
       overdueOutstanding: string;
@@ -4129,6 +4509,255 @@ export interface components {
       /** @description Opaque bearer token. It is returned only once. */
       sessionToken: string;
     };
+    LogisticsAssigneeReferenceDto: {
+      /** Format: uuid */
+      accountId: string;
+      displayName: string;
+      email: string;
+    };
+    LogisticsCourierConnectionDto: {
+      connected: boolean;
+      /** @enum {string} */
+      provider: 'econt' | 'speedy';
+    };
+    LogisticsDeliveryDto: {
+      addressLine1: string;
+      addressLine2?: string;
+      city: string;
+      countryCode: string;
+      /** Format: date-time */
+      createdAt: string;
+      /** Format: uuid */
+      customerId: string;
+      /** Format: uuid */
+      customerLocationId: string;
+      customerLocationName: string;
+      customerName: string;
+      /** Format: date-time */
+      deliveredAt?: string;
+      /** @enum {string} */
+      deliveryMethod: 'company_transport' | 'econt' | 'speedy';
+      exceptionReason?: string;
+      /** Format: uuid */
+      handoverCertificateId: string;
+      /** @enum {string} */
+      handoverStatus: 'prepared' | 'accepted';
+      history: components['schemas']['LogisticsDeliveryHistoryEntryDto'][];
+      /** Format: uuid */
+      id: string;
+      instructions?: string;
+      number: string;
+      postalCode?: string;
+      proofNotes?: string;
+      recipientName?: string;
+      /** Format: date-time */
+      scheduledEnd: string;
+      /** Format: date-time */
+      scheduledStart: string;
+      /** Format: uuid */
+      shipmentId: string;
+      shipmentNumber: string;
+      /** @enum {string} */
+      status: 'planned' | 'in_transit' | 'delivered' | 'exception' | 'cancelled';
+      version: number;
+    };
+    LogisticsDeliveryHistoryEntryDto: {
+      /** Format: date-time */
+      changedAt: string;
+      changedBy: string;
+      /** @enum {string} */
+      nextStatus: 'planned' | 'in_transit' | 'delivered' | 'exception' | 'cancelled';
+      note?: string;
+      /** @enum {string} */
+      previousStatus?: 'planned' | 'in_transit' | 'delivered' | 'exception' | 'cancelled';
+    };
+    LogisticsDeliveryPageDto: {
+      items: components['schemas']['LogisticsDeliveryDto'][];
+      page: number;
+      pageSize: number;
+      total: number;
+      totalPages: number;
+    };
+    LogisticsEquipmentReferenceDto: {
+      /** Format: uuid */
+      customerId: string;
+      /** Format: uuid */
+      customerLocationId: string;
+      deviceName: string;
+      /** Format: uuid */
+      id: string;
+      serialNumber: string;
+      /** Format: date */
+      warrantyEndsOn?: string;
+    };
+    LogisticsLocationReferenceDto: {
+      addressLine1: string;
+      addressLine2?: string;
+      city: string;
+      countryCode: string;
+      /** Format: uuid */
+      customerId: string;
+      /** Format: uuid */
+      id: string;
+      name: string;
+      postalCode?: string;
+    };
+    LogisticsReferenceDataDto: {
+      assignees: components['schemas']['LogisticsAssigneeReferenceDto'][];
+      courierConnections: components['schemas']['LogisticsCourierConnectionDto'][];
+      equipment: components['schemas']['LogisticsEquipmentReferenceDto'][];
+      locations: components['schemas']['LogisticsLocationReferenceDto'][];
+      serviceStops: components['schemas']['LogisticsServiceStopReferenceDto'][];
+      shipments: components['schemas']['LogisticsShipmentReferenceDto'][];
+      warehouses: components['schemas']['LogisticsWarehouseReferenceDto'][];
+    };
+    LogisticsReturnDto: {
+      /** Format: date-time */
+      createdAt: string;
+      /** Format: uuid */
+      customerId: string;
+      /** Format: uuid */
+      customerLocationId: string;
+      customerLocationName: string;
+      customerName: string;
+      /** Format: uuid */
+      id: string;
+      lines: components['schemas']['LogisticsReturnLineDto'][];
+      number: string;
+      /** Format: uuid */
+      originalShipmentId: string;
+      originalShipmentNumber: string;
+      reason: string;
+      /** Format: date-time */
+      receivedAt?: string;
+      /** Format: date-time */
+      scheduledPickupAt?: string;
+      /** @enum {string} */
+      status: 'registered' | 'received' | 'cancelled';
+      /** @enum {string} */
+      transportMethod: 'company_transport' | 'customer_dropoff' | 'econt' | 'speedy';
+      version: number;
+    };
+    LogisticsReturnLineDto: {
+      /** Format: uuid */
+      customerEquipmentId?: string;
+      customerEquipmentName?: string;
+      /** Format: uuid */
+      destinationWarehouseId: string;
+      destinationWarehouseName: string;
+      /** @enum {string} */
+      disposition: 'restock' | 'service';
+      /** Format: uuid */
+      id: string;
+      /** Format: uuid */
+      inventoryReturnMovementId?: string;
+      /** Format: uuid */
+      productId: string;
+      productName: string;
+      quantity: string;
+      serialNumbers: string[];
+      /** Format: uuid */
+      serviceRequestId?: string;
+      serviceRequestNumber?: string;
+      /** @enum {string} */
+      serviceType?: 'warranty' | 'out_of_warranty';
+      /** Format: uuid */
+      shipmentLineId: string;
+    };
+    LogisticsReturnPageDto: {
+      items: components['schemas']['LogisticsReturnDto'][];
+      page: number;
+      pageSize: number;
+      total: number;
+      totalPages: number;
+    };
+    LogisticsRoutePlanDto: {
+      /** Format: uuid */
+      assignedAccountId: string;
+      assignedTo: string;
+      /** Format: date-time */
+      createdAt: string;
+      /** Format: uuid */
+      id: string;
+      notes?: string;
+      number: string;
+      /** Format: date */
+      routeDate: string;
+      /** @enum {string} */
+      status: 'planned' | 'in_progress' | 'completed' | 'cancelled';
+      stops: components['schemas']['LogisticsRouteStopDto'][];
+      title: string;
+      version: number;
+    };
+    LogisticsRoutePlanPageDto: {
+      items: components['schemas']['LogisticsRoutePlanDto'][];
+      page: number;
+      pageSize: number;
+      total: number;
+      totalPages: number;
+    };
+    LogisticsRouteStopDto: {
+      addressLine: string;
+      city: string;
+      /** Format: uuid */
+      deliveryId?: string;
+      /** Format: uuid */
+      id: string;
+      label: string;
+      /** Format: date-time */
+      plannedArrival: string;
+      plannedDurationMinutes: number;
+      position: number;
+      /** Format: uuid */
+      serviceWorkOrderId?: string;
+      /** @enum {string} */
+      stopType: 'delivery' | 'service';
+    };
+    LogisticsServiceStopReferenceDto: {
+      addressLine: string;
+      city: string;
+      customerName: string;
+      /** Format: uuid */
+      id: string;
+      label: string;
+      /** Format: date-time */
+      scheduledStart: string;
+    };
+    LogisticsShipmentLineReferenceDto: {
+      /** Format: uuid */
+      id: string;
+      /** Format: uuid */
+      originalIssueMovementId: string;
+      /** Format: uuid */
+      productId: string;
+      productName: string;
+      quantity: string;
+      serialNumbers: string[];
+      /** @enum {string} */
+      trackingMode: 'none' | 'serial' | 'batch';
+    };
+    LogisticsShipmentReferenceDto: {
+      /** Format: uuid */
+      customerId: string;
+      customerName: string;
+      /** Format: uuid */
+      handoverCertificateId: string;
+      /** @enum {string} */
+      handoverStatus: 'prepared' | 'accepted';
+      handoverVersion: number;
+      /** Format: uuid */
+      id: string;
+      lines: components['schemas']['LogisticsShipmentLineReferenceDto'][];
+      number: string;
+      /** Format: date-time */
+      shippedAt: string;
+    };
+    LogisticsWarehouseReferenceDto: {
+      /** Format: uuid */
+      id: string;
+      name: string;
+      type: string;
+    };
     ManagedFileDto: {
       byteSize: number;
       checksumSha256: string;
@@ -4478,6 +5107,9 @@ export interface components {
       total: number;
       totalPages: number;
     };
+    ReceiveLogisticsReturnDto: {
+      expectedVersion: number;
+    };
     ReceivePurchaseOrderDto: {
       lines: components['schemas']['ReceivePurchaseOrderLineDto'][];
       supplierDeliveryReference?: string;
@@ -4541,6 +5173,10 @@ export interface components {
       targetQuantity: string;
       /** Format: uuid */
       warehouseId: string;
+    };
+    ReportLogisticsDeliveryExceptionDto: {
+      expectedVersion: number;
+      reason: string;
     };
     ReturnStockDto: {
       /** Format: uuid */
@@ -5534,6 +6170,10 @@ export interface components {
       customerPartnerIds: string[];
       name: string;
       version: number;
+    };
+    UpdateLogisticsDeliveryStatusDto: {
+      expectedVersion: number;
+      note?: string;
     };
     UpdatePartnerDto: {
       companyRepresentative?: string;
@@ -7340,6 +7980,187 @@ export interface operations {
       };
     };
   };
+  FinanceReportExportsController_list: {
+    parameters: {
+      query?: {
+        page?: number;
+        pageSize?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['FinanceReportExportPageDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  FinanceReportExportsController_create: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['CreateFinanceReportExportDto'];
+      };
+    };
+    responses: {
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['FinanceReportExportDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  FinanceReportExportsController_content: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: unknown;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description The completed report export. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/pdf': string;
+          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': string;
+          'text/csv': string;
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  FinanceReportExportsController_retry: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: unknown;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['FinanceReportExportDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  FinanceReportExportsController_definitions: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['FinanceReportDefinitionDto'][];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
   FinanceReportsController_aging: {
     parameters: {
       query: {
@@ -7861,6 +8682,578 @@ export interface operations {
         content: {
           'application/json': components['schemas']['HealthResponseDto'];
         };
+      };
+    };
+  };
+  LogisticsController_deliveries: {
+    parameters: {
+      query?: {
+        page?: number;
+        pageSize?: number;
+        status?: 'planned' | 'in_transit' | 'delivered' | 'exception' | 'cancelled';
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['LogisticsDeliveryPageDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  LogisticsController_createDelivery: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['CreateLogisticsDeliveryDto'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['LogisticsDeliveryDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  LogisticsController_delivery: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: unknown;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['LogisticsDeliveryDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  LogisticsController_cancelDelivery: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path: {
+        id: unknown;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['UpdateLogisticsDeliveryStatusDto'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['LogisticsDeliveryDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  LogisticsController_completeDelivery: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path: {
+        id: unknown;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['CompleteLogisticsDeliveryDto'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['LogisticsDeliveryDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  LogisticsController_dispatchDelivery: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path: {
+        id: unknown;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['UpdateLogisticsDeliveryStatusDto'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['LogisticsDeliveryDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  LogisticsController_reportDeliveryException: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path: {
+        id: unknown;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ReportLogisticsDeliveryExceptionDto'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['LogisticsDeliveryDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  LogisticsController_referenceData: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['LogisticsReferenceDataDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  LogisticsController_returns: {
+    parameters: {
+      query?: {
+        page?: number;
+        pageSize?: number;
+        status?: 'registered' | 'received' | 'cancelled';
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['LogisticsReturnPageDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  LogisticsController_createReturn: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['CreateLogisticsReturnDto'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['LogisticsReturnDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  LogisticsController_returnRecord: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: unknown;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['LogisticsReturnDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  LogisticsController_receiveReturn: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path: {
+        id: unknown;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ReceiveLogisticsReturnDto'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['LogisticsReturnDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  LogisticsController_routes: {
+    parameters: {
+      query: {
+        dateFrom: string;
+        dateTo: string;
+        page?: number;
+        pageSize?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['LogisticsRoutePlanPageDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  LogisticsController_createRoute: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['CreateLogisticsRouteDto'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['LogisticsRoutePlanDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  LogisticsController_route: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: unknown;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['LogisticsRoutePlanDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
       };
     };
   };

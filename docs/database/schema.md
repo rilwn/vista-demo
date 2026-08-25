@@ -329,6 +329,36 @@ optimistic versions, transaction locks, and concurrency-safe `SP`, `SPAY`,
 These records are an operational supplier subledger, not deductible-VAT or
 general-ledger posting.
 
+Migration `0038_reporting_export_foundation` adds a controlled reporting
+catalogue and persistent asynchronous export jobs. The initial catalogue contains
+the four operational Finance aging and turnover reports. A definition points to
+reviewed application code and permitted formats; it never stores or accepts user
+SQL. Each export retains its owner, filters, request hash, queue identifier,
+attempt state, file metadata, checksum, size, row count, and timestamps.
+Requester-scoped idempotency prevents one command from creating duplicate jobs.
+Generated files live in private S3-compatible storage and are verified against
+their saved length and SHA-256 before download. This foundation does not add the
+still-pending statutory journals, VAT reports, accounting formats, or no-code
+report-definition editor.
+
+Migration `0039_logistics_operations_core` adds transaction-backed company
+deliveries, reverse returns, and route plans. A delivery snapshots the active
+customer location and stays linked to one completed Sales shipment and its
+handover certificate. Optimistic versions and append-only status history protect
+dispatch, exception, customer receipt, and cancellation changes. Completing a
+delivery records the recipient and accepts a still-prepared Sales handover through
+the existing retry-safe command.
+
+Reverse-return lines retain the original shipment line, quantity, shipped serials,
+destination warehouse, inventory return movement, and optional Service request.
+Receiving posts each item through the inventory return command and opens one
+linked Service request for repair dispositions; stable sub-command keys make an
+interrupted retry continue without duplicating stock or Service work. Route plans
+snapshot ordered delivery and scheduled-Service stops for one active employee and
+prevent the same source from appearing on two open routes. `DLV`, `RTN`, and `RTE`
+are internal operational references. Econt and Speedy remain disconnected until
+INT-002 is approved; no provider booking or tracking is claimed.
+
 Migration `0030_service_work_orders_core` adds the `service` schema and its
 operational request-to-completion record chain. `requests` retain the immutable
 canonical customer, location, equipment, optional subscription reference, intake

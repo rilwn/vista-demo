@@ -2,6 +2,7 @@ import { HttpStatus, Inject, Injectable } from '@nestjs/common';
 import type {
   FinanceAgingBucket,
   FinanceAgingReport,
+  FinanceReportDefinitionKey,
   FinanceTurnoverReport,
 } from '@vista/contracts';
 
@@ -50,6 +51,20 @@ interface TurnoverTotalsRow {
   document_count: string;
   gross_bgn_total: string;
   outstanding_bgn_total: string;
+}
+
+export interface FinanceReportExportColumn {
+  key: string;
+  label: string;
+  type: 'date' | 'money' | 'number' | 'text';
+}
+
+export interface FinanceReportExportData {
+  columns: FinanceReportExportColumn[];
+  criteria: string[];
+  generatedAt: string;
+  rows: Record<string, number | string>[];
+  title: string;
 }
 
 @Injectable()
@@ -181,6 +196,81 @@ export class FinanceReportsService {
     };
   }
 
+  async exportData(
+    definitionKey: FinanceReportDefinitionKey,
+    filters: { dateFrom?: string; dateTo?: string },
+  ): Promise<FinanceReportExportData> {
+    const businessDate = await this.businessDate();
+    const generatedAt = new Date().toISOString();
+    if (
+      definitionKey === 'finance.receivables-aging' ||
+      definitionKey === 'finance.supplier-payables-aging'
+    ) {
+      const kind = definitionKey === 'finance.receivables-aging' ? 'receivable' : 'payable';
+      const result = await this.database.getPool().query<AgingRow>(
+        `SELECT source.*, '0'::text AS total_count
+         FROM (${agingSource(kind)}) source
+         ORDER BY source.due_date, source.partner_name, source.id`,
+        [businessDate],
+      );
+      return {
+        columns: agingExportColumns,
+        criteria: [`As of ${businessDate}`, 'Currency: BGN'],
+        generatedAt,
+        rows: result.rows.map((row) => ({
+          aging: agingBucketLabel(agingBucket(row.days_overdue)),
+          daysOverdue: row.days_overdue,
+          documentDate: row.document_date,
+          dueDate: row.due_date,
+          number: row.number,
+          originalBgnTotal: row.original_bgn_total,
+          outstandingBgnTotal: row.outstanding_bgn_total,
+          partnerName: row.partner_name,
+          paymentStatus: paymentStatusLabel(row.payment_status),
+          sourceNumber: row.source_number,
+        })),
+        title: kind === 'receivable' ? 'Customer receivables' : 'Supplier payables',
+      };
+    }
+
+    const dateFrom = filters.dateFrom;
+    const dateTo = filters.dateTo;
+    if (!dateFrom || !dateTo || !isCalendarDate(dateFrom) || !isCalendarDate(dateTo)) {
+      throw new ApiErrorException(
+        'FINANCE_REPORT_DATE_RANGE_REQUIRED',
+        'Choose a valid start and end date for this report.',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    if (dateFrom > dateTo) {
+      throw new ApiErrorException(
+        'FINANCE_REPORT_DATE_RANGE_INVALID',
+        'The start date cannot be after the end date.',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    const kind = definitionKey === 'finance.customer-turnover' ? 'customer' : 'supplier';
+    const result = await this.database.getPool().query<TurnoverRow>(
+      `SELECT source.*, '0'::text AS total_count
+       FROM (${turnoverSource(kind)}) source
+       ORDER BY source.gross_bgn_total DESC, source.partner_name, source.partner_id`,
+      [dateFrom, dateTo],
+    );
+    return {
+      columns: turnoverExportColumns,
+      criteria: [`Period: ${dateFrom} to ${dateTo}`, 'Currency: BGN'],
+      generatedAt,
+      rows: result.rows.map((row) => ({
+        allocatedBgnTotal: row.allocated_bgn_total,
+        documentCount: Number(row.document_count),
+        grossBgnTotal: row.gross_bgn_total,
+        outstandingBgnTotal: row.outstanding_bgn_total,
+        partnerName: row.partner_name,
+      })),
+      title: kind === 'customer' ? 'Customer turnover' : 'Supplier turnover',
+    };
+  }
+
   private async businessDate(): Promise<string> {
     const result = await this.database
       .getPool()
@@ -190,6 +280,27 @@ export class FinanceReportsService {
     return required(result.rows[0], 'Business date calculation failed').date;
   }
 }
+
+const agingExportColumns: FinanceReportExportColumn[] = [
+  { key: 'number', label: 'Document', type: 'text' },
+  { key: 'sourceNumber', label: 'Source document', type: 'text' },
+  { key: 'partnerName', label: 'Partner', type: 'text' },
+  { key: 'documentDate', label: 'Document date', type: 'date' },
+  { key: 'dueDate', label: 'Due date', type: 'date' },
+  { key: 'daysOverdue', label: 'Days overdue', type: 'number' },
+  { key: 'aging', label: 'Aging', type: 'text' },
+  { key: 'paymentStatus', label: 'Payment status', type: 'text' },
+  { key: 'originalBgnTotal', label: 'Original BGN', type: 'money' },
+  { key: 'outstandingBgnTotal', label: 'Outstanding BGN', type: 'money' },
+];
+
+const turnoverExportColumns: FinanceReportExportColumn[] = [
+  { key: 'partnerName', label: 'Partner', type: 'text' },
+  { key: 'documentCount', label: 'Documents', type: 'number' },
+  { key: 'grossBgnTotal', label: 'Gross BGN', type: 'money' },
+  { key: 'allocatedBgnTotal', label: 'Allocated BGN', type: 'money' },
+  { key: 'outstandingBgnTotal', label: 'Outstanding BGN', type: 'money' },
+];
 
 function agingSource(kind: FinanceAgingReport['kind']): string {
   if (kind === 'receivable') {
@@ -255,6 +366,31 @@ export function agingBucket(daysOverdue: number): FinanceAgingBucket {
   if (daysOverdue <= 60) return 'days_31_60';
   if (daysOverdue <= 90) return 'days_61_90';
   return 'over_90';
+}
+
+function agingBucketLabel(bucket: FinanceAgingBucket): string {
+  return {
+    current: 'Not due',
+    days_0_30: '0–30 days',
+    days_31_60: '31–60 days',
+    days_61_90: '61–90 days',
+    over_90: 'Over 90 days',
+  }[bucket];
+}
+
+function paymentStatusLabel(status: AgingRow['payment_status']): string {
+  return {
+    overdue: 'Overdue',
+    paid: 'Paid',
+    partially_paid: 'Partially paid',
+    unpaid: 'Unpaid',
+  }[status];
+}
+
+function isCalendarDate(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const parsed = new Date(`${value}T00:00:00Z`);
+  return !Number.isNaN(parsed.valueOf()) && parsed.toISOString().slice(0, 10) === value;
 }
 
 function required<T>(value: T | undefined, message: string): T {

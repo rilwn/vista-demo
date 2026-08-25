@@ -5,6 +5,7 @@ import type { FinanceService } from '../finance/finance.service.js';
 import type { StructuredLogger } from '../logging/structured-logger.service.js';
 import type { SalesSubscriptionsService } from '../sales/sales-subscriptions.service.js';
 import { JobHandlerRegistry } from './job-handler-registry.service.js';
+import type { FinanceReportExportsService } from './finance-report-exports.service.js';
 import { namedBackgroundJobs } from './named-background-jobs.js';
 import { NamedJobTriggerHandlersService } from './named-job-trigger-handlers.service.js';
 
@@ -79,6 +80,31 @@ describe('NamedJobTriggerHandlersService', () => {
     expect(detectPaymentStatuses).toHaveBeenCalledWith(context);
     expect(query).toHaveBeenCalledTimes(1);
   });
+
+  it('completes a requested report before recording the durable handoff', async () => {
+    const query = vi.fn().mockResolvedValue({ rowCount: 1 });
+    const generateReport = vi.fn().mockResolvedValue({
+      exportId: 'c25ae021-f68a-4b8a-83db-ecf9a5ca9196',
+      rowCount: 4,
+    });
+    const { registry, service } = createSubject(query, undefined, generateReport);
+    service.onModuleInit();
+    const context = {
+      attemptNumber: 1,
+      correlationId: 'report-correlation-1',
+      enqueuedAt: '2026-08-25T10:00:00.000Z',
+      idempotencyKey: 'finance-report-export:c25ae021-f68a-4b8a-83db-ecf9a5ca9196',
+      jobId: 'report-job-1',
+      maxAttempts: 5,
+      name: 'report.generate',
+      payload: { exportId: 'c25ae021-f68a-4b8a-83db-ecf9a5ca9196' },
+      retryAllowed: true,
+    } as const;
+
+    await expect(registry.execute(context)).resolves.toMatchObject({ rowCount: 4 });
+    expect(generateReport).toHaveBeenCalledWith(context);
+    expect(query).toHaveBeenCalledTimes(1);
+  });
 });
 
 function createSubject(
@@ -88,6 +114,7 @@ function createSubject(
     documentIds: [],
     updatedCount: 0,
   }),
+  generateReport = vi.fn(),
 ) {
   const registry = new JobHandlerRegistry();
   const database = { getPool: () => ({ query }) } as unknown as DatabaseService;
@@ -100,8 +127,16 @@ function createSubject(
     }),
   } as unknown as SalesSubscriptionsService;
   const finance = { detectPaymentStatuses } as unknown as FinanceService;
+  const reportExports = { generate: generateReport } as unknown as FinanceReportExportsService;
   return {
     registry,
-    service: new NamedJobTriggerHandlersService(database, registry, logger, subscriptions, finance),
+    service: new NamedJobTriggerHandlersService(
+      database,
+      registry,
+      logger,
+      subscriptions,
+      finance,
+      reportExports,
+    ),
   };
 }

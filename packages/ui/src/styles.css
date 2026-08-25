@@ -53,6 +53,27 @@
   --text-strong: var(--vista-ink);
   --warning: var(--vista-warning);
   --warning-strong: var(--vista-warning);
+  --color-accent: var(--vista-accent-strong);
+  --color-border: var(--vista-line-strong);
+  --color-border-subtle: var(--vista-line);
+  --color-danger: var(--vista-danger);
+  --color-info: var(--vista-info);
+  --color-info-soft: var(--vista-info-soft);
+  --color-info-strong: var(--vista-info);
+  --color-primary-500: var(--vista-accent);
+  --color-primary-700: var(--vista-forest-dark);
+  --color-primary-soft: var(--vista-accent-soft);
+  --color-success: var(--vista-success);
+  --color-success-soft: var(--vista-success-soft);
+  --color-success-strong: var(--vista-success);
+  --color-surface: var(--vista-surface);
+  --color-surface-subtle: var(--vista-surface-muted);
+  --color-text: var(--vista-ink);
+  --color-text-muted: var(--vista-muted);
+  --color-text-subtle: var(--vista-muted);
+  --color-warning: var(--vista-warning);
+  --color-warning-soft: var(--vista-warning-soft);
+  --color-warning-strong: var(--vista-warning);
   font-family:
     Inter,
     ui-sans-serif,

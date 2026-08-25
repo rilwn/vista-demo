@@ -6,6 +6,7 @@ import { DatabaseService } from '../database/database.service.js';
 import { FinanceService } from '../finance/finance.service.js';
 import { StructuredLogger } from '../logging/structured-logger.service.js';
 import { SalesSubscriptionsService } from '../sales/sales-subscriptions.service.js';
+import { FinanceReportExportsService } from './finance-report-exports.service.js';
 import { type BackgroundJobContext, JobHandlerRegistry } from './job-handler-registry.service.js';
 import { namedBackgroundJobs } from './named-background-jobs.js';
 
@@ -28,6 +29,8 @@ export class NamedJobTriggerHandlersService implements OnModuleInit {
     @Inject(StructuredLogger) private readonly logger: StructuredLogger,
     @Inject(SalesSubscriptionsService) private readonly subscriptions: SalesSubscriptionsService,
     @Inject(FinanceService) private readonly finance: FinanceService,
+    @Inject(FinanceReportExportsService)
+    private readonly reportExports: FinanceReportExportsService,
   ) {}
 
   onModuleInit(): void {
@@ -42,7 +45,9 @@ export class NamedJobTriggerHandlersService implements OnModuleInit {
         ? await this.subscriptions.generateDueInvoiceDrafts(context)
         : context.name === 'finance.payment-status.detect'
           ? await this.finance.detectPaymentStatuses(context)
-          : undefined;
+          : context.name === 'report.generate' && typeof context.payload['exportId'] === 'string'
+            ? await this.reportExports.generate(context)
+            : undefined;
     const eventId = deterministicUuid(`${context.name}\u0000${context.idempotencyKey}`);
     const outboxIdempotencyKey = `scheduled:${createHash('sha256')
       .update(`${context.name}\u0000${context.idempotencyKey}`)

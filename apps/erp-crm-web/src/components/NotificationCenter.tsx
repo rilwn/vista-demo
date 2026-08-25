@@ -16,26 +16,38 @@ export function NotificationCenter() {
 
   useEffect(() => {
     if (!open || !token) return;
+    const activeToken = token;
     let active = true;
-    setLoading(true);
-    setError(null);
-    void listNotifications(token)
-      .then((page) => {
-        if (active) setData(page);
-      })
-      .catch((caught) => {
+    let refreshing = false;
+
+    async function refresh(initial: boolean) {
+      if (refreshing) return;
+      refreshing = true;
+      if (initial) setLoading(true);
+      try {
+        const page = await listNotifications(activeToken);
+        if (active) {
+          setData(page);
+          setError(null);
+        }
+      } catch (caught) {
         if (active)
           setError(
             caught instanceof ApiClientError
               ? caught.message
               : 'Notifications could not be loaded right now.',
           );
-      })
-      .finally(() => {
-        if (active) setLoading(false);
-      });
+      } finally {
+        refreshing = false;
+        if (active && initial) setLoading(false);
+      }
+    }
+
+    void refresh(true);
+    const interval = window.setInterval(() => void refresh(false), 5_000);
     return () => {
       active = false;
+      window.clearInterval(interval);
     };
   }, [open, token]);
 

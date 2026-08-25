@@ -13,6 +13,7 @@ import { CatalogModule } from './catalog/catalog.module.js';
 import { InventoryModule } from './inventory/inventory.module.js';
 import { ProcurementModule } from './procurement/procurement.module.js';
 import { IntegrationModule } from './integration/integration.module.js';
+import { LogisticsModule } from './logistics/logistics.module.js';
 import { RootController } from './root.controller.js';
 import { RateLimitModule } from './security/rate-limit.module.js';
 import { SecurityAdministrationModule } from './security-administration/security-administration.module.js';
@@ -31,6 +32,7 @@ import { FilesModule } from './files/files.module.js';
     HealthModule,
     JobsModule,
     IntegrationModule,
+    LogisticsModule,
     AuthModule,
     SecurityAdministrationModule,
     OrganizationModule,

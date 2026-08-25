@@ -10,7 +10,7 @@ import { SalesService } from './sales.service.js';
 @Module({
   controllers: [SalesController],
   imports: [AuditModule, DatabaseModule],
-  exports: [SalesSubscriptionsService],
+  exports: [SalesService, SalesSubscriptionsService],
   providers: [SalesPricingService, SalesService, SalesSubscriptionsService],
 })
 export class SalesModule {}

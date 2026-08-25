@@ -49,12 +49,20 @@ location/device subscription period and advances the next billing date in the
 same transaction. The resulting draft follows the separate Finance collection
 and legal-issuance workflows.
 
-The remaining named handlers form the durable boundary for domains delivered in later
-ordered phases. A successful handler writes one deterministic
+`report.generate` is active for the controlled Finance aging and turnover
+catalogue. The API saves an owner-scoped export before dispatch. A short database
+poll recovers requests that could not reach Redis, while the stable queue key and
+a PostgreSQL advisory lock prevent simultaneous or replayed execution from
+creating two outputs. Retried attempts update the same lifecycle record and
+deterministic private object; completed replays return the saved result. CSV,
+Excel, and PDF files retain checksum, size, row-count, and audit evidence.
+
+The other remaining named handlers form the durable boundary for domains
+delivered in later ordered phases. A successful handler writes one deterministic
 `scheduler.<job-name>.requested` event to the transactional outbox. Replaying the
 same logical run cannot create a second event. Success therefore means that the
 requested work is durably handed to its owning domain; it does not claim that an
-invoice, reminder, report, backup, or other domain result already exists. Each
+invoice, reminder, backup, or other undelivered domain result already exists. Each
 owning phase must add its consumer, business rules, schedules, audit behavior, and
 end-to-end tests before that SRS responsibility is complete.
 

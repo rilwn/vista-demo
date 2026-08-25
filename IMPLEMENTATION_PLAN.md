@@ -1,6 +1,6 @@
 # Vista Integrated Information System — Remaining Implementation Plan
 
-Status date: 2026-08-21
+Status date: 2026-08-25
 Project: `BG16RFPR001-1.012-1324-C01`
 
 [`AGENTS.md`](AGENTS.md) is authoritative. This file contains only unfinished
@@ -107,10 +107,14 @@ proven under concurrency; no production topology or tracking rule is inferred.
   period-close cash controls, accounting posting, and provider-backed email
   delivery for payment reminders.
 - Deliver sales/purchase journals, VAT reports, structured accounting exports,
-  controlled report definitions, the required revenue/service/warranty/
-  receivables dashboard KPIs, and asynchronous Excel, CSV, and PDF exports.
-- Deliver company and courier logistics, Econt/Speedy adapters, returns and
-  reverse logistics, applicable Service-request creation, and route planning.
+  user-configurable controlled report definitions, and the required revenue,
+  Service, warranty, and receivables dashboard KPIs. Extend the asynchronous
+  export service from the current Finance balance/turnover reports to every
+  required module report.
+- Connect the approved Econt and Speedy booking, label, tracking, return,
+  retry, and reconciliation adapters. Keep both providers unavailable until
+  INT-002 supplies the selected products, credentials, environments, and
+  operating rules.
 
 **Depends on:** FIN-001, FIN-002, FIN-003, DOC-001, INT-001, INT-002, BUS-002,
 and the approved business timezone.
@@ -125,8 +129,9 @@ procurement-to-accounting and quotation-to-payment scenarios pass end to end.
 
 - Link completed Service work to payment-document issuance and complete the full
   supplier, sale, service, return, and repair serial lifecycle.
-- Deliver real calendar, capacity, overlap, workload, and technician/delivery
-  route planning.
+- Deliver the full technician calendar with capacity, overlap, and workload
+  controls, and apply those constraints to the existing mixed delivery and
+  Service route planner.
 - Deliver warranty monitoring, remaining-period and claim tracking, expiry
   reminders, inspection scheduling, and subscription-generated service visits.
 - Deliver CRM ticket correlation and SLA notifications, reverse-logistics

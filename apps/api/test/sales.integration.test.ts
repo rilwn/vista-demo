@@ -21,6 +21,9 @@ import type {
   FinanceCashReferenceData,
   FinanceCashVoucher,
   FinanceCustomerDocument,
+  FinanceReportDefinition,
+  FinanceReportExport,
+  FinanceReportExportPage,
   FinanceSupplierPayable,
   FinanceSupplierOffset,
   FinanceSupplierPayment,
@@ -37,6 +40,10 @@ import type {
   ServiceWorkOrderPage,
   FinancialDocument,
   FinancialDocumentReferenceData,
+  LogisticsDelivery,
+  LogisticsReferenceData,
+  LogisticsReturn,
+  LogisticsRoutePlan,
 } from '@vista/contracts';
 import { Pool } from 'pg';
 import request from 'supertest';
@@ -49,6 +56,7 @@ import { APP_ENVIRONMENT } from '../src/config/config.module.js';
 import { migrateDown, migrateUp } from '../src/database/migration-runner.js';
 import { JobHandlerRegistry } from '../src/jobs/job-handler-registry.service.js';
 import { NotificationDispatcherService } from '../src/notifications/notification-dispatcher.service.js';
+import { ObjectStorageService } from '../src/storage/object-storage.service.js';
 
 const runInfrastructureTests = process.env['RUN_INFRASTRUCTURE_TESTS'] === 'true';
 const password = 'Vista-Sales-Test-8!';
@@ -72,6 +80,11 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
   let technicianWarehouseId: string;
   let serialNumber: string;
   let salesInvoiceId: string;
+  let salesShipmentId: string;
+  let serialShipmentLineId: string;
+  let registeredLogisticsReturnId: string;
+  let registeredLogisticsReturnVersion: number;
+  const storedObjects = new Map<string, Buffer>();
   const runId = randomUUID().replaceAll('-', '');
 
   beforeAll(async () => {
@@ -92,9 +105,9 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
       new URL('../src/database/migrations', import.meta.url),
     );
     await migrateUp(database, migrationDirectory);
-    expect(await migrateDown(database, migrationDirectory)).toBe('0037_finance_supplier_subledger');
+    expect(await migrateDown(database, migrationDirectory)).toBe('0039_logistics_operations_core');
     expect(await migrateUp(database, migrationDirectory)).toContain(
-      '0037_finance_supplier_subledger',
+      '0039_logistics_operations_core',
     );
 
     Object.assign(process.env, {
@@ -115,7 +128,25 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
       SMTP_PORT: '1025',
       TOTP_ENCRYPTION_KEY: 'a-test-totp-key-with-at-least-32-characters',
     });
-    const module = await Test.createTestingModule({ imports: [AppModule] }).compile();
+    const module = await Test.createTestingModule({ imports: [AppModule] })
+      .overrideProvider(ObjectStorageService)
+      .useValue({
+        bucketName: () => 'vista-integration-test',
+        deleteObject: (key: string) => {
+          storedObjects.delete(key);
+          return Promise.resolve();
+        },
+        getObject: (key: string) => {
+          const value = storedObjects.get(key);
+          return value ? Promise.resolve(value) : Promise.reject(new Error('Object not found'));
+        },
+        ping: () => Promise.resolve(1),
+        putObject: ({ body, key }: { body: Buffer; key: string }) => {
+          storedObjects.set(key, Buffer.from(body));
+          return Promise.resolve();
+        },
+      })
+      .compile();
     application = module.createNestApplication();
     configureHttpApplication(application, application.get<AppEnvironment>(APP_ENVIRONMENT));
     await application.init();
@@ -133,6 +164,8 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
     await grantFinancePermissions(database, creatorId, ['create', 'edit', 'view']);
     await grantFinancePermissions(database, viewerId, ['view']);
     await grantServicePermissions(database, creatorId, ['approve', 'create', 'edit', 'view']);
+    await grantLogisticsPermissions(database, creatorId, ['create', 'edit', 'view']);
+    await grantLogisticsPermissions(database, viewerId, ['view']);
     ({
       customerId,
       customerLocationId,
@@ -244,6 +277,10 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
         }),
       ]),
     );
+    salesShipmentId = shipped.shipment!.id;
+    serialShipmentLineId = shipped.shipment!.lines.find(
+      (line) => line.productId === serialProductId,
+    )!.id;
 
     const acceptedResponse = await request(application.getHttpServer())
       .post(`/api/v1/sales/handover-certificates/${shipped.handover?.id}/accept`)
@@ -295,6 +332,159 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
       serial_status: 'issued',
       stock_quantity: '8.0000',
     });
+  });
+
+  it('plans and completes delivery, routes the stop, and receives a repair return safely', async () => {
+    const referencesResponse = await request(application.getHttpServer())
+      .get('/api/v1/logistics/reference-data')
+      .set('authorization', `Bearer ${viewerToken}`)
+      .expect(200);
+    const references = referencesResponse.body as LogisticsReferenceData;
+    expect(references).toMatchObject({
+      courierConnections: [
+        { connected: false, provider: 'econt' },
+        { connected: false, provider: 'speedy' },
+      ],
+    });
+    expect(references.shipments).toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: salesShipmentId })]),
+    );
+    expect(references.locations).toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: customerLocationId })]),
+    );
+
+    await request(application.getHttpServer())
+      .post('/api/v1/logistics/deliveries')
+      .set('authorization', `Bearer ${viewerToken}`)
+      .set('idempotency-key', `logistics-viewer-${runId}`)
+      .send({})
+      .expect(403);
+
+    const deliveryKey = `logistics-delivery-${runId}`;
+    const deliveryInput = {
+      customerLocationId,
+      deliveryMethod: 'company_transport',
+      instructions: 'Call the customer before arrival.',
+      scheduledEnd: '2026-08-26T09:00:00.000Z',
+      scheduledStart: '2026-08-26T07:00:00.000Z',
+      shipmentId: salesShipmentId,
+    };
+    const deliveryResponse = await request(application.getHttpServer())
+      .post('/api/v1/logistics/deliveries')
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', deliveryKey)
+      .send(deliveryInput)
+      .expect(201);
+    const delivery = deliveryResponse.body as LogisticsDelivery;
+    expect(delivery).toMatchObject({
+      customerLocationId,
+      deliveryMethod: 'company_transport',
+      shipmentId: salesShipmentId,
+      status: 'planned',
+      version: 1,
+    });
+    const deliveryReplay = await request(application.getHttpServer())
+      .post('/api/v1/logistics/deliveries')
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', deliveryKey)
+      .send(deliveryInput)
+      .expect(201);
+    expect((deliveryReplay.body as LogisticsDelivery).id).toBe(delivery.id);
+
+    const routeResponse = await request(application.getHttpServer())
+      .post('/api/v1/logistics/routes')
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', `logistics-route-${runId}`)
+      .send({
+        assignedAccountId: creatorAccountId,
+        notes: 'Customer delivery route.',
+        routeDate: '2026-08-26',
+        stops: [
+          {
+            deliveryId: delivery.id,
+            plannedArrival: '2026-08-26T07:30:00.000Z',
+            plannedDurationMinutes: 30,
+            stopType: 'delivery',
+          },
+        ],
+        title: 'Vratsa customer run',
+      })
+      .expect(201);
+    const route = routeResponse.body as LogisticsRoutePlan;
+    expect(route).toMatchObject({
+      assignedAccountId: creatorAccountId,
+      status: 'planned',
+      stops: [expect.objectContaining({ deliveryId: delivery.id, stopType: 'delivery' })],
+    });
+
+    const dispatchedResponse = await request(application.getHttpServer())
+      .post(`/api/v1/logistics/deliveries/${delivery.id}/dispatch`)
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', `logistics-dispatch-${runId}`)
+      .send({ expectedVersion: delivery.version, note: 'Loaded and checked.' })
+      .expect(201);
+    const dispatched = dispatchedResponse.body as LogisticsDelivery;
+    expect(dispatched).toMatchObject({ status: 'in_transit', version: 2 });
+
+    const completedResponse = await request(application.getHttpServer())
+      .post(`/api/v1/logistics/deliveries/${delivery.id}/complete`)
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', `logistics-complete-${runId}`)
+      .send({
+        deliveredAt: '2026-08-26T08:05:00.000Z',
+        expectedVersion: dispatched.version,
+        proofNotes: 'Boxes checked at handover.',
+        recipientName: 'Customer Representative',
+      })
+      .expect(201);
+    expect(completedResponse.body as LogisticsDelivery).toMatchObject({
+      handoverStatus: 'accepted',
+      recipientName: 'Customer Representative',
+      status: 'delivered',
+      version: 3,
+    });
+
+    const returnInput = {
+      customerLocationId,
+      lines: [
+        {
+          customerEquipmentId: equipmentId,
+          destinationWarehouseId: technicianWarehouseId,
+          disposition: 'service',
+          quantity: '1',
+          serialNumbers: [serialNumber],
+          serviceType: 'out_of_warranty',
+          shipmentLineId: serialShipmentLineId,
+        },
+      ],
+      originalShipmentId: salesShipmentId,
+      reason: 'The device does not power on after installation.',
+      transportMethod: 'customer_dropoff',
+    };
+    const returnResponse = await request(application.getHttpServer())
+      .post('/api/v1/logistics/returns')
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', `logistics-return-${runId}`)
+      .send(returnInput)
+      .expect(201);
+    const registeredReturn = returnResponse.body as LogisticsReturn;
+    expect(registeredReturn).toMatchObject({
+      originalShipmentId: salesShipmentId,
+      status: 'registered',
+      version: 1,
+    });
+    registeredLogisticsReturnId = registeredReturn.id;
+    registeredLogisticsReturnVersion = registeredReturn.version;
+
+    const evidence = await database.query<{ audit_count: string; outbox_count: string }>(
+      `SELECT
+         (SELECT count(*)::text FROM audit.events
+          WHERE target_id IN ($1, $2, $3) AND action LIKE 'logistics.%') AS audit_count,
+         (SELECT count(*)::text FROM integration.outbox_events
+          WHERE aggregate_id IN ($1, $2, $3) AND event_type LIKE 'logistics.%') AS outbox_count`,
+      [delivery.id, route.id, registeredReturn.id],
+    );
+    expect(evidence.rows[0]).toEqual({ audit_count: '5', outbox_count: '5' });
   });
 
   it('allocates partial payments once, marks overdue balances, and preserves the collection trail', async () => {
@@ -784,6 +974,104 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
     expect(remindersBeforeStatusJob.rows[0]?.count).toBe('2');
 
     const handlers = application.get(JobHandlerRegistry);
+    const definitionsResponse = await request(application.getHttpServer())
+      .get('/api/v1/finance/report-exports/definitions')
+      .set('authorization', `Bearer ${viewerToken}`)
+      .expect(200);
+    expect(definitionsResponse.body as FinanceReportDefinition[]).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          formats: ['csv', 'xlsx', 'pdf'],
+          key: 'finance.supplier-turnover',
+          requiresDateRange: true,
+        }),
+      ]),
+    );
+    await request(application.getHttpServer())
+      .post('/api/v1/finance/report-exports')
+      .set('authorization', `Bearer ${viewerToken}`)
+      .set('idempotency-key', `report-viewer-${runId}`)
+      .send({
+        dateFrom: turnoverDateFrom,
+        dateTo: dueDate,
+        definitionKey: 'finance.supplier-turnover',
+        format: 'xlsx',
+      })
+      .expect(403);
+    const reportKey = `report-export-${runId}`;
+    const requestedReportResponse = await request(application.getHttpServer())
+      .post('/api/v1/finance/report-exports')
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', reportKey)
+      .send({
+        dateFrom: turnoverDateFrom,
+        dateTo: dueDate,
+        definitionKey: 'finance.supplier-turnover',
+        format: 'xlsx',
+      })
+      .expect(202);
+    const requestedReport = requestedReportResponse.body as FinanceReportExport;
+    expect(requestedReport).toMatchObject({
+      definitionKey: 'finance.supplier-turnover',
+      format: 'xlsx',
+      status: 'queued',
+    });
+    const reportReplay = await request(application.getHttpServer())
+      .post('/api/v1/finance/report-exports')
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', reportKey)
+      .send({
+        dateFrom: turnoverDateFrom,
+        dateTo: dueDate,
+        definitionKey: 'finance.supplier-turnover',
+        format: 'xlsx',
+      })
+      .expect(202);
+    expect((reportReplay.body as FinanceReportExport).id).toBe(requestedReport.id);
+    const reportJob = {
+      attemptNumber: 1,
+      correlationId: `report-job-${runId}`,
+      enqueuedAt: '2026-08-21T12:00:00.000Z',
+      idempotencyKey: `finance-report-export:${requestedReport.id}`,
+      jobId: `report-job-${runId}`,
+      maxAttempts: 5,
+      name: 'report.generate',
+      payload: { exportId: requestedReport.id },
+      retryAllowed: true,
+    };
+    await expect(handlers.execute(reportJob)).resolves.toMatchObject({ rowCount: 1 });
+    await expect(handlers.execute(reportJob)).resolves.toMatchObject({ rowCount: 1 });
+    const reportListResponse = await request(application.getHttpServer())
+      .get('/api/v1/finance/report-exports')
+      .set('authorization', `Bearer ${token}`)
+      .expect(200);
+    const reportList = reportListResponse.body as FinanceReportExportPage;
+    expect(reportList).toMatchObject({ total: 1 });
+    expect(reportList.items[0]).toMatchObject({
+      id: requestedReport.id,
+      rowCount: 1,
+      status: 'completed',
+    });
+    expect(reportList.items[0]?.fileName).toMatch(/supplier-turnover.*\.xlsx$/u);
+    await request(application.getHttpServer())
+      .get(`/api/v1/finance/report-exports/${requestedReport.id}/content`)
+      .set('authorization', `Bearer ${viewerToken}`)
+      .expect(404);
+    const downloadedReport = await request(application.getHttpServer())
+      .get(`/api/v1/finance/report-exports/${requestedReport.id}/content`)
+      .set('authorization', `Bearer ${token}`)
+      .expect('content-type', /spreadsheetml/u)
+      .expect(200);
+    expect(Number(downloadedReport.headers['content-length'])).toBeGreaterThan(2_000);
+    const reportEvidence = await database.query<{ audit_count: string; export_count: string }>(
+      `SELECT
+         (SELECT count(*)::text FROM reporting.export_jobs WHERE id = $1) AS export_count,
+         (SELECT count(*)::text FROM audit.events
+          WHERE target_id = $1 AND action LIKE 'report.export.%') AS audit_count`,
+      [requestedReport.id],
+    );
+    expect(reportEvidence.rows[0]).toEqual({ audit_count: '3', export_count: '1' });
+
     const financeJob = {
       attemptNumber: 1,
       correlationId: `finance-job-${runId}`,
@@ -2048,6 +2336,62 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
     );
   });
 
+  it('receives a repair return into inventory and opens the linked Service request once', async () => {
+    await database.query(
+      "UPDATE master_data.customer_equipment SET status = 'active' WHERE id = $1",
+      [equipmentId],
+    );
+    const receiveKey = `logistics-receive-${runId}`;
+    const receivedResponse = await request(application.getHttpServer())
+      .post(`/api/v1/logistics/returns/${registeredLogisticsReturnId}/receive`)
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', receiveKey)
+      .send({ expectedVersion: registeredLogisticsReturnVersion })
+      .expect(201);
+    const received = receivedResponse.body as LogisticsReturn;
+    expect(received).toMatchObject({ status: 'received', version: 2 });
+    expect(received.lines[0]).toMatchObject({
+      disposition: 'service',
+      serialNumbers: [serialNumber],
+    });
+    expect(received.lines[0]?.inventoryReturnMovementId).toBeTruthy();
+    expect(received.lines[0]?.serviceRequestNumber).toMatch(/^SRV-/u);
+
+    const receiveReplay = await request(application.getHttpServer())
+      .post(`/api/v1/logistics/returns/${registeredLogisticsReturnId}/receive`)
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', receiveKey)
+      .send({ expectedVersion: registeredLogisticsReturnVersion })
+      .expect(201);
+    expect((receiveReplay.body as LogisticsReturn).id).toBe(received.id);
+
+    const evidence = await database.query<{
+      audit_count: string;
+      outbox_count: string;
+      request_count: string;
+      return_movement_count: string;
+    }>(
+      `SELECT
+         (SELECT count(*)::text FROM audit.events
+          WHERE target_id = $1 AND action LIKE 'logistics.return.%') AS audit_count,
+         (SELECT count(*)::text FROM integration.outbox_events
+          WHERE aggregate_id = $1 AND event_type LIKE 'logistics.return.%') AS outbox_count,
+         (SELECT count(*)::text FROM service.requests request
+          JOIN logistics.reverse_return_lines line ON line.service_request_id = request.id
+          WHERE line.reverse_return_id = $1) AS request_count,
+         (SELECT count(*)::text FROM inventory.stock_movements movement
+          JOIN logistics.reverse_return_lines line ON line.inventory_return_movement_id = movement.id
+          WHERE line.reverse_return_id = $1) AS return_movement_count`,
+      [received.id],
+    );
+    expect(evidence.rows[0]).toEqual({
+      audit_count: '2',
+      outbox_count: '2',
+      request_count: '1',
+      return_movement_count: '1',
+    });
+  });
+
   function quotationInput() {
     return {
       currencyCode: 'BGN',
@@ -2175,6 +2519,34 @@ async function grantServicePermissions(
   for (const action of actions) {
     const permission = await pool.query<{ id: string }>(
       `INSERT INTO iam.permissions (id, module, action) VALUES ($1, 'erp.service', $2)
+       ON CONFLICT (module, action) DO UPDATE SET module = EXCLUDED.module RETURNING id`,
+      [randomUUID(), action],
+    );
+    await pool.query('INSERT INTO iam.role_permissions (role_id, permission_id) VALUES ($1, $2)', [
+      roleId,
+      permission.rows[0]?.id,
+    ]);
+  }
+  await pool.query('INSERT INTO iam.account_roles (account_id, role_id) VALUES ($1, $2)', [
+    accountId,
+    roleId,
+  ]);
+}
+
+async function grantLogisticsPermissions(
+  pool: Pool,
+  accountId: string,
+  actions: Array<'create' | 'edit' | 'view'>,
+) {
+  const roleId = randomUUID();
+  await pool.query('INSERT INTO iam.roles (id, code, name) VALUES ($1, $2, $3)', [
+    roleId,
+    `logistics-${randomUUID()}`,
+    'Logistics test role',
+  ]);
+  for (const action of actions) {
+    const permission = await pool.query<{ id: string }>(
+      `INSERT INTO iam.permissions (id, module, action) VALUES ($1, 'erp.logistics', $2)
        ON CONFLICT (module, action) DO UPDATE SET module = EXCLUDED.module RETURNING id`,
       [randomUUID(), action],
     );

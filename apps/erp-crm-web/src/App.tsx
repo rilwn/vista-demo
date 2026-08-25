@@ -11,6 +11,10 @@ import { FinanceCashPage } from './pages/FinanceCashPage';
 import { FinancePayablesPage } from './pages/FinancePayablesPage';
 import { FinanceReportsPage } from './pages/FinanceReportsPage';
 import { HomePage } from './pages/HomePage';
+import {
+  type LogisticsOperationsView,
+  LogisticsOperationsPage,
+} from './pages/LogisticsOperationsPage';
 import { ModulePage } from './pages/ModulePage';
 import { NotFoundPage } from './pages/NotFoundPage';
 import { OrganizationPage } from './pages/OrganizationPage';
@@ -112,6 +116,16 @@ function pageForPath(
   if (servicePath?.[1]) {
     return hasPermission('erp.service') ? (
       <ServiceOperationsPage view={servicePath[1] as ServiceOperationsView} />
+    ) : (
+      <NotFoundPage />
+    );
+  }
+  const logisticsPath = /^\/modules\/erp\.logistics\/(deliveries|couriers|returns|routes)$/u.exec(
+    pathname,
+  );
+  if (logisticsPath?.[1]) {
+    return hasPermission('erp.logistics') ? (
+      <LogisticsOperationsPage view={logisticsPath[1] as LogisticsOperationsView} />
     ) : (
       <NotFoundPage />
     );

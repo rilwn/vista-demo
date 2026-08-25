@@ -1,6 +1,8 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type {
   FinanceAgingReport,
+  FinanceReportDefinition,
+  FinanceReportExport,
   FinanceBankStatement,
   FinanceCashVoucher,
   FinanceSupplierOffset,
@@ -2313,6 +2315,7 @@ describe('ERP and CRM authenticated workspace', () => {
       permissions: [
         ...authenticationContext.permissions,
         { action: 'view', module: 'erp.finance' },
+        { action: 'create', module: 'erp.finance' },
       ],
     };
     storeAuthenticatedSession(financeContext);
@@ -2419,8 +2422,70 @@ describe('ERP and CRM authenticated workspace', () => {
         outstandingBgnTotal: '75.0000',
       },
     };
-    const fetchMock = vi.fn((input: string) => {
+    const definitions: FinanceReportDefinition[] = [
+      {
+        description: 'Open customer balances grouped by due-date age.',
+        formats: ['csv', 'xlsx', 'pdf'],
+        key: 'finance.receivables-aging',
+        name: 'Customer receivables',
+        requiresDateRange: false,
+      },
+      {
+        description: 'Open supplier balances grouped by due-date age.',
+        formats: ['csv', 'xlsx', 'pdf'],
+        key: 'finance.supplier-payables-aging',
+        name: 'Supplier payables',
+        requiresDateRange: false,
+      },
+      {
+        description: 'Customer document turnover for a selected period.',
+        formats: ['csv', 'xlsx', 'pdf'],
+        key: 'finance.customer-turnover',
+        name: 'Customer turnover',
+        requiresDateRange: true,
+      },
+      {
+        description: 'Supplier document turnover for a selected period.',
+        formats: ['csv', 'xlsx', 'pdf'],
+        key: 'finance.supplier-turnover',
+        name: 'Supplier turnover',
+        requiresDateRange: true,
+      },
+    ];
+    const completedExport: FinanceReportExport = {
+      attemptCount: 1,
+      completedAt: '2026-08-21T12:05:00.000Z',
+      createdAt: '2026-08-21T12:04:00.000Z',
+      definitionKey: 'finance.supplier-turnover',
+      fileName: 'supplier-turnover-2026-08-21.xlsx',
+      format: 'xlsx',
+      id: '1c11fa55-9d40-4289-9f89-40517a63cbb8',
+      name: 'Supplier turnover',
+      rowCount: 1,
+      sizeBytes: 8124,
+      status: 'completed',
+    };
+    let exportRequested = false;
+    const fetchMock = vi.fn((input: string, options?: RequestInit) => {
       if (input.endsWith('/auth/me')) return Promise.resolve(jsonResponse(financeContext));
+      if (input.endsWith('/finance/report-exports/definitions'))
+        return Promise.resolve(jsonResponse(definitions));
+      if (input.includes('/finance/report-exports?'))
+        return Promise.resolve(
+          jsonResponse({
+            items: exportRequested ? [completedExport] : [],
+            page: 1,
+            pageSize: 20,
+            total: exportRequested ? 1 : 0,
+            totalPages: exportRequested ? 1 : 0,
+          }),
+        );
+      if (input.endsWith('/finance/report-exports') && options?.method === 'POST') {
+        exportRequested = true;
+        return Promise.resolve(
+          jsonResponse({ ...completedExport, completedAt: undefined, status: 'queued' }, 202),
+        );
+      }
       if (input.includes('/finance/reports/aging?'))
         return Promise.resolve(
           jsonResponse(input.includes('kind=payable') ? payableReport : receivableReport),
@@ -2454,6 +2519,24 @@ describe('ERP and CRM authenticated workspace', () => {
     expect(await screen.findByText('TechSupply Ltd.')).toBeTruthy();
     expect(
       fetchMock.mock.calls.some(([url]) => url.includes('/finance/reports/turnover?dateFrom=')),
+    ).toBe(true);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Export report' }));
+    const exportDialog = await screen.findByRole('dialog', { name: 'Export report' });
+    expect(within(exportDialog).getByLabelText<HTMLSelectElement>('Report').value).toBe(
+      'finance.supplier-turnover',
+    );
+    fireEvent.click(within(exportDialog).getByRole('button', { name: 'Prepare export' }));
+    expect(await within(exportDialog).findByText('Ready')).toBeTruthy();
+    expect(within(exportDialog).getAllByText('Supplier turnover').length).toBeGreaterThan(1);
+    expect(
+      fetchMock.mock.calls.some(
+        ([url, options]) =>
+          url.endsWith('/finance/report-exports') &&
+          options?.method === 'POST' &&
+          typeof options.body === 'string' &&
+          options.body.includes('finance.supplier-turnover'),
+      ),
     ).toBe(true);
   });
 
@@ -3940,6 +4023,172 @@ describe('ERP and CRM authenticated workspace', () => {
     dialog = await screen.findByRole('dialog', { name: 'BST-2026-000009' });
     expect(within(dialog).getByText('SPAY-2026-000002', { exact: false })).toBeTruthy();
     expect(within(dialog).getAllByText('Matched').length).toBeGreaterThan(0);
+  });
+
+  it('plans a delivery from a completed Sales shipment and dispatches it from the delivery board', async () => {
+    const logisticsContext = {
+      ...authenticationContext,
+      permissions: [
+        ...authenticationContext.permissions,
+        { action: 'view', module: 'erp.logistics' },
+        { action: 'create', module: 'erp.logistics' },
+        { action: 'edit', module: 'erp.logistics' },
+      ],
+    };
+    storeAuthenticatedSession(logisticsContext);
+    const shipmentId = '02427517-cad3-4d92-9774-7765198e65ce';
+    const locationId = '950acac8-e75e-434c-9124-51c09f23d37d';
+    const deliveryId = 'eb26eaa9-c67d-45b8-9876-0e0dd2e02740';
+    const references = {
+      assignees: [
+        {
+          accountId: loginResponse.account.id,
+          displayName: loginResponse.account.displayName,
+          email: loginResponse.account.email,
+        },
+      ],
+      courierConnections: [
+        { connected: false, provider: 'econt' },
+        { connected: false, provider: 'speedy' },
+      ],
+      equipment: [],
+      locations: [
+        {
+          addressLine1: '12 Hristo Botev Blvd.',
+          city: 'Vratsa',
+          countryCode: 'BG',
+          customerId: partner.id,
+          id: locationId,
+          name: 'Vratsa retail outlet',
+          postalCode: '3000',
+        },
+      ],
+      serviceStops: [],
+      shipments: [
+        {
+          customerId: partner.id,
+          customerName: partner.displayName,
+          handoverCertificateId: '7915ab0c-ccf1-45b9-8d90-0d97ddbc0052',
+          handoverStatus: 'prepared',
+          handoverVersion: 1,
+          id: shipmentId,
+          lines: [],
+          number: 'SHP-2026-000014',
+          shippedAt: '2026-08-25T08:00:00.000Z',
+        },
+      ],
+      warehouses: [warehouseFixture],
+    };
+    let deliveries: Record<string, unknown>[] = [];
+    const plannedDelivery = {
+      addressLine1: '12 Hristo Botev Blvd.',
+      city: 'Vratsa',
+      countryCode: 'BG',
+      createdAt: '2026-08-25T09:00:00.000Z',
+      customerId: partner.id,
+      customerLocationId: locationId,
+      customerLocationName: 'Vratsa retail outlet',
+      customerName: partner.displayName,
+      deliveryMethod: 'company_transport',
+      handoverCertificateId: references.shipments[0]!.handoverCertificateId,
+      handoverStatus: 'prepared',
+      history: [
+        {
+          changedAt: '2026-08-25T09:00:00.000Z',
+          changedBy: loginResponse.account.displayName,
+          nextStatus: 'planned',
+          note: 'Delivery planned',
+        },
+      ],
+      id: deliveryId,
+      instructions: 'Call the customer before arrival.',
+      number: 'DLV-2026-000014',
+      postalCode: '3000',
+      scheduledEnd: '2026-08-26T09:00:00.000Z',
+      scheduledStart: '2026-08-26T07:00:00.000Z',
+      shipmentId,
+      shipmentNumber: 'SHP-2026-000014',
+      status: 'planned',
+      version: 1,
+    };
+    const fetchMock = vi.fn((input: string, options?: RequestInit) => {
+      if (input.endsWith('/auth/me')) return Promise.resolve(jsonResponse(logisticsContext));
+      if (input.endsWith('/logistics/reference-data')) {
+        return Promise.resolve(jsonResponse(references));
+      }
+      if (input.includes('/logistics/deliveries') && options?.method === 'POST') {
+        if (input.endsWith(`/${deliveryId}/dispatch`)) {
+          const dispatched = {
+            ...plannedDelivery,
+            history: [
+              ...plannedDelivery.history,
+              {
+                changedAt: '2026-08-26T07:00:00.000Z',
+                changedBy: loginResponse.account.displayName,
+                nextStatus: 'in_transit',
+                note: 'Driver departed',
+                previousStatus: 'planned',
+              },
+            ],
+            status: 'in_transit',
+            version: 2,
+          };
+          deliveries = [dispatched];
+          return Promise.resolve(jsonResponse(dispatched, 201));
+        }
+        deliveries = [plannedDelivery];
+        return Promise.resolve(jsonResponse(plannedDelivery, 201));
+      }
+      if (input.includes('/logistics/deliveries')) {
+        return Promise.resolve(
+          jsonResponse({
+            items: deliveries,
+            page: 1,
+            pageSize: 50,
+            total: deliveries.length,
+            totalPages: deliveries.length ? 1 : 0,
+          }),
+        );
+      }
+      if (input.includes('/logistics/returns')) {
+        return Promise.resolve(
+          jsonResponse({ items: [], page: 1, pageSize: 50, total: 0, totalPages: 0 }),
+        );
+      }
+      if (input.includes('/logistics/routes')) {
+        return Promise.resolve(
+          jsonResponse({ items: [], page: 1, pageSize: 50, total: 0, totalPages: 0 }),
+        );
+      }
+      return Promise.resolve(jsonResponse({}));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderApplication(['/modules/erp.logistics/deliveries']);
+    expect(await screen.findByRole('heading', { name: 'Deliveries' })).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Back to Logistics' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Plan delivery' }));
+    const planDialog = await screen.findByRole('dialog', { name: 'Plan delivery' });
+    fireEvent.change(within(planDialog).getByLabelText('Instructions (optional)'), {
+      target: { value: 'Call the customer before arrival.' },
+    });
+    fireEvent.click(within(planDialog).getByRole('button', { name: 'Plan delivery' }));
+
+    const deliveryDialog = await screen.findByRole('dialog', { name: 'DLV-2026-000014' });
+    expect(within(deliveryDialog).getByText('Vratsa retail outlet')).toBeTruthy();
+    fireEvent.click(within(deliveryDialog).getByRole('button', { name: 'Dispatch' }));
+    expect(await screen.findByText('DLV-2026-000014 is on the way.')).toBeTruthy();
+    expect(within(deliveryDialog).getAllByText('On the way').length).toBeGreaterThan(0);
+
+    const createCall = fetchMock.mock.calls.find(
+      ([url, options]) => url.endsWith('/logistics/deliveries') && options?.method === 'POST',
+    );
+    expect(JSON.parse((createCall?.[1] as RequestInit).body as string)).toMatchObject({
+      customerLocationId: locationId,
+      deliveryMethod: 'company_transport',
+      instructions: 'Call the customer before arrival.',
+      shipmentId,
+    });
   });
 
   it('navigates from ERP Service to request intake and creates a dispatch-ready service request', async () => {
