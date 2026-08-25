@@ -12,6 +12,7 @@ import type {
   SupplierEvaluation,
   SupplierInvoice,
   SupplierInvoiceLine,
+  VatTreatment,
   UpdateSupplierClaimStatusRequest,
   UpdateSupplierCommercialProfileRequest,
 } from '@vista/contracts';
@@ -235,8 +236,8 @@ export class SupplierProcurementService {
           await client.query(
             `INSERT INTO procurement.supplier_invoice_lines (
              id, supplier_invoice_id, purchase_order_id, purchase_order_line_id,
-             quantity, unit_price
-           ) VALUES ($1, $2, $3, $4, $5, $6)`,
+             quantity, unit_price, vat_treatment, vat_rate
+           ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
             [
               randomUUID(),
               invoiceId,
@@ -244,6 +245,8 @@ export class SupplierProcurementService {
               line.orderLineId,
               line.quantity,
               line.unitPrice,
+              line.vatTreatment,
+              line.vatRate,
             ],
           );
           await client.query(
@@ -563,13 +566,20 @@ export class SupplierProcurementService {
       recorded_at: string;
       supplier_name: string;
       supplier_partner_id: string;
+      tax_breakdown_complete: boolean;
       total: string;
+      net_total: string;
+      vat_total: string;
     }>(
       `SELECT invoice.id, invoice.purchase_order_id, invoice.supplier_partner_id,
               supplier.display_name AS supplier_name,
               invoice.supplier_invoice_number AS invoice_number,
               invoice.invoice_date::text, invoice.currency_code, invoice.recorded_at::text,
-              COALESCE(sum(line.line_total), 0)::text AS total
+              COALESCE(sum(line.line_total), 0)::text AS net_total,
+              COALESCE(sum(line.vat_amount), 0)::text AS vat_total,
+              COALESCE(sum(line.gross_total), 0)::text AS total,
+              COALESCE(bool_and(line.vat_treatment IS NOT NULL), false)
+                AS tax_breakdown_complete
        FROM procurement.supplier_invoices invoice
        JOIN master_data.partners supplier ON supplier.id = invoice.supplier_partner_id
        LEFT JOIN procurement.supplier_invoice_lines line ON line.supplier_invoice_id = invoice.id
@@ -591,11 +601,17 @@ export class SupplierProcurementService {
       product_id: string;
       product_name: string;
       quantity: string;
+      gross_total: string;
+      vat_amount: string | null;
+      vat_rate: string | null;
+      vat_treatment: VatTreatment | null;
       unit_price: string;
     }>(
       `SELECT line.id, line.purchase_order_line_id AS order_line_id,
               order_line.product_id, product.name AS product_name,
-              line.quantity::text, line.unit_price::text, line.line_total::text
+              line.quantity::text, line.unit_price::text, line.line_total::text,
+              line.gross_total::text, line.vat_amount::text, line.vat_rate::text,
+              line.vat_treatment
        FROM procurement.supplier_invoice_lines line
        JOIN procurement.purchase_order_lines order_line ON order_line.id = line.purchase_order_line_id
        JOIN master_data.products product ON product.id = order_line.product_id
@@ -608,11 +624,14 @@ export class SupplierProcurementService {
       invoiceDate: row.invoice_date,
       invoiceNumber: row.invoice_number,
       lines: lines.rows.map(invoiceLine),
+      netTotal: row.net_total,
       purchaseOrderId: row.purchase_order_id,
       recordedAt: row.recorded_at,
       supplierName: row.supplier_name,
       supplierPartnerId: row.supplier_partner_id,
+      taxBreakdownComplete: row.tax_breakdown_complete,
       total: row.total,
+      vatTotal: row.vat_total,
     };
   }
 
@@ -798,12 +817,15 @@ function normalizeInvoice(input: CreateSupplierInvoiceRequest) {
       orderLineId: line.orderLineId,
       quantity: positiveDecimal(line.quantity),
       unitPrice: money(line.unitPrice),
+      vatRate: supplierVatRate(line.vatTreatment, line.vatRate),
+      vatTreatment: line.vatTreatment,
     })),
     purchaseOrderId: input.purchaseOrderId,
   };
 }
 
 function invoiceLine(row: {
+  gross_total: string;
   id: string;
   line_total: string;
   order_line_id: string;
@@ -811,16 +833,40 @@ function invoiceLine(row: {
   product_name: string;
   quantity: string;
   unit_price: string;
+  vat_amount: string | null;
+  vat_rate: string | null;
+  vat_treatment: VatTreatment | null;
 }): SupplierInvoiceLine {
   return {
+    grossTotal: row.gross_total,
     id: row.id,
     lineTotal: row.line_total,
+    netTotal: row.line_total,
     orderLineId: row.order_line_id,
     productId: row.product_id,
     productName: row.product_name,
     quantity: row.quantity,
+    taxBreakdownRecorded: row.vat_treatment !== null,
     unitPrice: row.unit_price,
+    ...(row.vat_amount !== null ? { vatAmount: row.vat_amount } : {}),
+    ...(row.vat_rate !== null ? { vatRate: row.vat_rate } : {}),
+    ...(row.vat_treatment !== null ? { vatTreatment: row.vat_treatment } : {}),
   };
+}
+
+function supplierVatRate(treatment: VatTreatment, value: string | undefined): string {
+  if (treatment === 'standard_20') return '20.0000';
+  if (treatment === 'reduced_9') return '9.0000';
+  if (treatment === 'zero' || treatment === 'exempt') return '0.0000';
+  const rate = value === undefined ? undefined : money(value);
+  if (rate === undefined || decimalUnits(rate) > 1_000_000n) {
+    throw new ApiErrorException(
+      'SUPPLIER_INVOICE_ICA_RATE_REQUIRED',
+      'Enter the recorded VAT rate for the intra-community acquisition line.',
+      HttpStatus.BAD_REQUEST,
+    );
+  }
+  return rate;
 }
 
 function statusEvent(row: {

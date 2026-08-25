@@ -5,6 +5,7 @@ import {
   ArrayMinSize,
   IsArray,
   IsDateString,
+  IsDefined,
   IsIn,
   IsInt,
   IsOptional,
@@ -15,8 +16,10 @@ import {
   MaxLength,
   Min,
   ValidateNested,
+  ValidateIf,
 } from 'class-validator';
 import {
+  vatTreatments,
   supplierClaimStatuses,
   supplierClaimTypes,
   purchaseOrderStatuses,
@@ -41,6 +44,7 @@ import {
   type SupplierEvaluation,
   type SupplierInvoice,
   type SupplierInvoiceLine,
+  type VatTreatment,
   type UpdateSupplierClaimStatusRequest,
   type UpdateSupplierCommercialProfileRequest,
 } from '@vista/contracts';
@@ -323,7 +327,7 @@ export class ProcurementSupplierRecordDto implements ProcurementSupplierRecord {
 
 export class CreateSupplierInvoiceLineDto implements CreateSupplierInvoiceLineRequest {
   @ApiProperty({ format: 'uuid', type: String })
-  @IsUUID('4')
+  @IsUUID('loose')
   orderLineId!: string;
 
   @ApiProperty({ type: String })
@@ -335,6 +339,20 @@ export class CreateSupplierInvoiceLineDto implements CreateSupplierInvoiceLineRe
   @IsString()
   @Matches(decimalPattern)
   unitPrice!: string;
+
+  @ApiPropertyOptional({ example: '20.0000', type: String })
+  @ValidateIf(
+    (line: CreateSupplierInvoiceLineDto) =>
+      line.vatTreatment === 'ica' || line.vatRate !== undefined,
+  )
+  @IsDefined()
+  @IsString()
+  @Matches(decimalPattern)
+  vatRate?: string;
+
+  @ApiProperty({ enum: vatTreatments })
+  @IsIn(vatTreatments)
+  vatTreatment!: CreateSupplierInvoiceLineRequest['vatTreatment'];
 }
 
 export class CreateSupplierInvoiceDto implements CreateSupplierInvoiceRequest {
@@ -356,18 +374,24 @@ export class CreateSupplierInvoiceDto implements CreateSupplierInvoiceRequest {
   lines!: CreateSupplierInvoiceLineDto[];
 
   @ApiProperty({ format: 'uuid', type: String })
-  @IsUUID('4')
+  @IsUUID('loose')
   purchaseOrderId!: string;
 }
 
 export class SupplierInvoiceLineDto implements SupplierInvoiceLine {
+  @ApiProperty({ type: String }) grossTotal!: string;
   @ApiProperty({ type: String }) id!: string;
   @ApiProperty({ type: String }) lineTotal!: string;
+  @ApiProperty({ type: String }) netTotal!: string;
   @ApiProperty({ format: 'uuid', type: String }) orderLineId!: string;
   @ApiProperty({ format: 'uuid', type: String }) productId!: string;
   @ApiProperty({ type: String }) productName!: string;
   @ApiProperty({ type: String }) quantity!: string;
+  @ApiProperty({ type: Boolean }) taxBreakdownRecorded!: boolean;
   @ApiProperty({ type: String }) unitPrice!: string;
+  @ApiPropertyOptional({ type: String }) vatAmount?: string;
+  @ApiPropertyOptional({ type: String }) vatRate?: string;
+  @ApiPropertyOptional({ enum: vatTreatments }) vatTreatment?: VatTreatment;
 }
 
 export class SupplierInvoiceDto implements SupplierInvoice {
@@ -376,11 +400,14 @@ export class SupplierInvoiceDto implements SupplierInvoice {
   @ApiProperty({ format: 'date', type: String }) invoiceDate!: string;
   @ApiProperty({ type: String }) invoiceNumber!: string;
   @ApiProperty({ isArray: true, type: SupplierInvoiceLineDto }) lines!: SupplierInvoiceLine[];
+  @ApiProperty({ type: String }) netTotal!: string;
   @ApiProperty({ format: 'uuid', type: String }) purchaseOrderId!: string;
   @ApiProperty({ format: 'date-time', type: String }) recordedAt!: string;
   @ApiProperty({ type: String }) supplierName!: string;
   @ApiProperty({ format: 'uuid', type: String }) supplierPartnerId!: string;
+  @ApiProperty({ type: Boolean }) taxBreakdownComplete!: boolean;
   @ApiProperty({ type: String }) total!: string;
+  @ApiProperty({ type: String }) vatTotal!: string;
 }
 
 export class CreateSupplierClaimDto implements CreateSupplierClaimRequest {

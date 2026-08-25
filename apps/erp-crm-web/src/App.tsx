@@ -1,3 +1,5 @@
+import { SearchableSelects } from '@vista/ui';
+
 import { useAuth } from './auth/AuthProvider';
 import { LoginPage } from './auth/LoginPage';
 import { RecoveryPage } from './auth/RecoveryPage';
@@ -37,6 +39,15 @@ import { findWorkflowPage } from './pages/workflow-pages';
 import { Navigate, useRouter } from './routing/Router';
 
 export function App() {
+  return (
+    <>
+      <SearchableSelects />
+      <Application />
+    </>
+  );
+}
+
+function Application() {
   const { hasPermission, status } = useAuth();
   const { location } = useRouter();
 

@@ -21,6 +21,7 @@ import type {
   FinanceCashReferenceData,
   FinanceCashVoucher,
   FinanceCustomerDocument,
+  FinanceJournalReport,
   FinanceReportDefinition,
   FinanceReportExport,
   FinanceReportExportPage,
@@ -30,6 +31,7 @@ import type {
   FinanceSupplierReferenceData,
   FinanceReferenceData,
   FinanceTurnoverReport,
+  FinanceVatReviewReport,
   NotificationPage,
   ServiceEquipmentHistory,
   ServiceReferenceData,
@@ -105,9 +107,9 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
       new URL('../src/database/migrations', import.meta.url),
     );
     await migrateUp(database, migrationDirectory);
-    expect(await migrateDown(database, migrationDirectory)).toBe('0039_logistics_operations_core');
+    expect(await migrateDown(database, migrationDirectory)).toBe('0040_finance_journal_vat_review');
     expect(await migrateUp(database, migrationDirectory)).toContain(
-      '0039_logistics_operations_core',
+      '0040_finance_journal_vat_review',
     );
 
     Object.assign(process.env, {
@@ -597,11 +599,11 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
     let supplierPayable = payableResponse.body as FinanceSupplierPayable;
     expect(supplierPayable).toMatchObject({
       allocatedTotal: '0.0000',
-      outstandingTotal: '80.0000',
+      outstandingTotal: '96.0000',
       paymentStatus: 'unpaid',
       sourceSupplierInvoiceId: supplierInvoiceId,
       supplierPartnerId: customerId,
-      total: '80.0000',
+      total: '96.0000',
     });
     const payableReplay = await request(application.getHttpServer())
       .post('/api/v1/finance/supplier-payables')
@@ -655,7 +657,7 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
     supplierPayable = payableAfterAdvanceResponse.body as FinanceSupplierPayable;
     expect(supplierPayable).toMatchObject({
       allocatedTotal: '20.0000',
-      outstandingTotal: '60.0000',
+      outstandingTotal: '76.0000',
       paymentStatus: 'partially_paid',
     });
 
@@ -673,7 +675,7 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
     supplierPayable = supplierPaymentResponse.body as FinanceSupplierPayable;
     expect(supplierPayable).toMatchObject({
       allocatedTotal: '40.0000',
-      outstandingTotal: '40.0000',
+      outstandingTotal: '56.0000',
       paymentStatus: 'partially_paid',
     });
 
@@ -721,7 +723,7 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
     ).body as FinanceSupplierPayable;
     expect(supplierPayable).toMatchObject({
       allocatedTotal: '50.0000',
-      outstandingTotal: '30.0000',
+      outstandingTotal: '46.0000',
     });
 
     const partialPayment = {
@@ -931,11 +933,11 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
         expect.objectContaining({
           bucket: 'current',
           id: supplierPayable.id,
-          outstandingBgnTotal: '30.0000',
+          outstandingBgnTotal: '46.0000',
         }),
       ],
       kind: 'payable',
-      totals: { current: '30.0000', total: '30.0000' },
+      totals: { current: '46.0000', total: '46.0000' },
     });
     const customerTurnoverResponse = await request(application.getHttpServer())
       .get(
@@ -963,9 +965,36 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
       totals: {
         allocatedBgnTotal: '50.0000',
         documentCount: 1,
-        grossBgnTotal: '80.0000',
-        outstandingBgnTotal: '30.0000',
+        grossBgnTotal: '96.0000',
+        outstandingBgnTotal: '46.0000',
       },
+    });
+    const purchaseJournalResponse = await request(application.getHttpServer())
+      .get(
+        `/api/v1/finance/reports/journal?kind=purchase&dateFrom=${turnoverDateFrom}&dateTo=${dueDate}`,
+      )
+      .set('authorization', `Bearer ${viewerToken}`)
+      .expect(200);
+    expect(purchaseJournalResponse.body as FinanceJournalReport).toMatchObject({
+      kind: 'purchase',
+      totals: {
+        documentCount: 1,
+        grossBgnTotal: '96.0000',
+        incompleteTaxDocuments: 0,
+        netBgnTotal: '80.0000',
+        vatBgnTotal: '16.0000',
+      },
+    });
+    const vatReviewResponse = await request(application.getHttpServer())
+      .get(`/api/v1/finance/reports/vat-review?dateFrom=${turnoverDateFrom}&dateTo=${dueDate}`)
+      .set('authorization', `Bearer ${viewerToken}`)
+      .expect(200);
+    expect(vatReviewResponse.body as FinanceVatReviewReport).toMatchObject({
+      incompletePurchaseDocumentNumbers: [],
+      incompletePurchaseDocuments: 0,
+      recordedDifferenceBgn: '-16.0000',
+      recordedInputVatBgn: '16.0000',
+      recordedOutputVatBgn: '0.0000',
     });
     const remindersBeforeStatusJob = await database.query<{ count: string }>(
       `SELECT count(*)::text AS count FROM notifications.messages
@@ -983,6 +1012,11 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
         expect.objectContaining({
           formats: ['csv', 'xlsx', 'pdf'],
           key: 'finance.supplier-turnover',
+          requiresDateRange: true,
+        }),
+        expect.objectContaining({
+          formats: ['csv', 'xlsx', 'pdf'],
+          key: 'finance.vat-review',
           requiresDateRange: true,
         }),
       ]),
@@ -1072,6 +1106,38 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
     );
     expect(reportEvidence.rows[0]).toEqual({ audit_count: '3', export_count: '1' });
 
+    const vatExportResponse = await request(application.getHttpServer())
+      .post('/api/v1/finance/report-exports')
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', `vat-report-export-${runId}`)
+      .send({
+        dateFrom: turnoverDateFrom,
+        dateTo: dueDate,
+        definitionKey: 'finance.vat-review',
+        format: 'csv',
+      })
+      .expect(202);
+    const vatExport = vatExportResponse.body as FinanceReportExport;
+    await expect(
+      handlers.execute({
+        attemptNumber: 1,
+        correlationId: `vat-report-job-${runId}`,
+        enqueuedAt: '2026-08-21T12:00:00.000Z',
+        idempotencyKey: `finance-report-export:${vatExport.id}`,
+        jobId: `vat-report-job-${runId}`,
+        maxAttempts: 5,
+        name: 'report.generate',
+        payload: { exportId: vatExport.id },
+        retryAllowed: true,
+      }),
+    ).resolves.toMatchObject({ rowCount: 1 });
+    const downloadedVatReport = await request(application.getHttpServer())
+      .get(`/api/v1/finance/report-exports/${vatExport.id}/content`)
+      .set('authorization', `Bearer ${token}`)
+      .expect('content-type', /csv/u)
+      .expect(200);
+    expect(downloadedVatReport.text).toContain('Recorded input VAT');
+
     const financeJob = {
       attemptNumber: 1,
       correlationId: `finance-job-${runId}`,
@@ -1133,7 +1199,7 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
     const statementInput = {
       accountIban: 'BG76DEMO00000000000000',
       bankName: 'Vista integration bank',
-      closingBalance: '1113.6',
+      closingBalance: '1097.6',
       currencyCode: 'BGN',
       lines: [
         {
@@ -1161,7 +1227,7 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
           valueDate: dueDate,
         },
         {
-          amount: '30',
+          amount: '46',
           counterpartyName: `Sales Customer ${runId}`,
           direction: 'outgoing',
           paymentReference: `Payment for ${supplierPayable.number}`,
@@ -1270,7 +1336,7 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
       })
       .expect(200);
     expect(supplierBankMatchResponse.body as FinanceSupplierPayment).toMatchObject({
-      amount: '30.0000',
+      amount: '46.0000',
       availableTotal: '0.0000',
       kind: 'payment',
       sourceBankTransactionId: outgoing.id,
@@ -1299,7 +1365,7 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
         .expect(200)
     ).body as FinanceSupplierPayable;
     expect(paidSupplierPayable).toMatchObject({
-      allocatedTotal: '80.0000',
+      allocatedTotal: '96.0000',
       outstandingTotal: '0.0000',
       paymentStatus: 'paid',
     });
@@ -1411,6 +1477,31 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
         expect.objectContaining({ vatRate: '20.0000', vatTreatment: 'standard_20' }),
       ]),
     );
+    const salesJournalResponse = await request(application.getHttpServer())
+      .get(`/api/v1/finance/reports/journal?kind=sales&dateFrom=${issueDate}&dateTo=${issueDate}`)
+      .set('authorization', `Bearer ${viewerToken}`)
+      .expect(200);
+    expect(salesJournalResponse.body as FinanceJournalReport).toMatchObject({
+      kind: 'sales',
+      totals: {
+        documentCount: 1,
+        grossBgnTotal: '273.6000',
+        incompleteTaxDocuments: 0,
+        netBgnTotal: '228.0000',
+        vatBgnTotal: '45.6000',
+      },
+    });
+    const combinedVatResponse = await request(application.getHttpServer())
+      .get(`/api/v1/finance/reports/vat-review?dateFrom=${issueDate}&dateTo=${issueDate}`)
+      .set('authorization', `Bearer ${viewerToken}`)
+      .expect(200);
+    expect(combinedVatResponse.body as FinanceVatReviewReport).toMatchObject({
+      incompletePurchaseDocumentNumbers: [],
+      incompletePurchaseDocuments: 0,
+      recordedDifferenceBgn: '29.6000',
+      recordedInputVatBgn: '16.0000',
+      recordedOutputVatBgn: '45.6000',
+    });
 
     const replay = await request(application.getHttpServer())
       .post('/api/v1/finance/financial-documents')
@@ -2603,8 +2694,8 @@ async function seedSupplierInvoiceEvidence(
   await pool.query(
     `INSERT INTO procurement.supplier_invoice_lines (
        id, supplier_invoice_id, purchase_order_id, purchase_order_line_id,
-       quantity, unit_price
-     ) VALUES ($1, $2, $3, $4, 1, 80)`,
+       quantity, unit_price, vat_treatment, vat_rate
+     ) VALUES ($1, $2, $3, $4, 1, 80, 'standard_20', 20)`,
     [randomUUID(), supplierInvoiceId, purchaseOrderId, purchaseOrderLineId],
   );
 

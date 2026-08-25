@@ -1317,6 +1317,23 @@ body {
   gap: 0.2rem;
 }
 
+.finance-report-toolbar-title {
+  display: grid;
+  gap: 0.2rem;
+  margin-right: auto;
+}
+
+.finance-report-toolbar-title span {
+  color: var(--vista-muted);
+  font-size: 0.68rem;
+  font-weight: 690;
+}
+
+.finance-report-toolbar-title strong {
+  color: var(--vista-ink);
+  font-size: 1rem;
+}
+
 .finance-report-toolbar > div:first-child > span,
 .finance-report-toolbar label span {
   color: var(--vista-muted);
@@ -1421,8 +1438,10 @@ body {
 
 .finance-report-register-head,
 .finance-turnover-register-head,
+.finance-journal-register-head,
 .finance-report-register-row,
-.finance-turnover-register-row {
+.finance-turnover-register-row,
+.finance-journal-register-row {
   display: grid;
   align-items: center;
   gap: 1rem;
@@ -1440,8 +1459,16 @@ body {
   grid-template-columns: minmax(12rem, 1.5fr) 6rem repeat(3, minmax(8rem, 0.8fr));
 }
 
+.finance-journal-register-head,
+.finance-journal-register-row {
+  grid-template-columns:
+    minmax(11rem, 1.15fr) minmax(10rem, 1.1fr) minmax(8rem, 0.7fr)
+    repeat(3, minmax(7rem, 0.62fr));
+}
+
 .finance-report-register-head,
-.finance-turnover-register-head {
+.finance-turnover-register-head,
+.finance-journal-register-head {
   min-height: 2.5rem;
   padding: 0.5rem 0.85rem;
   color: var(--vista-muted);
@@ -1451,19 +1478,22 @@ body {
 }
 
 .finance-report-register-head span:last-child,
-.finance-turnover-register-head span:not(:first-child) {
+.finance-turnover-register-head span:not(:first-child),
+.finance-journal-register-head span:nth-last-child(-n + 3) {
   text-align: right;
 }
 
 .finance-report-register-row,
-.finance-turnover-register-row {
+.finance-turnover-register-row,
+.finance-journal-register-row {
   min-height: 4.6rem;
   padding: 0.75rem 0.85rem;
   background: var(--vista-surface);
 }
 
 .finance-report-register-row + .finance-report-register-row,
-.finance-turnover-register-row + .finance-turnover-register-row {
+.finance-turnover-register-row + .finance-turnover-register-row,
+.finance-journal-register-row + .finance-journal-register-row {
   border-top: 1px solid var(--vista-line);
 }
 
@@ -1537,13 +1567,116 @@ body {
 
 .finance-report-amount,
 .finance-turnover-register-row > strong:not(:first-child),
-.finance-turnover-register-row > span {
+.finance-turnover-register-row > span,
+.finance-journal-register-row > strong,
+.finance-journal-register-row > span {
   text-align: right;
 }
 
 .finance-report-amount {
   color: var(--vista-ink);
   font-size: 0.8rem;
+}
+
+.finance-journal-register-row > strong,
+.finance-journal-register-row > span {
+  color: var(--vista-ink);
+  font-size: 0.76rem;
+  white-space: nowrap;
+}
+
+.finance-tax-missing {
+  width: fit-content;
+  justify-self: end;
+  padding: 0.28rem 0.46rem;
+  border-radius: 999px;
+  color: #755b18 !important;
+  background: #fff5d5;
+  font-size: 0.64rem !important;
+  font-weight: 720;
+}
+
+.finance-vat-groups {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.finance-vat-group {
+  overflow: hidden;
+  border: 1px solid var(--vista-line);
+  border-radius: 0.85rem;
+  background: var(--vista-surface);
+}
+
+.finance-vat-group > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  min-height: 3.2rem;
+  padding: 0.7rem 0.85rem;
+  border-bottom: 1px solid var(--vista-line);
+  background: var(--vista-surface-muted);
+}
+
+.finance-vat-group > header h3 {
+  margin: 0;
+  color: var(--vista-ink);
+  font-size: 0.82rem;
+}
+
+.finance-vat-group > header span {
+  color: var(--vista-muted);
+  font-size: 0.66rem;
+  font-weight: 680;
+}
+
+.finance-vat-table {
+  overflow-x: auto;
+}
+
+.finance-vat-table-head,
+.finance-vat-table-row {
+  display: grid;
+  align-items: center;
+  gap: 1rem;
+  min-width: 38rem;
+  padding: 0.65rem 0.85rem;
+  grid-template-columns: minmax(11rem, 1.3fr) 5rem 6rem minmax(8rem, 0.8fr) minmax(8rem, 0.8fr);
+}
+
+.finance-vat-table-head {
+  color: var(--vista-muted);
+  background: color-mix(in srgb, var(--vista-surface-muted) 70%, var(--vista-surface));
+  font-size: 0.63rem;
+  font-weight: 720;
+}
+
+.finance-vat-table-head span:nth-child(n + 2),
+.finance-vat-table-row > span,
+.finance-vat-table-row > strong:last-child {
+  text-align: right;
+}
+
+.finance-vat-table-row + .finance-vat-table-row {
+  border-top: 1px solid var(--vista-line);
+}
+
+.finance-vat-table-row > strong,
+.finance-vat-table-row > span {
+  color: var(--vista-ink);
+  font-size: 0.73rem;
+}
+
+.finance-vat-table-row > span {
+  color: var(--vista-muted);
+}
+
+.finance-vat-empty {
+  padding: 1.2rem;
+  color: var(--vista-muted);
+  font-size: 0.72rem;
+  text-align: center;
 }
 
 .finance-report-state {
@@ -1598,7 +1731,8 @@ body {
   }
 
   .finance-report-register-head,
-  .finance-turnover-register-head {
+  .finance-turnover-register-head,
+  .finance-journal-register-head {
     display: none;
   }
 
@@ -1612,6 +1746,10 @@ body {
 
   .finance-turnover-register-row {
     grid-template-columns: minmax(12rem, 1.5fr) 5rem repeat(3, minmax(7rem, 0.8fr));
+  }
+
+  .finance-journal-register-row {
+    grid-template-columns: minmax(11rem, 1.2fr) minmax(9rem, 1fr) repeat(3, minmax(7rem, 0.7fr));
   }
 }
 
@@ -1658,7 +1796,8 @@ body {
   }
 
   .finance-report-register-row,
-  .finance-turnover-register-row {
+  .finance-turnover-register-row,
+  .finance-journal-register-row {
     align-items: start;
     gap: 0.65rem;
     grid-template-columns: minmax(0, 1fr) auto;
@@ -1690,6 +1829,16 @@ body {
   .finance-turnover-register-row .finance-report-amount {
     grid-column: 2;
     grid-row: 2;
+  }
+
+  .finance-journal-register-row > strong:nth-child(4),
+  .finance-journal-register-row > span:nth-child(5) {
+    display: none;
+  }
+
+  .finance-journal-register-row .finance-report-amount {
+    grid-column: 2;
+    grid-row: 1;
   }
 }
 
@@ -5180,6 +5329,371 @@ select.vista-field-input {
 
   .security-account-recovery .vista-button {
     width: 100%;
+  }
+}
+
+/* Supplier invoice panels — quiet document hierarchy, clear comparisons, and
+ * a footer that closes cleanly against the bottom of the panel. */
+.supplier-invoice-drawer .procurement-drawer-header {
+  padding: 1rem 1.5rem 1.2rem;
+}
+
+.supplier-invoice-drawer .procurement-drawer-eyebrow {
+  color: var(--vista-accent-strong);
+  font-size: 0.67rem;
+  font-weight: 760;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.supplier-invoice-drawer .procurement-drawer-header > div {
+  gap: 0.22rem;
+}
+
+.supplier-invoice-drawer .procurement-drawer-header h2,
+.supplier-invoice-drawer .procurement-drawer-header p {
+  margin: 0;
+}
+
+.supplier-invoice-drawer .security-drawer-body {
+  padding-top: 0 !important;
+}
+
+.supplier-invoice-drawer .procurement-form {
+  display: grid;
+  gap: 0;
+}
+
+.supplier-invoice-form-section {
+  display: grid;
+  gap: 1rem;
+  padding: 1.35rem 0;
+  border-bottom: 1px solid var(--vista-line);
+}
+
+.supplier-invoice-section-heading {
+  display: grid;
+  grid-template-columns: 1.75rem minmax(0, 1fr);
+  gap: 0.75rem;
+  align-items: start;
+}
+
+.supplier-invoice-section-heading > span {
+  display: inline-flex;
+  width: 1.75rem;
+  height: 1.75rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.5rem;
+  color: var(--vista-accent-strong);
+  background: var(--vista-accent-soft);
+  font-size: 0.72rem;
+  font-weight: 760;
+}
+
+.supplier-invoice-section-heading > div {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.supplier-invoice-section-heading h3,
+.supplier-invoice-section-heading p {
+  margin: 0;
+}
+
+.supplier-invoice-section-heading h3 {
+  color: var(--vista-ink);
+  font-size: 0.9rem;
+  letter-spacing: -0.01em;
+}
+
+.supplier-invoice-section-heading p {
+  color: var(--vista-muted);
+  font-size: 0.75rem;
+  line-height: 1.45;
+}
+
+.supplier-invoice-section-heading.is-unnumbered {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.supplier-invoice-order-context {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr) minmax(5rem, 0.5fr);
+  overflow: hidden;
+  border: 1px solid var(--vista-line);
+  border-radius: 0.7rem;
+  background: var(--vista-surface-muted);
+}
+
+.supplier-invoice-order-context > div {
+  display: grid;
+  gap: 0.25rem;
+  min-width: 0;
+  padding: 0.8rem 0.9rem;
+}
+
+.supplier-invoice-order-context > div + div {
+  border-left: 1px solid var(--vista-line);
+}
+
+.supplier-invoice-order-context span,
+.supplier-invoice-line-note {
+  color: var(--vista-muted);
+  font-size: 0.7rem;
+}
+
+.supplier-invoice-order-context strong {
+  overflow: hidden;
+  font-size: 0.78rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.supplier-invoice-document-fields {
+  grid-template-columns: minmax(0, 1.35fr) minmax(10rem, 0.65fr);
+}
+
+.supplier-invoice-line-card {
+  gap: 1rem !important;
+  padding: 1rem !important;
+  border-color: var(--vista-line) !important;
+  border-radius: 0.8rem !important;
+  background: var(--vista-surface) !important;
+  transition:
+    border-color 140ms ease,
+    opacity 140ms ease;
+}
+
+.supplier-invoice-line-card.is-selected {
+  border-color: color-mix(in srgb, var(--vista-accent) 34%, var(--vista-line)) !important;
+}
+
+.supplier-invoice-line-card.is-skipped {
+  opacity: 0.66;
+}
+
+.supplier-invoice-line-card legend {
+  max-width: calc(100% - 0.5rem);
+}
+
+.supplier-invoice-line-card .procurement-check-label {
+  color: var(--vista-ink);
+  font-size: 0.82rem;
+  line-height: 1.35;
+}
+
+.supplier-invoice-line-card .procurement-comparison-strip,
+.supplier-invoice-preview-quantities {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  overflow: hidden;
+  border: 1px solid var(--vista-line);
+  border-radius: 0.65rem;
+  background: var(--vista-surface-muted);
+}
+
+.supplier-invoice-line-card .procurement-comparison-strip > div,
+.supplier-invoice-preview-quantities > div {
+  display: grid;
+  gap: 0.2rem;
+  min-width: 0;
+  padding: 0.7rem 0.8rem;
+}
+
+.supplier-invoice-line-card .procurement-comparison-strip > div + div,
+.supplier-invoice-preview-quantities > div + div {
+  border-left: 1px solid var(--vista-line);
+}
+
+.supplier-invoice-line-card .procurement-comparison-strip span,
+.supplier-invoice-preview-quantities span {
+  color: var(--vista-muted);
+  font-size: 0.67rem;
+}
+
+.supplier-invoice-line-card .procurement-comparison-strip strong,
+.supplier-invoice-preview-quantities strong {
+  color: var(--vista-ink);
+  font-size: 0.8rem;
+}
+
+.supplier-invoice-line-fields {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.8rem;
+  align-items: start;
+}
+
+.supplier-invoice-line-note {
+  margin: -0.25rem 0 0;
+  line-height: 1.4;
+}
+
+.supplier-invoice-drawer .security-drawer-actions {
+  margin-top: 0;
+}
+
+.supplier-invoice-preview-hero {
+  display: grid;
+  grid-template-columns: minmax(12rem, 0.85fr) minmax(0, 1.15fr);
+  gap: 0;
+  margin: 1.25rem 0 0;
+  overflow: hidden;
+  border: 1px solid var(--vista-line);
+  border-radius: 0.85rem;
+  background: var(--vista-surface);
+}
+
+.supplier-invoice-preview-total {
+  display: grid;
+  align-content: center;
+  gap: 0.32rem;
+  padding: 1.2rem;
+  color: #fff;
+  background: var(--vista-forest);
+}
+
+.supplier-invoice-preview-total > span {
+  color: #d8eadf;
+  font-size: 0.7rem;
+}
+
+.supplier-invoice-preview-total > strong {
+  font-size: 1.45rem;
+  letter-spacing: -0.035em;
+}
+
+.supplier-invoice-preview-total > small {
+  color: #d8eadf;
+  font-size: 0.69rem;
+  line-height: 1.4;
+}
+
+.supplier-invoice-preview-hero > dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0;
+}
+
+.supplier-invoice-preview-hero > dl > div,
+.supplier-invoice-line-money > div {
+  display: grid;
+  gap: 0.22rem;
+  min-width: 0;
+  padding: 0.85rem 0.95rem;
+}
+
+.supplier-invoice-preview-hero > dl > div:nth-child(even) {
+  border-left: 1px solid var(--vista-line);
+}
+
+.supplier-invoice-preview-hero > dl > div:nth-child(n + 3) {
+  border-top: 1px solid var(--vista-line);
+}
+
+.supplier-invoice-preview-hero dt,
+.supplier-invoice-line-money dt {
+  color: var(--vista-muted);
+  font-size: 0.67rem;
+}
+
+.supplier-invoice-preview-hero dd,
+.supplier-invoice-line-money dd {
+  min-width: 0;
+  margin: 0;
+  color: var(--vista-ink);
+  font-size: 0.76rem;
+  font-weight: 680;
+  overflow-wrap: anywhere;
+}
+
+.supplier-invoice-tax-status {
+  display: inline-flex;
+  width: max-content;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: 0.8rem;
+  padding: 0.38rem 0.55rem;
+  border-radius: 999px;
+  color: var(--vista-success);
+  background: var(--vista-success-soft);
+  font-size: 0.7rem;
+  font-weight: 720;
+}
+
+.supplier-invoice-preview-drawer .procurement-preview-section {
+  gap: 0.8rem;
+}
+
+.supplier-invoice-preview-drawer .procurement-comparison-card {
+  gap: 0.9rem;
+  padding: 1rem;
+  border: 1px solid var(--vista-line);
+  background: var(--vista-surface);
+}
+
+.supplier-invoice-line-money {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin: 0;
+  overflow: hidden;
+  border-top: 1px solid var(--vista-line);
+}
+
+.supplier-invoice-line-money > div {
+  padding: 0.75rem 0;
+}
+
+.supplier-invoice-line-money > div + div {
+  padding-left: 0.75rem;
+  border-left: 1px solid var(--vista-line);
+}
+
+@media (max-width: 680px) {
+  .supplier-invoice-document-fields,
+  .supplier-invoice-line-fields,
+  .supplier-invoice-preview-hero {
+    grid-template-columns: 1fr;
+  }
+
+  .supplier-invoice-preview-total {
+    min-height: 8rem;
+  }
+
+  .supplier-invoice-line-money {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .supplier-invoice-line-money > div:nth-child(3) {
+    padding-left: 0;
+    border-top: 1px solid var(--vista-line);
+    border-left: 0;
+  }
+
+  .supplier-invoice-line-money > div:nth-child(4) {
+    border-top: 1px solid var(--vista-line);
+  }
+}
+
+@media (max-width: 440px) {
+  .supplier-invoice-order-context,
+  .supplier-invoice-line-card .procurement-comparison-strip,
+  .supplier-invoice-preview-quantities,
+  .supplier-invoice-preview-hero > dl {
+    grid-template-columns: 1fr;
+  }
+
+  .supplier-invoice-order-context > div + div,
+  .supplier-invoice-line-card .procurement-comparison-strip > div + div,
+  .supplier-invoice-preview-quantities > div + div,
+  .supplier-invoice-preview-hero > dl > div:nth-child(even) {
+    border-top: 1px solid var(--vista-line);
+    border-left: 0;
+  }
+
+  .supplier-invoice-preview-hero > dl > div:nth-child(n + 3) {
+    border-top: 1px solid var(--vista-line);
   }
 }
 
@@ -17512,5 +18026,487 @@ select.vista-field-input {
     )
     .vista-button {
     width: 100%;
+  }
+}
+
+.finance-report-alert-link {
+  display: inline-flex;
+  width: max-content;
+  align-items: center;
+  gap: 0.35rem;
+  margin-top: 0.55rem;
+  color: inherit;
+  font-size: 0.74rem;
+  font-weight: 720;
+  text-decoration: none;
+}
+
+.finance-report-alert-link:hover {
+  text-decoration: underline;
+}
+
+/* Supplier invoice panel final cascade. */
+.supplier-invoice-drawer.security-drawer.is-wide {
+  width: min(100%, 46rem);
+  max-width: min(100%, 46rem);
+}
+
+.supplier-invoice-drawer > .procurement-drawer-header {
+  padding: 1rem 1.5rem 1.2rem;
+}
+
+.supplier-invoice-drawer > .security-drawer-body {
+  padding-top: 0 !important;
+}
+
+@media (max-width: 760px) {
+  .supplier-invoice-drawer.security-drawer.is-wide {
+    width: 100%;
+    max-width: 100%;
+  }
+}
+
+/* Supplier invoice form and preview
+ * These selectors intentionally finish the cascade: general Procurement form
+ * rules must not resize checkboxes or dismantle these document layouts. */
+.supplier-invoice-drawer > .security-drawer-body {
+  --drawer-body-inline: clamp(1rem, 3vw, 1.45rem);
+
+  padding-right: var(--drawer-body-inline) !important;
+  padding-left: var(--drawer-body-inline) !important;
+}
+
+.supplier-invoice-drawer .procurement-form,
+.supplier-invoice-drawer .supplier-invoice-form-section,
+.supplier-invoice-drawer .supplier-invoice-line-card,
+.supplier-invoice-preview-drawer .procurement-preview-section,
+.supplier-invoice-preview-drawer .procurement-comparison-card {
+  min-width: 0;
+}
+
+.supplier-invoice-drawer .procurement-form {
+  display: grid;
+  gap: 0;
+}
+
+.supplier-invoice-drawer .supplier-invoice-form-section {
+  display: grid;
+  gap: 1rem;
+  padding: 1.3rem 0;
+  border-bottom: 1px solid var(--vista-line);
+}
+
+.supplier-invoice-drawer .supplier-invoice-section-heading {
+  display: grid;
+  grid-template-columns: 1.75rem minmax(0, 1fr);
+  align-items: start;
+  gap: 0.72rem;
+}
+
+.supplier-invoice-drawer .supplier-invoice-section-heading.is-unnumbered {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.supplier-invoice-drawer .procurement-field {
+  display: grid;
+  min-width: 0;
+  gap: 0.42rem;
+  margin: 0;
+}
+
+.supplier-invoice-drawer .procurement-field > span {
+  color: var(--vista-muted);
+  font-size: 0.72rem;
+  font-weight: 720;
+}
+
+.supplier-invoice-drawer .procurement-form input:not([type='checkbox']),
+.supplier-invoice-drawer .procurement-form textarea,
+.supplier-invoice-drawer .vista-search-select-shell,
+.supplier-invoice-drawer .vista-search-select-shell > input.vista-search-select {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+}
+
+.supplier-invoice-drawer .supplier-invoice-document-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(10rem, 0.65fr);
+  align-items: start;
+  gap: 0.85rem;
+}
+
+.supplier-invoice-drawer .supplier-invoice-order-context {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr) minmax(5rem, 0.5fr);
+  overflow: hidden;
+  border: 1px solid var(--vista-line);
+  border-radius: 0.72rem;
+  background: var(--vista-surface-muted);
+}
+
+.supplier-invoice-drawer .supplier-invoice-line-card {
+  display: grid;
+  gap: 0.95rem !important;
+  margin: 0;
+  padding: 1rem !important;
+  border: 1px solid var(--vista-line) !important;
+  border-radius: 0.82rem !important;
+  background: var(--vista-surface) !important;
+  opacity: 1;
+}
+
+.supplier-invoice-drawer .supplier-invoice-line-card.is-selected {
+  border-color: color-mix(in srgb, var(--vista-accent) 38%, var(--vista-line)) !important;
+}
+
+.supplier-invoice-drawer .supplier-invoice-line-card.is-skipped {
+  border-color: var(--vista-line) !important;
+  background: var(--vista-surface-muted) !important;
+}
+
+.supplier-invoice-drawer .supplier-invoice-line-card > legend {
+  display: block;
+  float: none;
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+}
+
+.supplier-invoice-drawer .supplier-invoice-line-card .procurement-check-label {
+  display: grid;
+  grid-template-columns: 1.2rem minmax(0, 1fr);
+  width: 100%;
+  min-width: 0;
+  align-items: center;
+  gap: 0.62rem;
+  margin: 0;
+  color: var(--vista-ink);
+  font-size: 0.84rem;
+  font-weight: 720;
+  line-height: 1.35;
+  cursor: pointer;
+}
+
+.supplier-invoice-drawer
+  .supplier-invoice-line-card
+  .procurement-check-label
+  input[type='checkbox'] {
+  appearance: none;
+  display: grid;
+  width: 1.15rem !important;
+  height: 1.15rem !important;
+  min-width: 1.15rem !important;
+  min-height: 1.15rem !important;
+  place-content: center;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 1px solid var(--vista-line-strong) !important;
+  border-radius: 0.3rem !important;
+  background: var(--vista-surface) !important;
+  box-shadow: none !important;
+  cursor: pointer;
+}
+
+.supplier-invoice-drawer
+  .supplier-invoice-line-card
+  .procurement-check-label
+  input[type='checkbox']::before {
+  width: 0.58rem;
+  height: 0.58rem;
+  content: '';
+  clip-path: polygon(14% 44%, 0 59%, 40% 100%, 100% 20%, 84% 5%, 39% 67%);
+  background: #fff;
+  transform: scale(0);
+  transition: transform 100ms ease;
+}
+
+.supplier-invoice-drawer
+  .supplier-invoice-line-card
+  .procurement-check-label
+  input[type='checkbox']:checked {
+  border-color: var(--vista-accent) !important;
+  background: var(--vista-accent) !important;
+}
+
+.supplier-invoice-drawer
+  .supplier-invoice-line-card
+  .procurement-check-label
+  input[type='checkbox']:checked::before {
+  transform: scale(1);
+}
+
+.supplier-invoice-drawer .supplier-invoice-line-card .procurement-check-label > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.supplier-invoice-drawer .supplier-invoice-line-card .procurement-comparison-strip,
+.supplier-invoice-preview-drawer .supplier-invoice-preview-quantities {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  overflow: hidden;
+  border: 1px solid var(--vista-line);
+  border-radius: 0.65rem;
+  background: var(--vista-surface-muted);
+}
+
+.supplier-invoice-drawer .supplier-invoice-line-card .procurement-comparison-strip > div,
+.supplier-invoice-preview-drawer .supplier-invoice-preview-quantities > div {
+  display: grid;
+  min-width: 0;
+  gap: 0.2rem;
+  padding: 0.72rem 0.78rem;
+}
+
+.supplier-invoice-drawer .supplier-invoice-line-card .procurement-comparison-strip > div + div,
+.supplier-invoice-preview-drawer .supplier-invoice-preview-quantities > div + div {
+  border-left: 1px solid var(--vista-line);
+}
+
+.supplier-invoice-drawer .supplier-invoice-line-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  gap: 0.82rem;
+}
+
+.supplier-invoice-drawer .supplier-invoice-line-fields > label:last-child:nth-child(odd) {
+  grid-column: 1 / -1;
+}
+
+.supplier-invoice-drawer .supplier-invoice-line-note {
+  margin: -0.15rem 0 0;
+  color: var(--vista-muted);
+  font-size: 0.7rem;
+  line-height: 1.45;
+}
+
+.supplier-invoice-preview-drawer .supplier-invoice-preview-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
+  margin: 1.25rem 0 0;
+  overflow: hidden;
+  border: 1px solid var(--vista-line);
+  border-radius: 0.85rem;
+  background: var(--vista-surface);
+}
+
+.supplier-invoice-preview-drawer .supplier-invoice-preview-total {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: auto auto;
+  align-items: center;
+  gap: 0.24rem 1rem;
+  min-height: 0;
+  padding: 1rem 1.1rem;
+  color: var(--vista-ink);
+  background: color-mix(in srgb, var(--vista-accent) 9%, var(--vista-surface));
+}
+
+.supplier-invoice-preview-drawer .supplier-invoice-preview-total > span {
+  grid-column: 1;
+  grid-row: 1;
+  color: var(--vista-muted);
+  font-size: 0.7rem;
+  font-weight: 720;
+}
+
+.supplier-invoice-preview-drawer .supplier-invoice-preview-total > strong {
+  grid-column: 2;
+  grid-row: 1 / 3;
+  color: var(--vista-ink);
+  font-size: clamp(1.25rem, 4vw, 1.6rem);
+  letter-spacing: -0.035em;
+  text-align: right;
+}
+
+.supplier-invoice-preview-drawer .supplier-invoice-preview-total > small {
+  grid-column: 1;
+  grid-row: 2;
+  color: var(--vista-muted);
+  font-size: 0.7rem;
+  line-height: 1.4;
+}
+
+.supplier-invoice-preview-drawer .supplier-invoice-preview-hero > dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0;
+  border-top: 1px solid var(--vista-line);
+}
+
+.supplier-invoice-preview-drawer .supplier-invoice-preview-hero > dl > div {
+  display: grid;
+  min-width: 0;
+  gap: 0.22rem;
+  padding: 0.78rem 0.95rem;
+}
+
+.supplier-invoice-preview-drawer .supplier-invoice-preview-hero > dl > div:nth-child(even) {
+  border-left: 1px solid var(--vista-line);
+}
+
+.supplier-invoice-preview-drawer .supplier-invoice-preview-hero > dl > div:nth-child(n + 3) {
+  border-top: 1px solid var(--vista-line);
+}
+
+.supplier-invoice-preview-drawer .supplier-invoice-tax-status,
+.supplier-invoice-preview-drawer > .security-drawer-body > .vista-alert {
+  margin-top: 0.85rem;
+}
+
+.supplier-invoice-preview-drawer .supplier-invoice-tax-status {
+  box-sizing: border-box;
+  display: grid;
+  grid-template-columns: 2rem minmax(0, 1fr);
+  width: 100%;
+  min-width: 0;
+  align-items: center;
+  gap: 0.72rem;
+  padding: 0.72rem 0.82rem;
+  border: 1px solid color-mix(in srgb, var(--vista-success) 24%, var(--vista-line));
+  border-radius: 0.72rem;
+  color: var(--vista-ink);
+  background: color-mix(in srgb, var(--vista-success) 7%, var(--vista-surface));
+  font-size: inherit;
+}
+
+.supplier-invoice-preview-drawer .supplier-invoice-tax-status-icon {
+  display: grid;
+  width: 2rem;
+  height: 2rem;
+  place-items: center;
+  border-radius: 50%;
+  color: #fff;
+  background: var(--vista-success);
+}
+
+.supplier-invoice-preview-drawer .supplier-invoice-tax-status-copy {
+  display: grid;
+  min-width: 0;
+  gap: 0.16rem;
+}
+
+.supplier-invoice-preview-drawer .supplier-invoice-tax-status-copy > strong {
+  color: var(--vista-ink);
+  font-size: 0.78rem;
+  font-weight: 740;
+  line-height: 1.35;
+}
+
+.supplier-invoice-preview-drawer .supplier-invoice-tax-status-copy > small {
+  color: var(--vista-muted);
+  font-size: 0.69rem;
+  line-height: 1.4;
+}
+
+.supplier-invoice-preview-drawer .procurement-preview-section {
+  display: grid;
+  gap: 0.82rem;
+  padding: 1.3rem 0;
+}
+
+.supplier-invoice-preview-drawer .procurement-comparison-card {
+  display: grid;
+  gap: 0 !important;
+  overflow: hidden;
+  padding: 0 !important;
+  border: 1px solid var(--vista-line) !important;
+  border-radius: 0.82rem !important;
+  background: var(--vista-surface) !important;
+}
+
+.supplier-invoice-preview-drawer .procurement-comparison-card > header {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.85rem 0.95rem;
+}
+
+.supplier-invoice-preview-drawer .procurement-comparison-card > header > strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--vista-ink);
+  font-size: 0.82rem;
+}
+
+.supplier-invoice-preview-drawer .supplier-invoice-preview-quantities {
+  border-right: 0;
+  border-left: 0;
+  border-radius: 0;
+}
+
+.supplier-invoice-preview-drawer .supplier-invoice-line-money {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0;
+  border-top: 1px solid var(--vista-line);
+}
+
+.supplier-invoice-preview-drawer .supplier-invoice-line-money > div {
+  display: grid;
+  min-width: 0;
+  gap: 0.22rem;
+  padding: 0.72rem 0.9rem;
+  border: 0;
+}
+
+.supplier-invoice-preview-drawer .supplier-invoice-line-money > div:nth-child(even) {
+  border-left: 1px solid var(--vista-line);
+}
+
+.supplier-invoice-preview-drawer .supplier-invoice-line-money > div:nth-child(n + 3) {
+  border-top: 1px solid var(--vista-line);
+}
+
+@media (max-width: 560px) {
+  .supplier-invoice-drawer .supplier-invoice-document-fields,
+  .supplier-invoice-drawer .supplier-invoice-line-fields,
+  .supplier-invoice-drawer .supplier-invoice-order-context {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .supplier-invoice-drawer .supplier-invoice-line-fields > label:last-child:nth-child(odd) {
+    grid-column: auto;
+  }
+
+  .supplier-invoice-drawer .supplier-invoice-order-context > div + div {
+    border-top: 1px solid var(--vista-line);
+    border-left: 0;
+  }
+
+  .supplier-invoice-preview-drawer .supplier-invoice-preview-total {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .supplier-invoice-preview-drawer .supplier-invoice-preview-total > span,
+  .supplier-invoice-preview-drawer .supplier-invoice-preview-total > strong,
+  .supplier-invoice-preview-drawer .supplier-invoice-preview-total > small {
+    grid-column: 1;
+    grid-row: auto;
+    text-align: left;
+  }
+}
+
+@media (max-width: 420px) {
+  .supplier-invoice-preview-drawer .supplier-invoice-preview-hero > dl,
+  .supplier-invoice-preview-drawer .supplier-invoice-line-money {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .supplier-invoice-preview-drawer .supplier-invoice-preview-hero > dl > div:nth-child(even),
+  .supplier-invoice-preview-drawer .supplier-invoice-line-money > div:nth-child(even) {
+    border-left: 0;
+  }
+
+  .supplier-invoice-preview-drawer .supplier-invoice-preview-hero > dl > div + div,
+  .supplier-invoice-preview-drawer .supplier-invoice-line-money > div + div {
+    border-top: 1px solid var(--vista-line);
   }
 }

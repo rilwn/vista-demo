@@ -521,9 +521,7 @@ function mapDefinition(row: DefinitionRow): FinanceReportDefinition {
     formats: row.available_formats,
     key: row.definition_key,
     name: row.name,
-    requiresDateRange:
-      row.definition_key === 'finance.customer-turnover' ||
-      row.definition_key === 'finance.supplier-turnover',
+    requiresDateRange: dateRangeReportKeys.has(row.definition_key),
   };
 }
 
@@ -548,8 +546,7 @@ function reportFilters(
   input: CreateFinanceReportExportDto,
   definitionKey: FinanceReportDefinitionKey,
 ): Record<string, string> {
-  const requiresDateRange =
-    definitionKey === 'finance.customer-turnover' || definitionKey === 'finance.supplier-turnover';
+  const requiresDateRange = dateRangeReportKeys.has(definitionKey);
   if (!requiresDateRange) {
     if (input.dateFrom || input.dateTo) {
       throw new ApiErrorException(
@@ -619,3 +616,11 @@ function asIso(value: Date | string): string {
 }
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+const dateRangeReportKeys = new Set<FinanceReportDefinitionKey>([
+  'finance.customer-turnover',
+  'finance.supplier-turnover',
+  'finance.sales-journal',
+  'finance.purchase-journal',
+  'finance.vat-review',
+]);

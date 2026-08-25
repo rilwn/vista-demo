@@ -1,59 +1,44 @@
-# Test Logistics
+# Test the supplier-invoice UI fixes
 
 ## Start
 
-1. Stop the development server if it is running.
-2. Run `npm run db:migrate`.
-3. Run `npm run db:fixtures:dev` once so the matching demo shipment, location,
-   equipment, and permissions are present.
-4. Run `npm run dev`, open `http://localhost:5173`, and sign in as
-   `manager@vista.local` with your `DEV_FIXTURES_PASSWORD`.
+1. If development is already running, stop it once with `Ctrl+C` so the shared
+   choice-field update is reloaded.
+2. Run `npm run dev`.
+3. Open the ERP/CRM app and sign in as `manager@vista.local`.
 
-## Delivery and route
+## 1. Check the invoice panels
 
-1. From the sidebar choose **ERP → Logistics → Deliveries**.
-2. Select **Plan delivery** and use:
-   - Shipment: `DEV-SH-0001 · Alfa Market Demo Ltd.`
-   - Delivery location: `Alfa Market — Central Store · Vratsa`
-   - Keep the suggested window
-   - Instructions: `Call Elena 15 minutes before arrival.`
-3. Select **Plan delivery**, then use **Back** in its preview.
-4. Open **Routes**, select **Plan route**, keep the suggested date and manager,
-   select the new `DLV-...` customer delivery as the first stop, and save.
+1. From the sidebar choose **ERP → Procurement → Supplier invoices**.
+2. Select **Record supplier invoice**.
+3. Select **Purchase order**. Type `TechSupply`, then choose the adapter order
+   from the list beneath the field.
 
-Expected: the route appears on its selected calendar date and retains the linked
-delivery stop.
+Expected: the choices appear in a clean light panel that matches the app, not a
+black browser menu. The form has three clear sections, readable quantity
+comparisons, aligned fields, square product checkboxes, a scrolling body, and a
+fitted action bar. Select **Back**; no invoice needs to be saved.
 
-5. Return to **Deliveries**, open the new `DLV-...` row, and select **Dispatch**.
-6. Select **Record delivery**. Enter recipient `Elena Petrova`, keep the shown
-   time, add `One box received in good condition.`, and confirm.
+4. Find `TEST-VAT-2026-0825-01` and select **Preview**.
 
-Expected: the delivery is **Delivered**, its activity shows each step, and the
-handover is **Accepted**. **Back** returns to the delivery board, while the route
-keeps its historical stop snapshot.
+Expected: the invoice total, supplier details, VAT status, order quantities,
+and line values are separated clearly. **Back** returns to the invoice list.
 
-## Return to Service
+## 2. Check the Finance warning
 
-1. Open **ERP → Logistics → Returns** and select **Register return**.
-2. Use:
-   - Shipment: `DEV-SH-0001 · Alfa Market Demo Ltd.`
-   - Customer location: `Alfa Market — Central Store · Vratsa`
-   - Shipment item: `Demo 12 V Power Adapter`
-   - Quantity: `1`
-   - Destination warehouse: `Demo Service Warehouse`
-   - Next action: **Send to Service**
-   - Equipment: `Demo 12 V Power Adapter · DEMO-ADAPTER-ALFA-01`
-   - Service type: **Out of warranty**
-   - Transport: **Customer drop-off**
-   - Reason: `Adapter does not power on after installation.`
-3. Select **Register return**, then select **Receive return** in its preview.
+1. From the sidebar choose **ERP → Finance → Finance reports**.
+2. Select **Document journals → Purchases → Apply**.
 
-Expected: the return becomes **Received**, shows its inventory movement, and
-shows one linked `SRV-...` Service request. Reopening it never creates a second
-stock movement or Service request.
+Expected: the warning names the earlier invoice without VAT details and
+explains that it remains in the journal but is excluded from VAT totals. This
+is expected historical data, not a failed test.
 
-## Provider boundary
+## 3. Check searchable choices
 
-Open **ERP → Logistics → Couriers**. Econt and Speedy must both show **Not
-connected** and must not offer a booking action until their approved provider
-configuration is supplied.
+Open any create panel with a choice field, such as **ERP → Sales → Quotations →
+New quotation**. Type part of a customer, warehouse, or product name and choose
+the matching suggestion.
+
+Expected: single-choice fields filter suggestions while typing. Multiple serial
+number lists have their own search field and preserve multiple selection. Press
+the arrow keys and **Enter** once to confirm keyboard selection also works.

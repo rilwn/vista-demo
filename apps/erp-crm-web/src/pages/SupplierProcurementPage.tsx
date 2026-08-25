@@ -8,6 +8,7 @@ import type {
   SupplierClaim,
   SupplierClaimStatus,
   SupplierInvoice,
+  VatTreatment,
 } from '@vista/contracts';
 import { type FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 
@@ -621,6 +622,8 @@ interface InvoiceLineDraft {
   orderLineId: string;
   quantity: string;
   unitPrice: string;
+  vatRate: string;
+  vatTreatment: VatTreatment;
 }
 
 function SupplierInvoiceDrawer({
@@ -657,10 +660,12 @@ function SupplierInvoiceDrawer({
     const input: CreateSupplierInvoiceRequest = {
       invoiceDate,
       invoiceNumber: invoiceNumber.trim(),
-      lines: included.map(({ orderLineId, quantity, unitPrice }) => ({
+      lines: included.map(({ orderLineId, quantity, unitPrice, vatRate, vatTreatment }) => ({
         orderLineId,
         quantity,
         unitPrice,
+        ...(vatTreatment === 'ica' ? { vatRate } : {}),
+        vatTreatment,
       })),
       purchaseOrderId: order.id,
     };
@@ -679,8 +684,10 @@ function SupplierInvoiceDrawer({
   return (
     <RecordDrawer
       busy={busy}
+      className="supplier-invoice-drawer"
+      eyebrow="Procurement"
       onBack={onBack}
-      subtitle="Link the supplier invoice to ordered and delivered quantities"
+      subtitle="Match the supplier document with the purchase order before recording it."
       title="Record supplier invoice"
     >
       <form className="procurement-form" onSubmit={(event) => void submit(event)}>
@@ -690,50 +697,93 @@ function SupplierInvoiceDrawer({
             Create a purchase order before recording an invoice.
           </InlineAlert>
         ) : null}
-        <label className="procurement-field">
-          <span>Purchase order</span>
-          <select
-            onChange={(event) => selectOrder(event.target.value)}
-            required
-            value={purchaseOrderId}
-          >
-            {orders.map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.supplierName} · {shortIdentity(item.id)}
-              </option>
-            ))}
-          </select>
-        </label>
-        <div className="procurement-form-grid">
+        <section className="supplier-invoice-form-section">
+          <header className="supplier-invoice-section-heading">
+            <span>1</span>
+            <div>
+              <h3>Source document</h3>
+              <p>Choose the purchase order covered by this invoice.</p>
+            </div>
+          </header>
           <label className="procurement-field">
-            <span>Supplier invoice number</span>
-            <input
-              maxLength={120}
-              onChange={(event) => setInvoiceNumber(event.target.value)}
+            <span>Purchase order</span>
+            <select
+              onChange={(event) => selectOrder(event.target.value)}
               required
-              value={invoiceNumber}
-            />
+              value={purchaseOrderId}
+            >
+              {orders.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.supplierName} · {shortIdentity(item.id)}
+                </option>
+              ))}
+            </select>
           </label>
-          <label className="procurement-field">
-            <span>Invoice date</span>
-            <input
-              onChange={(event) => setInvoiceDate(event.target.value)}
-              required
-              type="date"
-              value={invoiceDate}
-            />
-          </label>
-        </div>
-        <section className="procurement-invoice-lines">
-          <header>
-            <strong>Invoice lines</strong>
-            <span>Compare before recording</span>
+          {order ? (
+            <div className="supplier-invoice-order-context">
+              <div>
+                <span>Supplier</span>
+                <strong>{order.supplierName}</strong>
+              </div>
+              <div>
+                <span>Order reference</span>
+                <strong>{shortIdentity(order.id)}</strong>
+              </div>
+              <div>
+                <span>Currency</span>
+                <strong>{order.currencyCode}</strong>
+              </div>
+            </div>
+          ) : null}
+        </section>
+
+        <section className="supplier-invoice-form-section">
+          <header className="supplier-invoice-section-heading">
+            <span>2</span>
+            <div>
+              <h3>Invoice details</h3>
+              <p>Enter the reference exactly as it appears on the supplier document.</p>
+            </div>
+          </header>
+          <div className="procurement-form-grid supplier-invoice-document-fields">
+            <label className="procurement-field">
+              <span>Supplier invoice number</span>
+              <input
+                maxLength={120}
+                onChange={(event) => setInvoiceNumber(event.target.value)}
+                placeholder="For example, TS-2026-0148"
+                required
+                value={invoiceNumber}
+              />
+            </label>
+            <label className="procurement-field">
+              <span>Invoice date</span>
+              <input
+                onChange={(event) => setInvoiceDate(event.target.value)}
+                required
+                type="date"
+                value={invoiceDate}
+              />
+            </label>
+          </div>
+        </section>
+
+        <section className="procurement-invoice-lines supplier-invoice-form-section">
+          <header className="supplier-invoice-section-heading">
+            <span>3</span>
+            <div>
+              <h3>Products and VAT</h3>
+              <p>Compare ordered, delivered, and previously invoiced quantities.</p>
+            </div>
           </header>
           {order?.lines.map((line) => {
             const draft = lines.find((item) => item.orderLineId === line.id);
             if (!draft) return null;
             return (
-              <fieldset key={line.id}>
+              <fieldset
+                className={`supplier-invoice-line-card ${draft.include ? 'is-selected' : 'is-skipped'}`}
+                key={line.id}
+              >
                 <legend>
                   <label className="procurement-check-label">
                     <input
@@ -742,22 +792,25 @@ function SupplierInvoiceDrawer({
                         updateInvoiceDraft(setLines, line.id, { include: event.target.checked })
                       }
                       type="checkbox"
-                    />{' '}
-                    {line.productName}
+                    />
+                    <span>{line.productName}</span>
                   </label>
                 </legend>
                 <div className="procurement-comparison-strip">
-                  <span>
-                    Ordered <strong>{line.orderedQuantity}</strong>
-                  </span>
-                  <span>
-                    Delivered <strong>{line.deliveredQuantity}</strong>
-                  </span>
-                  <span>
-                    Already invoiced <strong>{line.invoicedQuantity}</strong>
-                  </span>
+                  <div>
+                    <span>Ordered</span>
+                    <strong>{line.orderedQuantity}</strong>
+                  </div>
+                  <div>
+                    <span>Delivered</span>
+                    <strong>{line.deliveredQuantity}</strong>
+                  </div>
+                  <div>
+                    <span>Already invoiced</span>
+                    <strong>{line.invoicedQuantity}</strong>
+                  </div>
                 </div>
-                <div className="procurement-form-grid">
+                <div className="supplier-invoice-line-fields">
                   <label className="procurement-field">
                     <span>Invoice quantity</span>
                     <input
@@ -784,7 +837,46 @@ function SupplierInvoiceDrawer({
                       value={draft.unitPrice}
                     />
                   </label>
+                  <label className="procurement-field">
+                    <span>VAT treatment</span>
+                    <select
+                      disabled={!draft.include}
+                      onChange={(event) => {
+                        const vatTreatment = event.target.value as VatTreatment;
+                        updateInvoiceDraft(setLines, line.id, {
+                          vatRate: defaultVatRate(vatTreatment),
+                          vatTreatment,
+                        });
+                      }}
+                      value={draft.vatTreatment}
+                    >
+                      <option value="standard_20">Standard 20%</option>
+                      <option value="reduced_9">Reduced 9%</option>
+                      <option value="zero">Zero-rated</option>
+                      <option value="exempt">Exempt</option>
+                      <option value="ica">Intra-community acquisition</option>
+                    </select>
+                  </label>
+                  {draft.vatTreatment === 'ica' ? (
+                    <label className="procurement-field">
+                      <span>Recorded VAT rate (%)</span>
+                      <input
+                        disabled={!draft.include}
+                        inputMode="decimal"
+                        onChange={(event) =>
+                          updateInvoiceDraft(setLines, line.id, { vatRate: event.target.value })
+                        }
+                        pattern="\d+(\.\d{1,4})?"
+                        required={draft.include}
+                        value={draft.vatRate}
+                      />
+                    </label>
+                  ) : null}
                 </div>
+                <p className="supplier-invoice-line-note">
+                  {subtract(line.orderedQuantity, line.invoicedQuantity)} remains against this order
+                  line before this invoice is recorded.
+                </p>
               </fieldset>
             );
           })}
@@ -814,25 +906,68 @@ function InvoicePreviewDrawer({
   return (
     <RecordDrawer
       busy={false}
+      className="supplier-invoice-drawer supplier-invoice-preview-drawer"
+      eyebrow="Supplier invoice"
       onBack={onBack}
       subtitle={`${invoice.supplierName} · ${formatDate(invoice.invoiceDate)}`}
-      title={`Invoice ${invoice.invoiceNumber}`}
+      title={invoice.invoiceNumber}
     >
-      <section className="procurement-preview-summary">
-        <div>
-          <span>Total</span>
+      <section className="supplier-invoice-preview-hero">
+        <div className="supplier-invoice-preview-total">
+          <span>Invoice total</span>
           <strong>{formatMoney(invoice.total, invoice.currencyCode)}</strong>
+          <small>
+            {formatMoney(invoice.netTotal, invoice.currencyCode)} net ·{' '}
+            {formatMoney(invoice.vatTotal, invoice.currencyCode)} VAT
+          </small>
         </div>
-        <div>
-          <span>Purchase order</span>
-          <strong>{shortIdentity(invoice.purchaseOrderId)}</strong>
-        </div>
+        <dl>
+          <div>
+            <dt>Supplier</dt>
+            <dd>{invoice.supplierName}</dd>
+          </div>
+          <div>
+            <dt>Invoice date</dt>
+            <dd>{formatDate(invoice.invoiceDate)}</dd>
+          </div>
+          <div>
+            <dt>Purchase order</dt>
+            <dd>{shortIdentity(invoice.purchaseOrderId)}</dd>
+          </div>
+          <div>
+            <dt>Currency</dt>
+            <dd>{invoice.currencyCode}</dd>
+          </div>
+        </dl>
       </section>
+      {!invoice.taxBreakdownComplete ? (
+        <InlineAlert tone="warning" title="VAT details were not recorded">
+          This earlier invoice remains in the purchase register, but Finance excludes it from
+          recorded input VAT totals.
+        </InlineAlert>
+      ) : (
+        <div className="supplier-invoice-tax-status" role="status">
+          <span className="supplier-invoice-tax-status-icon" aria-hidden="true">
+            <Icon name="check" size={16} />
+          </span>
+          <span className="supplier-invoice-tax-status-copy">
+            <strong>VAT details are complete</strong>
+            <small>Every invoice line has a recorded VAT treatment.</small>
+          </span>
+        </div>
+      )}
       <section className="procurement-preview-section">
-        <h3>Three-way comparison</h3>
+        <div className="supplier-invoice-section-heading is-unnumbered">
+          <div>
+            <h3>Order comparison</h3>
+            <p>Ordered, received, and invoiced quantities for each product.</p>
+          </div>
+        </div>
         {invoice.lines.map((line) => {
           const orderLine = order?.lines.find((item) => item.id === line.orderLineId);
-          const matched = orderLine?.deliveredQuantity === orderLine?.invoicedQuantity;
+          const matched = Boolean(
+            orderLine && orderLine.deliveredQuantity === orderLine.invoicedQuantity,
+          );
           return (
             <article className="procurement-comparison-card" key={line.id}>
               <header>
@@ -841,21 +976,42 @@ function InvoicePreviewDrawer({
                   {matched ? 'Matched' : 'Review variance'}
                 </span>
               </header>
-              <div>
-                <span>
-                  Ordered <strong>{orderLine?.orderedQuantity ?? '—'}</strong>
-                </span>
-                <span>
-                  Delivered <strong>{orderLine?.deliveredQuantity ?? '—'}</strong>
-                </span>
-                <span>
-                  Invoiced <strong>{orderLine?.invoicedQuantity ?? line.quantity}</strong>
-                </span>
+              <div className="supplier-invoice-preview-quantities">
+                <div>
+                  <span>Ordered</span>
+                  <strong>{orderLine?.orderedQuantity ?? '—'}</strong>
+                </div>
+                <div>
+                  <span>Delivered</span>
+                  <strong>{orderLine?.deliveredQuantity ?? '—'}</strong>
+                </div>
+                <div>
+                  <span>Invoiced</span>
+                  <strong>{orderLine?.invoicedQuantity ?? line.quantity}</strong>
+                </div>
               </div>
-              <small>
-                {formatMoney(line.unitPrice, invoice.currencyCode)} per unit ·{' '}
-                {formatMoney(line.lineTotal, invoice.currencyCode)}
-              </small>
+              <dl className="supplier-invoice-line-money">
+                <div>
+                  <dt>Unit price</dt>
+                  <dd>{formatMoney(line.unitPrice, invoice.currencyCode)}</dd>
+                </div>
+                <div>
+                  <dt>Net</dt>
+                  <dd>{formatMoney(line.netTotal, invoice.currencyCode)}</dd>
+                </div>
+                <div>
+                  <dt>VAT</dt>
+                  <dd>
+                    {line.vatTreatment
+                      ? `${formatMoney(line.vatAmount ?? '0', invoice.currencyCode)} · ${vatTreatmentLabel(line.vatTreatment)}`
+                      : 'Not recorded'}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Total</dt>
+                  <dd>{formatMoney(line.grossTotal, invoice.currencyCode)}</dd>
+                </div>
+              </dl>
             </article>
           );
         })}
@@ -1084,6 +1240,7 @@ function RecordDrawer({
   busy,
   children,
   className = '',
+  eyebrow,
   onBack,
   subtitle,
   title,
@@ -1091,6 +1248,7 @@ function RecordDrawer({
   busy: boolean;
   children: React.ReactNode;
   className?: string;
+  eyebrow?: string;
   onBack: () => void;
   subtitle: string;
   title: string;
@@ -1121,6 +1279,7 @@ function RecordDrawer({
             <Icon name="arrow" size={17} /> Back
           </button>
           <div>
+            {eyebrow ? <span className="procurement-drawer-eyebrow">{eyebrow}</span> : null}
             <h2>{title}</h2>
             <p>{subtitle}</p>
           </div>
@@ -1274,8 +1433,27 @@ function invoiceDrafts(order?: PurchaseOrder): InvoiceLineDraft[] {
       orderLineId: line.id,
       quantity: subtract(line.orderedQuantity, line.invoicedQuantity),
       unitPrice: line.unitPrice,
+      vatRate: '20.0000',
+      vatTreatment: 'standard_20',
     })) ?? []
   );
+}
+
+function defaultVatRate(treatment: VatTreatment): string {
+  if (treatment === 'standard_20') return '20.0000';
+  if (treatment === 'reduced_9') return '9.0000';
+  if (treatment === 'zero' || treatment === 'exempt') return '0.0000';
+  return '';
+}
+
+function vatTreatmentLabel(treatment: VatTreatment): string {
+  return {
+    exempt: 'Exempt',
+    ica: 'Intra-community acquisition',
+    reduced_9: 'Reduced 9%',
+    standard_20: 'Standard 20%',
+    zero: 'Zero-rated',
+  }[treatment];
 }
 
 function updateInvoiceDraft(

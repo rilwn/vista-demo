@@ -951,6 +951,8 @@ export interface CreateSupplierInvoiceLineRequest {
   orderLineId: string;
   quantity: string;
   unitPrice: string;
+  vatRate?: string;
+  vatTreatment: VatTreatment;
 }
 
 export interface CreateSupplierInvoiceRequest {
@@ -961,13 +963,19 @@ export interface CreateSupplierInvoiceRequest {
 }
 
 export interface SupplierInvoiceLine {
+  grossTotal: string;
   id: string;
   lineTotal: string;
+  netTotal: string;
   orderLineId: string;
   productId: string;
   productName: string;
   quantity: string;
+  taxBreakdownRecorded: boolean;
   unitPrice: string;
+  vatAmount?: string;
+  vatRate?: string;
+  vatTreatment?: VatTreatment;
 }
 
 export interface SupplierInvoice {
@@ -976,11 +984,14 @@ export interface SupplierInvoice {
   invoiceDate: string;
   invoiceNumber: string;
   lines: SupplierInvoiceLine[];
+  netTotal: string;
   purchaseOrderId: string;
   recordedAt: string;
   supplierName: string;
   supplierPartnerId: string;
+  taxBreakdownComplete: boolean;
   total: string;
+  vatTotal: string;
 }
 
 export const supplierClaimTypes = ['damaged', 'non_conforming'] as const;
@@ -1377,6 +1388,69 @@ export interface FinanceTurnoverReport {
   totals: FinanceTurnoverTotals;
 }
 
+export const financeJournalKinds = ['sales', 'purchase'] as const;
+export type FinanceJournalKind = (typeof financeJournalKinds)[number];
+
+export interface FinanceJournalReportItem {
+  currencyCode: string;
+  documentDate: string;
+  documentType: FinancialDocumentType | 'supplier_invoice';
+  exchangeRate?: string;
+  grossBgnTotal: string;
+  id: string;
+  netBgnTotal: string;
+  number: string;
+  partnerName: string;
+  partnerVatNumber?: string;
+  sourceNumber?: string;
+  status: 'cancelled' | 'draft' | 'recorded';
+  taxBreakdownComplete: boolean;
+  taxEventDate?: string;
+  vatBgnTotal: string;
+}
+
+export interface FinanceJournalTotals {
+  documentCount: number;
+  grossBgnTotal: string;
+  incompleteTaxDocuments: number;
+  netBgnTotal: string;
+  vatBgnTotal: string;
+}
+
+export interface FinanceJournalReport {
+  dateFrom: string;
+  dateTo: string;
+  items: FinanceJournalReportItem[];
+  kind: FinanceJournalKind;
+  page: number;
+  pageSize: number;
+  totalItems: number;
+  totalPages: number;
+  totals: FinanceJournalTotals;
+}
+
+export type FinanceVatDirection = 'input' | 'output';
+
+export interface FinanceVatReviewItem {
+  direction: FinanceVatDirection;
+  documentCount: number;
+  netBgnTotal: string;
+  vatBgnTotal: string;
+  vatRate: string;
+  vatTreatment: VatTreatment;
+}
+
+export interface FinanceVatReviewReport {
+  dateFrom: string;
+  dateTo: string;
+  incompletePurchaseDocumentNumbers: string[];
+  incompletePurchaseDocuments: number;
+  items: FinanceVatReviewItem[];
+  recordedDifferenceBgn: string;
+  recordedInputVatBgn: string;
+  recordedOutputVatBgn: string;
+}
+
 export const logisticsDeliveryMethods = ['company_transport', 'econt', 'speedy'] as const;
 export type LogisticsDeliveryMethod = (typeof logisticsDeliveryMethods)[number];
 export const logisticsDeliveryStatuses = [
@@ -1681,6 +1755,9 @@ export const financeReportDefinitionKeys = [
   'finance.supplier-payables-aging',
   'finance.customer-turnover',
   'finance.supplier-turnover',
+  'finance.sales-journal',
+  'finance.purchase-journal',
+  'finance.vat-review',
 ] as const;
 export type FinanceReportDefinitionKey = (typeof financeReportDefinitionKeys)[number];
 

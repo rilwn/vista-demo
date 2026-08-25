@@ -49,8 +49,9 @@ location/device subscription period and advances the next billing date in the
 same transaction. The resulting draft follows the separate Finance collection
 and legal-issuance workflows.
 
-`report.generate` is active for the controlled Finance aging and turnover
-catalogue. The API saves an owner-scoped export before dispatch. A short database
+`report.generate` is active for the controlled Finance aging, turnover, Sales
+journal, Purchase journal, and VAT review catalogue. The API saves an owner-scoped
+export before dispatch. A short database
 poll recovers requests that could not reach Redis, while the stable queue key and
 a PostgreSQL advisory lock prevent simultaneous or replayed execution from
 creating two outputs. Retried attempts update the same lifecycle record and

@@ -1797,6 +1797,8 @@ async function ensureProcurementFixtures(
   const receiptLineId = fixtureId('procurement-goods-receipt-line:received-roll');
   const supplierInvoiceId = fixtureId('procurement-supplier-invoice:received-roll');
   const supplierInvoiceLineId = fixtureId('procurement-supplier-invoice-line:received-roll');
+  const vatSupplierInvoiceId = fixtureId('procurement-supplier-invoice:open-adapter-vat');
+  const vatSupplierInvoiceLineId = fixtureId('procurement-supplier-invoice-line:open-adapter-vat');
   const supplierClaimId = fixtureId('procurement-supplier-claim:received-roll');
 
   await insertFixtureRow(
@@ -1904,6 +1906,39 @@ async function ensureProcurementFixtures(
        id, supplier_invoice_id, purchase_order_id, purchase_order_line_id, quantity, unit_price
      ) VALUES ($1, $2, $3, $4, 30.0000, 1.1000) ON CONFLICT (id) DO NOTHING`,
     [supplierInvoiceLineId, supplierInvoiceId, receivedOrderId, receivedLineId],
+  );
+  await insertFixtureRow(
+    client,
+    'procurement.supplier_invoices',
+    vatSupplierInvoiceId,
+    `INSERT INTO procurement.supplier_invoices (
+       id, purchase_order_id, supplier_partner_id, supplier_invoice_number, invoice_date,
+       currency_code, recorded_by
+     ) VALUES (
+       $1, $2, $3, 'DEV-SUP-VAT-001', CURRENT_DATE - INTERVAL '2 days', 'BGN', $4
+     ) ON CONFLICT (id) DO NOTHING`,
+    [vatSupplierInvoiceId, openOrderId, supplierPartnerId, managerId],
+  );
+  await insertFixtureRow(
+    client,
+    'procurement.supplier_invoice_lines',
+    vatSupplierInvoiceLineId,
+    `INSERT INTO procurement.supplier_invoice_lines (
+       id, supplier_invoice_id, purchase_order_id, purchase_order_line_id, quantity, unit_price,
+       vat_treatment, vat_rate
+     ) VALUES ($1, $2, $3, $4, 4.0000, 12.5000, 'standard_20', 20.0000)
+     ON CONFLICT (id) DO NOTHING`,
+    [vatSupplierInvoiceLineId, vatSupplierInvoiceId, openOrderId, openLineId],
+  );
+  await client.query(
+    `UPDATE procurement.purchase_order_lines order_line
+     SET invoiced_quantity = (
+       SELECT coalesce(sum(invoice_line.quantity), 0)
+       FROM procurement.supplier_invoice_lines invoice_line
+       WHERE invoice_line.purchase_order_line_id = order_line.id
+     )
+     WHERE order_line.id = $1`,
+    [openLineId],
   );
   await insertFixtureRow(
     client,

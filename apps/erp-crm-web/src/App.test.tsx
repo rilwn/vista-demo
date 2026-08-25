@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type {
   FinanceAgingReport,
+  FinanceJournalReport,
   FinanceReportDefinition,
   FinanceReportExport,
   FinanceBankStatement,
@@ -9,6 +10,7 @@ import type {
   FinanceSupplierPayable,
   FinanceSupplierPayment,
   FinanceTurnoverReport,
+  FinanceVatReviewReport,
   ProcurementSupplierRecord,
   SalesWorkflow,
 } from '@vista/contracts';
@@ -2228,20 +2230,29 @@ describe('ERP and CRM authenticated workspace', () => {
           invoiceNumber: 'SUP-2026-101',
           lines: [
             {
+              grossTotal: '96.0000',
               id: '592fd12f-f1d0-4c78-8e8f-9a2d2af7a34c',
               lineTotal: '80.0000',
+              netTotal: '80.0000',
               orderLineId,
               productId: inventoryProductFixture.id,
               productName: inventoryProductFixture.name,
               quantity: '2.0000',
+              taxBreakdownRecorded: true,
               unitPrice: '40.0000',
+              vatAmount: '16.0000',
+              vatRate: '20.0000',
+              vatTreatment: 'standard_20',
             },
           ],
+          netTotal: '80.0000',
           purchaseOrderId: orderId,
           recordedAt: '2026-08-11T13:05:00.000Z',
           supplierName: supplier.profile.supplierName,
           supplierPartnerId: supplierId,
-          total: '80.0000',
+          taxBreakdownComplete: true,
+          total: '96.0000',
+          vatTotal: '16.0000',
         };
         invoices = [invoice];
         return Promise.resolve(jsonResponse(invoice, 201));
@@ -2304,7 +2315,10 @@ describe('ERP and CRM authenticated workspace', () => {
     expect(
       fetchMock.mock.calls.some(
         ([url, options]) =>
-          url.endsWith('/procurement/supplier-invoices') && options?.method === 'POST',
+          url.endsWith('/procurement/supplier-invoices') &&
+          options?.method === 'POST' &&
+          typeof options.body === 'string' &&
+          options.body.includes('"vatTreatment":"standard_20"'),
       ),
     ).toBe(true);
   });
@@ -2422,6 +2436,97 @@ describe('ERP and CRM authenticated workspace', () => {
         outstandingBgnTotal: '75.0000',
       },
     };
+    const salesJournal: FinanceJournalReport = {
+      dateFrom: '2026-08-01',
+      dateTo: '2026-08-21',
+      items: [
+        {
+          currencyCode: 'BGN',
+          documentDate: '2026-08-18',
+          documentType: 'invoice',
+          exchangeRate: '1.00000000',
+          grossBgnTotal: '240.0000',
+          id: '4a3dd890-b862-45cc-b94d-b96e584186bf',
+          netBgnTotal: '200.0000',
+          number: 'DINV-VR-2026-000014',
+          partnerName: 'Alfa Market Ltd.',
+          partnerVatNumber: 'BG204000001',
+          sourceNumber: 'DEV-INV-DRAFT-0001',
+          status: 'draft',
+          taxBreakdownComplete: true,
+          taxEventDate: '2026-08-18',
+          vatBgnTotal: '40.0000',
+        },
+      ],
+      kind: 'sales',
+      page: 1,
+      pageSize: 50,
+      totalItems: 1,
+      totalPages: 1,
+      totals: {
+        documentCount: 1,
+        grossBgnTotal: '240.0000',
+        incompleteTaxDocuments: 0,
+        netBgnTotal: '200.0000',
+        vatBgnTotal: '40.0000',
+      },
+    };
+    const purchaseJournal: FinanceJournalReport = {
+      ...salesJournal,
+      items: [
+        {
+          currencyCode: 'BGN',
+          documentDate: '2026-08-19',
+          documentType: 'supplier_invoice',
+          exchangeRate: '1.00000000',
+          grossBgnTotal: '120.0000',
+          id: 'bc863e98-b977-421d-a426-eb74a7454d69',
+          netBgnTotal: '100.0000',
+          number: 'SUP-2026-101',
+          partnerName: 'TechSupply Ltd.',
+          partnerVatNumber: 'BG205000002',
+          status: 'recorded',
+          taxBreakdownComplete: true,
+          taxEventDate: '2026-08-19',
+          vatBgnTotal: '20.0000',
+        },
+      ],
+      kind: 'purchase',
+      totals: {
+        documentCount: 1,
+        grossBgnTotal: '120.0000',
+        incompleteTaxDocuments: 0,
+        netBgnTotal: '100.0000',
+        vatBgnTotal: '20.0000',
+      },
+    };
+    const vatReview: FinanceVatReviewReport = {
+      dateFrom: '2026-08-01',
+      dateTo: '2026-08-21',
+      incompletePurchaseDocumentNumbers: [],
+      incompletePurchaseDocuments: 0,
+      items: [
+        {
+          direction: 'output',
+          documentCount: 1,
+          netBgnTotal: '200.0000',
+          vatBgnTotal: '40.0000',
+          vatRate: '20.0000',
+          vatTreatment: 'standard_20',
+        },
+        {
+          direction: 'input',
+          documentCount: 1,
+          netBgnTotal: '100.0000',
+          vatBgnTotal: '20.0000',
+          vatRate: '20.0000',
+          vatTreatment: 'standard_20',
+        },
+      ],
+      recordedDifferenceBgn: '20.0000',
+      recordedInputVatBgn: '20.0000',
+      recordedOutputVatBgn: '40.0000',
+    };
     const definitions: FinanceReportDefinition[] = [
       {
         description: 'Open customer balances grouped by due-date age.',
@@ -2449,6 +2554,27 @@ describe('ERP and CRM authenticated workspace', () => {
         formats: ['csv', 'xlsx', 'pdf'],
         key: 'finance.supplier-turnover',
         name: 'Supplier turnover',
+        requiresDateRange: true,
+      },
+      {
+        description: 'Recorded Sales document tax values for a selected period.',
+        formats: ['csv', 'xlsx', 'pdf'],
+        key: 'finance.sales-journal',
+        name: 'Sales journal review',
+        requiresDateRange: true,
+      },
+      {
+        description: 'Recorded supplier invoice tax values for a selected period.',
+        formats: ['csv', 'xlsx', 'pdf'],
+        key: 'finance.purchase-journal',
+        name: 'Purchase journal review',
+        requiresDateRange: true,
+      },
+      {
+        description: 'Recorded output and input VAT for a selected period.',
+        formats: ['csv', 'xlsx', 'pdf'],
+        key: 'finance.vat-review',
+        name: 'VAT review',
         requiresDateRange: true,
       },
     ];
@@ -2494,17 +2620,21 @@ describe('ERP and CRM authenticated workspace', () => {
         return Promise.resolve(
           jsonResponse(input.includes('kind=supplier') ? supplierTurnover : customerTurnover),
         );
+      if (input.includes('/finance/reports/journal?'))
+        return Promise.resolve(
+          jsonResponse(input.includes('kind=purchase') ? purchaseJournal : salesJournal),
+        );
+      if (input.includes('/finance/reports/vat-review?'))
+        return Promise.resolve(jsonResponse(vatReview));
       return Promise.resolve(jsonResponse({}));
     });
     vi.stubGlobal('fetch', fetchMock);
 
     renderApplication(['/modules/erp.finance']);
     expect(await screen.findByRole('heading', { name: 'Finance' })).toBeTruthy();
-    fireEvent.click(
-      screen.getByRole('link', { name: /Balances & turnover Review current receivables/u }),
-    );
+    fireEvent.click(screen.getByRole('link', { name: /Finance reports Review balances/u }));
 
-    expect(await screen.findByRole('heading', { name: 'Balances & turnover' })).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: 'Finance reports' })).toBeTruthy();
     expect(await screen.findByText('Alfa Market Ltd.')).toBeTruthy();
     expect(screen.getByText('12 days overdue')).toBeTruthy();
 
@@ -2537,6 +2667,20 @@ describe('ERP and CRM authenticated workspace', () => {
           typeof options.body === 'string' &&
           options.body.includes('finance.supplier-turnover'),
       ),
+    ).toBe(true);
+
+    fireEvent.click(within(exportDialog).getByRole('button', { name: 'Close' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Document journals' }));
+    expect(await screen.findByText('DINV-VR-2026-000014')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Purchases' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
+    expect(await screen.findByText('SUP-2026-101')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('tab', { name: 'VAT review' }));
+    expect(await screen.findByRole('heading', { name: 'Output VAT from sales' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Recorded input VAT from purchases' })).toBeTruthy();
+    expect(
+      fetchMock.mock.calls.some(([url]) => url.includes('/finance/reports/vat-review?dateFrom=')),
     ).toBe(true);
   });
 

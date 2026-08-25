@@ -1,6 +1,6 @@
 import { useBrowserSession } from '@vista/auth/browser-session';
 import type { AuthenticationContextResponse, LoginRequest, LoginResponse } from '@vista/contracts';
-import { AuthenticationForm, Button } from '@vista/ui';
+import { AuthenticationForm, Button, SearchableSelects } from '@vista/ui';
 import { useActiveItemVisibility } from '@vista/ui/navigation';
 import { useState } from 'react';
 
@@ -40,6 +40,15 @@ const screenOrder: PosScreen[] = [
 ];
 
 export function App() {
+  return (
+    <>
+      <SearchableSelects />
+      <Application />
+    </>
+  );
+}
+
+function Application() {
   const authentication = useBrowserSession<
     LoginRequest,
     LoginResponse,

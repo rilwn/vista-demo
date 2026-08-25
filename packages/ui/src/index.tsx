@@ -6,6 +6,8 @@ import type {
 } from 'react';
 import { type FormEvent, useState } from 'react';
 
+export { SearchableSelects } from './searchable-selects';
+
 export interface AppShellProps extends PropsWithChildren {
   eyebrow: string;
   status?: ReactNode;

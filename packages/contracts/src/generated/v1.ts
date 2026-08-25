@@ -676,6 +676,22 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/finance/reports/journal': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['FinanceReportsController_journal'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/finance/reports/turnover': {
     parameters: {
       query?: never;
@@ -684,6 +700,22 @@ export interface paths {
       cookie?: never;
     };
     get: operations['FinanceReportsController_turnover'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/finance/reports/vat-review': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['FinanceReportsController_vatReview'];
     put?: never;
     post?: never;
     delete?: never;
@@ -3104,7 +3136,10 @@ export interface components {
         | 'finance.receivables-aging'
         | 'finance.supplier-payables-aging'
         | 'finance.customer-turnover'
-        | 'finance.supplier-turnover';
+        | 'finance.supplier-turnover'
+        | 'finance.sales-journal'
+        | 'finance.purchase-journal'
+        | 'finance.vat-review';
       /** @enum {string} */
       format: 'csv' | 'xlsx' | 'pdf';
     };
@@ -3495,6 +3530,10 @@ export interface components {
       orderLineId: string;
       quantity: string;
       unitPrice: string;
+      /** @example 20.0000 */
+      vatRate?: string;
+      /** @enum {string} */
+      vatTreatment: 'standard_20' | 'reduced_9' | 'zero' | 'exempt' | 'ica';
     };
     CreateUnitDto: {
       code: string;
@@ -3874,6 +3913,49 @@ export interface components {
       recordedAt: string;
       total: string;
     };
+    FinanceJournalReportDto: {
+      /** Format: date */
+      dateFrom: string;
+      /** Format: date */
+      dateTo: string;
+      items: components['schemas']['FinanceJournalReportItemDto'][];
+      /** @enum {string} */
+      kind: 'sales' | 'purchase';
+      page: number;
+      pageSize: number;
+      totalItems: number;
+      totalPages: number;
+      totals: components['schemas']['FinanceJournalTotalsDto'];
+    };
+    FinanceJournalReportItemDto: {
+      currencyCode: string;
+      /** Format: date */
+      documentDate: string;
+      /** @enum {string} */
+      documentType: 'invoice' | 'proforma' | 'credit_note' | 'debit_note' | 'supplier_invoice';
+      exchangeRate?: string;
+      grossBgnTotal: string;
+      /** Format: uuid */
+      id: string;
+      netBgnTotal: string;
+      number: string;
+      partnerName: string;
+      partnerVatNumber?: string;
+      sourceNumber?: string;
+      /** @enum {string} */
+      status: 'cancelled' | 'draft' | 'recorded';
+      taxBreakdownComplete: boolean;
+      /** Format: date */
+      taxEventDate?: string;
+      vatBgnTotal: string;
+    };
+    FinanceJournalTotalsDto: {
+      documentCount: number;
+      grossBgnTotal: string;
+      incompleteTaxDocuments: number;
+      netBgnTotal: string;
+      vatBgnTotal: string;
+    };
     FinanceOffsetReceivableReferenceDto: {
       customerName: string;
       /** Format: uuid */
@@ -3926,7 +4008,10 @@ export interface components {
         | 'finance.receivables-aging'
         | 'finance.supplier-payables-aging'
         | 'finance.customer-turnover'
-        | 'finance.supplier-turnover';
+        | 'finance.supplier-turnover'
+        | 'finance.sales-journal'
+        | 'finance.purchase-journal'
+        | 'finance.vat-review';
       name: string;
       requiresDateRange: boolean;
     };
@@ -3941,7 +4026,10 @@ export interface components {
         | 'finance.receivables-aging'
         | 'finance.supplier-payables-aging'
         | 'finance.customer-turnover'
-        | 'finance.supplier-turnover';
+        | 'finance.supplier-turnover'
+        | 'finance.sales-journal'
+        | 'finance.purchase-journal'
+        | 'finance.vat-review';
       errorCode?: string;
       fileName?: string;
       /** @enum {string} */
@@ -4157,6 +4245,28 @@ export interface components {
       documentCount: number;
       grossBgnTotal: string;
       outstandingBgnTotal: string;
+    };
+    FinanceVatReviewItemDto: {
+      /** @enum {string} */
+      direction: 'input' | 'output';
+      documentCount: number;
+      netBgnTotal: string;
+      vatBgnTotal: string;
+      vatRate: string;
+      /** @enum {string} */
+      vatTreatment: 'standard_20' | 'reduced_9' | 'zero' | 'exempt' | 'ica';
+    };
+    FinanceVatReviewReportDto: {
+      /** Format: date */
+      dateFrom: string;
+      /** Format: date */
+      dateTo: string;
+      incompletePurchaseDocumentNumbers: string[];
+      incompletePurchaseDocuments: number;
+      items: components['schemas']['FinanceVatReviewItemDto'][];
+      recordedDifferenceBgn: string;
+      recordedInputVatBgn: string;
+      recordedOutputVatBgn: string;
     };
     FinancialDocumentCorrectionReferenceDto: {
       currencyCode: string;
@@ -6093,6 +6203,7 @@ export interface components {
       invoiceDate: string;
       invoiceNumber: string;
       lines: components['schemas']['SupplierInvoiceLineDto'][];
+      netTotal: string;
       /** Format: uuid */
       purchaseOrderId: string;
       /** Format: date-time */
@@ -6100,18 +6211,27 @@ export interface components {
       supplierName: string;
       /** Format: uuid */
       supplierPartnerId: string;
+      taxBreakdownComplete: boolean;
       total: string;
+      vatTotal: string;
     };
     SupplierInvoiceLineDto: {
+      grossTotal: string;
       id: string;
       lineTotal: string;
+      netTotal: string;
       /** Format: uuid */
       orderLineId: string;
       /** Format: uuid */
       productId: string;
       productName: string;
       quantity: string;
+      taxBreakdownRecorded: boolean;
       unitPrice: string;
+      vatAmount?: string;
+      vatRate?: string;
+      /** @enum {string} */
+      vatTreatment?: 'standard_20' | 'reduced_9' | 'zero' | 'exempt' | 'ica';
     };
     TotpEnrollmentStatusDto: {
       enrolled: boolean;
@@ -8198,6 +8318,45 @@ export interface operations {
       };
     };
   };
+  FinanceReportsController_journal: {
+    parameters: {
+      query: {
+        dateFrom?: string;
+        dateTo?: string;
+        kind: 'sales' | 'purchase';
+        page?: number;
+        pageSize?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['FinanceJournalReportDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
   FinanceReportsController_turnover: {
     parameters: {
       query: {
@@ -8219,6 +8378,42 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['FinanceTurnoverReportDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  FinanceReportsController_vatReview: {
+    parameters: {
+      query?: {
+        dateFrom?: string;
+        dateTo?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['FinanceVatReviewReportDto'];
         };
       };
       /** @description The endpoint request limit was exceeded. */

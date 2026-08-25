@@ -112,7 +112,7 @@ export class FinancePayablesService {
                 profile.payment_terms_days,
                 (invoice.invoice_date + coalesce(profile.payment_terms_days, 0))::text
                   AS suggested_due_date,
-                coalesce(sum(line.line_total), 0)::text AS total
+                coalesce(sum(line.gross_total), 0)::text AS total
          FROM procurement.supplier_invoices invoice
          JOIN master_data.partners supplier ON supplier.id = invoice.supplier_partner_id
          LEFT JOIN procurement.supplier_profiles profile
@@ -123,7 +123,7 @@ export class FinancePayablesService {
            ON payable.source_supplier_invoice_id = invoice.id
          WHERE payable.id IS NULL
          GROUP BY invoice.id, supplier.display_name, profile.payment_terms_days
-         HAVING coalesce(sum(line.line_total), 0) > 0
+         HAVING coalesce(sum(line.gross_total), 0) > 0
          ORDER BY invoice.invoice_date DESC, invoice.recorded_at DESC, invoice.id DESC`,
       ),
       this.database.getPool().query<{ id: string; name: string }>(
@@ -339,7 +339,7 @@ export class FinancePayablesService {
         if (!sourceInvoice)
           throw notFound('FINANCE_SUPPLIER_INVOICE_NOT_FOUND', 'Supplier invoice not found.');
         const totalResult = await client.query<{ total: string }>(
-          `SELECT coalesce(sum(line_total), 0)::text AS total
+          `SELECT coalesce(sum(gross_total), 0)::text AS total
            FROM procurement.supplier_invoice_lines WHERE supplier_invoice_id = $1`,
           [normalized.supplierInvoiceId],
         );

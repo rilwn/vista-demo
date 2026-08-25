@@ -22,6 +22,11 @@ the correct module hub, including when the nested page was opened directly.
 Record previews and forms use their own **Back** control to return to the
 unchanged register.
 
+Choice fields support typing inside the field to narrow the available options;
+select one of the shown suggestions to confirm the value. Multiple-choice lists,
+such as serial-number allocation, keep the selection list visible and provide a
+separate search box without clearing items already selected.
+
 To change a password, open **My access → Change password**. The panel shows the
 currently configured requirements. Enter the current password and the new
 password twice. A successful change keeps this browser session active and signs
@@ -101,22 +106,28 @@ captured when the reminder was prepared. Email and SMS delivery remain dependent
 on the approved provider configuration and are not represented as sent until that
 adapter is live.
 
-### Finance balances and turnover
+### Finance reports
 
-Open **ERP → Finance → Balances & turnover**. **Aging & balances** switches
+Open **ERP → Finance → Finance reports**. **Aging & balances** switches
 between current customer receivables and supplier payables and groups open BGN
 balances into not-due, 0–30, 31–60, 61–90, and over-90 buckets. **Turnover by
 partner** groups customer or supplier documents within an inclusive date range.
 Gross turnover belongs to that period; allocated and outstanding columns show the
-current state of those selected documents. These operational views do not replace
-official journals, VAT reports, or accounting exports.
+current state of those selected documents. **Document journals** reviews Sales
+financial-document drafts or Procurement supplier invoices with their recorded
+BGN tax totals. **VAT review** compares recorded output and input VAT by treatment
+and rate and names earlier supplier invoices whose tax breakdown is missing.
+Those documents remain visible but are excluded from the relevant VAT totals.
+These preparation views do not replace official filed journals, VAT returns, or
+accounting exports.
 
-Select **Export report** to prepare the current report as Excel, CSV, or PDF. A
-turnover export asks for an inclusive date range; an aging export uses the current
-business date. The panel updates the request automatically and keeps completed
-files under **Recent exports** for the requesting account. Select **Download**
-when the status is **Ready**. If preparation ends unsuccessfully, select **Try
-again**. Leaving or closing the panel does not cancel a saved request.
+Select **Export report** to prepare any available Finance report as Excel, CSV,
+or PDF. Turnover, journal, and VAT exports ask for an inclusive date range; an
+aging export uses the current business date. The panel updates the request
+automatically and keeps completed files under **Recent exports** for the
+requesting account. Select **Download** when the status is **Ready**. If
+preparation ends unsuccessfully, select **Try again**. Leaving or closing the
+panel does not cancel a saved request.
 
 ### Platform job operations
 
@@ -403,6 +414,8 @@ opened.
 - Choose **Supplier invoices**, then **Record supplier invoice**. Select the
   purchase order, enter the supplier's invoice number and date, and compare each
   line's ordered, delivered, and already-invoiced quantities before recording.
+  Record the VAT treatment shown on the supplier document; intra-community
+  acquisition requires its explicit rate.
   Select **Preview** on a recorded invoice to inspect the three-way comparison;
   use **Back** to return to the register.
 - Choose **Supplier claims**, then **New supplier claim**. Select the exact
@@ -411,9 +424,9 @@ opened.
   through Submitted, Resolved, and Closed. The system prevents claims above the
   received quantity.
 
-These invoice records are purchasing evidence and comparison controls. They do
-not post VAT, accounting, payment, or correction documents; those actions will
-be performed through the finance workflow.
+These invoice records are purchasing evidence and comparison controls. Their
+recorded VAT snapshot supports Finance review, but does not decide deductibility,
+post to the general ledger, or create a correction document.
 
 ### Quotation to invoice draft
 

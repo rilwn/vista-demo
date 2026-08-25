@@ -349,6 +349,14 @@ dispatch, exception, customer receipt, and cancellation changes. Completing a
 delivery records the recipient and accepts a still-prepared Sales handover through
 the existing retry-safe command.
 
+Migration `0040_finance_journal_vat_review` adds an immutable VAT-treatment and
+rate snapshot to new Procurement supplier-invoice lines, with generated net/VAT/
+gross values. Historical lines remain explicitly incomplete instead of being
+silently assigned tax. It also adds controlled Sales journal, Purchase journal,
+and VAT review definitions to the asynchronous export catalogue. These are
+preparation reports; official filing, deductible-VAT decisions, and structured
+accounting formats remain approval-controlled work.
+
 Reverse-return lines retain the original shipment line, quantity, shipped serials,
 destination warehouse, inventory return movement, and optional Service request.
 Receiving posts each item through the inventory return command and opens one

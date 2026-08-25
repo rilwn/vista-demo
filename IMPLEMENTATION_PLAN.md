@@ -106,11 +106,11 @@ proven under concurrency; no production topology or tracking rule is inferred.
 - Complete approved bank statement format adapters, payment reversal,
   period-close cash controls, accounting posting, and provider-backed email
   delivery for payment reminders.
-- Deliver sales/purchase journals, VAT reports, structured accounting exports,
+- Approve and complete official sales/purchase journal and VAT filing outputs
+  from the operational review foundation; deliver structured accounting exports,
   user-configurable controlled report definitions, and the required revenue,
-  Service, warranty, and receivables dashboard KPIs. Extend the asynchronous
-  export service from the current Finance balance/turnover reports to every
-  required module report.
+  Service, warranty, and receivables dashboard KPIs. Extend asynchronous exports
+  to every required module report.
 - Connect the approved Econt and Speedy booking, label, tracking, return,
   retry, and reconciliation adapters. Keep both providers unavailable until
   INT-002 supplies the selected products, credentials, environments, and

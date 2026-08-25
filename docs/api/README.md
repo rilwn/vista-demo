@@ -130,7 +130,7 @@ becomes overdue. The daily business-timezone job also catches existing records
 and performs the overdue status transition. Read-only Finance viewers are not
 operational reminder recipients.
 
-## Finance balance and turnover reports
+## Finance reports
 
 - `GET /api/v1/finance/reports/aging?kind=receivable|payable` returns the current
   BGN subledger balance, document detail, and current, 0–30, 31–60, 61–90, and
@@ -139,14 +139,22 @@ operational reminder recipients.
   groups document turnover by partner for the selected inclusive date range.
   Gross is period document value; allocated and outstanding values are the
   current balances of those selected documents.
+- `GET /api/v1/finance/reports/journal?kind=sales|purchase&dateFrom=...&dateTo=...`
+  returns recorded document and BGN tax snapshots, pagination, totals, and the
+  count of purchase documents whose tax breakdown is incomplete.
+- `GET /api/v1/finance/reports/vat-review?dateFrom=...&dateTo=...` groups recorded
+  output and input VAT by treatment and rate, calculates their recorded
+  difference, and identifies incomplete purchase documents.
 
-Both routes require `erp.finance:view`. They are operational subledger reports,
-not official sales/purchase journals, VAT returns, or accounting exports.
+All routes require `erp.finance:view`. The journal and VAT routes are preparation
+reports, not official filed journals, VAT returns, deductible-VAT decisions, or
+accounting exports.
 
 ## Finance report exports
 
 - `GET /api/v1/finance/report-exports/definitions` lists the controlled Finance
-  reports and their available file types.
+  reports and their available file types, including balance, turnover, journal,
+  and VAT review definitions.
 - `GET /api/v1/finance/report-exports` lists only exports requested by the
   signed-in account.
 - `POST /api/v1/finance/report-exports` accepts one definition key, file type,

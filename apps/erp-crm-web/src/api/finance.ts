@@ -20,9 +20,12 @@ import type {
   FinanceReferenceData,
   FinanceAgingKind,
   FinanceAgingReport,
+  FinanceJournalKind,
+  FinanceJournalReport,
   FinanceSummary,
   FinanceTurnoverKind,
   FinanceTurnoverReport,
+  FinanceVatReviewReport,
   CreateFinanceReportExportRequest,
   FinanceReportDefinition,
   FinanceReportExport,
@@ -97,6 +100,34 @@ export function getFinanceTurnoverReport(
     apiClient.GET('/api/v1/finance/reports/turnover', {
       headers: authorizationHeaders(token),
       params: { query: { dateFrom, dateTo, kind, page, pageSize: 50 } },
+    }),
+  );
+}
+
+export function getFinanceJournalReport(
+  token: string,
+  kind: FinanceJournalKind,
+  dateFrom: string,
+  dateTo: string,
+  page = 1,
+): Promise<FinanceJournalReport> {
+  return unwrapApiResponse(
+    apiClient.GET('/api/v1/finance/reports/journal', {
+      headers: authorizationHeaders(token),
+      params: { query: { dateFrom, dateTo, kind, page, pageSize: 50 } },
+    }),
+  );
+}
+
+export function getFinanceVatReview(
+  token: string,
+  dateFrom: string,
+  dateTo: string,
+): Promise<FinanceVatReviewReport> {
+  return unwrapApiResponse(
+    apiClient.GET('/api/v1/finance/reports/vat-review', {
+      headers: authorizationHeaders(token),
+      params: { query: { dateFrom, dateTo } },
     }),
   );
 }

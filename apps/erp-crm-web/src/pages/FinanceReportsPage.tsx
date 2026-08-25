@@ -4,11 +4,14 @@ import type {
   FinanceAgingKind,
   FinanceAgingReport,
   FinanceAgingReportItem,
+  FinanceJournalKind,
+  FinanceJournalReport,
   FinanceReportDefinition,
   FinanceReportDefinitionKey,
   FinanceReportExport,
   FinanceTurnoverKind,
   FinanceTurnoverReport,
+  FinanceVatReviewReport,
   ReportExportFormat,
 } from '@vista/contracts';
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -18,16 +21,19 @@ import {
   createFinanceReportExport,
   downloadFinanceReportExport,
   getFinanceAgingReport,
+  getFinanceJournalReport,
   getFinanceReportDefinitions,
   getFinanceTurnoverReport,
+  getFinanceVatReview,
   listFinanceReportExports,
   retryFinanceReportExport,
 } from '../api/finance';
 import { useAuth } from '../auth/AuthProvider';
 import { Icon } from '../components/Icon';
+import { Link } from '../routing/Router';
 import { FinanceTabs } from './FinanceBankPage';
 
-type ReportView = 'aging' | 'turnover';
+type ReportView = 'aging' | 'turnover' | 'journals' | 'vat';
 
 export function FinanceReportsPage() {
   const { session } = useAuth();
@@ -35,6 +41,7 @@ export function FinanceReportsPage() {
   const [view, setView] = useState<ReportView>('aging');
   const [agingKind, setAgingKind] = useState<FinanceAgingKind>('receivable');
   const [turnoverKind, setTurnoverKind] = useState<FinanceTurnoverKind>('customer');
+  const [journalKind, setJournalKind] = useState<FinanceJournalKind>('sales');
   const initialDates = useMemo(() => reportDates(), []);
   const [dateFrom, setDateFrom] = useState(initialDates.dateFrom);
   const [dateTo, setDateTo] = useState(initialDates.dateTo);
@@ -44,17 +51,23 @@ export function FinanceReportsPage() {
       ? agingKind === 'receivable'
         ? 'finance.receivables-aging'
         : 'finance.supplier-payables-aging'
-      : turnoverKind === 'customer'
-        ? 'finance.customer-turnover'
-        : 'finance.supplier-turnover';
+      : view === 'turnover'
+        ? turnoverKind === 'customer'
+          ? 'finance.customer-turnover'
+          : 'finance.supplier-turnover'
+        : view === 'journals'
+          ? journalKind === 'sales'
+            ? 'finance.sales-journal'
+            : 'finance.purchase-journal'
+          : 'finance.vat-review';
 
   return (
     <div className="page-stack finance-report-workspace">
       <header className="page-header finance-report-header">
         <div>
           <p className="page-eyebrow">ERP · Finance</p>
-          <h1>Balances &amp; turnover</h1>
-          <p>Review current customer and supplier exposure, then compare document turnover.</p>
+          <h1>Finance reports</h1>
+          <p>Review balances, turnover, document journals, and recorded VAT in one workspace.</p>
         </div>
         <Button onClick={() => setExportOpen(true)}>
           <Icon name="chart" size={16} /> Export report
@@ -64,8 +77,8 @@ export function FinanceReportsPage() {
       <FinanceTabs />
 
       <InlineAlert tone="info">
-        These reports support day-to-day balance checks in BGN. Official sales and purchase
-        journals, VAT reports, and accounting files will be added after their formats are approved.
+        Sales, purchase, and VAT views are preparation reports. Final filing and accounting exports
+        remain unavailable until the approved formats and tax decisions are recorded.
       </InlineAlert>
 
       <div aria-label="Finance report" className="finance-report-switch" role="tablist">
@@ -87,11 +100,29 @@ export function FinanceReportsPage() {
         >
           Turnover by partner
         </button>
+        <button
+          aria-selected={view === 'journals'}
+          className={view === 'journals' ? 'is-active' : undefined}
+          onClick={() => setView('journals')}
+          role="tab"
+          type="button"
+        >
+          Document journals
+        </button>
+        <button
+          aria-selected={view === 'vat'}
+          className={view === 'vat' ? 'is-active' : undefined}
+          onClick={() => setView('vat')}
+          role="tab"
+          type="button"
+        >
+          VAT review
+        </button>
       </div>
 
       {view === 'aging' ? (
         <AgingView kind={agingKind} onKindChange={setAgingKind} token={token} />
-      ) : (
+      ) : view === 'turnover' ? (
         <TurnoverView
           dateFrom={dateFrom}
           dateTo={dateTo}
@@ -99,6 +130,24 @@ export function FinanceReportsPage() {
           onDateFromChange={setDateFrom}
           onDateToChange={setDateTo}
           onKindChange={setTurnoverKind}
+          token={token}
+        />
+      ) : view === 'journals' ? (
+        <JournalView
+          dateFrom={dateFrom}
+          dateTo={dateTo}
+          kind={journalKind}
+          onDateFromChange={setDateFrom}
+          onDateToChange={setDateTo}
+          onKindChange={setJournalKind}
+          token={token}
+        />
+      ) : (
+        <VatReviewView
+          dateFrom={dateFrom}
+          dateTo={dateTo}
+          onDateFromChange={setDateFrom}
+          onDateToChange={setDateTo}
           token={token}
         />
       )}
@@ -709,6 +758,304 @@ function TurnoverRegister({ report }: { report: FinanceTurnoverReport }) {
   );
 }
 
+function JournalView({
+  dateFrom,
+  dateTo,
+  kind,
+  onDateFromChange,
+  onDateToChange,
+  onKindChange,
+  token,
+}: {
+  dateFrom: string;
+  dateTo: string;
+  kind: FinanceJournalKind;
+  onDateFromChange: (date: string) => void;
+  onDateToChange: (date: string) => void;
+  onKindChange: (kind: FinanceJournalKind) => void;
+  token: string;
+}) {
+  const [filters, setFilters] = useState({ dateFrom, dateTo, kind });
+  const [page, setPage] = useState(1);
+  const data = useJournal(token, filters.kind, filters.dateFrom, filters.dateTo, page);
+  const incompleteNumbers =
+    data.report?.items.filter((item) => !item.taxBreakdownComplete).map((item) => item.number) ??
+    [];
+
+  function apply() {
+    setPage(1);
+    setFilters({ dateFrom, dateTo, kind });
+  }
+
+  return (
+    <section aria-label="Document journals" className="finance-report-body">
+      <div className="finance-report-toolbar is-filter">
+        <div className="finance-report-toggle">
+          <button
+            className={kind === 'sales' ? 'is-active' : undefined}
+            onClick={() => onKindChange('sales')}
+            type="button"
+          >
+            Sales
+          </button>
+          <button
+            className={kind === 'purchase' ? 'is-active' : undefined}
+            onClick={() => onKindChange('purchase')}
+            type="button"
+          >
+            Purchases
+          </button>
+        </div>
+        <ReportDateField label="From" onChange={onDateFromChange} value={dateFrom} />
+        <ReportDateField label="To" onChange={onDateToChange} value={dateTo} />
+        <Button
+          disabled={!dateFrom || !dateTo || dateFrom > dateTo}
+          onClick={apply}
+          variant="secondary"
+        >
+          <Icon name="search" size={16} /> Apply
+        </Button>
+      </div>
+
+      {data.loading ? <ReportState title="Loading journal" /> : null}
+      {data.error ? <ReportError message={data.error} onRetry={data.reload} /> : null}
+      {data.report ? (
+        <>
+          <p className="finance-report-caption">
+            {kind === 'sales' ? 'Customer' : 'Supplier'} documents dated{' '}
+            {formatDate(data.report.dateFrom)}–{formatDate(data.report.dateTo)}. Values are shown in
+            BGN from the rate recorded on each document.
+          </p>
+          {data.report.totals.incompleteTaxDocuments ? (
+            <InlineAlert title="Earlier invoice excluded from VAT totals" tone="warning">
+              <p>
+                {incompleteNumbers.length ? (
+                  <>
+                    <strong>{incompleteNumbers.join(', ')}</strong>{' '}
+                  </>
+                ) : null}
+                {data.report.totals.incompleteTaxDocuments === 1 ? 'was' : 'were'} recorded without
+                VAT details. The document remains in the journal, but its tax is not included in the
+                totals.
+              </p>
+              <Link
+                className="finance-report-alert-link"
+                to="/modules/erp.procurement/supplier-invoices"
+              >
+                Open supplier invoices <Icon name="arrow" size={14} />
+              </Link>
+            </InlineAlert>
+          ) : null}
+          <div aria-label="Journal totals" className="finance-turnover-summary">
+            <ReportMetric label="Documents" value={String(data.report.totals.documentCount)} />
+            <ReportMetric label="Net value" value={formatMoney(data.report.totals.netBgnTotal)} />
+            <ReportMetric
+              label="Recorded VAT"
+              value={formatMoney(data.report.totals.vatBgnTotal)}
+            />
+            <ReportMetric
+              label="Gross value"
+              value={formatMoney(data.report.totals.grossBgnTotal)}
+            />
+          </div>
+          <JournalRegister report={data.report} />
+          <ReportPagination
+            page={data.report.page}
+            totalPages={data.report.totalPages}
+            onPage={setPage}
+          />
+        </>
+      ) : null}
+    </section>
+  );
+}
+
+function JournalRegister({ report }: { report: FinanceJournalReport }) {
+  if (!report.items.length) return <ReportState title="No documents in this period" />;
+  return (
+    <div className="finance-report-register">
+      <div aria-hidden="true" className="finance-journal-register-head">
+        <span>Document</span>
+        <span>Partner</span>
+        <span>Date &amp; currency</span>
+        <span>Net</span>
+        <span>VAT</span>
+        <span>Gross</span>
+      </div>
+      {report.items.map((item) => (
+        <article className="finance-journal-register-row" key={item.id}>
+          <div className="finance-report-document">
+            <span>{journalDocumentMark(item.documentType)}</span>
+            <div>
+              <strong>{item.number}</strong>
+              <small>
+                {journalDocumentLabel(item.documentType)} · {journalStatusLabel(item.status)}
+              </small>
+            </div>
+          </div>
+          <div className="finance-report-partner">
+            <strong>{item.partnerName}</strong>
+            <small>
+              {item.partnerVatNumber ? `VAT ${item.partnerVatNumber}` : 'No VAT number'}
+            </small>
+          </div>
+          <div className="finance-report-due">
+            <strong>{formatDate(item.taxEventDate ?? item.documentDate)}</strong>
+            <small>
+              {item.currencyCode}
+              {item.exchangeRate ? ` · rate ${item.exchangeRate}` : ''}
+            </small>
+          </div>
+          <strong>{formatMoney(item.netBgnTotal)}</strong>
+          <span className={!item.taxBreakdownComplete ? 'finance-tax-missing' : undefined}>
+            {item.taxBreakdownComplete ? formatMoney(item.vatBgnTotal) : 'Needs review'}
+          </span>
+          <strong className="finance-report-amount">{formatMoney(item.grossBgnTotal)}</strong>
+        </article>
+      ))}
+    </div>
+  );
+}
+
+function VatReviewView({
+  dateFrom,
+  dateTo,
+  onDateFromChange,
+  onDateToChange,
+  token,
+}: {
+  dateFrom: string;
+  dateTo: string;
+  onDateFromChange: (date: string) => void;
+  onDateToChange: (date: string) => void;
+  token: string;
+}) {
+  const [filters, setFilters] = useState({ dateFrom, dateTo });
+  const data = useVatReview(token, filters.dateFrom, filters.dateTo);
+
+  return (
+    <section aria-label="VAT review" className="finance-report-body">
+      <div className="finance-report-toolbar is-filter">
+        <div className="finance-report-toolbar-title">
+          <span>Recorded tax</span>
+          <strong>Output and input VAT</strong>
+        </div>
+        <ReportDateField label="From" onChange={onDateFromChange} value={dateFrom} />
+        <ReportDateField label="To" onChange={onDateToChange} value={dateTo} />
+        <Button
+          disabled={!dateFrom || !dateTo || dateFrom > dateTo}
+          onClick={() => setFilters({ dateFrom, dateTo })}
+          variant="secondary"
+        >
+          <Icon name="search" size={16} /> Apply
+        </Button>
+      </div>
+
+      {data.loading ? <ReportState title="Loading VAT review" /> : null}
+      {data.error ? <ReportError message={data.error} onRetry={data.reload} /> : null}
+      {data.report ? <VatReviewContent report={data.report} /> : null}
+    </section>
+  );
+}
+
+function VatReviewContent({ report }: { report: FinanceVatReviewReport }) {
+  const output = report.items.filter((item) => item.direction === 'output');
+  const input = report.items.filter((item) => item.direction === 'input');
+  return (
+    <>
+      <p className="finance-report-caption">
+        Tax events from {formatDate(report.dateFrom)}–{formatDate(report.dateTo)}. Input VAT is
+        shown as recorded; final deductibility is not decided here.
+      </p>
+      {report.incompletePurchaseDocuments ? (
+        <InlineAlert title="Earlier invoice excluded from input VAT" tone="warning">
+          <p>
+            <strong>{report.incompletePurchaseDocumentNumbers.join(', ')}</strong>{' '}
+            {report.incompletePurchaseDocuments === 1 ? 'was' : 'were'} recorded without VAT
+            details. The {report.incompletePurchaseDocuments === 1 ? 'invoice is' : 'invoices are'}
+            visible in the purchase journal but excluded from the input VAT total.
+          </p>
+          <Link
+            className="finance-report-alert-link"
+            to="/modules/erp.procurement/supplier-invoices"
+          >
+            Open supplier invoices <Icon name="arrow" size={14} />
+          </Link>
+        </InlineAlert>
+      ) : null}
+      <div aria-label="VAT totals" className="finance-turnover-summary finance-vat-summary">
+        <ReportMetric label="Output VAT" value={formatMoney(report.recordedOutputVatBgn)} />
+        <ReportMetric label="Recorded input VAT" value={formatMoney(report.recordedInputVatBgn)} />
+        <ReportMetric
+          label="Recorded difference"
+          value={formatMoney(report.recordedDifferenceBgn)}
+        />
+        <ReportMetric
+          label="Purchases to review"
+          value={String(report.incompletePurchaseDocuments)}
+        />
+      </div>
+      <div className="finance-vat-groups">
+        <VatGroup items={output} title="Output VAT from sales" />
+        <VatGroup items={input} title="Recorded input VAT from purchases" />
+      </div>
+    </>
+  );
+}
+
+function VatGroup({ items, title }: { items: FinanceVatReviewReport['items']; title: string }) {
+  return (
+    <section className="finance-vat-group">
+      <header>
+        <h3>{title}</h3>
+        <span>{items.reduce((total, item) => total + item.documentCount, 0)} documents</span>
+      </header>
+      {!items.length ? (
+        <div className="finance-vat-empty">No recorded VAT in this period.</div>
+      ) : (
+        <div className="finance-vat-table">
+          <div aria-hidden="true" className="finance-vat-table-head">
+            <span>Treatment</span>
+            <span>Rate</span>
+            <span>Documents</span>
+            <span>Taxable value</span>
+            <span>VAT</span>
+          </div>
+          {items.map((item) => (
+            <div
+              className="finance-vat-table-row"
+              key={`${item.direction}-${item.vatTreatment}-${item.vatRate}`}
+            >
+              <strong>{vatTreatmentLabel(item.vatTreatment)}</strong>
+              <span>{formatRate(item.vatRate)}</span>
+              <span>{item.documentCount}</span>
+              <span>{formatMoney(item.netBgnTotal)}</span>
+              <strong>{formatMoney(item.vatBgnTotal)}</strong>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function ReportDateField({
+  label,
+  onChange,
+  value,
+}: {
+  label: string;
+  onChange: (date: string) => void;
+  value: string;
+}) {
+  return (
+    <label>
+      <span>{label}</span>
+      <input onChange={(event) => onChange(event.target.value)} type="date" value={value} />
+    </label>
+  );
+}
+
 function ReportMetric({ label, value }: { label: string; value: string }) {
   return (
     <div>
@@ -815,6 +1162,101 @@ function useTurnover(
     };
   }, [dateFrom, dateTo, kind, page, revision, token]);
   return { error, loading, reload, report };
+}
+
+function useJournal(
+  token: string,
+  kind: FinanceJournalKind,
+  dateFrom: string,
+  dateTo: string,
+  page: number,
+) {
+  const [report, setReport] = useState<FinanceJournalReport | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [revision, setRevision] = useState(0);
+  const reload = useCallback(() => setRevision((value) => value + 1), []);
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    setError(null);
+    void getFinanceJournalReport(token, kind, dateFrom, dateTo, page)
+      .then((value) => active && setReport(value))
+      .catch((caught) => {
+        if (active) setError(errorMessage(caught, 'The journal could not be loaded.'));
+      })
+      .finally(() => active && setLoading(false));
+    return () => {
+      active = false;
+    };
+  }, [dateFrom, dateTo, kind, page, revision, token]);
+  return { error, loading, reload, report };
+}
+
+function useVatReview(token: string, dateFrom: string, dateTo: string) {
+  const [report, setReport] = useState<FinanceVatReviewReport | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [revision, setRevision] = useState(0);
+  const reload = useCallback(() => setRevision((value) => value + 1), []);
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    setError(null);
+    void getFinanceVatReview(token, dateFrom, dateTo)
+      .then((value) => active && setReport(value))
+      .catch((caught) => {
+        if (active) setError(errorMessage(caught, 'The VAT review could not be loaded.'));
+      })
+      .finally(() => active && setLoading(false));
+    return () => {
+      active = false;
+    };
+  }, [dateFrom, dateTo, revision, token]);
+  return { error, loading, reload, report };
+}
+
+function journalDocumentMark(type: FinanceJournalReport['items'][number]['documentType']): string {
+  return {
+    credit_note: 'CN',
+    debit_note: 'DN',
+    invoice: 'INV',
+    proforma: 'PRO',
+    supplier_invoice: 'SUP',
+  }[type];
+}
+
+function journalDocumentLabel(type: FinanceJournalReport['items'][number]['documentType']): string {
+  return {
+    credit_note: 'Credit note',
+    debit_note: 'Debit note',
+    invoice: 'Invoice',
+    proforma: 'Proforma',
+    supplier_invoice: 'Supplier invoice',
+  }[type];
+}
+
+function journalStatusLabel(status: FinanceJournalReport['items'][number]['status']): string {
+  return { cancelled: 'Cancelled', draft: 'Draft', recorded: 'Recorded' }[status];
+}
+
+function vatTreatmentLabel(
+  treatment: FinanceVatReviewReport['items'][number]['vatTreatment'],
+): string {
+  return {
+    exempt: 'Exempt',
+    ica: 'Intra-community acquisition',
+    reduced_9: 'Reduced rate',
+    standard_20: 'Standard rate',
+    zero: 'Zero rate',
+  }[treatment];
+}
+
+function formatRate(value: string): string {
+  const rate = Number(value);
+  return Number.isFinite(rate)
+    ? `${rate.toLocaleString(undefined, { maximumFractionDigits: 4 })}%`
+    : value;
 }
 
 function errorMessage(error: unknown, fallback: string): string {

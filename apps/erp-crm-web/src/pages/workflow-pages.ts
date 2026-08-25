@@ -197,8 +197,8 @@ export const workflowPages: WorkflowPageDefinition[] = [
   ),
   finance(
     'registers',
-    'Balances & turnover',
-    'Review current receivables, payables, aging, and partner turnover from the Finance subledgers.',
+    'Finance reports',
+    'Review balances, partner turnover, document journals, and recorded VAT from the Finance workspace.',
     'Review reports',
     [
       {
