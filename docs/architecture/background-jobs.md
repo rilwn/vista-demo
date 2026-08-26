@@ -58,9 +58,18 @@ transaction locks, and persisted generation links make retries return no new
 work. Generated visits enter the normal Service request register with their
 planned date and cannot be created through manual intake.
 
+`crm.sla.evaluate` is an active recurring handler. Startup upserts its stable
+schedule using `CRM_SLA_EVALUATION_CRON` in `BUSINESS_TIMEZONE`. Each run locks
+eligible open tickets, evaluates the retained response and resolution targets,
+and creates one near-deadline or past-deadline notification per ticket, timer,
+and state. Notification correlation and SLA-event uniqueness make retries and
+overlapping runs return no duplicate work.
+
 `report.generate` is active for the controlled Finance aging, turnover, Sales
-journal, Purchase journal, and VAT review catalogue. The API saves an owner-scoped
-export before dispatch. A short database
+journal, Purchase journal, and VAT review catalogue and for the Service request,
+technician-performance, and cost reports. Finance and Service use separate
+permission-protected catalogues and account-scoped lists while sharing the same
+recovery-safe worker. The API saves an owner-scoped export before dispatch. A short database
 poll recovers requests that could not reach Redis, while the stable queue key and
 a PostgreSQL advisory lock prevent simultaneous or replayed execution from
 creating two outputs. Retried attempts update the same lifecycle record and

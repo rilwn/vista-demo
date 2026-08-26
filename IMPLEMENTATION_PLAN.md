@@ -128,9 +128,6 @@ procurement-to-accounting and quotation-to-payment scenarios pass end to end.
 **Remaining**
 
 - Complete the full supplier, sale, service, return, and repair serial lifecycle.
-- Deliver CRM ticket correlation and SLA notifications, reverse-logistics
-  integration, Service reports/exports, and remaining technician mobile and
-  accessibility acceptance.
 
 **Depends on:** SVC-001, SLA-001, Phase 3 finance/logistics behavior, and
 approved scheduling and signature policies.
@@ -147,17 +144,16 @@ mobile scenarios pass end to end.
   chats, visits, tasks, reminders, and authorized attachments.
 - Deliver lead capture, qualification/conversion, opportunities, and
   backend-validated, audited Kanban stage changes.
-- Deliver tickets, SLA monitoring/escalation, loop-safe ERP Service correlation,
-  and the customer portal only if selected.
-- Deliver warranty cards and claims, surveys, NPS, referrals, reproducible
-  analytics/dashboards, exports, ERP/POS synchronization, and external APIs.
+- Deliver the customer portal only if selected.
+- Deliver warranty cards, the unified CRM warranty-claim experience, surveys,
+  NPS, referrals, reproducible analytics/dashboards, exports, ERP/POS
+  synchronization, and external APIs.
 
 **Depends on:** SLA-001, CRM-001, CRM-002, KPI-001, SVC-001, and Phase 4
 correlation rules.
 
-**Accept when:** CRM does not create conflicting ERP-owned records; ticket and
-Service correlation cannot loop or duplicate; KPI formulas are documented; all
-required CRM workflows and export paths pass.
+**Accept when:** CRM does not create conflicting ERP-owned records; KPI formulas
+are documented; all remaining required CRM workflows and export paths pass.
 
 ## Phase 6 — Complete online POS
 

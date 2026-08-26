@@ -1,4 +1,5 @@
 import type {
+  ApiErrorResponse,
   AssignServiceWorkOrderRequest,
   CancelServiceRequest,
   CompleteServiceWorkOrderRequest,
@@ -6,6 +7,11 @@ import type {
   CreateServiceInspectionPlanRequest,
   CreateServiceRequest,
   CreateWarrantyClaimRequest,
+  CreateServiceReportExportRequest,
+  ServiceReportDefinition,
+  ServiceReportExport,
+  ServiceReportExportPage,
+  ServiceReportOverview,
   ServiceCareOverview,
   ServiceInspectionPlan,
   ServiceEquipmentHistory,
@@ -42,6 +48,82 @@ export function getServiceCareOverview(token: string): Promise<ServiceCareOvervi
   return unwrapApiResponse(
     apiClient.GET('/api/v1/service/care', { headers: authorizationHeaders(token) }),
   );
+}
+
+export function getServiceReportOverview(
+  token: string,
+  dateFrom: string,
+  dateTo: string,
+): Promise<ServiceReportOverview> {
+  return unwrapApiResponse(
+    apiClient.GET('/api/v1/service/reports/overview', {
+      headers: authorizationHeaders(token),
+      params: { query: { dateFrom, dateTo } },
+    }),
+  );
+}
+
+export function getServiceReportDefinitions(token: string): Promise<ServiceReportDefinition[]> {
+  return unwrapApiResponse(
+    apiClient.GET('/api/v1/service/report-exports/definitions', {
+      headers: authorizationHeaders(token),
+    }),
+  );
+}
+
+export function listServiceReportExports(
+  token: string,
+  page = 1,
+): Promise<ServiceReportExportPage> {
+  return unwrapApiResponse(
+    apiClient.GET('/api/v1/service/report-exports', {
+      headers: authorizationHeaders(token),
+      params: { query: { page, pageSize: 20 } },
+    }),
+  );
+}
+
+export function createServiceReportExport(
+  token: string,
+  key: string,
+  input: CreateServiceReportExportRequest,
+): Promise<ServiceReportExport> {
+  return unwrapApiResponse(
+    apiClient.POST('/api/v1/service/report-exports', {
+      body: input,
+      headers: authorizationHeaders(token),
+      params: { header: idempotencyParameters(key).header },
+    }),
+  );
+}
+
+export function retryServiceReportExport(token: string, id: string): Promise<ServiceReportExport> {
+  return unwrapApiResponse(
+    apiClient.POST('/api/v1/service/report-exports/{id}/retry', {
+      headers: authorizationHeaders(token),
+      params: { path: { id } },
+    }),
+  );
+}
+
+export async function downloadServiceReportExport(
+  token: string,
+  report: ServiceReportExport,
+): Promise<Blob> {
+  const response = await fetch(`${apiV1BaseUrl}/service/report-exports/${report.id}/content`, {
+    headers: authorizationHeaders(token),
+  });
+  if (!response.ok) {
+    const body = (await response.json().catch(() => undefined)) as ApiErrorResponse | undefined;
+    throw new ApiClientError(
+      body?.error.message ?? 'The report could not be downloaded.',
+      body?.error.code ?? 'REPORT_DOWNLOAD_FAILED',
+      response.status,
+      body?.error.correlationId,
+      body?.error.details,
+    );
+  }
+  return response.blob();
 }
 
 export function createWarrantyClaim(
@@ -142,6 +224,15 @@ export function listServiceRequests(
     apiClient.GET('/api/v1/service/requests', {
       headers: authorizationHeaders(token),
       params: { query: { page, pageSize } },
+    }),
+  );
+}
+
+export function getServiceRequest(token: string, id: string): Promise<ServiceRequest> {
+  return unwrapApiResponse(
+    apiClient.GET('/api/v1/service/requests/{id}', {
+      headers: authorizationHeaders(token),
+      params: { path: { id } },
     }),
   );
 }

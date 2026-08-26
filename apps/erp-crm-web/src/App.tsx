@@ -7,6 +7,7 @@ import { WorkspaceLayout } from './layout/WorkspaceLayout';
 import { messages } from './messages';
 import { AccessPage } from './pages/AccessPage';
 import { CatalogPage } from './pages/CatalogPage';
+import { CrmTicketsPage } from './pages/CrmTicketsPage';
 import { type FinanceView, FinancePage } from './pages/FinancePage';
 import { FinanceBankPage } from './pages/FinanceBankPage';
 import { FinanceCashPage } from './pages/FinanceCashPage';
@@ -122,9 +123,12 @@ function pageForPath(
     return hasPermission('erp.finance') ? <FinanceReportsPage /> : <NotFoundPage />;
   }
   const servicePath =
-    /^\/modules\/erp\.service\/(requests|work-orders|schedule|devices|care)$/u.exec(pathname);
+    /^\/modules\/erp\.service\/(requests|work-orders|schedule|devices|care|reports)$/u.exec(
+      pathname,
+    );
   if (servicePath?.[1]) {
-    return hasPermission('erp.service') ? (
+    return hasPermission('erp.service') &&
+      (servicePath[1] !== 'reports' || hasPermission('erp.service', 'approve')) ? (
       <ServiceOperationsPage view={servicePath[1] as ServiceOperationsView} />
     ) : (
       <NotFoundPage />
@@ -142,6 +146,9 @@ function pageForPath(
   }
   if (/^\/modules\/erp\.sales\/(quotations|orders|shipments)$/u.test(pathname)) {
     return hasPermission('erp.sales') ? <SalesWorkflowPage /> : <NotFoundPage />;
+  }
+  if (pathname === '/modules/crm/tickets') {
+    return hasPermission('crm') ? <CrmTicketsPage /> : <NotFoundPage />;
   }
   const workflow = findWorkflowPage(pathname);
   if (workflow) {

@@ -14,6 +14,8 @@ import type {
   ProcurementSupplierRecord,
   SalesWorkflow,
   ServiceInspectionPlan,
+  ServiceReportDefinition,
+  ServiceReportOverview,
   WarrantyClaim,
 } from '@vista/contracts';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -5033,6 +5035,121 @@ describe('ERP and CRM authenticated workspace', () => {
       outcome: 'passed',
     });
     expect(inspectionBody.completedOn).toMatch(/^\d{4}-\d{2}-\d{2}$/u);
+  });
+
+  it('reviews Service performance and opens an account-scoped report export panel', async () => {
+    const serviceContext = {
+      ...authenticationContext,
+      permissions: [
+        ...authenticationContext.permissions,
+        { action: 'view', module: 'erp.service' },
+        { action: 'create', module: 'erp.service' },
+        { action: 'approve', module: 'erp.service' },
+      ],
+    };
+    storeAuthenticatedSession(serviceContext);
+    const overview: ServiceReportOverview = {
+      dateFrom: '2026-08-01',
+      dateTo: '2026-08-26',
+      generatedAt: '2026-08-26T12:00:00.000Z',
+      statusTotals: [
+        { count: 1, status: 'in_progress' },
+        { count: 2, status: 'completed' },
+      ],
+      technicians: [
+        {
+          assignedCount: 3,
+          completedCount: 2,
+          displayName: 'Mila Petrova',
+          laborMinutes: 150,
+          totalCostBgn: '170.0000',
+        },
+      ],
+      totals: {
+        cancelledRequests: 0,
+        completedRequests: 2,
+        laborMinutes: 150,
+        openRequests: 1,
+        totalCostBgn: '170.0000',
+        totalRequests: 3,
+      },
+      typeTotals: [
+        {
+          completedCount: 2,
+          requestCount: 3,
+          serviceType: 'warranty',
+          totalCostBgn: '170.0000',
+        },
+      ],
+    };
+    const definitions: ServiceReportDefinition[] = [
+      {
+        description: 'Detailed Service requests and recorded cost.',
+        formats: ['csv', 'xlsx', 'pdf'],
+        key: 'service.request-register',
+        name: 'Service request register',
+        requiresDateRange: true,
+      },
+    ];
+    const emptyRequestPage = {
+      items: [],
+      page: 1,
+      pageSize: 25,
+      summary: { completed: 0, inProgress: 0, new: 0, scheduled: 0 },
+      total: 0,
+      totalPages: 0,
+    };
+    const emptyWorkPage = { items: [], page: 1, pageSize: 25, total: 0, totalPages: 0 };
+    const fetchMock = vi.fn((input: string) => {
+      if (input.endsWith('/auth/me')) return Promise.resolve(jsonResponse(serviceContext));
+      if (input.endsWith('/service/reference-data'))
+        return Promise.resolve(
+          jsonResponse({
+            businessTimezone: 'Europe/Sofia',
+            customers: [],
+            equipment: [],
+            locations: [],
+            parts: [],
+            subscriptions: [],
+            technicians: [],
+          }),
+        );
+      if (input.includes('/service/requests?'))
+        return Promise.resolve(jsonResponse(emptyRequestPage));
+      if (input.includes('/service/work-orders'))
+        return Promise.resolve(jsonResponse(emptyWorkPage));
+      if (input.includes('/service/reports/overview'))
+        return Promise.resolve(jsonResponse(overview));
+      if (input.endsWith('/service/report-exports/definitions'))
+        return Promise.resolve(jsonResponse(definitions));
+      if (input.includes('/service/report-exports?'))
+        return Promise.resolve(
+          jsonResponse({ items: [], page: 1, pageSize: 20, total: 0, totalPages: 0 }),
+        );
+      return Promise.resolve(jsonResponse({}));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderApplication(['/modules/erp.service/reports']);
+
+    expect(await screen.findByRole('heading', { name: 'Service reports' })).toBeTruthy();
+    expect((await screen.findAllByText('Mila Petrova')).length).toBeGreaterThan(0);
+    expect(screen.getAllByText('2h 30m').length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/BGN\s*170\.00/u).length).toBeGreaterThan(0);
+    const serviceTabs = screen.getByRole('navigation', { name: 'Service sections' });
+    expect(serviceTabs.classList.contains('service-tabs')).toBe(true);
+    expect(
+      within(serviceTabs).getByRole('link', { name: 'Reports' }).classList.contains('is-active'),
+    ).toBe(true);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Export report' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Export Service report' });
+    expect(within(dialog).getByLabelText('Report')).toHaveProperty(
+      'value',
+      'service.request-register',
+    );
+    expect(within(dialog).getByRole('button', { name: 'Prepare export' })).toBeTruthy();
+    expect(within(dialog).getByRole('button', { name: 'Close' })).toBeTruthy();
   });
 
   it('shows technician workload and saves working hours from the service schedule', async () => {

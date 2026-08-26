@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import type { DatabaseService } from '../database/database.service.js';
+import type { CrmTicketsService } from '../crm/crm-tickets.service.js';
 import type { FinanceService } from '../finance/finance.service.js';
 import type { StructuredLogger } from '../logging/structured-logger.service.js';
 import type { SalesSubscriptionsService } from '../sales/sales-subscriptions.service.js';
@@ -130,6 +131,26 @@ describe('NamedJobTriggerHandlersService', () => {
 
     expect(serviceCare[method]).toHaveBeenCalledWith(context);
   });
+
+  it('evaluates CRM ticket SLAs before recording the durable handoff', async () => {
+    const { crmTickets, registry, service } = createSubject();
+    service.onModuleInit();
+    const context = {
+      attemptNumber: 1,
+      correlationId: 'crm-sla-correlation',
+      enqueuedAt: '2026-08-26T10:00:00.000Z',
+      idempotencyKey: 'crm-sla-2026-08-26T10:00',
+      jobId: 'crm-sla-job',
+      maxAttempts: 5,
+      name: 'crm.sla.evaluate',
+      payload: { asOf: '2026-08-26T10:00:00.000Z' },
+      retryAllowed: true,
+    } as const;
+
+    await registry.execute(context);
+
+    expect(crmTickets.evaluateSla).toHaveBeenCalledWith(context);
+  });
 });
 
 function createSubject(
@@ -159,7 +180,10 @@ function createSubject(
     prepareWarrantyReminders: vi.fn(),
   };
   const serviceCare = serviceCareSpies as unknown as ServiceCareService;
+  const crmTicketSpies = { evaluateSla: vi.fn() };
+  const crmTickets = crmTicketSpies as unknown as CrmTicketsService;
   return {
+    crmTickets: crmTicketSpies,
     registry,
     serviceCare: serviceCareSpies,
     service: new NamedJobTriggerHandlersService(
@@ -170,6 +194,7 @@ function createSubject(
       finance,
       reportExports,
       serviceCare,
+      crmTickets,
     ),
   };
 }

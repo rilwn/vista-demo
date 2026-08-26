@@ -1803,6 +1803,88 @@ export interface FinanceReportExportPage {
   totalPages: number;
 }
 
+export const serviceReportDefinitionKeys = [
+  'service.request-register',
+  'service.technician-performance',
+  'service.cost-summary',
+] as const;
+export type ServiceReportDefinitionKey = (typeof serviceReportDefinitionKeys)[number];
+
+export interface ServiceReportDefinition {
+  description: string;
+  formats: ReportExportFormat[];
+  key: ServiceReportDefinitionKey;
+  name: string;
+  requiresDateRange: true;
+}
+
+export interface CreateServiceReportExportRequest {
+  dateFrom: string;
+  dateTo: string;
+  definitionKey: ServiceReportDefinitionKey;
+  format: ReportExportFormat;
+}
+
+export interface ServiceReportExport {
+  attemptCount: number;
+  completedAt?: string;
+  createdAt: string;
+  definitionKey: ServiceReportDefinitionKey;
+  errorCode?: string;
+  fileName?: string;
+  format: ReportExportFormat;
+  id: string;
+  name: string;
+  rowCount?: number;
+  sizeBytes?: number;
+  status: ReportExportStatus;
+}
+
+export interface ServiceReportExportPage {
+  items: ServiceReportExport[];
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+}
+
+export interface ServiceReportStatusTotal {
+  count: number;
+  status: ServiceRequestStatus;
+}
+
+export interface ServiceReportTypeTotal {
+  completedCount: number;
+  requestCount: number;
+  serviceType: ServiceType;
+  totalCostBgn: string;
+}
+
+export interface ServiceTechnicianPerformance {
+  assignedCount: number;
+  completedCount: number;
+  displayName: string;
+  laborMinutes: number;
+  totalCostBgn: string;
+}
+
+export interface ServiceReportOverview {
+  dateFrom: string;
+  dateTo: string;
+  generatedAt: string;
+  statusTotals: ServiceReportStatusTotal[];
+  technicians: ServiceTechnicianPerformance[];
+  totals: {
+    cancelledRequests: number;
+    completedRequests: number;
+    laborMinutes: number;
+    openRequests: number;
+    totalCostBgn: string;
+    totalRequests: number;
+  };
+  typeTotals: ServiceReportTypeTotal[];
+}
+
 export type FinanceSupplierPayableStatus = 'overdue' | 'paid' | 'partially_paid' | 'unpaid';
 export type FinanceSupplierPaymentKind = 'advance' | 'offset' | 'payment';
 
@@ -2510,6 +2592,160 @@ export interface CreateServiceRequest {
   sourceChannel: ManualServiceRequestChannel;
   subscriptionContractId?: string;
   serviceType: ServiceType;
+}
+
+export const crmTicketChannels = [
+  'telephone',
+  'email',
+  'customer_portal',
+  'on_site',
+  'chat',
+] as const;
+export type CrmTicketChannel = (typeof crmTicketChannels)[number];
+
+export const crmTicketPriorities = ['low', 'normal', 'high', 'urgent'] as const;
+export type CrmTicketPriority = (typeof crmTicketPriorities)[number];
+
+export const crmTicketStatuses = [
+  'new',
+  'in_progress',
+  'waiting_customer',
+  'resolved',
+  'closed',
+  'cancelled',
+] as const;
+export type CrmTicketStatus = (typeof crmTicketStatuses)[number];
+
+export type CrmSlaTimerState = 'on_track' | 'at_risk' | 'breached' | 'met';
+
+export interface CrmTicketCategory {
+  code: string;
+  id: string;
+  name: string;
+}
+
+export interface CrmSlaPolicyReference {
+  customerPartnerId?: string;
+  id: string;
+  name: string;
+  priority?: CrmTicketPriority;
+  responseMinutes: number;
+  resolutionMinutes: number;
+  serviceSubscriptionContractId?: string;
+}
+
+export interface CrmTicketAssigneeReference {
+  displayName: string;
+  id: string;
+}
+
+export interface CrmTicketReferenceData {
+  assignees: CrmTicketAssigneeReference[];
+  businessTimezone: string;
+  categories: CrmTicketCategory[];
+  customers: ServiceCustomerReference[];
+  equipment: ServiceEquipmentReference[];
+  locations: ServiceLocationReference[];
+  slaPolicies: CrmSlaPolicyReference[];
+  subscriptions: ServiceSubscriptionReference[];
+}
+
+export interface CrmTicketHistoryEntry {
+  changedAt: string;
+  changedByName?: string;
+  id: string;
+  note?: string;
+  status: CrmTicketStatus;
+  type: 'created' | 'response' | 'status_change' | 'service_link';
+}
+
+export interface CrmTicketServiceLink {
+  correlationId: string;
+  serviceRequestId: string;
+  serviceRequestNumber: string;
+}
+
+export interface CrmTicket {
+  assignedTo?: CrmTicketAssigneeReference;
+  category: CrmTicketCategory;
+  channel: CrmTicketChannel;
+  createdAt: string;
+  customerEquipmentId?: string;
+  customerLocationId?: string;
+  customerName: string;
+  customerPartnerId: string;
+  description: string;
+  equipmentName?: string;
+  history: CrmTicketHistoryEntry[];
+  id: string;
+  locationName?: string;
+  number: string;
+  priority: CrmTicketPriority;
+  respondedAt?: string;
+  responseDueAt: string;
+  responseState: CrmSlaTimerState;
+  resolutionDueAt: string;
+  resolutionState: CrmSlaTimerState;
+  resolvedAt?: string;
+  serviceLink?: CrmTicketServiceLink;
+  serviceSubscriptionContractId?: string;
+  slaPolicy: CrmSlaPolicyReference;
+  status: CrmTicketStatus;
+  subject: string;
+  updatedAt: string;
+  version: number;
+}
+
+export interface CrmTicketPage {
+  items: CrmTicket[];
+  page: number;
+  pageSize: number;
+  summary: {
+    atRisk: number;
+    breached: number;
+    open: number;
+    unassigned: number;
+  };
+  total: number;
+  totalPages: number;
+}
+
+export interface CreateCrmTicketRequest {
+  assignedToAccountId?: string;
+  categoryId: string;
+  channel: CrmTicketChannel;
+  customerEquipmentId?: string;
+  customerLocationId?: string;
+  customerPartnerId: string;
+  description: string;
+  priority: CrmTicketPriority;
+  serviceSubscriptionContractId?: string;
+  slaPolicyId: string;
+  subject: string;
+}
+
+export interface RecordCrmTicketResponseRequest {
+  expectedVersion: number;
+  note: string;
+}
+
+export interface TransitionCrmTicketRequest {
+  expectedVersion: number;
+  note: string;
+  status: CrmTicketStatus;
+}
+
+export interface CreateServiceRequestFromCrmTicketRequest {
+  expectedVersion: number;
+  serviceType: ServiceType;
+  subscriptionContractId?: string;
+}
+
+export interface CreateCrmTicketFromServiceRequestRequest {
+  assignedToAccountId?: string;
+  categoryId: string;
+  priority: CrmTicketPriority;
+  slaPolicyId: string;
 }
 
 export interface AssignServiceWorkOrderRequest {

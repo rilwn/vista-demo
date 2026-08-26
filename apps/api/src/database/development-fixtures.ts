@@ -110,6 +110,7 @@ const allOperationalPermissions: readonly PermissionGrant[] = [
   grant('crm', 'create'),
   grant('crm', 'edit'),
   grant('crm', 'delete'),
+  grant('crm', 'approve'),
   grant('erp.warehouse', 'view'),
   grant('erp.warehouse', 'create'),
   grant('erp.warehouse', 'edit'),
@@ -167,6 +168,9 @@ export const developmentFixtureAccounts: readonly DevelopmentFixtureAccount[] = 
     grant('crm', 'create'),
     grant('crm', 'edit'),
     grant('crm', 'delete'),
+    grant('crm', 'approve'),
+    grant('erp.service', 'view'),
+    grant('erp.service', 'create'),
   ]),
   account('warehouse', 'DEV-WAREHOUSE', 'Vista Demo Warehouse Operator', 'warehouse@vista.local', [
     grant('platform.organization', 'view'),
@@ -652,6 +656,14 @@ async function ensureOperationalFixtures(
   await ensureServiceCareFixtures(
     client,
     managerId,
+    partners.alfa,
+    partners.alfaStoreLocation,
+    partners.printerEquipment,
+  );
+  await ensureCrmTicketFixtures(
+    client,
+    managerId,
+    accountIds.crm,
     partners.alfa,
     partners.alfaStoreLocation,
     partners.printerEquipment,
@@ -2396,6 +2408,93 @@ async function ensureServiceCareFixtures(
      ) VALUES ($1, $2, 'technical', 12, CURRENT_DATE + 7, 30, $3, $3)
      ON CONFLICT (id) DO NOTHING`,
     [planId, equipmentId, managerId],
+  );
+}
+
+async function ensureCrmTicketFixtures(
+  client: PoolClient,
+  managerId: string,
+  crmAccountId: string,
+  customerPartnerId: string,
+  customerLocationId: string,
+  equipmentId: string,
+): Promise<void> {
+  const categories = [
+    ['technical_support', 'Technical support'],
+    ['billing', 'Billing'],
+    ['delivery', 'Delivery'],
+    ['general', 'General enquiry'],
+  ] as const;
+  for (const [code, name] of categories) {
+    const id = fixtureId(`crm-ticket-category:${code}`);
+    await insertFixtureRow(
+      client,
+      'crm.ticket_categories',
+      id,
+      `INSERT INTO crm.ticket_categories (id, code, name)
+       VALUES ($1,$2,$3) ON CONFLICT (id) DO NOTHING`,
+      [id, code, name],
+    );
+  }
+
+  const policies = [
+    ['low', 'Standard care · low priority', 480, 4320],
+    ['normal', 'Standard care · normal priority', 240, 1440],
+    ['high', 'Priority care · high priority', 60, 480],
+    ['urgent', 'Critical care · urgent', 15, 240],
+  ] as const;
+  for (const [priority, name, responseMinutes, resolutionMinutes] of policies) {
+    const id = fixtureId(`crm-sla-policy:${priority}`);
+    await insertFixtureRow(
+      client,
+      'crm.sla_policies',
+      id,
+      `INSERT INTO crm.sla_policies (
+         id, name, priority, response_minutes, resolution_minutes,
+         risk_threshold_percent, escalation_account_id
+       ) VALUES ($1,$2,$3,$4,$5,80,$6) ON CONFLICT (id) DO NOTHING`,
+      [id, name, priority, responseMinutes, resolutionMinutes, managerId],
+    );
+  }
+
+  const ticketId = fixtureId('crm-ticket:printer-support');
+  await insertFixtureRow(
+    client,
+    'crm.tickets',
+    ticketId,
+    `INSERT INTO crm.tickets (
+       id, ticket_number, customer_partner_id, customer_location_id,
+       customer_equipment_id, category_id, channel, priority, subject,
+       description, assigned_to_account_id, sla_policy_id, sla_policy_name,
+       sla_response_minutes, sla_resolution_minutes, sla_risk_threshold_percent,
+       response_due_at, resolution_due_at, created_by, updated_by
+     ) VALUES (
+       $1, 'DEV-TKT-0001', $2, $3, $4, $5, 'telephone', 'normal',
+       'Receipt printer stops during busy periods',
+       'The customer reports intermittent paper-feed stops and needs a service visit.',
+       $6, $7, 'Standard care · normal priority', 240, 1440, 80,
+       now() + INTERVAL '4 hours', now() + INTERVAL '24 hours', $8, $8
+     ) ON CONFLICT (id) DO NOTHING`,
+    [
+      ticketId,
+      customerPartnerId,
+      customerLocationId,
+      equipmentId,
+      fixtureId('crm-ticket-category:technical_support'),
+      crmAccountId,
+      fixtureId('crm-sla-policy:normal'),
+      managerId,
+    ],
+  );
+  await insertFixtureRow(
+    client,
+    'crm.ticket_history',
+    fixtureId('crm-ticket-history:printer-support-created'),
+    `INSERT INTO crm.ticket_history (
+       id, ticket_id, event_type, status, note, changed_by
+     ) VALUES ($1,$2,'created','new','Ticket created from a customer phone call.',$3)
+     ON CONFLICT (id) DO NOTHING`,
+    [fixtureId('crm-ticket-history:printer-support-created'), ticketId, managerId],
   );
 }
 

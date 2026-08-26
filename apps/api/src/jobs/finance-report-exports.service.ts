@@ -8,6 +8,10 @@ import type {
   FinanceReportExportPage,
   ReportExportFormat,
   ReportExportStatus,
+  ServiceReportDefinition,
+  ServiceReportDefinitionKey,
+  ServiceReportExport,
+  ServiceReportExportPage,
 } from '@vista/contracts';
 import { UnrecoverableError } from 'bullmq';
 
@@ -20,6 +24,7 @@ import { ApiErrorException } from '../common/api-error.exception.js';
 import { DatabaseService } from '../database/database.service.js';
 import { FinanceReportsService } from '../finance/finance-reports.service.js';
 import { StructuredLogger } from '../logging/structured-logger.service.js';
+import { ServiceReportsService } from '../service/service-reports.service.js';
 import { ObjectStorageService } from '../storage/object-storage.service.js';
 import type { BackgroundJobContext } from './job-handler-registry.service.js';
 import { JobQueueService } from './job-queue.service.js';
@@ -29,9 +34,27 @@ import type {
 } from './finance-report-exports.dto.js';
 import { renderFinanceReport } from './finance-report-renderer.js';
 
+type ReportDefinitionKey = FinanceReportDefinitionKey | ServiceReportDefinitionKey;
+type AnyReportDefinition = FinanceReportDefinition | ServiceReportDefinition;
+type AnyReportExport = FinanceReportExport | ServiceReportExport;
+interface AnyReportExportPage {
+  items: AnyReportExport[];
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+}
+interface ReportExportRequest {
+  dateFrom?: string;
+  dateTo?: string;
+  definitionKey: ReportDefinitionKey;
+  format: ReportExportFormat;
+}
+type ReportScope = 'finance' | 'service';
+
 interface DefinitionRow {
   available_formats: ReportExportFormat[];
-  definition_key: FinanceReportDefinitionKey;
+  definition_key: ReportDefinitionKey;
   description: string;
   id: string;
   implementation_key: string;
@@ -71,6 +94,7 @@ export class FinanceReportExportsService {
     @Inject(DatabaseService) private readonly database: DatabaseService,
     @Inject(AuditService) private readonly audit: AuditService,
     @Inject(FinanceReportsService) private readonly reports: FinanceReportsService,
+    @Inject(ServiceReportsService) private readonly serviceReports: ServiceReportsService,
     @Inject(JobQueueService) private readonly jobs: JobQueueService,
     @Inject(ObjectStorageService) private readonly storage: ObjectStorageService,
     @Inject(StructuredLogger) private readonly logger: StructuredLogger,
@@ -80,32 +104,59 @@ export class FinanceReportExportsService {
     const result = await this.database.getPool().query<DefinitionRow>(
       `SELECT id, definition_key, name, description, implementation_key, available_formats
        FROM reporting.report_definitions
-       WHERE is_active = true
+       WHERE is_active = true AND definition_key LIKE 'finance.%'
        ORDER BY name, definition_key`,
     );
-    return result.rows.map(mapDefinition);
+    return result.rows.map(mapDefinition) as FinanceReportDefinition[];
+  }
+
+  async serviceDefinitions(): Promise<ServiceReportDefinition[]> {
+    const result = await this.database.getPool().query<DefinitionRow>(
+      `SELECT id, definition_key, name, description, implementation_key, available_formats
+       FROM reporting.report_definitions
+       WHERE is_active = true AND definition_key LIKE 'service.%'
+       ORDER BY name, definition_key`,
+    );
+    return result.rows.map(mapDefinition) as ServiceReportDefinition[];
   }
 
   async list(
     query: FinanceReportExportPageQueryDto,
     auth: AuthenticationContext,
   ): Promise<FinanceReportExportPage> {
+    return this.listForScope(query, auth, 'finance') as Promise<FinanceReportExportPage>;
+  }
+
+  async serviceList(
+    query: FinanceReportExportPageQueryDto,
+    auth: AuthenticationContext,
+  ): Promise<ServiceReportExportPage> {
+    return this.listForScope(query, auth, 'service') as Promise<ServiceReportExportPage>;
+  }
+
+  private async listForScope(
+    query: FinanceReportExportPageQueryDto,
+    auth: AuthenticationContext,
+    scope: ReportScope,
+  ): Promise<AnyReportExportPage> {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 20;
     const offset = (page - 1) * pageSize;
     const [count, rows] = await Promise.all([
-      this.database
-        .getPool()
-        .query<{ total: string }>(
-          'SELECT count(*)::text AS total FROM reporting.export_jobs WHERE requested_by = $1',
-          [auth.accountId],
-        ),
+      this.database.getPool().query<{ total: string }>(
+        `SELECT count(*)::text AS total
+           FROM reporting.export_jobs export
+           JOIN reporting.report_definitions definition
+             ON definition.id = export.report_definition_id
+           WHERE export.requested_by = $1 AND definition.definition_key LIKE $2`,
+        [auth.accountId, `${scope}.%`],
+      ),
       this.database.getPool().query<ExportRow>(
         `${exportSelect()}
-         WHERE export.requested_by = $1
+         WHERE export.requested_by = $1 AND definition.definition_key LIKE $2
          ORDER BY export.requested_at DESC, export.id DESC
-         LIMIT $2 OFFSET $3`,
-        [auth.accountId, pageSize, offset],
+         LIMIT $3 OFFSET $4`,
+        [auth.accountId, `${scope}.%`, pageSize, offset],
       ),
     ]);
     const total = Number(count.rows[0]?.total ?? 0);
@@ -124,8 +175,39 @@ export class FinanceReportExportsService {
     auth: AuthenticationContext,
     metadata: RequestSecurityMetadata,
   ): Promise<FinanceReportExport> {
+    return this.createForScope(
+      input,
+      key,
+      auth,
+      metadata,
+      'finance',
+    ) as Promise<FinanceReportExport>;
+  }
+
+  async serviceCreate(
+    input: ReportExportRequest,
+    key: string | undefined,
+    auth: AuthenticationContext,
+    metadata: RequestSecurityMetadata,
+  ): Promise<ServiceReportExport> {
+    return this.createForScope(
+      input,
+      key,
+      auth,
+      metadata,
+      'service',
+    ) as Promise<ServiceReportExport>;
+  }
+
+  private async createForScope(
+    input: ReportExportRequest,
+    key: string | undefined,
+    auth: AuthenticationContext,
+    metadata: RequestSecurityMetadata,
+    scope: ReportScope,
+  ): Promise<AnyReportExport> {
     const idempotencyKey = validIdempotencyKey(key);
-    const definition = await this.definition(input.definitionKey);
+    const definition = await this.definition(input.definitionKey, scope);
     if (!definition.available_formats.includes(input.format)) {
       throw new ApiErrorException(
         'REPORT_EXPORT_FORMAT_NOT_AVAILABLE',
@@ -215,7 +297,7 @@ export class FinanceReportExportsService {
     }
 
     if (shouldDispatch) await this.dispatch(exportId);
-    return this.ownedExport(exportId, auth.accountId);
+    return mapExport(await this.ownedExportRow(exportId, auth.accountId, scope));
   }
 
   async retry(
@@ -223,7 +305,24 @@ export class FinanceReportExportsService {
     auth: AuthenticationContext,
     metadata: RequestSecurityMetadata,
   ): Promise<FinanceReportExport> {
-    const row = await this.ownedExportRow(id, auth.accountId);
+    return this.retryForScope(id, auth, metadata, 'finance') as Promise<FinanceReportExport>;
+  }
+
+  async serviceRetry(
+    id: string,
+    auth: AuthenticationContext,
+    metadata: RequestSecurityMetadata,
+  ): Promise<ServiceReportExport> {
+    return this.retryForScope(id, auth, metadata, 'service') as Promise<ServiceReportExport>;
+  }
+
+  private async retryForScope(
+    id: string,
+    auth: AuthenticationContext,
+    metadata: RequestSecurityMetadata,
+    scope: ReportScope,
+  ): Promise<AnyReportExport> {
+    const row = await this.ownedExportRow(id, auth.accountId, scope);
     if (row.status !== 'failed') {
       throw new ApiErrorException(
         'REPORT_EXPORT_NOT_FAILED',
@@ -257,7 +356,7 @@ export class FinanceReportExportsService {
       targetType: 'report_export',
       ...(metadata.userAgent ? { userAgent: metadata.userAgent } : {}),
     });
-    return this.ownedExport(id, auth.accountId);
+    return mapExport(await this.ownedExportRow(id, auth.accountId, scope));
   }
 
   async content(
@@ -265,7 +364,24 @@ export class FinanceReportExportsService {
     auth: AuthenticationContext,
     metadata: RequestSecurityMetadata,
   ): Promise<FinanceReportExportContent> {
-    const row = await this.ownedExportRow(id, auth.accountId);
+    return this.contentForScope(id, auth, metadata, 'finance');
+  }
+
+  serviceContent(
+    id: string,
+    auth: AuthenticationContext,
+    metadata: RequestSecurityMetadata,
+  ): Promise<FinanceReportExportContent> {
+    return this.contentForScope(id, auth, metadata, 'service');
+  }
+
+  private async contentForScope(
+    id: string,
+    auth: AuthenticationContext,
+    metadata: RequestSecurityMetadata,
+    scope: ReportScope,
+  ): Promise<FinanceReportExportContent> {
+    const row = await this.ownedExportRow(id, auth.accountId, scope);
     if (
       row.status !== 'completed' ||
       !row.storage_key ||
@@ -360,7 +476,15 @@ export class FinanceReportExportsService {
       [exportId],
     );
     try {
-      const data = await this.reports.exportData(existing.definition_key, existing.filters);
+      const data = existing.definition_key.startsWith('service.')
+        ? await this.serviceReports.exportData(
+            existing.definition_key as ServiceReportDefinitionKey,
+            existing.filters,
+          )
+        : await this.reports.exportData(
+            existing.definition_key as FinanceReportDefinitionKey,
+            existing.filters,
+          );
       const rendered = await renderFinanceReport(existing.export_format, data);
       const checksum = createHash('sha256').update(rendered.buffer).digest('hex');
       const fileName = exportFileName(
@@ -455,12 +579,12 @@ export class FinanceReportExportsService {
     }
   }
 
-  private async definition(key: FinanceReportDefinitionKey): Promise<DefinitionRow> {
+  private async definition(key: ReportDefinitionKey, scope: ReportScope): Promise<DefinitionRow> {
     const result = await this.database.getPool().query<DefinitionRow>(
       `SELECT id, definition_key, name, description, implementation_key, available_formats
        FROM reporting.report_definitions
-       WHERE definition_key = $1 AND is_active = true`,
-      [key],
+       WHERE definition_key = $1 AND definition_key LIKE $2 AND is_active = true`,
+      [key, `${scope}.%`],
     );
     const definition = result.rows[0];
     if (!definition) {
@@ -480,17 +604,16 @@ export class FinanceReportExportsService {
     return result.rows[0];
   }
 
-  private async ownedExport(id: string, accountId: string): Promise<FinanceReportExport> {
-    return mapExport(await this.ownedExportRow(id, accountId));
-  }
-
-  private async ownedExportRow(id: string, accountId: string): Promise<ExportRow> {
-    const result = await this.database
-      .getPool()
-      .query<ExportRow>(`${exportSelect()} WHERE export.id = $1 AND export.requested_by = $2`, [
-        id,
-        accountId,
-      ]);
+  private async ownedExportRow(
+    id: string,
+    accountId: string,
+    scope?: ReportScope,
+  ): Promise<ExportRow> {
+    const result = await this.database.getPool().query<ExportRow>(
+      `${exportSelect()} WHERE export.id = $1 AND export.requested_by = $2
+          AND ($3::text IS NULL OR definition.definition_key LIKE $3)`,
+      [id, accountId, scope ? `${scope}.%` : null],
+    );
     const row = result.rows[0];
     if (!row) {
       throw new ApiErrorException(
@@ -515,17 +638,20 @@ function exportSelect(): string {
           JOIN reporting.report_definitions definition ON definition.id = export.report_definition_id`;
 }
 
-function mapDefinition(row: DefinitionRow): FinanceReportDefinition {
-  return {
+function mapDefinition(row: DefinitionRow): AnyReportDefinition {
+  const mapped = {
     description: row.description,
     formats: row.available_formats,
     key: row.definition_key,
     name: row.name,
     requiresDateRange: dateRangeReportKeys.has(row.definition_key),
   };
+  return row.definition_key.startsWith('service.')
+    ? (mapped as ServiceReportDefinition)
+    : (mapped as FinanceReportDefinition);
 }
 
-function mapExport(row: ExportRow): FinanceReportExport {
+function mapExport(row: ExportRow): AnyReportExport {
   return {
     attemptCount: row.attempt_count,
     ...(row.completed_at ? { completedAt: asIso(row.completed_at) } : {}),
@@ -543,8 +669,8 @@ function mapExport(row: ExportRow): FinanceReportExport {
 }
 
 function reportFilters(
-  input: CreateFinanceReportExportDto,
-  definitionKey: FinanceReportDefinitionKey,
+  input: ReportExportRequest,
+  definitionKey: ReportDefinitionKey,
 ): Record<string, string> {
   const requiresDateRange = dateRangeReportKeys.has(definitionKey);
   if (!requiresDateRange) {
@@ -586,11 +712,11 @@ function validIdempotencyKey(value: string | undefined): string {
 }
 
 function exportFileName(
-  definitionKey: FinanceReportDefinitionKey,
+  definitionKey: ReportDefinitionKey,
   requestedAt: Date | string,
   extension: ReportExportFormat,
 ): string {
-  const report = definitionKey.replace('finance.', '');
+  const report = definitionKey.replace(/^[^.]+\./u, '');
   return `${report}-${asIso(requestedAt).slice(0, 10)}.${extension}`;
 }
 
@@ -617,10 +743,13 @@ function asIso(value: Date | string): string {
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-const dateRangeReportKeys = new Set<FinanceReportDefinitionKey>([
+const dateRangeReportKeys = new Set<ReportDefinitionKey>([
   'finance.customer-turnover',
   'finance.supplier-turnover',
   'finance.sales-journal',
   'finance.purchase-journal',
   'finance.vat-review',
+  'service.request-register',
+  'service.technician-performance',
+  'service.cost-summary',
 ]);

@@ -37,6 +37,10 @@ import type {
   ServiceReferenceData,
   ServiceRequest,
   ServiceRequestPage,
+  ServiceReportDefinition,
+  ServiceReportExport,
+  ServiceReportExportPage,
+  ServiceReportOverview,
   ServiceSchedule,
   ServiceTechnicianSchedulePolicy,
   ServiceWorkOrder,
@@ -52,6 +56,8 @@ import type {
   ServiceCareOverview,
   ServiceInspectionPlan,
   WarrantyClaim,
+  CrmTicket,
+  CrmTicketReferenceData,
 } from '@vista/contracts';
 import { Pool } from 'pg';
 import request from 'supertest';
@@ -114,8 +120,12 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
       new URL('../src/database/migrations', import.meta.url),
     );
     await migrateUp(database, migrationDirectory);
-    expect(await migrateDown(database, migrationDirectory)).toBe('0043_service_care_management');
-    expect(await migrateUp(database, migrationDirectory)).toContain('0043_service_care_management');
+    expect(await migrateDown(database, migrationDirectory)).toBe(
+      '0045_service_operational_reports',
+    );
+    expect(await migrateUp(database, migrationDirectory)).toContain(
+      '0045_service_operational_reports',
+    );
 
     Object.assign(process.env, {
       BUSINESS_TIMEZONE: 'Europe/Sofia',
@@ -172,6 +182,7 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
     await grantFinancePermissions(database, creatorId, ['create', 'edit', 'view']);
     await grantFinancePermissions(database, viewerId, ['view']);
     await grantServicePermissions(database, creatorId, ['approve', 'create', 'edit', 'view']);
+    await grantCrmPermissions(database, creatorId, ['create', 'edit', 'view']);
     await grantLogisticsPermissions(database, creatorId, ['create', 'edit', 'view']);
     await grantLogisticsPermissions(database, viewerId, ['view']);
     ({
@@ -2190,6 +2201,199 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
     });
   });
 
+  it('keeps CRM tickets, SLA events, and ERP Service requests linked without loops', async () => {
+    const categoryId = randomUUID();
+    const policyId = randomUUID();
+    await database.query(
+      `INSERT INTO crm.ticket_categories (id, code, name)
+       VALUES ($1,$2,'Technical support')`,
+      [categoryId, `technical_${runId}`],
+    );
+    await database.query(
+      `INSERT INTO crm.sla_policies (
+         id, name, priority, response_minutes, resolution_minutes,
+         risk_threshold_percent, escalation_account_id
+       ) VALUES ($1,'Integration test SLA','normal',60,240,80,$2)`,
+      [policyId, creatorAccountId],
+    );
+
+    await request(application.getHttpServer())
+      .get('/api/v1/crm/tickets')
+      .set('authorization', `Bearer ${viewerToken}`)
+      .expect(403);
+
+    const referenceResponse = await request(application.getHttpServer())
+      .get('/api/v1/crm/tickets/reference-data')
+      .set('authorization', `Bearer ${token}`)
+      .expect(200);
+    const references = referenceResponse.body as CrmTicketReferenceData;
+    expect(references.categories).toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: categoryId })]),
+    );
+    expect(references.slaPolicies).toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: policyId })]),
+    );
+
+    const ticketInput = {
+      assignedToAccountId: creatorAccountId,
+      categoryId,
+      channel: 'telephone',
+      customerEquipmentId: equipmentId,
+      customerLocationId,
+      customerPartnerId: customerId,
+      description: 'The customer reports a device fault that needs a technician visit.',
+      priority: 'normal',
+      slaPolicyId: policyId,
+      subject: 'Customer device needs inspection',
+    };
+    const ticketKey = `crm-ticket-${runId}`;
+    const createdResponse = await request(application.getHttpServer())
+      .post('/api/v1/crm/tickets')
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', ticketKey)
+      .send(ticketInput)
+      .expect(201);
+    const created = createdResponse.body as CrmTicket;
+    expect(created).toMatchObject({ status: 'new', version: 1 });
+    expect(created.number).toMatch(/^TKT-\d{4}-\d{6}$/u);
+
+    const replayResponse = await request(application.getHttpServer())
+      .post('/api/v1/crm/tickets')
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', ticketKey)
+      .send(ticketInput)
+      .expect(201);
+    expect((replayResponse.body as CrmTicket).id).toBe(created.id);
+
+    const responseResult = await request(application.getHttpServer())
+      .post(`/api/v1/crm/tickets/${created.id}/respond`)
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', `crm-ticket-response-${runId}`)
+      .send({
+        expectedVersion: 1,
+        note: 'We have received the issue and are arranging a technician visit.',
+      })
+      .expect(200);
+    expect(responseResult.body as CrmTicket).toMatchObject({
+      responseState: 'met',
+      status: 'in_progress',
+      version: 2,
+    });
+
+    const serviceLinkResponse = await request(application.getHttpServer())
+      .post(`/api/v1/crm/tickets/${created.id}/service-request`)
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', `crm-ticket-service-${runId}`)
+      .send({ expectedVersion: 2, serviceType: 'out_of_warranty' })
+      .expect(201);
+    const linked = serviceLinkResponse.body as CrmTicket;
+    expect(linked.serviceLink?.serviceRequestNumber).toMatch(/^SRV-\d{4}-\d{6}$/u);
+    expect(linked.version).toBe(3);
+
+    const loopSafeResponse = await request(application.getHttpServer())
+      .post(`/api/v1/crm/tickets/from-service-request/${linked.serviceLink?.serviceRequestId}`)
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', `crm-ticket-loop-${runId}`)
+      .send({ categoryId, priority: 'normal', slaPolicyId: policyId })
+      .expect(201);
+    expect((loopSafeResponse.body as CrmTicket).id).toBe(created.id);
+
+    const serviceRequestResponse = await request(application.getHttpServer())
+      .post('/api/v1/service/requests')
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', `crm-source-service-${runId}`)
+      .send({
+        customerEquipmentId: equipmentId,
+        customerLocationId,
+        customerPartnerId: customerId,
+        priority: 'normal',
+        problemDescription: 'A second customer issue started in the Service team.',
+        serviceType: 'out_of_warranty',
+        sourceChannel: 'email',
+      })
+      .expect(201);
+    const sourceRequest = serviceRequestResponse.body as ServiceRequest;
+    const fromServiceResponse = await request(application.getHttpServer())
+      .post(`/api/v1/crm/tickets/from-service-request/${sourceRequest.id}`)
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', `crm-from-service-${runId}`)
+      .send({
+        assignedToAccountId: creatorAccountId,
+        categoryId,
+        priority: 'normal',
+        slaPolicyId: policyId,
+      })
+      .expect(201);
+    const fromService = fromServiceResponse.body as CrmTicket;
+    expect(fromService).toMatchObject({
+      serviceLink: { serviceRequestId: sourceRequest.id },
+      status: 'new',
+    });
+
+    await database.query(
+      `UPDATE crm.tickets SET created_at = now() - INTERVAL '5 hours',
+         response_due_at = now() - INTERVAL '4 hours',
+         resolution_due_at = now() - INTERVAL '1 hour'
+       WHERE id = $1`,
+      [fromService.id],
+    );
+    const handlers = application.get(JobHandlerRegistry);
+    const slaJob = {
+      attemptNumber: 1,
+      correlationId: `crm-sla-${runId}`,
+      enqueuedAt: '2026-08-26T12:00:00.000Z',
+      idempotencyKey: `crm-sla-${runId}`,
+      jobId: `crm-sla-${runId}`,
+      maxAttempts: 5,
+      name: 'crm.sla.evaluate',
+      payload: { asOf: new Date(Date.now() + 60_000).toISOString() },
+      retryAllowed: true,
+    } as const;
+    const slaResult = await handlers.execute(slaJob);
+    expect(slaResult).toMatchObject({ notificationCount: 2 });
+    await expect(handlers.execute({ ...slaJob, attemptNumber: 2 })).resolves.toMatchObject({
+      deduplicated: true,
+      notificationCount: 0,
+    });
+
+    const dispatcher = application.get(NotificationDispatcherService);
+    for (const notificationId of (slaResult as { notificationIds: string[] }).notificationIds) {
+      await dispatcher.dispatch(notificationId);
+    }
+    const notificationResponse = await request(application.getHttpServer())
+      .get('/api/v1/notifications?page=1&pageSize=100')
+      .set('authorization', `Bearer ${token}`)
+      .expect(200);
+    expect((notificationResponse.body as NotificationPage).items).toEqual(
+      expect.arrayContaining([expect.objectContaining({ templateKey: 'crm.ticket.sla.breached' })]),
+    );
+
+    const evidence = await database.query<{
+      audit_count: string;
+      link_count: string;
+      notification_count: string;
+      outbox_count: string;
+      ticket_count: string;
+    }>(
+      `SELECT
+         (SELECT count(*)::text FROM crm.tickets) AS ticket_count,
+         (SELECT count(*)::text FROM crm.ticket_service_links) AS link_count,
+         (SELECT count(*)::text FROM notifications.messages
+           WHERE template_key LIKE 'crm.ticket.sla.%') AS notification_count,
+         (SELECT count(*)::text FROM audit.events
+           WHERE action LIKE 'crm.ticket.%') AS audit_count,
+         (SELECT count(*)::text FROM integration.outbox_events
+           WHERE event_type LIKE 'crm.ticket.%') AS outbox_count`,
+    );
+    expect(evidence.rows[0]).toEqual({
+      audit_count: '4',
+      link_count: '2',
+      notification_count: '2',
+      outbox_count: '4',
+      ticket_count: '2',
+    });
+  });
+
   it('carries a service request through technician work, evidence, parts, signature, and serial history', async () => {
     await request(application.getHttpServer())
       .get('/api/v1/service/reference-data')
@@ -2300,10 +2504,10 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
     expect(requestPage).toMatchObject({
       page: 1,
       pageSize: 25,
-      summary: { new: 2 },
-      total: 2,
       totalPages: 1,
     });
+    expect(requestPage.summary.new).toBeGreaterThanOrEqual(2);
+    expect(requestPage.total).toBeGreaterThanOrEqual(2);
     expect(requestPage.items).toEqual(
       expect.arrayContaining([expect.objectContaining({ id: created.id })]),
     );
@@ -2775,6 +2979,111 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
     expect(Number(evidence.rows[0]?.outbox_count)).toBeGreaterThanOrEqual(5);
   });
 
+  it('summarizes Service work and prepares access-controlled report exports without mixing Finance files', async () => {
+    await request(application.getHttpServer())
+      .get('/api/v1/service/reports/overview?dateFrom=2026-01-01&dateTo=2099-12-31')
+      .set('authorization', `Bearer ${viewerToken}`)
+      .expect(403);
+
+    const overviewResponse = await request(application.getHttpServer())
+      .get('/api/v1/service/reports/overview?dateFrom=2026-01-01&dateTo=2099-12-31')
+      .set('authorization', `Bearer ${token}`)
+      .expect(200);
+    const overview = overviewResponse.body as ServiceReportOverview;
+    expect(typeof overview.totals.completedRequests).toBe('number');
+    expect(typeof overview.totals.laborMinutes).toBe('number');
+    expect(typeof overview.totals.totalRequests).toBe('number');
+    expect(overview.totals.completedRequests).toBeGreaterThanOrEqual(1);
+    expect(overview.totals.laborMinutes).toBeGreaterThanOrEqual(30);
+    expect(overview.technicians.length).toBeGreaterThanOrEqual(1);
+    expect(typeof overview.technicians[0]?.completedCount).toBe('number');
+    expect(typeof overview.technicians[0]?.laborMinutes).toBe('number');
+
+    const definitionsResponse = await request(application.getHttpServer())
+      .get('/api/v1/service/report-exports/definitions')
+      .set('authorization', `Bearer ${token}`)
+      .expect(200);
+    const definitions = definitionsResponse.body as ServiceReportDefinition[];
+    expect(definitions.map((definition) => definition.key)).toEqual([
+      'service.cost-summary',
+      'service.request-register',
+      'service.technician-performance',
+    ]);
+
+    const exportKey = `service-report-export-${runId}`;
+    const exportInput = {
+      dateFrom: '2026-01-01',
+      dateTo: '2099-12-31',
+      definitionKey: 'service.request-register',
+      format: 'csv',
+    };
+    const requestedResponse = await request(application.getHttpServer())
+      .post('/api/v1/service/report-exports')
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', exportKey)
+      .send(exportInput)
+      .expect(202);
+    const requested = requestedResponse.body as ServiceReportExport;
+    expect(requested).toMatchObject({
+      definitionKey: 'service.request-register',
+      format: 'csv',
+      status: 'queued',
+    });
+    const replayResponse = await request(application.getHttpServer())
+      .post('/api/v1/service/report-exports')
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', exportKey)
+      .send(exportInput)
+      .expect(202);
+    expect((replayResponse.body as ServiceReportExport).id).toBe(requested.id);
+
+    const handlers = application.get(JobHandlerRegistry);
+    const reportJob = {
+      attemptNumber: 1,
+      correlationId: `service-report-job-${runId}`,
+      enqueuedAt: '2026-08-26T12:00:00.000Z',
+      idempotencyKey: `service-report-export:${requested.id}`,
+      jobId: `service-report-job-${runId}`,
+      maxAttempts: 5,
+      name: 'report.generate',
+      payload: { exportId: requested.id },
+      retryAllowed: true,
+    } as const;
+    const generated = (await handlers.execute(reportJob)) as { rowCount: number };
+    expect(generated.rowCount).toBeGreaterThanOrEqual(1);
+    await expect(handlers.execute({ ...reportJob, attemptNumber: 2 })).resolves.toMatchObject({
+      deduplicated: true,
+      rowCount: generated.rowCount,
+    });
+
+    const serviceListResponse = await request(application.getHttpServer())
+      .get('/api/v1/service/report-exports')
+      .set('authorization', `Bearer ${token}`)
+      .expect(200);
+    const serviceList = serviceListResponse.body as ServiceReportExportPage;
+    expect(serviceList).toMatchObject({ total: 1 });
+    expect(serviceList.items[0]).toMatchObject({
+      id: requested.id,
+      status: 'completed',
+    });
+
+    const financeListResponse = await request(application.getHttpServer())
+      .get('/api/v1/finance/report-exports')
+      .set('authorization', `Bearer ${token}`)
+      .expect(200);
+    expect((financeListResponse.body as FinanceReportExportPage).items).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: requested.id })]),
+    );
+
+    const downloaded = await request(application.getHttpServer())
+      .get(`/api/v1/service/report-exports/${requested.id}/content`)
+      .set('authorization', `Bearer ${token}`)
+      .expect('content-type', /csv/u)
+      .expect(200);
+    expect(downloaded.text).toContain('Service request register');
+    expect(downloaded.text).toContain('Request');
+  });
+
   it('limits a technician without service approval to assigned work and preserves dispatcher oversight', async () => {
     const firstTechnicianAccountId = await createAccount(
       database,
@@ -3186,6 +3495,34 @@ async function grantServicePermissions(
   for (const action of actions) {
     const permission = await pool.query<{ id: string }>(
       `INSERT INTO iam.permissions (id, module, action) VALUES ($1, 'erp.service', $2)
+       ON CONFLICT (module, action) DO UPDATE SET module = EXCLUDED.module RETURNING id`,
+      [randomUUID(), action],
+    );
+    await pool.query('INSERT INTO iam.role_permissions (role_id, permission_id) VALUES ($1, $2)', [
+      roleId,
+      permission.rows[0]?.id,
+    ]);
+  }
+  await pool.query('INSERT INTO iam.account_roles (account_id, role_id) VALUES ($1, $2)', [
+    accountId,
+    roleId,
+  ]);
+}
+
+async function grantCrmPermissions(
+  pool: Pool,
+  accountId: string,
+  actions: Array<'create' | 'edit' | 'view'>,
+) {
+  const roleId = randomUUID();
+  await pool.query('INSERT INTO iam.roles (id, code, name) VALUES ($1, $2, $3)', [
+    roleId,
+    `crm-${randomUUID()}`,
+    'CRM test role',
+  ]);
+  for (const action of actions) {
+    const permission = await pool.query<{ id: string }>(
+      `INSERT INTO iam.permissions (id, module, action) VALUES ($1, 'crm', $2)
        ON CONFLICT (module, action) DO UPDATE SET module = EXCLUDED.module RETURNING id`,
       [randomUUID(), action],
     );

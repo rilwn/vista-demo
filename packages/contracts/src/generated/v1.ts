@@ -228,6 +228,118 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/crm/tickets': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['CrmTicketsController_list'];
+    put?: never;
+    post: operations['CrmTicketsController_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/crm/tickets/{id}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['CrmTicketsController_get'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/crm/tickets/{id}/respond': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['CrmTicketsController_respond'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/crm/tickets/{id}/service-request': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['CrmTicketsController_createServiceRequest'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/crm/tickets/{id}/transition': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['CrmTicketsController_transition'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/crm/tickets/from-service-request/{serviceRequestId}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['CrmTicketsController_createFromServiceRequest'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/crm/tickets/reference-data': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['CrmTicketsController_referenceData'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/files': {
     parameters: {
       query?: never;
@@ -2357,6 +2469,86 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/service/report-exports': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['ServiceReportExportsController_list'];
+    put?: never;
+    post: operations['ServiceReportExportsController_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/service/report-exports/{id}/content': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['ServiceReportExportsController_content'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/service/report-exports/{id}/retry': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['ServiceReportExportsController_retry'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/service/report-exports/definitions': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['ServiceReportExportsController_definitions'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/service/reports/overview': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['ServiceReportsController_overview'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/service/requests': {
     parameters: {
       query?: never;
@@ -3148,6 +3340,38 @@ export interface components {
       name: string;
       operatorIds?: string[];
     };
+    CreateCrmTicketDto: {
+      /** Format: uuid */
+      assignedToAccountId?: string;
+      /** Format: uuid */
+      categoryId: string;
+      /** @enum {string} */
+      channel: 'telephone' | 'email' | 'customer_portal' | 'on_site' | 'chat';
+      /** Format: uuid */
+      customerEquipmentId?: string;
+      /** Format: uuid */
+      customerLocationId?: string;
+      /** Format: uuid */
+      customerPartnerId: string;
+      description: string;
+      /** @enum {string} */
+      priority: 'low' | 'normal' | 'high' | 'urgent';
+      /** Format: uuid */
+      serviceSubscriptionContractId?: string;
+      /** Format: uuid */
+      slaPolicyId: string;
+      subject: string;
+    };
+    CreateCrmTicketFromServiceRequestDto: {
+      /** Format: uuid */
+      assignedToAccountId?: string;
+      /** Format: uuid */
+      categoryId: string;
+      /** @enum {string} */
+      priority: 'low' | 'normal' | 'high' | 'urgent';
+      /** Format: uuid */
+      slaPolicyId: string;
+    };
     CreateCustomerEquipmentDto: {
       deviceName: string;
       /** Format: uuid */
@@ -3588,6 +3812,17 @@ export interface components {
       nextDueDate: string;
       reminderLeadDays: number;
     };
+    CreateServiceReportExportDto: {
+      /** Format: date */
+      dateFrom: string;
+      /** Format: date */
+      dateTo: string;
+      /** @enum {string} */
+      definitionKey:
+        'service.request-register' | 'service.technician-performance' | 'service.cost-summary';
+      /** @enum {string} */
+      format: 'csv' | 'xlsx' | 'pdf';
+    };
     CreateServiceRequestDto: {
       /** Format: uuid */
       customerEquipmentId: string;
@@ -3602,6 +3837,13 @@ export interface components {
       serviceType: 'warranty' | 'out_of_warranty' | 'subscription';
       /** @enum {string} */
       sourceChannel: 'telephone' | 'email' | 'customer_portal' | 'on_site';
+      /** Format: uuid */
+      subscriptionContractId?: string;
+    };
+    CreateServiceRequestFromCrmTicketDto: {
+      expectedVersion: number;
+      /** @enum {string} */
+      serviceType: 'warranty' | 'out_of_warranty' | 'subscription';
       /** Format: uuid */
       subscriptionContractId?: string;
     };
@@ -3691,6 +3933,119 @@ export interface components {
       description: string;
       /** Format: uuid */
       serviceRequestId?: string;
+    };
+    CrmSlaPolicyReferenceDto: {
+      /** Format: uuid */
+      customerPartnerId?: string;
+      /** Format: uuid */
+      id: string;
+      name: string;
+      /** @enum {string} */
+      priority?: 'low' | 'normal' | 'high' | 'urgent';
+      resolutionMinutes: number;
+      responseMinutes: number;
+      /** Format: uuid */
+      serviceSubscriptionContractId?: string;
+    };
+    CrmTicketAssigneeDto: {
+      displayName: string;
+      /** Format: uuid */
+      id: string;
+    };
+    CrmTicketCategoryDto: {
+      code: string;
+      /** Format: uuid */
+      id: string;
+      name: string;
+    };
+    CrmTicketDto: {
+      assignedTo?: components['schemas']['CrmTicketAssigneeDto'];
+      category: components['schemas']['CrmTicketCategoryDto'];
+      /** @enum {string} */
+      channel: 'telephone' | 'email' | 'customer_portal' | 'on_site' | 'chat';
+      /** Format: date-time */
+      createdAt: string;
+      /** Format: uuid */
+      customerEquipmentId?: string;
+      /** Format: uuid */
+      customerLocationId?: string;
+      customerName: string;
+      /** Format: uuid */
+      customerPartnerId: string;
+      description: string;
+      equipmentName?: string;
+      history: components['schemas']['CrmTicketHistoryEntryDto'][];
+      /** Format: uuid */
+      id: string;
+      locationName?: string;
+      number: string;
+      /** @enum {string} */
+      priority: 'low' | 'normal' | 'high' | 'urgent';
+      /** Format: date-time */
+      resolutionDueAt: string;
+      /** @enum {string} */
+      resolutionState: 'on_track' | 'at_risk' | 'breached' | 'met';
+      /** Format: date-time */
+      resolvedAt?: string;
+      /** Format: date-time */
+      respondedAt?: string;
+      /** Format: date-time */
+      responseDueAt: string;
+      /** @enum {string} */
+      responseState: 'on_track' | 'at_risk' | 'breached' | 'met';
+      serviceLink?: components['schemas']['CrmTicketServiceLinkDto'];
+      /** Format: uuid */
+      serviceSubscriptionContractId?: string;
+      slaPolicy: components['schemas']['CrmSlaPolicyReferenceDto'];
+      /** @enum {string} */
+      status: 'new' | 'in_progress' | 'waiting_customer' | 'resolved' | 'closed' | 'cancelled';
+      subject: string;
+      /** Format: date-time */
+      updatedAt: string;
+      version: number;
+    };
+    CrmTicketHistoryEntryDto: {
+      /** Format: date-time */
+      changedAt: string;
+      changedByName?: string;
+      /** Format: uuid */
+      id: string;
+      note?: string;
+      /** @enum {string} */
+      status: 'new' | 'in_progress' | 'waiting_customer' | 'resolved' | 'closed' | 'cancelled';
+      /** @enum {string} */
+      type: 'created' | 'response' | 'status_change' | 'service_link';
+    };
+    CrmTicketPageDto: {
+      items: components['schemas']['CrmTicketDto'][];
+      page: number;
+      pageSize: number;
+      summary: components['schemas']['CrmTicketSummaryDto'];
+      total: number;
+      totalPages: number;
+    };
+    CrmTicketReferenceDataDto: {
+      assignees: components['schemas']['CrmTicketAssigneeDto'][];
+      businessTimezone: string;
+      categories: components['schemas']['CrmTicketCategoryDto'][];
+      customers: Record<string, never>[];
+      equipment: Record<string, never>[];
+      locations: Record<string, never>[];
+      slaPolicies: components['schemas']['CrmSlaPolicyReferenceDto'][];
+      subscriptions: Record<string, never>[];
+    };
+    CrmTicketServiceLinkDto: {
+      /** Format: uuid */
+      correlationId: string;
+      /** Format: uuid */
+      serviceRequestId: string;
+      serviceRequestNumber: string;
+    };
+    CrmTicketSummaryDto: {
+      atRisk: number;
+      breached: number;
+      open: number;
+      unassigned: number;
     };
     CustomerAssetVersionDto: {
       expectedVersion: number;
@@ -5430,6 +5785,10 @@ export interface components {
       /** Format: uuid */
       warehouseId: string;
     };
+    RecordCrmTicketResponseDto: {
+      expectedVersion: number;
+      note: string;
+    };
     RecordStocktakeCountDto: {
       batches?: components['schemas']['StocktakeBatchCountDto'][];
       /** @example 1.0000 */
@@ -5911,6 +6270,75 @@ export interface components {
       subscriptions: components['schemas']['ServiceSubscriptionReferenceDto'][];
       technicians: components['schemas']['ServiceTechnicianReferenceDto'][];
     };
+    ServiceReportDefinitionDto: {
+      description: string;
+      formats: ('csv' | 'xlsx' | 'pdf')[];
+      /** @enum {string} */
+      key: 'service.request-register' | 'service.technician-performance' | 'service.cost-summary';
+      name: string;
+      /** @enum {boolean} */
+      requiresDateRange: true;
+    };
+    ServiceReportExportDto: {
+      attemptCount: number;
+      /** Format: date-time */
+      completedAt?: string;
+      /** Format: date-time */
+      createdAt: string;
+      /** @enum {string} */
+      definitionKey:
+        'service.request-register' | 'service.technician-performance' | 'service.cost-summary';
+      errorCode?: string;
+      fileName?: string;
+      /** @enum {string} */
+      format: 'csv' | 'xlsx' | 'pdf';
+      /** Format: uuid */
+      id: string;
+      name: string;
+      rowCount?: number;
+      sizeBytes?: number;
+      /** @enum {string} */
+      status: 'queued' | 'processing' | 'completed' | 'failed';
+    };
+    ServiceReportExportPageDto: {
+      items: components['schemas']['ServiceReportExportDto'][];
+      page: number;
+      pageSize: number;
+      total: number;
+      totalPages: number;
+    };
+    ServiceReportOverviewDto: {
+      /** Format: date */
+      dateFrom: string;
+      /** Format: date */
+      dateTo: string;
+      /** Format: date-time */
+      generatedAt: string;
+      statusTotals: components['schemas']['ServiceReportStatusTotalDto'][];
+      technicians: components['schemas']['ServiceTechnicianPerformanceDto'][];
+      totals: components['schemas']['ServiceReportTotalsDto'];
+      typeTotals: components['schemas']['ServiceReportTypeTotalDto'][];
+    };
+    ServiceReportStatusTotalDto: {
+      count: number;
+      /** @enum {string} */
+      status: 'new' | 'scheduled' | 'in_progress' | 'completed' | 'cancelled';
+    };
+    ServiceReportTotalsDto: {
+      cancelledRequests: number;
+      completedRequests: number;
+      laborMinutes: number;
+      openRequests: number;
+      totalCostBgn: string;
+      totalRequests: number;
+    };
+    ServiceReportTypeTotalDto: {
+      completedCount: number;
+      requestCount: number;
+      /** @enum {string} */
+      serviceType: 'warranty' | 'out_of_warranty' | 'subscription';
+      totalCostBgn: string;
+    };
     ServiceRequestDto: {
       assignedTechnician?: components['schemas']['ServiceTechnicianDto'];
       /** Format: date-time */
@@ -6055,6 +6483,13 @@ export interface components {
       /** Format: uuid */
       warehouseId: string;
       warehouseName: string;
+    };
+    ServiceTechnicianPerformanceDto: {
+      assignedCount: number;
+      completedCount: number;
+      displayName: string;
+      laborMinutes: number;
+      totalCostBgn: string;
     };
     ServiceTechnicianReferenceDto: {
       /** Format: uuid */
@@ -6547,6 +6982,12 @@ export interface components {
       serialNumbers?: string[];
       /** Format: uuid */
       toWarehouseId: string;
+    };
+    TransitionCrmTicketDto: {
+      expectedVersion: number;
+      note: string;
+      /** @enum {string} */
+      status: 'new' | 'in_progress' | 'waiting_customer' | 'resolved' | 'closed' | 'cancelled';
     };
     TransitionWarrantyClaimDto: {
       expectedVersion: number;
@@ -7333,6 +7774,316 @@ export interface operations {
           [name: string]: unknown;
         };
         content?: never;
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  CrmTicketsController_list: {
+    parameters: {
+      query?: {
+        page?: number;
+        pageSize?: number;
+        priority?: 'low' | 'normal' | 'high' | 'urgent';
+        search?: string;
+        status?: 'new' | 'in_progress' | 'waiting_customer' | 'resolved' | 'closed' | 'cancelled';
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CrmTicketPageDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  CrmTicketsController_create: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['CreateCrmTicketDto'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CrmTicketDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  CrmTicketsController_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: unknown;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CrmTicketDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  CrmTicketsController_respond: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path: {
+        id: unknown;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['RecordCrmTicketResponseDto'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CrmTicketDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  CrmTicketsController_createServiceRequest: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path: {
+        id: unknown;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['CreateServiceRequestFromCrmTicketDto'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CrmTicketDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  CrmTicketsController_transition: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path: {
+        id: unknown;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['TransitionCrmTicketDto'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CrmTicketDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  CrmTicketsController_createFromServiceRequest: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path: {
+        serviceRequestId: unknown;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['CreateCrmTicketFromServiceRequestDto'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CrmTicketDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  CrmTicketsController_referenceData: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CrmTicketReferenceDataDto'];
+        };
       };
       /** @description The endpoint request limit was exceeded. */
       429: {
@@ -13439,6 +14190,223 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['ServiceReferenceDataDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  ServiceReportExportsController_list: {
+    parameters: {
+      query?: {
+        page?: number;
+        pageSize?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ServiceReportExportPageDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  ServiceReportExportsController_create: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['CreateServiceReportExportDto'];
+      };
+    };
+    responses: {
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ServiceReportExportDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  ServiceReportExportsController_content: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: unknown;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description The completed Service report export. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/pdf': string;
+          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': string;
+          'text/csv': string;
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  ServiceReportExportsController_retry: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: unknown;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ServiceReportExportDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  ServiceReportExportsController_definitions: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ServiceReportDefinitionDto'][];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  ServiceReportsController_overview: {
+    parameters: {
+      query: {
+        dateFrom: string;
+        dateTo: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ServiceReportOverviewDto'];
         };
       };
       /** @description The endpoint request limit was exceeded. */

@@ -779,12 +779,44 @@ Resolution checks active state and effective periods for the list, group, and
 campaign; orders matches by priority and customer specificity; and never mutates
 the quotation or a saved document.
 
+## CRM tickets and SLA
+
+The CRM ticket API keeps customer issues and ERP Service work linked without
+copying customer, location, or equipment master data.
+
+- `GET /api/v1/crm/tickets/reference-data` returns active customers, their
+  locations and equipment, ticket categories, eligible CRM owners, active
+  service subscriptions, and applicable SLA choices.
+- `GET /api/v1/crm/tickets` provides a filtered, paginated register and open,
+  unassigned, near-deadline, and past-deadline totals. `GET
+/api/v1/crm/tickets/:id` returns the ticket, SLA state, linked Service request,
+  and chronological history.
+- `POST /api/v1/crm/tickets`, `/:id/respond`, and `/:id/transition` create a
+  ticket, record its first response, and apply controlled status changes.
+- `POST /api/v1/crm/tickets/:id/service-request` and `POST
+/api/v1/crm/tickets/from-service-request/:serviceRequestId` create or return
+  the single correlated record in the other module.
+
+Reads require `crm:view`; ticket creation requires `crm:create`; response and
+status changes require `crm:edit`. Cross-module creation also requires the
+matching ERP Service permission. Writes require an `Idempotency-Key`, use
+optimistic versions where appropriate, and commit the business change, history,
+audit record, and outbox event together. Stable database constraints prevent a
+ticket or Service request from acquiring a second correlation.
+
+An SLA policy may be global, customer-specific, or subscription-specific and
+may vary by priority. Its response time, resolution time, and warning threshold
+are retained with the ticket. The recurring `crm.sla.evaluate` job detects a
+near or missed deadline, notifies the owner and escalation recipient once, and
+returns no new work on replay. Approved production SLA values remain governed by
+SLA-001.
+
 ## Service operations
 
 The current Service API covers authorized request-to-completion work, technician
 scheduling, warranty claims, warranty monitoring, required-device inspections,
-and subscription-generated visits. It does not claim official payment issuance,
-CRM-ticket correlation, or full sales/supplier serial-lifecycle behavior.
+subscription-generated visits, and CRM-ticket correlation. It does not claim
+official payment issuance or full sales/supplier serial-lifecycle behavior.
 
 - `GET /api/v1/service/reference-data` returns the shared customer/location
   choices, active technicians with their mapped technician warehouses, available
@@ -831,6 +863,16 @@ CRM-ticket correlation, or full sales/supplier serial-lifecycle behavior.
   customer representative, and PNG signature; `GET /api/v1/service/work-orders/:id/photos/:photoId` and
   `GET /api/v1/service/work-orders/:id/signature` return only
   access-controlled binary evidence with private/no-store response headers.
+- `GET /api/v1/service/reports/overview?dateFrom=YYYY-MM-DD&dateTo=YYYY-MM-DD`
+  returns reproducible request, status, service-type, technician, recorded-time,
+  and BGN cost totals for the selected business-date period.
+- `GET /api/v1/service/report-exports/definitions` lists the controlled Service
+  request-register, technician-performance, and cost-summary reports;
+  `GET /api/v1/service/report-exports` lists only the current account's Service
+  exports; `POST /api/v1/service/report-exports` prepares CSV, Excel, or PDF;
+  `POST /api/v1/service/report-exports/:id/retry` retries a failed job; and
+  `GET /api/v1/service/report-exports/:id/content` securely downloads a completed
+  integrity-checked file.
 
 All reads require `erp.service:view`. An account without
 `erp.service:approve` is scoped to its own assigned work: registers, direct
@@ -847,6 +889,12 @@ Completion issues parts from the assigned technician warehouse within the same
 PostgreSQL transaction, so a failed inventory issue rolls back the work
 completion.
 
+Team-wide Service summaries and export downloads require
+`erp.service:approve`; preparing or retrying an export additionally requires
+`erp.service:create`. Export requests are account-scoped, audited, retry-safe,
+and processed by the shared `report.generate` worker without appearing in the
+Finance export register.
+
 Request and appointment display use `BUSINESS_TIMEZONE`. Assignment and route
 planning take the same technician-scoped transaction lock. A new or rescheduled
 visit must fit one enabled business-day window and cannot overlap active work or
@@ -855,6 +903,5 @@ route planner under Logistics, where delivery time also consumes a configured
 technician's capacity. Daily retry-safe jobs prepare inspection and warranty-
 expiry reminders and create upcoming Service requests from active subscription
 plans. Their lead/horizon settings and schedules are environment-configurable.
-Official payment issuance, warranty-card generation, CRM ticket correlation/SLA,
-Service reports/exports, and a complete sale-to-service serial timeline remain
-pending.
+Official payment issuance, warranty-card generation, and a complete
+sale-to-service serial timeline remain pending.

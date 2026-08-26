@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import type { JobQueueService } from './job-queue.service.js';
 import {
+  crmSlaScheduleId,
   financePaymentStatusScheduleId,
   RecurringBillingScheduleService,
   recurringBillingScheduleId,
@@ -36,6 +37,7 @@ describe('RecurringBillingScheduleService', () => {
     const service = new RecurringBillingScheduleService(
       {
         BUSINESS_TIMEZONE: 'Europe/Sofia',
+        CRM_SLA_EVALUATION_CRON: '0 */5 * * * *',
         FINANCE_PAYMENT_STATUS_CRON: '0 25 1 * * *',
         NODE_ENV: 'production',
         SALES_SUBSCRIPTION_INVOICE_CRON: '0 15 1 * * *',
@@ -54,6 +56,13 @@ describe('RecurringBillingScheduleService', () => {
       name: 'sales.subscription-invoice.generate',
       pattern: '0 15 1 * * *',
       payload: { responsibility: 'recurring-service-billing' },
+      timezone: 'Europe/Sofia',
+    });
+    expect(upsertSchedule).toHaveBeenCalledWith({
+      id: crmSlaScheduleId,
+      name: 'crm.sla.evaluate',
+      pattern: '0 */5 * * * *',
+      payload: { responsibility: 'ticket-sla-monitoring' },
       timezone: 'Europe/Sofia',
     });
     expect(logger.event).toHaveBeenCalledWith(

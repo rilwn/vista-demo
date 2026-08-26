@@ -10,6 +10,7 @@ export const financePaymentStatusScheduleId = 'finance.payment-status.daily';
 export const serviceInspectionReminderScheduleId = 'service.inspection-reminder.daily';
 export const serviceWarrantyReminderScheduleId = 'service.warranty-reminder.daily';
 export const servicePlanVisitScheduleId = 'service.plan-visit.daily';
+export const crmSlaScheduleId = 'crm.sla.frequent';
 
 @Injectable()
 export class RecurringBillingScheduleService implements OnApplicationBootstrap {
@@ -76,5 +77,16 @@ export class RecurringBillingScheduleService implements OnApplicationBootstrap {
         scheduleId: schedule.id,
       });
     }
+    const crmSlaSchedule = await this.jobs.upsertSchedule({
+      id: crmSlaScheduleId,
+      name: 'crm.sla.evaluate',
+      pattern: this.environment.CRM_SLA_EVALUATION_CRON,
+      payload: { responsibility: 'ticket-sla-monitoring' },
+      timezone: this.environment.BUSINESS_TIMEZONE,
+    });
+    this.logger.event('info', 'crm.sla.schedule.ready', {
+      nextRunAt: crmSlaSchedule.nextRunAt,
+      scheduleId: crmSlaSchedule.id,
+    });
   }
 }

@@ -133,6 +133,9 @@ function notificationTitle(notification: NotificationMessage): string {
   if (notification.templateKey === 'finance.payment.overdue') return 'Payment is overdue';
   if (notification.templateKey === 'service.inspection.due') return 'Inspection is due';
   if (notification.templateKey === 'service.warranty.due') return 'Warranty is nearing expiry';
+  if (notification.templateKey === 'crm.ticket.sla.at_risk')
+    return 'Ticket deadline is approaching';
+  if (notification.templateKey === 'crm.ticket.sla.breached') return 'Ticket deadline has passed';
   return 'New notification';
 }
 
@@ -151,6 +154,17 @@ function notificationDetail(notification: NotificationMessage): string {
     const amount = money(value(notification.payload, 'outstandingBgn'));
     const dueDate = dateValue(notification.payload, 'dueDate');
     return `${number} · ${counterparty} · ${amount} outstanding · due ${dueDate}.`;
+  }
+  if (
+    notification.templateKey === 'crm.ticket.sla.at_risk' ||
+    notification.templateKey === 'crm.ticket.sla.breached'
+  ) {
+    const number = value(notification.payload, 'ticketNumber');
+    const customer = value(notification.payload, 'customerName');
+    const subject = value(notification.payload, 'subject');
+    const timer =
+      value(notification.payload, 'timerType') === 'response' ? 'response' : 'resolution';
+    return `${number} · ${customer} · ${timer} · ${subject}.`;
   }
   if (
     notification.templateKey === 'service.inspection.due' ||

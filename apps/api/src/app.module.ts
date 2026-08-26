@@ -21,6 +21,7 @@ import { SalesModule } from './sales/sales.module.js';
 import { FinanceModule } from './finance/finance.module.js';
 import { ServiceOperationsModule } from './service/service.module.js';
 import { FilesModule } from './files/files.module.js';
+import { CrmModule } from './crm/crm.module.js';
 
 @Module({
   controllers: [RootController],
@@ -44,6 +45,7 @@ import { FilesModule } from './files/files.module.js';
     SalesModule,
     FinanceModule,
     ServiceOperationsModule,
+    CrmModule,
     FilesModule,
   ],
 })

@@ -15859,6 +15859,397 @@ select.vista-field-input {
   color: var(--vista-warning);
 }
 
+.service-reports-workspace {
+  display: grid;
+  align-content: start;
+  gap: 1rem;
+}
+
+.service-report-toolbar {
+  display: grid;
+  align-items: end;
+  gap: 1rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--vista-line);
+  border-radius: 1rem;
+  background: var(--vista-surface);
+  grid-template-columns: minmax(11rem, 1fr) auto auto;
+}
+
+.service-report-toolbar > div:first-child,
+.service-report-date-fields label {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.service-report-toolbar > div:first-child span,
+.service-report-date-fields label span {
+  color: var(--vista-muted);
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+.service-report-toolbar > div:first-child strong {
+  color: var(--vista-ink);
+  font-size: 0.88rem;
+}
+
+.service-report-date-fields {
+  display: flex;
+  align-items: end;
+  gap: 0.55rem;
+}
+
+.service-report-date-fields input {
+  min-height: 2.55rem;
+  padding: 0.48rem 0.62rem;
+  border: 1px solid var(--vista-line-strong);
+  border-radius: 0.62rem;
+  color: var(--vista-ink);
+  background: var(--vista-surface);
+  font: inherit;
+  font-size: 0.76rem;
+}
+
+.service-report-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.service-report-error button {
+  padding: 0;
+  border: 0;
+  color: inherit;
+  background: transparent;
+  font: inherit;
+  font-weight: 750;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.service-report-summary {
+  display: grid;
+  overflow: hidden;
+  border: 1px solid var(--vista-line);
+  border-radius: 1rem;
+  background: var(--vista-surface);
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.service-report-summary > div {
+  display: grid;
+  gap: 0.4rem;
+  min-height: 5.4rem;
+  padding: 0.9rem 1rem;
+}
+
+.service-report-summary > div + div {
+  border-left: 1px solid var(--vista-line);
+}
+
+.service-report-summary span {
+  color: var(--vista-muted);
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+.service-report-summary strong {
+  align-self: end;
+  color: var(--vista-ink);
+  font-size: 1.08rem;
+}
+
+.service-report-summary .is-warning strong {
+  color: var(--vista-warning);
+}
+
+.service-report-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.service-report-card,
+.service-technician-report {
+  overflow: hidden;
+  border: 1px solid var(--vista-line);
+  border-radius: 1rem;
+  background: var(--vista-surface);
+}
+
+.service-report-card > header,
+.service-technician-report > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.9rem 1rem;
+  border-bottom: 1px solid var(--vista-line);
+  background: var(--vista-surface-muted);
+}
+
+.service-report-card > header div,
+.service-technician-report > header div {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.service-report-card > header span,
+.service-technician-report > header div > span {
+  color: var(--vista-forest-dark);
+  font-size: 0.62rem;
+  font-weight: 780;
+  letter-spacing: 0.055em;
+  text-transform: uppercase;
+}
+
+.service-report-card h2,
+.service-technician-report h2,
+.service-technician-report p {
+  margin: 0;
+}
+
+.service-report-card h2,
+.service-technician-report h2 {
+  color: var(--vista-ink);
+  font-size: 0.92rem;
+}
+
+.service-report-card > header > strong,
+.service-technician-report > header > span {
+  color: var(--vista-muted);
+  font-size: 0.72rem;
+  font-weight: 740;
+}
+
+.service-report-breakdown,
+.service-report-type-list {
+  display: grid;
+  gap: 0.72rem;
+  padding: 1rem;
+}
+
+.service-report-breakdown > div {
+  display: grid;
+  align-items: center;
+  gap: 0.7rem;
+  grid-template-columns: minmax(6.5rem, 0.75fr) minmax(6rem, 1fr) auto;
+}
+
+.service-report-breakdown span,
+.service-report-breakdown strong {
+  font-size: 0.72rem;
+}
+
+.service-report-breakdown span {
+  color: var(--vista-muted);
+}
+
+.service-report-breakdown strong {
+  color: var(--vista-ink);
+}
+
+.service-report-breakdown > div > div {
+  overflow: hidden;
+  height: 0.42rem;
+  border-radius: 999px;
+  background: var(--vista-line-soft);
+}
+
+.service-report-breakdown i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--vista-forest-dark);
+}
+
+.service-report-breakdown p,
+.service-report-type-list > p {
+  margin: 0;
+  color: var(--vista-muted);
+  font-size: 0.76rem;
+}
+
+.service-report-type-list article {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-bottom: 0.7rem;
+  border-bottom: 1px solid var(--vista-line-soft);
+}
+
+.service-report-type-list article:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+.service-report-type-list article > div {
+  display: grid;
+  gap: 0.18rem;
+}
+
+.service-report-type-list article > div:last-child {
+  justify-items: end;
+}
+
+.service-report-type-list strong {
+  color: var(--vista-ink);
+  font-size: 0.78rem;
+}
+
+.service-report-type-list span {
+  color: var(--vista-muted);
+  font-size: 0.66rem;
+}
+
+.service-technician-report > header p {
+  color: var(--vista-muted);
+  font-size: 0.7rem;
+}
+
+.service-technician-table {
+  display: grid;
+}
+
+.service-technician-row {
+  display: grid;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.82rem 1rem;
+  grid-template-columns: minmax(12rem, 1.5fr) repeat(4, minmax(5.6rem, 0.6fr));
+}
+
+.service-technician-row + .service-technician-row {
+  border-top: 1px solid var(--vista-line-soft);
+}
+
+.service-technician-row.is-head {
+  color: var(--vista-muted);
+  background: var(--vista-surface-muted);
+  font-size: 0.64rem;
+  font-weight: 760;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.service-technician-row strong,
+.service-technician-row:not(.is-head) span {
+  color: var(--vista-ink);
+  font-size: 0.75rem;
+}
+
+.service-technician-row:not(.is-head) span {
+  color: var(--vista-muted);
+}
+
+.service-report-empty {
+  display: grid;
+  justify-items: center;
+  gap: 0.3rem;
+  min-height: 7rem;
+  place-content: center;
+  padding: 1.25rem;
+  color: var(--vista-muted);
+  text-align: center;
+}
+
+.service-report-empty strong {
+  color: var(--vista-ink);
+  font-size: 0.78rem;
+}
+
+.service-report-empty span {
+  font-size: 0.68rem;
+}
+
+@media (max-width: 980px) {
+  .service-report-toolbar {
+    grid-template-columns: 1fr auto;
+  }
+
+  .service-report-date-fields {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+
+  .service-report-summary {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .service-report-summary > div:nth-child(4) {
+    border-top: 1px solid var(--vista-line);
+    border-left: 0;
+  }
+
+  .service-report-summary > div:nth-child(4),
+  .service-report-summary > div:nth-child(5) {
+    border-top: 1px solid var(--vista-line);
+  }
+}
+
+@media (max-width: 720px) {
+  .service-report-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .service-technician-row.is-head {
+    display: none;
+  }
+
+  .service-technician-row {
+    gap: 0.55rem;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .service-technician-row strong {
+    grid-column: 1 / -1;
+  }
+
+  .service-technician-row span::before {
+    display: block;
+    margin-bottom: 0.16rem;
+    color: var(--vista-muted);
+    content: attr(data-label);
+    font-size: 0.6rem;
+    font-weight: 720;
+    text-transform: uppercase;
+  }
+}
+
+@media (max-width: 560px) {
+  .service-report-toolbar,
+  .service-report-date-fields {
+    display: grid;
+    align-items: stretch;
+    grid-template-columns: 1fr;
+  }
+
+  .service-report-toolbar > .vista-button {
+    width: 100%;
+  }
+
+  .service-report-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .service-report-summary > div:nth-child(3),
+  .service-report-summary > div:nth-child(5) {
+    border-top: 1px solid var(--vista-line);
+    border-left: 0;
+  }
+
+  .service-report-summary > div:nth-child(4) {
+    border-left: 1px solid var(--vista-line);
+  }
+
+  .service-report-summary > div:nth-child(5) {
+    grid-column: 1 / -1;
+  }
+}
+
 .service-register,
 .service-work-orders-panel,
 .service-schedule-panel,
@@ -17370,6 +17761,44 @@ select.vista-field-input {
   border: 1px dashed var(--vista-line-strong);
   border-radius: 0.58rem;
   background: var(--vista-surface);
+}
+
+.service-signature-upload {
+  display: inline-flex;
+  width: fit-content;
+  min-height: 2.45rem;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.48rem 0.7rem;
+  border: 1px solid var(--vista-line-strong);
+  border-radius: 0.58rem;
+  color: var(--vista-forest-dark);
+  background: var(--vista-surface);
+  cursor: pointer;
+  font-size: 0.72rem;
+  font-weight: 720;
+}
+
+.service-signature-upload:hover {
+  border-color: var(--vista-forest-dark);
+  background: var(--vista-accent-soft);
+}
+
+.service-signature-upload:focus-within {
+  outline: 3px solid color-mix(in srgb, var(--vista-accent) 28%, transparent);
+  outline-offset: 2px;
+}
+
+.service-signature-upload input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+.service-signature-pad .service-signature-error {
+  color: var(--vista-danger);
+  font-weight: 680;
 }
 
 @media (max-width: 1120px) {
@@ -19229,6 +19658,7 @@ select.vista-field-input {
   .finance-drawer-actions,
   .financial-document-form-actions,
   .service-drawer-actions,
+  .crm-ticket-drawer-actions,
   .bank-drawer-actions,
   .cash-drawer-actions
 ) {
@@ -19854,5 +20284,849 @@ select.vista-field-input {
 
   .service-tabs a:last-child {
     grid-column: 1 / -1;
+  }
+}
+
+/* CRM ticket desk */
+.crm-ticket-workspace {
+  gap: 1.25rem;
+}
+
+.crm-ticket-header {
+  align-items: flex-end;
+}
+
+.crm-tabs {
+  gap: 0.3rem;
+  margin: 0;
+  padding: 0.35rem;
+  border: 1px solid var(--vista-line);
+  border-radius: 0.9rem;
+  background: var(--vista-surface);
+  box-shadow: var(--vista-shadow-sm);
+}
+
+.crm-tabs a {
+  min-height: 2.4rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.62rem;
+}
+
+.crm-tabs a.is-active {
+  border-color: transparent;
+  color: var(--vista-forest-dark);
+  background: var(--vista-accent-soft);
+  box-shadow: none;
+}
+
+.crm-ticket-notice {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.crm-ticket-notice button {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.crm-ticket-summary {
+  display: grid;
+  overflow: hidden;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  border: 1px solid var(--vista-line);
+  border-radius: 1rem;
+  background: var(--vista-surface);
+  box-shadow: var(--vista-shadow-sm);
+}
+
+.crm-ticket-summary > div {
+  display: grid;
+  min-height: 6.4rem;
+  align-content: center;
+  gap: 0.3rem;
+  padding: 1.1rem 1.25rem;
+}
+
+.crm-ticket-summary > div + div {
+  border-left: 1px solid var(--vista-line);
+}
+
+.crm-ticket-summary span,
+.crm-ticket-summary strong {
+  display: block;
+}
+
+.crm-ticket-summary span {
+  color: var(--vista-muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.crm-ticket-summary strong {
+  color: var(--vista-ink);
+  font-size: clamp(1.55rem, 2vw, 2rem);
+  line-height: 1;
+}
+
+.crm-ticket-summary .is-warning strong {
+  color: #9a6700;
+}
+
+.crm-ticket-summary .is-danger strong {
+  color: #b42318;
+}
+
+.crm-ticket-register {
+  overflow: hidden;
+  border: 1px solid var(--vista-line);
+  border-radius: 1rem;
+  background: var(--vista-surface);
+  box-shadow: var(--vista-shadow-sm);
+}
+
+.crm-ticket-register-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1.2rem;
+  padding: 1.15rem 1.25rem;
+  border-bottom: 1px solid var(--vista-line);
+  background: #fff;
+}
+
+.crm-ticket-register-header h2,
+.crm-ticket-register-header p {
+  margin: 0;
+}
+
+.crm-ticket-register-header h2 {
+  color: var(--vista-ink);
+  font-size: 1rem;
+}
+
+.crm-ticket-register-header p {
+  margin-top: 0.25rem;
+  color: var(--vista-muted);
+  font-size: 0.78rem;
+}
+
+.crm-ticket-filters {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+.crm-ticket-filters select,
+.crm-ticket-search {
+  height: 2.5rem;
+  border: 1px solid #d7dde5;
+  border-radius: 0.65rem;
+  background: #fff;
+}
+
+.crm-ticket-filters select {
+  min-width: 8.5rem;
+  padding: 0 2rem 0 0.75rem;
+  color: var(--vista-ink);
+}
+
+.crm-ticket-search {
+  display: flex;
+  min-width: min(20rem, 32vw);
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0 0.7rem;
+  color: var(--vista-muted);
+}
+
+.crm-ticket-search input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--vista-ink);
+  font: inherit;
+}
+
+.crm-ticket-list {
+  display: grid;
+}
+
+.crm-ticket-row {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: 0.25rem minmax(0, 1.6fr) minmax(12rem, 0.7fr) auto;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem 1.25rem;
+  border: 0;
+  border-bottom: 1px solid #edf0f4;
+  background: #fff;
+  color: var(--vista-ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 150ms ease;
+}
+
+.crm-ticket-row:hover {
+  background: #f9fafb;
+}
+
+.crm-priority-mark {
+  width: 0.25rem;
+  height: 2.75rem;
+  border-radius: 999px;
+  background: #aeb7c4;
+}
+
+.crm-priority-mark.is-high,
+.crm-priority-mark.is-urgent {
+  background: #d92d20;
+}
+
+.crm-priority-mark.is-normal {
+  background: #c79012;
+}
+
+.crm-ticket-row-main,
+.crm-ticket-row-main > span:first-child,
+.crm-ticket-row-meta {
+  display: grid;
+  min-width: 0;
+}
+
+.crm-ticket-row-main {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.9rem;
+}
+
+.crm-ticket-row strong,
+.crm-ticket-row small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.crm-ticket-row-main strong {
+  font-size: 0.9rem;
+}
+
+.crm-ticket-row small {
+  margin-top: 0.24rem;
+  color: var(--vista-muted);
+  font-size: 0.73rem;
+}
+
+.crm-ticket-row-tags {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.crm-ticket-row-meta {
+  justify-items: end;
+}
+
+.crm-ticket-row-meta strong {
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.crm-ticket-status,
+.crm-sla-state,
+.crm-priority-pill {
+  display: inline-flex;
+  width: max-content;
+  min-height: 1.55rem;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0.2rem 0.55rem;
+  font-size: 0.68rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.crm-ticket-status {
+  background: #eef2f6;
+  color: #465467;
+}
+
+.crm-ticket-status.is-new,
+.crm-ticket-status.is-in_progress {
+  background: #e8f1ff;
+  color: #175cd3;
+}
+
+.crm-ticket-status.is-resolved,
+.crm-ticket-status.is-closed {
+  background: #e8f7ef;
+  color: #067647;
+}
+
+.crm-ticket-status.is-waiting_customer {
+  background: #fff3d6;
+  color: #8a5d00;
+}
+
+.crm-ticket-status.is-cancelled {
+  background: #f1f2f4;
+  color: #667085;
+}
+
+.crm-sla-state.is-on_track,
+.crm-sla-state.is-met {
+  background: #e8f7ef;
+  color: #067647;
+}
+
+.crm-sla-state.is-at_risk {
+  background: #fff3d6;
+  color: #8a5d00;
+}
+
+.crm-sla-state.is-breached {
+  background: #ffebe9;
+  color: #b42318;
+}
+
+.crm-ticket-register-state {
+  display: grid;
+  min-height: 15rem;
+  place-items: center;
+  align-content: center;
+  gap: 0.55rem;
+  padding: 2rem;
+  color: var(--vista-muted);
+  text-align: center;
+}
+
+.crm-ticket-register-state h3,
+.crm-ticket-register-state p {
+  margin: 0;
+}
+
+.crm-ticket-register-state h3 {
+  color: var(--vista-ink);
+  font-size: 0.95rem;
+}
+
+.crm-ticket-register-state p {
+  font-size: 0.8rem;
+}
+
+.crm-ticket-pager {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.8rem 1.25rem;
+  border-top: 1px solid var(--vista-line);
+}
+
+.crm-ticket-pager span {
+  color: var(--vista-muted);
+  font-size: 0.78rem;
+}
+
+.crm-ticket-drawer.security-drawer.is-wide {
+  width: min(45rem, 100vw);
+}
+
+.crm-ticket-drawer > .crm-ticket-drawer-header {
+  position: relative;
+  z-index: 2;
+  flex: 0 0 auto;
+  border-bottom: 1px solid var(--vista-line);
+  background: #fff;
+}
+
+.crm-ticket-drawer .security-drawer-body {
+  --drawer-body-inline: 1rem;
+  --drawer-body-bottom: 1rem;
+
+  padding: 0;
+  background: #f5f7f9;
+}
+
+.crm-ticket-form,
+.crm-ticket-preview {
+  display: grid;
+  gap: 0.9rem;
+  padding: 1rem;
+}
+
+.crm-ticket-form-section,
+.crm-ticket-preview-section,
+.crm-ticket-sla-card,
+.crm-ticket-action-form {
+  display: grid;
+  gap: 1rem;
+  margin: 0;
+  padding: 1rem;
+  border: 1px solid #e1e6ec;
+  border-radius: 0.85rem;
+  background: #fff;
+}
+
+.crm-ticket-form-section > header,
+.crm-ticket-preview-section > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.8rem;
+}
+
+.crm-ticket-form-section > header {
+  justify-content: flex-start;
+}
+
+.crm-ticket-form-section > header > span {
+  display: grid;
+  width: 1.7rem;
+  height: 1.7rem;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 0.5rem;
+  background: #182230;
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.crm-ticket-form-section h3,
+.crm-ticket-form-section p,
+.crm-ticket-preview-section h3,
+.crm-ticket-preview-section p,
+.crm-ticket-action-form h3,
+.crm-ticket-action-form p {
+  margin: 0;
+}
+
+.crm-ticket-form-section h3,
+.crm-ticket-preview-section h3,
+.crm-ticket-action-form h3 {
+  color: var(--vista-ink);
+  font-size: 0.9rem;
+}
+
+.crm-ticket-form-section header p,
+.crm-ticket-preview-section header p,
+.crm-ticket-action-form header p {
+  margin-top: 0.2rem;
+  color: var(--vista-muted);
+  font-size: 0.74rem;
+  line-height: 1.45;
+}
+
+.crm-ticket-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.8rem;
+}
+
+.crm-ticket-field {
+  display: grid;
+  min-width: 0;
+  gap: 0.38rem;
+  color: #344054;
+  font-size: 0.74rem;
+  font-weight: 700;
+}
+
+.crm-ticket-field input,
+.crm-ticket-field select,
+.crm-ticket-field textarea {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid #d5dce5;
+  border-radius: 0.62rem;
+  outline: 0;
+  background: #fff;
+  color: var(--vista-ink);
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 500;
+}
+
+.crm-ticket-field input,
+.crm-ticket-field select {
+  min-height: 2.6rem;
+  padding: 0 0.75rem;
+}
+
+.crm-ticket-field textarea {
+  resize: vertical;
+  padding: 0.7rem 0.75rem;
+  line-height: 1.5;
+}
+
+.crm-ticket-field input:focus,
+.crm-ticket-field select:focus,
+.crm-ticket-field textarea:focus {
+  border-color: #8098b3;
+  box-shadow: 0 0 0 3px rgb(23 92 211 / 8%);
+}
+
+.crm-ticket-preview-hero {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1.15rem;
+  border-radius: 0.9rem;
+  background: #182230;
+  color: #fff;
+}
+
+.crm-ticket-preview-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-bottom: 0.8rem;
+}
+
+.crm-priority-pill {
+  background: rgb(255 255 255 / 12%);
+  color: #fff;
+}
+
+.crm-priority-pill.is-urgent,
+.crm-priority-pill.is-high {
+  background: #b42318;
+}
+
+.crm-ticket-preview-hero h3,
+.crm-ticket-preview-hero p {
+  margin: 0;
+}
+
+.crm-ticket-preview-hero h3 {
+  max-width: 31rem;
+  font-size: 1.2rem;
+  line-height: 1.25;
+}
+
+.crm-ticket-preview-hero p {
+  margin-top: 0.35rem;
+  color: #cbd5e1;
+  font-size: 0.78rem;
+}
+
+.crm-ticket-sla-card > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.crm-ticket-sla-card > header span:first-child {
+  color: var(--vista-muted);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.crm-ticket-sla-card h3 {
+  margin: 0.15rem 0 0;
+  font-size: 0.9rem;
+}
+
+.crm-ticket-sla-grid,
+.crm-ticket-facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.65rem;
+}
+
+.crm-ticket-sla-grid > div,
+.crm-ticket-facts > div {
+  display: grid;
+  gap: 0.25rem;
+  padding: 0.8rem;
+  border-radius: 0.65rem;
+  background: #f6f8fa;
+}
+
+.crm-ticket-sla-grid span,
+.crm-ticket-facts dt {
+  color: var(--vista-muted);
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+.crm-ticket-sla-grid strong,
+.crm-ticket-facts dd {
+  margin: 0;
+  color: var(--vista-ink);
+  font-size: 0.78rem;
+  font-weight: 750;
+}
+
+.crm-ticket-sla-grid small {
+  width: max-content;
+  color: #067647;
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+.crm-ticket-sla-grid small.is-at_risk {
+  color: #8a5d00;
+}
+
+.crm-ticket-sla-grid small.is-breached {
+  color: #b42318;
+}
+
+.crm-ticket-description,
+.crm-ticket-hint {
+  margin: 0;
+  color: #475467;
+  font-size: 0.8rem;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+
+.crm-ticket-linked-record {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.75rem;
+  border-radius: 0.7rem;
+  background: #eaf7ef;
+  color: #067647;
+}
+
+.crm-ticket-linked-record > span {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.crm-ticket-linked-record strong {
+  font-size: 0.8rem;
+}
+
+.crm-ticket-linked-record small {
+  font-size: 0.68rem;
+}
+
+.crm-ticket-action-form {
+  border-color: #cad5e2;
+  background: #f9fafb;
+}
+
+.crm-ticket-action-form > div:last-child {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+}
+
+.crm-ticket-timeline ol {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.crm-ticket-timeline li {
+  position: relative;
+  display: grid;
+  grid-template-columns: 0.8rem minmax(0, 1fr);
+  gap: 0.65rem;
+  padding-bottom: 1rem;
+}
+
+.crm-ticket-timeline li:last-child {
+  padding-bottom: 0;
+}
+
+.crm-ticket-timeline li > span {
+  position: relative;
+  z-index: 1;
+  width: 0.55rem;
+  height: 0.55rem;
+  margin-top: 0.25rem;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: #175cd3;
+  box-shadow: 0 0 0 1px #9fb6d3;
+}
+
+.crm-ticket-timeline li:not(:last-child)::before {
+  position: absolute;
+  top: 0.8rem;
+  bottom: 0;
+  left: 0.24rem;
+  width: 1px;
+  background: #d6dde6;
+  content: '';
+}
+
+.crm-ticket-timeline strong,
+.crm-ticket-timeline p,
+.crm-ticket-timeline small {
+  display: block;
+  margin: 0;
+}
+
+.crm-ticket-timeline strong {
+  color: var(--vista-ink);
+  font-size: 0.77rem;
+}
+
+.crm-ticket-timeline p {
+  margin-top: 0.18rem;
+  color: #475467;
+  font-size: 0.74rem;
+  line-height: 1.45;
+}
+
+.crm-ticket-timeline small {
+  margin-top: 0.3rem;
+  color: var(--vista-muted);
+  font-size: 0.66rem;
+}
+
+@media (max-width: 1020px) {
+  .crm-ticket-register-header,
+  .crm-ticket-filters {
+    align-items: stretch;
+  }
+
+  .crm-ticket-register-header {
+    flex-direction: column;
+  }
+
+  .crm-ticket-filters {
+    display: grid;
+    width: 100%;
+    grid-template-columns: minmax(0, 1fr) repeat(2, minmax(8rem, 0.45fr)) auto;
+  }
+
+  .crm-ticket-search {
+    min-width: 0;
+  }
+}
+
+@media (max-width: 760px) {
+  .crm-ticket-header,
+  .crm-ticket-preview-hero {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .crm-ticket-header > .vista-button,
+  .crm-ticket-preview-hero > .vista-button {
+    width: 100%;
+  }
+
+  .crm-ticket-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .crm-ticket-summary > div:nth-child(3) {
+    border-top: 1px solid var(--vista-line);
+    border-left: 0;
+  }
+
+  .crm-ticket-summary > div:nth-child(4) {
+    border-top: 1px solid var(--vista-line);
+  }
+
+  .crm-ticket-filters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .crm-ticket-search {
+    grid-column: 1 / -1;
+  }
+
+  .crm-ticket-filters > .vista-button {
+    width: 100%;
+  }
+
+  .crm-ticket-row {
+    grid-template-columns: 0.2rem minmax(0, 1fr) auto;
+    gap: 0.75rem;
+  }
+
+  .crm-ticket-row-main {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .crm-ticket-row-meta {
+    display: none;
+  }
+
+  .crm-ticket-form-grid,
+  .crm-ticket-sla-grid,
+  .crm-ticket-facts {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .crm-ticket-preview-section > header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .crm-ticket-preview-section > header > .vista-button {
+    width: 100%;
+  }
+}
+
+@media (max-width: 560px) {
+  .crm-tabs {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    overflow: visible;
+  }
+
+  .crm-tabs a {
+    display: flex;
+    min-height: 2.4rem;
+    align-items: center;
+    justify-content: center;
+    padding: 0.5rem;
+    text-align: center;
+    white-space: normal;
+  }
+
+  .crm-ticket-filters {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .crm-ticket-search {
+    grid-column: auto;
+  }
+
+  .crm-ticket-row-tags {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .crm-ticket-form,
+  .crm-ticket-preview {
+    padding: 0.75rem;
+  }
+
+  .crm-ticket-drawer .security-drawer-body {
+    --drawer-body-inline: 0.75rem;
+    --drawer-body-bottom: 0.75rem;
+  }
+
+  .crm-ticket-drawer-actions .vista-button,
+  .crm-ticket-action-form > div:last-child .vista-button {
+    width: 100%;
   }
 }

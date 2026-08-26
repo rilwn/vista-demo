@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 
 import { AuditModule } from '../audit/audit.module.js';
 import { DatabaseModule } from '../database/database.module.js';
+import { CrmModule } from '../crm/crm.module.js';
 import { FinanceModule } from '../finance/finance.module.js';
 import { SalesModule } from '../sales/sales.module.js';
 import { ServiceOperationsModule } from '../service/service.module.js';
@@ -15,12 +16,14 @@ import { JobQueueService } from './job-queue.service.js';
 import { NamedJobTriggerHandlersService } from './named-job-trigger-handlers.service.js';
 import { PlatformJobWorkerService } from './platform-job-worker.service.js';
 import { RecurringBillingScheduleService } from './recurring-billing-schedule.service.js';
+import { ServiceReportExportsController } from './service-report-exports.controller.js';
 
 @Module({
-  controllers: [FinanceReportExportsController, JobsController],
+  controllers: [FinanceReportExportsController, JobsController, ServiceReportExportsController],
   exports: [JobHandlerRegistry, JobQueueService],
   imports: [
     AuditModule,
+    CrmModule,
     DatabaseModule,
     FinanceModule,
     ObjectStorageModule,

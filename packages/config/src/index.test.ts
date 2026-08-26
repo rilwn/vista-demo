@@ -49,6 +49,7 @@ describe('parseEnvironment', () => {
     expect(environment.JOB_QUEUE_NAME).toBe('platform');
     expect(environment.FINANCE_PAYMENT_REMINDER_LEAD_DAYS).toBe(7);
     expect(environment.FINANCE_PAYMENT_STATUS_CRON).toBe('0 25 1 * * *');
+    expect(environment.CRM_SLA_EVALUATION_CRON).toBe('0 */5 * * * *');
     expect(environment.SALES_SUBSCRIPTION_INVOICE_CRON).toBe('0 15 1 * * *');
     expect(environment.SERVICE_INSPECTION_REMINDER_CRON).toBe('0 35 1 * * *');
     expect(environment.SERVICE_PLAN_VISIT_HORIZON_DAYS).toBe(90);

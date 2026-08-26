@@ -27,9 +27,12 @@ import type {
   ServiceWorkTimeEntryInput,
   TransitionWarrantyClaimRequest,
   WarrantyClaim,
+  CrmTicketPriority,
+  CrmTicketReferenceData,
 } from '@vista/contracts';
 import {
   type FormEvent,
+  type ChangeEvent,
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
   useCallback,
@@ -53,6 +56,7 @@ import {
   getServiceEquipmentHistory,
   getServiceCareOverview,
   getServiceReferenceData,
+  getServiceRequest,
   getServiceSchedule,
   getServiceWorkOrder,
   listMyServiceWork,
@@ -64,11 +68,14 @@ import {
   uploadServicePhoto,
 } from '../api/service';
 import { downloadManagedFile, uploadManagedFile } from '../api/files';
+import { createCrmTicketFromServiceRequest, getCrmTicketReferenceData } from '../api/crm-tickets';
 import { useAuth } from '../auth/AuthProvider';
 import { Icon } from '../components/Icon';
 import { Link, useRouter } from '../routing/Router';
+import { ServiceReportsView } from './ServiceReportsView';
 
-export type ServiceOperationsView = 'care' | 'devices' | 'requests' | 'schedule' | 'work-orders';
+export type ServiceOperationsView =
+  'care' | 'devices' | 'reports' | 'requests' | 'schedule' | 'work-orders';
 
 const emptyReferences: ServiceReferenceData = {
   businessTimezone: 'UTC',
@@ -99,12 +106,15 @@ const emptyWorkOrderPage: ServiceWorkOrderPage = {
 
 export function ServiceOperationsPage({ view }: { view: ServiceOperationsView }) {
   const { hasPermission, session } = useAuth();
+  const { location, navigate } = useRouter();
+  const openedFromNavigation = useRef(false);
   const token = session?.sessionToken ?? '';
   const canCreate = hasPermission('erp.service', 'create');
   const canEdit = hasPermission('erp.service', 'edit');
   const canApprove = hasPermission('erp.service', 'approve');
   const canCreateFinance = hasPermission('erp.finance', 'create');
   const canViewFinance = hasPermission('erp.finance', 'view');
+  const canCreateCrm = hasPermission('crm', 'create') && hasPermission('crm', 'view');
   const [requestListPage, setRequestListPage] = useState(1);
   const [workOrderListPage, setWorkOrderListPage] = useState(1);
   const data = useServiceData(token, requestListPage, workOrderListPage, canApprove);
@@ -123,6 +133,16 @@ export function ServiceOperationsPage({ view }: { view: ServiceOperationsView })
     },
     [token],
   );
+
+  useEffect(() => {
+    if (openedFromNavigation.current) return;
+    const requestId = navigationServiceRequestId(location.state);
+    if (!requestId) return;
+    openedFromNavigation.current = true;
+    void getServiceRequest(token, requestId)
+      .then(setSelectedRequest)
+      .catch(() => setNotice('The linked Service request could not be opened.'));
+  }, [location.state, token]);
 
   if (data.loading) return <ServiceState title="Loading service work" />;
   if (data.error)
@@ -187,6 +207,15 @@ export function ServiceOperationsPage({ view }: { view: ServiceOperationsView })
         >
           Warranty &amp; inspections
         </Link>
+        {canApprove ? (
+          <Link
+            className={({ isActive }) => (isActive ? 'is-active' : undefined)}
+            end
+            to="/modules/erp.service/reports"
+          >
+            Reports
+          </Link>
+        ) : null}
       </nav>
 
       {notice ? (
@@ -247,6 +276,7 @@ export function ServiceOperationsPage({ view }: { view: ServiceOperationsView })
           timezone={businessTimezone}
         />
       ) : null}
+      {view === 'reports' ? <ServiceReportsView canExport={canCreate} token={token} /> : null}
 
       {creating ? (
         <NewServiceRequestDrawer
@@ -265,11 +295,13 @@ export function ServiceOperationsPage({ view }: { view: ServiceOperationsView })
       {selectedRequest ? (
         <ServiceRequestDrawer
           canApprove={canApprove}
+          canCreateCrm={canCreateCrm}
           onBack={() => setSelectedRequest(null)}
           onOpenWorkOrder={(id) => {
             setSelectedRequest(null);
             void openWorkOrder(id);
           }}
+          onOpenCrmTicket={(id) => navigate('/modules/crm/tickets', { state: { ticketId: id } })}
           onSaved={(request, message) => {
             setSelectedRequest(request);
             setNotice(message);
@@ -2102,6 +2134,15 @@ function formatFileSize(bytes: number) {
     : `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
+function navigationServiceRequestId(value: unknown): string | undefined {
+  return value &&
+    typeof value === 'object' &&
+    'serviceRequestId' in value &&
+    typeof value.serviceRequestId === 'string'
+    ? value.serviceRequestId
+    : undefined;
+}
+
 function NewServiceRequestDrawer({
   onBack,
   onSaved,
@@ -2356,7 +2397,9 @@ function NewServiceRequestDrawer({
 
 function ServiceRequestDrawer({
   canApprove,
+  canCreateCrm,
   onBack,
+  onOpenCrmTicket,
   onOpenWorkOrder,
   onSaved,
   references,
@@ -2365,7 +2408,9 @@ function ServiceRequestDrawer({
   timezone,
 }: {
   canApprove: boolean;
+  canCreateCrm: boolean;
   onBack: () => void;
+  onOpenCrmTicket: (id: string) => void;
   onOpenWorkOrder: (id: string) => void;
   onSaved: (request: ServiceRequest, message: string) => void;
   references: ServiceReferenceData;
@@ -2377,6 +2422,7 @@ function ServiceRequestDrawer({
   const [cancellationReason, setCancellationReason] = useState('');
   const [cancelling, setCancelling] = useState(false);
   const [showCancellation, setShowCancellation] = useState(false);
+  const [showCrmTicket, setShowCrmTicket] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function cancel() {
@@ -2486,6 +2532,32 @@ function ServiceRequestDrawer({
             ) : null}
           </section>
         ) : null}
+        {canCreateCrm ? (
+          <section className="service-preview-section service-crm-link-section">
+            <header>
+              <div>
+                <h3>CRM customer ticket</h3>
+                <p>
+                  Connect this Service request to the customer-service queue without creating
+                  duplicates.
+                </p>
+              </div>
+              {!showCrmTicket ? (
+                <Button onClick={() => setShowCrmTicket(true)} variant="secondary">
+                  Create or open ticket
+                </Button>
+              ) : null}
+            </header>
+            {showCrmTicket ? (
+              <CreateCrmTicketFromServiceForm
+                onCancel={() => setShowCrmTicket(false)}
+                onCreated={onOpenCrmTicket}
+                request={request}
+                token={token}
+              />
+            ) : null}
+          </section>
+        ) : null}
         {assigning ? (
           <AssignServiceRequestForm
             onCancel={() => setAssigning(false)}
@@ -2550,6 +2622,154 @@ function ServiceRequestDrawer({
         ) : null}
       </div>
     </ServiceDrawer>
+  );
+}
+
+function CreateCrmTicketFromServiceForm({
+  onCancel,
+  onCreated,
+  request,
+  token,
+}: {
+  onCancel: () => void;
+  onCreated: (ticketId: string) => void;
+  request: ServiceRequest;
+  token: string;
+}) {
+  const priority: CrmTicketPriority = request.priority === 'critical' ? 'urgent' : request.priority;
+  const [references, setReferences] = useState<CrmTicketReferenceData | null>(null);
+  const [categoryId, setCategoryId] = useState('');
+  const [slaPolicyId, setSlaPolicyId] = useState('');
+  const [assignedToAccountId, setAssignedToAccountId] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    void getCrmTicketReferenceData(token)
+      .then((value) => {
+        if (!active) return;
+        setReferences(value);
+        setCategoryId(
+          value.categories.find((item) => item.code === 'technical_support')?.id ??
+            value.categories[0]?.id ??
+            '',
+        );
+        const policies = value.slaPolicies.filter(
+          (item) =>
+            (!item.customerPartnerId || item.customerPartnerId === request.customerPartnerId) &&
+            (!item.serviceSubscriptionContractId ||
+              item.serviceSubscriptionContractId === request.subscriptionContractId) &&
+            (!item.priority || item.priority === priority),
+        );
+        setSlaPolicyId(policies[0]?.id ?? '');
+      })
+      .catch((caught) => {
+        if (active) setError(errorText(caught, 'CRM choices could not be loaded.'));
+      });
+    return () => {
+      active = false;
+    };
+  }, [priority, request.customerPartnerId, request.subscriptionContractId, token]);
+
+  const policies =
+    references?.slaPolicies.filter(
+      (item) =>
+        (!item.customerPartnerId || item.customerPartnerId === request.customerPartnerId) &&
+        (!item.serviceSubscriptionContractId ||
+          item.serviceSubscriptionContractId === request.subscriptionContractId) &&
+        (!item.priority || item.priority === priority),
+    ) ?? [];
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      const ticket = await createCrmTicketFromServiceRequest(
+        token,
+        request.id,
+        crypto.randomUUID(),
+        {
+          ...(assignedToAccountId ? { assignedToAccountId } : {}),
+          categoryId,
+          priority,
+          slaPolicyId,
+        },
+      );
+      onCreated(ticket.id);
+    } catch (caught) {
+      setError(errorText(caught, 'The CRM ticket could not be created.'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <form
+      className="service-dispatch-form service-crm-link-form"
+      onSubmit={(event) => void submit(event)}
+    >
+      {error ? <InlineAlert tone="error">{error}</InlineAlert> : null}
+      {!references ? (
+        <p className="service-problem-copy">Loading CRM choices…</p>
+      ) : (
+        <>
+          <div className="service-form-grid">
+            <ServiceField label="Ticket category">
+              <select
+                onChange={(event) => setCategoryId(event.target.value)}
+                required
+                value={categoryId}
+              >
+                {references.categories.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.name}
+                  </option>
+                ))}
+              </select>
+            </ServiceField>
+            <ServiceField label="CRM owner">
+              <select
+                onChange={(event) => setAssignedToAccountId(event.target.value)}
+                value={assignedToAccountId}
+              >
+                <option value="">Leave unassigned</option>
+                {references.assignees.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.displayName}
+                  </option>
+                ))}
+              </select>
+            </ServiceField>
+          </div>
+          <ServiceField label="SLA rule">
+            <select
+              onChange={(event) => setSlaPolicyId(event.target.value)}
+              required
+              value={slaPolicyId}
+            >
+              {policies.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.name}
+                </option>
+              ))}
+            </select>
+          </ServiceField>
+          {!policies.length ? (
+            <InlineAlert tone="warning">No active SLA rule applies to this priority.</InlineAlert>
+          ) : null}
+        </>
+      )}
+      <div className="service-inline-actions">
+        <Button busy={busy} disabled={!references || !categoryId || !slaPolicyId} type="submit">
+          Create or open ticket
+        </Button>
+        <Button disabled={busy} onClick={onCancel} type="button" variant="secondary">
+          Cancel
+        </Button>
+      </div>
+    </form>
   );
 }
 
@@ -3366,6 +3586,7 @@ function CompleteWorkOrderDrawer({
 function SignaturePad({ onChange }: { onChange: (value: string) => void }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const drawing = useRef(false);
+  const [error, setError] = useState<string | null>(null);
 
   function position(event: ReactPointerEvent<HTMLCanvasElement>) {
     const canvas = canvasRef.current!;
@@ -3380,6 +3601,7 @@ function SignaturePad({ onChange }: { onChange: (value: string) => void }) {
     const canvas = canvasRef.current;
     const context = canvas?.getContext('2d');
     if (!canvas || !context) return;
+    setError(null);
     const point = position(event);
     drawing.current = true;
     canvas.setPointerCapture(event.pointerId);
@@ -3412,7 +3634,65 @@ function SignaturePad({ onChange }: { onChange: (value: string) => void }) {
     const canvas = canvasRef.current;
     const context = canvas?.getContext('2d');
     if (canvas && context) context.clearRect(0, 0, canvas.width, canvas.height);
+    setError(null);
     onChange('');
+  }
+
+  function chooseSignature(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type) || file.size > 2_000_000) {
+      setError('Choose a PNG, JPEG, or WebP image smaller than 2 MB.');
+      return;
+    }
+    const canvas = canvasRef.current;
+    const context = canvas?.getContext('2d', { willReadFrequently: true });
+    if (!canvas || !context) return;
+    const source = URL.createObjectURL(file);
+    const image = new Image();
+    image.onload = () => {
+      URL.revokeObjectURL(source);
+      context.clearRect(0, 0, canvas.width, canvas.height);
+      context.fillStyle = '#ffffff';
+      context.fillRect(0, 0, canvas.width, canvas.height);
+      const scale = Math.min(canvas.width / image.width, canvas.height / image.height);
+      const width = image.width * scale;
+      const height = image.height * scale;
+      context.drawImage(
+        image,
+        (canvas.width - width) / 2,
+        (canvas.height - height) / 2,
+        width,
+        height,
+      );
+      const pixels = context.getImageData(0, 0, canvas.width, canvas.height);
+      for (let index = 0; index < pixels.data.length; index += 4) {
+        const luminance =
+          pixels.data[index]! * 0.299 +
+          pixels.data[index + 1]! * 0.587 +
+          pixels.data[index + 2]! * 0.114;
+        const color = luminance < 205 ? 24 : 255;
+        pixels.data[index] = color;
+        pixels.data[index + 1] = color;
+        pixels.data[index + 2] = color;
+        pixels.data[index + 3] = 255;
+      }
+      context.putImageData(pixels, 0, 0);
+      const signature = canvas.toDataURL('image/png');
+      if (Math.ceil((signature.length * 3) / 4) > 100_000) {
+        clear();
+        setError('This signature image is too detailed. Choose a simpler image or draw below.');
+        return;
+      }
+      setError(null);
+      onChange(signature);
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(source);
+      setError('The selected signature image could not be read.');
+    };
+    image.src = source;
   }
 
   return (
@@ -3424,6 +3704,7 @@ function SignaturePad({ onChange }: { onChange: (value: string) => void }) {
         </button>
       </div>
       <canvas
+        aria-describedby="service-signature-help"
         aria-label="Customer signature pad"
         height="150"
         onPointerCancel={finish}
@@ -3434,7 +3715,20 @@ function SignaturePad({ onChange }: { onChange: (value: string) => void }) {
         ref={canvasRef}
         width="620"
       />
-      <small>Draw with a mouse, trackpad, finger, or stylus.</small>
+      <small id="service-signature-help">
+        Draw with a mouse, trackpad, finger, or stylus. If drawing is not practical, choose a saved
+        signature image.
+      </small>
+      <label className="service-signature-upload">
+        <Icon name="plus" size={15} />
+        <span>Choose signature image</span>
+        <input accept="image/png,image/jpeg,image/webp" onChange={chooseSignature} type="file" />
+      </label>
+      {error ? (
+        <small className="service-signature-error" role="alert">
+          {error}
+        </small>
+      ) : null}
     </div>
   );
 }
@@ -3455,6 +3749,10 @@ function ServiceDrawer({
   variant?: 'care';
 }) {
   const drawerRef = useRef<HTMLElement | null>(null);
+  const busyRef = useRef(busy);
+  useEffect(() => {
+    busyRef.current = busy;
+  }, [busy]);
 
   useEffect(() => {
     const drawerElement = drawerRef.current;
@@ -3471,6 +3769,10 @@ function ServiceDrawer({
     const initialFocus = drawer.querySelector<HTMLElement>('.panel-back-button');
     (initialFocus ?? drawer).focus();
     function trapFocus(event: KeyboardEvent) {
+      if (event.key === 'Escape' && !busyRef.current) {
+        onBack();
+        return;
+      }
       if (event.key !== 'Tab') return;
       const elements = focusable();
       if (!elements.length) {
@@ -3748,6 +4050,11 @@ function pageMeta(view: ServiceOperationsView) {
       description:
         'Capture, dispatch, and follow customer service needs from one operational register.',
       title: 'Service requests',
+    },
+    reports: {
+      description:
+        'Review Service workload, completion, recorded time, and cost with downloadable reports.',
+      title: 'Service reports',
     },
     schedule: {
       description:
