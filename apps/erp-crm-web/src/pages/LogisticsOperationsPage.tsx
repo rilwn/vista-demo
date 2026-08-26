@@ -38,6 +38,7 @@ export type LogisticsOperationsView = 'couriers' | 'deliveries' | 'returns' | 'r
 
 const emptyReferences: LogisticsReferenceData = {
   assignees: [],
+  businessTimezone: 'UTC',
   courierConnections: [
     { connected: false, provider: 'econt' },
     { connected: false, provider: 'speedy' },
@@ -985,14 +986,22 @@ function NewRouteDrawer({
   const availableDeliveries = deliveries.filter((item) =>
     ['planned', 'in_transit', 'exception'].includes(item.status),
   );
-  const [routeDate, setRouteDate] = useState(todayInput());
+  const initialServiceStop = references.serviceStops[0];
+  const initialRouteDate = initialServiceStop
+    ? businessDate(initialServiceStop.scheduledStart, references.businessTimezone)
+    : todayInput();
+  const [routeDate, setRouteDate] = useState(initialRouteDate);
   const [title, setTitle] = useState('Vratsa customer run');
-  const [assigneeId, setAssigneeId] = useState(references.assignees[0]?.accountId ?? '');
+  const [assigneeId, setAssigneeId] = useState(
+    availableDeliveries[0]
+      ? (references.assignees[0]?.accountId ?? '')
+      : (initialServiceStop?.assignedAccountId ?? references.assignees[0]?.accountId ?? ''),
+  );
   const [notes, setNotes] = useState('');
   const [stops, setStops] = useState<DraftRouteStop[]>(() => [
     availableDeliveries[0]
       ? newDraftStop(availableDeliveries[0].id, routeDate, 0, 'delivery')
-      : newDraftStop(references.serviceStops[0]?.id ?? '', routeDate, 0, 'service'),
+      : newServiceDraftStop(initialServiceStop, references.businessTimezone),
   ]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -1010,14 +1019,24 @@ function NewRouteDrawer({
         assignedAccountId: assigneeId,
         ...(notes.trim() ? { notes: notes.trim() } : {}),
         routeDate,
-        stops: stops.map((stop) => ({
-          ...(stop.kind === 'delivery'
-            ? { deliveryId: stop.sourceId }
-            : { serviceWorkOrderId: stop.sourceId }),
-          plannedArrival: localDateTimeToIso(stop.time),
-          plannedDurationMinutes: stop.duration,
-          stopType: stop.kind,
-        })),
+        stops: stops.map((stop) => {
+          const serviceSource =
+            stop.kind === 'service'
+              ? references.serviceStops.find((source) => source.id === stop.sourceId)
+              : undefined;
+          return {
+            ...(stop.kind === 'delivery'
+              ? { deliveryId: stop.sourceId }
+              : { serviceWorkOrderId: stop.sourceId }),
+            plannedArrival:
+              serviceSource?.scheduledStart ??
+              businessDateTimeToIso(stop.time, references.businessTimezone),
+            plannedDurationMinutes: serviceSource
+              ? serviceAppointmentMinutes(serviceSource)
+              : stop.duration,
+            stopType: stop.kind,
+          };
+        }),
         title: title.trim(),
       };
       onSaved(await createLogisticsRoute(token, crypto.randomUUID(), input));
@@ -1029,6 +1048,11 @@ function NewRouteDrawer({
   }
 
   const hasSources = availableDeliveries.length > 0 || references.serviceStops.length > 0;
+  const selectedServiceStops = stops
+    .filter((stop) => stop.kind === 'service')
+    .map((stop) => references.serviceStops.find((source) => source.id === stop.sourceId))
+    .filter((source): source is LogisticsReferenceData['serviceStops'][number] => Boolean(source));
+  const serviceAssigneeId = selectedServiceStops[0]?.assignedAccountId;
   const valid =
     !!title.trim() && !!assigneeId && stops.length > 0 && stops.every((stop) => stop.sourceId);
   return (
@@ -1065,6 +1089,7 @@ function NewRouteDrawer({
               <label>
                 <span>Date</span>
                 <input
+                  disabled={selectedServiceStops.length > 0}
                   required
                   type="date"
                   value={routeDate}
@@ -1073,15 +1098,23 @@ function NewRouteDrawer({
                     setStops((current) =>
                       current.map((stop, index) => ({
                         ...stop,
-                        time: `${event.target.value}T${String(9 + index).padStart(2, '0')}:00`,
+                        ...(stop.kind === 'delivery'
+                          ? {
+                              time: `${event.target.value}T${String(9 + index).padStart(2, '0')}:00`,
+                            }
+                          : {}),
                       })),
                     );
                   }}
                 />
+                {selectedServiceStops.length ? (
+                  <small>The Service appointment sets the route date.</small>
+                ) : null}
               </label>
               <label>
                 <span>Assigned employee</span>
                 <select
+                  disabled={Boolean(serviceAssigneeId)}
                   required
                   value={assigneeId}
                   onChange={(event) => setAssigneeId(event.target.value)}
@@ -1092,6 +1125,9 @@ function NewRouteDrawer({
                     </option>
                   ))}
                 </select>
+                {serviceAssigneeId ? (
+                  <small>The selected Service visit sets the responsible technician.</small>
+                ) : null}
               </label>
             </div>
             <label>
@@ -1103,7 +1139,14 @@ function NewRouteDrawer({
             <div className="route-stop-editor">
               {stops.map((stop, index) => {
                 const sources =
-                  stop.kind === 'delivery' ? availableDeliveries : references.serviceStops;
+                  stop.kind === 'delivery'
+                    ? availableDeliveries
+                    : references.serviceStops.filter(
+                        (source) =>
+                          !serviceAssigneeId ||
+                          source.assignedAccountId === serviceAssigneeId ||
+                          source.id === stop.sourceId,
+                      );
                 return (
                   <section key={stop.id}>
                     <header>
@@ -1128,13 +1171,30 @@ function NewRouteDrawer({
                           value={stop.kind}
                           onChange={(event) => {
                             const kind = event.target.value as DraftRouteStop['kind'];
-                            updateStop(stop.id, {
-                              kind,
-                              sourceId:
-                                kind === 'delivery'
-                                  ? (availableDeliveries[0]?.id ?? '')
-                                  : (references.serviceStops[0]?.id ?? ''),
-                            });
+                            if (kind === 'service') {
+                              const source = references.serviceStops.find(
+                                (item) =>
+                                  !serviceAssigneeId ||
+                                  item.assignedAccountId === serviceAssigneeId,
+                              );
+                              const prepared = newServiceDraftStop(
+                                source,
+                                references.businessTimezone,
+                              );
+                              updateStop(stop.id, { ...prepared, id: stop.id });
+                              if (source) {
+                                setAssigneeId(source.assignedAccountId);
+                                setRouteDate(
+                                  businessDate(source.scheduledStart, references.businessTimezone),
+                                );
+                              }
+                            } else {
+                              updateStop(stop.id, {
+                                kind,
+                                sourceId: availableDeliveries[0]?.id ?? '',
+                                time: `${routeDate}T${String(9 + index).padStart(2, '0')}:00`,
+                              });
+                            }
                           }}
                         >
                           <option value="delivery">Customer delivery</option>
@@ -1146,9 +1206,24 @@ function NewRouteDrawer({
                         <select
                           required
                           value={stop.sourceId}
-                          onChange={(event) =>
-                            updateStop(stop.id, { sourceId: event.target.value })
-                          }
+                          onChange={(event) => {
+                            if (stop.kind === 'service') {
+                              const source = references.serviceStops.find(
+                                (item) => item.id === event.target.value,
+                              );
+                              const prepared = newServiceDraftStop(
+                                source,
+                                references.businessTimezone,
+                              );
+                              updateStop(stop.id, { ...prepared, id: stop.id });
+                              if (source) {
+                                setAssigneeId(source.assignedAccountId);
+                                setRouteDate(
+                                  businessDate(source.scheduledStart, references.businessTimezone),
+                                );
+                              }
+                            } else updateStop(stop.id, { sourceId: event.target.value });
+                          }}
                         >
                           {sources.map((item) => (
                             <option key={item.id} value={item.id}>
@@ -1164,6 +1239,7 @@ function NewRouteDrawer({
                       <label>
                         <span>Planned arrival</span>
                         <input
+                          disabled={stop.kind === 'service'}
                           required
                           type="datetime-local"
                           value={stop.time}
@@ -1173,6 +1249,7 @@ function NewRouteDrawer({
                       <label>
                         <span>Time at stop (minutes)</span>
                         <input
+                          disabled={stop.kind === 'service'}
                           max={1440}
                           min={5}
                           required
@@ -1182,23 +1259,32 @@ function NewRouteDrawer({
                             updateStop(stop.id, { duration: Number(event.target.value) })
                           }
                         />
+                        {stop.kind === 'service' ? (
+                          <small>Uses the scheduled Service appointment.</small>
+                        ) : null}
                       </label>
                     </div>
                   </section>
                 );
               })}
               <Button
-                onClick={() =>
+                onClick={() => {
+                  const serviceSource = references.serviceStops.find(
+                    (source) =>
+                      !serviceAssigneeId || source.assignedAccountId === serviceAssigneeId,
+                  );
                   setStops((current) => [
                     ...current,
-                    newDraftStop(
-                      availableDeliveries[0]?.id ?? references.serviceStops[0]?.id ?? '',
-                      routeDate,
-                      current.length,
-                      availableDeliveries[0] ? 'delivery' : 'service',
-                    ),
-                  ])
-                }
+                    availableDeliveries[0]
+                      ? newDraftStop(
+                          availableDeliveries[0].id,
+                          routeDate,
+                          current.length,
+                          'delivery',
+                        )
+                      : newServiceDraftStop(serviceSource, references.businessTimezone),
+                  ]);
+                }}
                 type="button"
                 variant="secondary"
               >
@@ -1869,6 +1955,94 @@ function newDraftStop(
     kind,
     sourceId,
     time: `${routeDate}T${String(9 + index).padStart(2, '0')}:00`,
+  };
+}
+
+function newServiceDraftStop(
+  source: LogisticsReferenceData['serviceStops'][number] | undefined,
+  timezone: string,
+): DraftRouteStop {
+  if (!source)
+    return {
+      duration: 45,
+      id: crypto.randomUUID(),
+      kind: 'service',
+      sourceId: '',
+      time: `${todayInput()}T09:00`,
+    };
+  return {
+    duration: serviceAppointmentMinutes(source),
+    id: crypto.randomUUID(),
+    kind: 'service',
+    sourceId: source.id,
+    time: toBusinessDateTimeInput(source.scheduledStart, timezone),
+  };
+}
+
+function serviceAppointmentMinutes(source: LogisticsReferenceData['serviceStops'][number]): number {
+  return Math.max(
+    5,
+    Math.round(
+      (new Date(source.scheduledEnd).getTime() - new Date(source.scheduledStart).getTime()) /
+        60_000,
+    ),
+  );
+}
+
+function businessDate(value: string, timezone: string) {
+  const parts = zonedDateTimeParts(new Date(value), timezone);
+  return `${parts.year}-${parts.month}-${parts.day}`;
+}
+
+function toBusinessDateTimeInput(value: string, timezone: string) {
+  const parts = zonedDateTimeParts(new Date(value), timezone);
+  return `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}`;
+}
+
+function businessDateTimeToIso(value: string, timezone: string) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/u.exec(value);
+  if (!match) return localDateTimeToIso(value);
+  const [, year, month, day, hour, minute] = match;
+  const target = Date.UTC(
+    Number(year),
+    Number(month) - 1,
+    Number(day),
+    Number(hour),
+    Number(minute),
+  );
+  let instant = target;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const observed = zonedDateTimeParts(new Date(instant), timezone);
+    const observedAsUtc = Date.UTC(
+      Number(observed.year),
+      Number(observed.month) - 1,
+      Number(observed.day),
+      Number(observed.hour),
+      Number(observed.minute),
+    );
+    instant += target - observedAsUtc;
+  }
+  return new Date(instant).toISOString();
+}
+
+function zonedDateTimeParts(value: Date, timezone: string) {
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    day: '2-digit',
+    hour: '2-digit',
+    hourCycle: 'h23',
+    minute: '2-digit',
+    month: '2-digit',
+    timeZone: timezone,
+    year: 'numeric',
+  }).formatToParts(value);
+  const part = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((candidate) => candidate.type === type)?.value ?? '';
+  return {
+    day: part('day'),
+    hour: part('hour'),
+    minute: part('minute'),
+    month: part('month'),
+    year: part('year'),
   };
 }
 

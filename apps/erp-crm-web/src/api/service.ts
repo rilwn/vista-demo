@@ -2,15 +2,25 @@ import type {
   AssignServiceWorkOrderRequest,
   CancelServiceRequest,
   CompleteServiceWorkOrderRequest,
+  CompleteServiceInspectionRequest,
+  CreateServiceInspectionPlanRequest,
   CreateServiceRequest,
+  CreateWarrantyClaimRequest,
+  ServiceCareOverview,
+  ServiceInspectionPlan,
   ServiceEquipmentHistory,
   ServiceReferenceData,
   ServiceRequest,
   ServiceRequestPage,
+  ServiceSchedule,
+  ServiceTechnicianSchedulePolicy,
   ServiceWorkOrder,
   ServiceWorkOrderPage,
   ServiceWorkOrderPhoto,
   StartServiceWorkOrderRequest,
+  TransitionWarrantyClaimRequest,
+  UpdateServiceTechnicianSchedulePolicyRequest,
+  WarrantyClaim,
 } from '@vista/contracts';
 
 import {
@@ -25,6 +35,101 @@ import {
 export function getServiceReferenceData(token: string): Promise<ServiceReferenceData> {
   return unwrapApiResponse(
     apiClient.GET('/api/v1/service/reference-data', { headers: authorizationHeaders(token) }),
+  );
+}
+
+export function getServiceCareOverview(token: string): Promise<ServiceCareOverview> {
+  return unwrapApiResponse(
+    apiClient.GET('/api/v1/service/care', { headers: authorizationHeaders(token) }),
+  );
+}
+
+export function createWarrantyClaim(
+  token: string,
+  key: string,
+  input: CreateWarrantyClaimRequest,
+): Promise<WarrantyClaim> {
+  return unwrapApiResponse(
+    apiClient.POST('/api/v1/service/warranty-claims', {
+      body: input,
+      headers: authorizationHeaders(token),
+      params: { header: idempotencyParameters(key).header },
+    }),
+  );
+}
+
+export function transitionWarrantyClaim(
+  token: string,
+  id: string,
+  key: string,
+  input: TransitionWarrantyClaimRequest,
+): Promise<WarrantyClaim> {
+  return unwrapApiResponse(
+    apiClient.POST('/api/v1/service/warranty-claims/{id}/transition', {
+      body: input,
+      headers: authorizationHeaders(token),
+      params: { header: idempotencyParameters(key).header, path: { id } },
+    }),
+  );
+}
+
+export function createServiceInspectionPlan(
+  token: string,
+  key: string,
+  input: CreateServiceInspectionPlanRequest,
+): Promise<ServiceInspectionPlan> {
+  return unwrapApiResponse(
+    apiClient.POST('/api/v1/service/inspection-plans', {
+      body: input,
+      headers: authorizationHeaders(token),
+      params: { header: idempotencyParameters(key).header },
+    }),
+  );
+}
+
+export function completeServiceInspection(
+  token: string,
+  id: string,
+  key: string,
+  input: CompleteServiceInspectionRequest,
+): Promise<ServiceInspectionPlan> {
+  return unwrapApiResponse(
+    apiClient.POST('/api/v1/service/inspection-plans/{id}/complete', {
+      body: input,
+      headers: authorizationHeaders(token),
+      params: { header: idempotencyParameters(key).header, path: { id } },
+    }),
+  );
+}
+
+export function getServiceSchedule(
+  token: string,
+  dateFrom: string,
+  dateTo: string,
+): Promise<ServiceSchedule> {
+  return unwrapApiResponse(
+    apiClient.GET('/api/v1/service/schedule', {
+      headers: authorizationHeaders(token),
+      params: { query: { dateFrom, dateTo } },
+    }),
+  );
+}
+
+export function updateServiceTechnicianSchedulePolicy(
+  token: string,
+  technicianAccountId: string,
+  key: string,
+  input: UpdateServiceTechnicianSchedulePolicyRequest,
+): Promise<ServiceTechnicianSchedulePolicy> {
+  return unwrapApiResponse(
+    apiClient.PUT('/api/v1/service/technicians/{id}/schedule-policy', {
+      body: input,
+      headers: authorizationHeaders(token),
+      params: {
+        header: idempotencyParameters(key).header,
+        path: { id: technicianAccountId },
+      },
+    }),
   );
 }
 

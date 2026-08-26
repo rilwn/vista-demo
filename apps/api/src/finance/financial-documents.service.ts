@@ -65,6 +65,8 @@ interface HeaderRow {
   rate_source: string;
   source_invoice_number: string | null;
   source_sales_invoice_id: string | null;
+  source_service_work_order_id: string | null;
+  source_service_work_order_number: string | null;
   status: FinancialDocumentStatus;
   tax_event_date: string;
   vat_total: string;
@@ -97,7 +99,16 @@ export class FinancialDocumentsService {
 
   async referenceData(): Promise<FinancialDocumentReferenceData> {
     const pool = this.database.getPool();
-    const [scopes, customers, products, salesHeaders, salesLines, corrections] = await Promise.all([
+    const [
+      scopes,
+      customers,
+      products,
+      salesHeaders,
+      salesLines,
+      serviceHeaders,
+      serviceLines,
+      corrections,
+    ] = await Promise.all([
       pool.query<{
         branch_id: string;
         branch_name: string;
@@ -178,6 +189,73 @@ export class FinancialDocumentsService {
          ORDER BY line.invoice_id, line.id`,
       ),
       pool.query<{
+        customer_name: string;
+        customer_partner_id: string;
+        id: string;
+        linked_document_types: FinancialDocumentType[];
+        total: string;
+        work_order_number: string;
+      }>(
+        `SELECT work_order.id, work_order.work_order_number,
+                request.customer_partner_id, customer.display_name AS customer_name,
+                work_order.total_cost_bgn::text AS total,
+                coalesce(array_agg(document.document_type ORDER BY document.document_type)
+                  FILTER (WHERE document.id IS NOT NULL), '{}'::varchar[]) AS linked_document_types
+         FROM service.work_orders work_order
+         JOIN service.requests request ON request.id = work_order.service_request_id
+         JOIN master_data.partners customer ON customer.id = request.customer_partner_id
+         LEFT JOIN finance.financial_documents document
+           ON document.source_service_work_order_id = work_order.id AND document.status = 'draft'
+         WHERE work_order.status = 'completed' AND work_order.total_cost_bgn > 0
+         GROUP BY work_order.id, request.customer_partner_id, customer.display_name
+         ORDER BY work_order.completed_at DESC, work_order.id DESC`,
+      ),
+      pool.query<{
+        description: string;
+        product_id: string | null;
+        quantity: string;
+        sort_at: string | Date;
+        sort_id: string;
+        sort_order: number;
+        unit_code: string;
+        unit_price: string;
+        work_order_id: string;
+      }>(
+        `SELECT source.work_order_id, source.product_id, source.description,
+                source.quantity::text, source.unit_code, source.unit_price::text,
+                source.sort_order, source.sort_at, source.sort_id
+         FROM (
+           SELECT work_order.id AS work_order_id, NULL::uuid AS product_id,
+                  concat('Service labour · ', work_order.work_order_number) AS description,
+                  1.0000::numeric AS quantity, 'SERVICE'::varchar AS unit_code,
+                  work_order.labor_cost_bgn AS unit_price, 1 AS sort_order,
+                  work_order.created_at AS sort_at,
+                  work_order.id::text AS sort_id
+           FROM service.work_orders work_order
+           WHERE work_order.status = 'completed' AND work_order.labor_cost_bgn > 0
+           UNION ALL
+           SELECT usage.work_order_id, usage.product_id, product.name AS description,
+                  usage.quantity, unit.code AS unit_code, usage.unit_cost_bgn AS unit_price,
+                  2 AS sort_order, usage.recorded_at AS sort_at,
+                  usage.id::text AS sort_id
+           FROM service.work_order_part_usages usage
+           JOIN service.work_orders work_order ON work_order.id = usage.work_order_id
+           JOIN master_data.products product ON product.id = usage.product_id
+           JOIN master_data.units unit ON unit.id = product.unit_id
+           WHERE work_order.status = 'completed'
+           UNION ALL
+           SELECT work_order.id AS work_order_id, NULL::uuid AS product_id,
+                  concat('Transport · ', work_order.work_order_number) AS description,
+                  1.0000::numeric AS quantity, 'SERVICE'::varchar AS unit_code,
+                  work_order.transport_cost_bgn AS unit_price, 3 AS sort_order,
+                  work_order.created_at AS sort_at,
+                  work_order.id::text AS sort_id
+           FROM service.work_orders work_order
+           WHERE work_order.status = 'completed' AND work_order.transport_cost_bgn > 0
+         ) source
+         ORDER BY source.work_order_id, source.sort_order, source.sort_at, source.sort_id`,
+      ),
+      pool.query<{
         currency_code: string;
         customer_name: string;
         customer_partner_id: string;
@@ -253,6 +331,26 @@ export class FinancialDocumentsService {
             vatTreatment: line.vat_treatment,
           })),
         number: row.invoice_number,
+        total: row.total,
+      })),
+      serviceDrafts: serviceHeaders.rows.map((row) => ({
+        currencyCode: 'BGN',
+        customerName: row.customer_name,
+        customerPartnerId: row.customer_partner_id,
+        id: row.id,
+        linkedDocumentTypes: row.linked_document_types,
+        lines: serviceLines.rows
+          .filter((line) => line.work_order_id === row.id)
+          .map((line) => ({
+            description: line.description,
+            discountPercent: '0.0000',
+            ...(line.product_id ? { productId: line.product_id } : {}),
+            quantity: line.quantity,
+            unitCode: line.unit_code,
+            unitPrice: line.unit_price,
+            vatTreatment: 'standard_20' as const,
+          })),
+        number: row.work_order_number,
         total: row.total,
       })),
       scopes: scopes.rows.map((scope) => ({
@@ -338,9 +436,13 @@ export class FinancialDocumentsService {
         const correction = await requireCorrection(client, normalized);
         const lines = normalized.sourceSalesInvoiceId
           ? await salesDraftLines(client, normalized, customer.id)
-          : await manualLines(client, normalized.lines ?? []);
+          : normalized.sourceServiceWorkOrderId
+            ? await serviceDraftLines(client, normalized, customer.id)
+            : await manualLines(client, normalized.lines ?? []);
         if (!lines.length)
           throw inputError('FINANCE_DOCUMENT_LINES_REQUIRED', 'Add at least one document line.');
+        const existingSourceDocumentId = await findExistingSourceDocument(client, normalized);
+        if (existingSourceDocumentId) return this.loadDocument(client, existingSourceDocumentId);
         let calculation;
         try {
           calculation = calculateFinancialDocument(lines, normalized.exchangeRate);
@@ -356,15 +458,16 @@ export class FinancialDocumentsService {
           `INSERT INTO finance.financial_documents (
            id, draft_number, document_type, legal_entity_id, branch_id, business_location_id,
            cash_register_id, operator_id, customer_partner_id, source_sales_invoice_id,
-           correction_of_document_id, correction_reason, issue_date, tax_event_date, due_date,
+           source_service_work_order_id, correction_of_document_id, correction_reason,
+           issue_date, tax_event_date, due_date,
            currency_code, exchange_rate, rate_date, rate_source,
            issuer_name, issuer_uic, issuer_vat_number, issuer_address,
            customer_name, customer_uic, customer_vat_number, customer_address,
            net_total, vat_total, gross_total, bgn_net_total, bgn_vat_total, bgn_gross_total,
            notes, created_by
          ) VALUES (
-           $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,
-           $20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35
+           $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,
+           $21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36
          )`,
           [
             id,
@@ -377,6 +480,7 @@ export class FinancialDocumentsService {
             normalized.operatorId ?? null,
             customer.id,
             normalized.sourceSalesInvoiceId ?? null,
+            normalized.sourceServiceWorkOrderId ?? null,
             correction?.id ?? null,
             normalized.correctionReason ?? null,
             normalized.issueDate,
@@ -629,6 +733,12 @@ export class FinancialDocumentsService {
       rateSource: row.rate_source,
       ...(row.source_sales_invoice_id ? { sourceSalesInvoiceId: row.source_sales_invoice_id } : {}),
       ...(row.source_invoice_number ? { sourceSalesInvoiceNumber: row.source_invoice_number } : {}),
+      ...(row.source_service_work_order_id
+        ? { sourceServiceWorkOrderId: row.source_service_work_order_id }
+        : {}),
+      ...(row.source_service_work_order_number
+        ? { sourceServiceWorkOrderNumber: row.source_service_work_order_number }
+        : {}),
       status: row.status,
       taxEventDate: row.tax_event_date,
       vatSummary: summaries.rows.map((summary) => ({
@@ -670,12 +780,7 @@ export class FinancialDocumentsService {
       return result;
     } catch (error) {
       await client.query('ROLLBACK');
-      if (isUniqueViolation(error))
-        throw new ApiErrorException(
-          'FINANCE_DOCUMENT_CONFLICT',
-          'This financial document conflicts with an existing draft.',
-          HttpStatus.CONFLICT,
-        );
+      if (isUniqueViolation(error)) throw financialDocumentUniqueConflict(error.constraint);
       throw error;
     } finally {
       client.release();
@@ -752,10 +857,20 @@ function normalizeInput(input: CreateFinancialDocumentRequest) {
       'Only credit and debit notes can correct an invoice.',
     );
   }
-  if (!input.sourceSalesInvoiceId && !input.lines?.length)
+  if (input.sourceSalesInvoiceId && input.sourceServiceWorkOrderId)
+    throw inputError(
+      'FINANCE_DOCUMENT_SOURCE_CONFLICT',
+      'Choose either a Sales draft or completed Service work, not both.',
+    );
+  if (!input.sourceSalesInvoiceId && !input.sourceServiceWorkOrderId && !input.lines?.length)
     throw inputError(
       'FINANCE_DOCUMENT_LINES_REQUIRED',
-      'Select a prepared Sales draft or add at least one line.',
+      'Select prepared Sales or Service work, or add at least one line.',
+    );
+  if (input.sourceServiceWorkOrderId && !input.lines?.length)
+    throw inputError(
+      'FINANCE_SERVICE_LINES_REQUIRED',
+      'Review the completed Service charges and VAT treatment before preparing the draft.',
     );
   return {
     businessLocationId: input.businessLocationId,
@@ -777,6 +892,9 @@ function normalizeInput(input: CreateFinancialDocumentRequest) {
     rateDate: normalizeDate(input.rateDate),
     rateSource,
     ...(input.sourceSalesInvoiceId ? { sourceSalesInvoiceId: input.sourceSalesInvoiceId } : {}),
+    ...(input.sourceServiceWorkOrderId
+      ? { sourceServiceWorkOrderId: input.sourceServiceWorkOrderId }
+      : {}),
     taxEventDate: normalizeDate(input.taxEventDate),
   };
 }
@@ -986,6 +1104,140 @@ async function salesDraftLines(
   }));
 }
 
+async function serviceDraftLines(
+  client: PoolClient,
+  input: ReturnType<typeof normalizeInput>,
+  customerId: string,
+) {
+  const workOrderId = input.sourceServiceWorkOrderId;
+  if (!workOrderId)
+    throw inputError('FINANCE_SERVICE_WORK_REQUIRED', 'Select completed Service work.');
+  if (input.documentType === 'credit_note' || input.documentType === 'debit_note')
+    throw inputError(
+      'FINANCE_CORRECTION_SERVICE_SOURCE_INVALID',
+      'Correction notes must use the original Finance invoice link, not completed Service work.',
+    );
+  const header = await client.query<{
+    customer_partner_id: string;
+    status: string;
+    total_cost_bgn: string;
+    work_order_number: string;
+  }>(
+    `SELECT request.customer_partner_id, work_order.status,
+            work_order.total_cost_bgn::text, work_order.work_order_number
+     FROM service.work_orders work_order
+     JOIN service.requests request ON request.id = work_order.service_request_id
+     WHERE work_order.id = $1 FOR KEY SHARE OF work_order, request`,
+    [workOrderId],
+  );
+  const source = header.rows[0];
+  if (!source || source.status !== 'completed' || decimalUnits(source.total_cost_bgn, 4) <= 0n)
+    throw inputError(
+      'FINANCE_SERVICE_WORK_INVALID',
+      'Select completed Service work with a charge greater than zero.',
+    );
+  if (source.customer_partner_id !== customerId || input.currencyCode !== 'BGN')
+    throw inputError(
+      'FINANCE_SERVICE_CONTEXT_MISMATCH',
+      'The customer and BGN currency must match the completed Service work.',
+    );
+  const expected = await serviceCostBasis(client, workOrderId, source);
+  const provided = await manualLines(client, input.lines ?? []);
+  const matches =
+    expected.length === provided.length &&
+    expected.every((line, index) => {
+      const candidate = provided[index];
+      return (
+        candidate?.description === line.description &&
+        candidate.discountPercent === line.discountPercent &&
+        candidate.productId === line.productId &&
+        candidate.quantity === line.quantity &&
+        candidate.unitCode === line.unitCode &&
+        candidate.unitPrice === line.unitPrice
+      );
+    });
+  if (!matches)
+    throw inputError(
+      'FINANCE_SERVICE_CHARGES_CHANGED',
+      'The Service charges changed after this form was opened. Close it, reopen the work order, and try again.',
+    );
+  return provided;
+}
+
+async function serviceCostBasis(
+  client: PoolClient,
+  workOrderId: string,
+  workOrder: { total_cost_bgn: string; work_order_number: string },
+) {
+  const costs = await client.query<{
+    labor_cost_bgn: string;
+    transport_cost_bgn: string;
+  }>(
+    `SELECT labor_cost_bgn::text, transport_cost_bgn::text
+     FROM service.work_orders WHERE id = $1`,
+    [workOrderId],
+  );
+  const cost = costs.rows[0];
+  if (!cost) throw new Error('Completed Service work disappeared during document preparation');
+  const lines: Array<ReturnType<typeof normalizeLine>> = [];
+  if (decimalUnits(cost.labor_cost_bgn, 4) > 0n)
+    lines.push({
+      description: `Service labour · ${workOrder.work_order_number}`,
+      discountPercent: '0.0000',
+      quantity: '1.0000',
+      unitCode: 'SERVICE',
+      unitPrice: normalizeDecimal(cost.labor_cost_bgn, 4),
+      vatTreatment: 'standard_20',
+    });
+  const parts = await client.query<{
+    product_id: string;
+    product_name: string;
+    quantity: string;
+    unit_code: string;
+    unit_cost_bgn: string;
+  }>(
+    `SELECT usage.product_id, product.name AS product_name, usage.quantity::text,
+            usage.unit_cost_bgn::text, unit.code AS unit_code
+     FROM service.work_order_part_usages usage
+     JOIN master_data.products product ON product.id = usage.product_id
+     JOIN master_data.units unit ON unit.id = product.unit_id
+     WHERE usage.work_order_id = $1 ORDER BY usage.recorded_at, usage.id`,
+    [workOrderId],
+  );
+  lines.push(
+    ...parts.rows.map((part) => ({
+      description: part.product_name,
+      discountPercent: '0.0000',
+      productId: part.product_id,
+      quantity: normalizeDecimal(part.quantity, 4),
+      unitCode: part.unit_code,
+      unitPrice: normalizeDecimal(part.unit_cost_bgn, 4),
+      vatTreatment: 'standard_20' as const,
+    })),
+  );
+  if (decimalUnits(cost.transport_cost_bgn, 4) > 0n)
+    lines.push({
+      description: `Transport · ${workOrder.work_order_number}`,
+      discountPercent: '0.0000',
+      quantity: '1.0000',
+      unitCode: 'SERVICE',
+      unitPrice: normalizeDecimal(cost.transport_cost_bgn, 4),
+      vatTreatment: 'standard_20',
+    });
+  const basisTotal = lines.reduce(
+    (sum, line) =>
+      sum + (decimalUnits(line.quantity, 4) * decimalUnits(line.unitPrice, 4)) / 10_000n,
+    0n,
+  );
+  if (basisTotal !== decimalUnits(workOrder.total_cost_bgn, 4))
+    throw new ApiErrorException(
+      'FINANCE_SERVICE_COST_MISMATCH',
+      'The completed Service charges do not reconcile. Review the work order before preparing a Finance draft.',
+      HttpStatus.CONFLICT,
+    );
+  return lines;
+}
+
 async function manualLines(client: PoolClient, lines: ReturnType<typeof normalizeLine>[]) {
   const productIds = lines.flatMap((line) => (line.productId ? [line.productId] : []));
   if (!productIds.length) return lines;
@@ -1047,7 +1299,38 @@ async function nextDraftNumber(
   const prefix = { credit_note: 'DCN', debit_note: 'DDN', invoice: 'DINV', proforma: 'DPRO' }[
     input.documentType
   ];
-  return `${prefix}-${locationCode}-${year}-${allocated.padStart(6, '0')}`;
+  const scopeFingerprint = createHash('sha256')
+    .update(
+      [
+        input.businessLocationId,
+        input.cashRegisterId ?? 'general-register',
+        input.operatorId ?? 'general-operator',
+      ].join(':'),
+    )
+    .digest('hex')
+    .slice(0, 12)
+    .toUpperCase();
+  return `${prefix}-${locationCode}-${scopeFingerprint}-${year}-${allocated.padStart(6, '0')}`;
+}
+
+async function findExistingSourceDocument(
+  client: PoolClient,
+  input: ReturnType<typeof normalizeInput>,
+): Promise<string | undefined> {
+  const sourceColumn = input.sourceSalesInvoiceId
+    ? 'source_sales_invoice_id'
+    : input.sourceServiceWorkOrderId
+      ? 'source_service_work_order_id'
+      : undefined;
+  const sourceId = input.sourceSalesInvoiceId ?? input.sourceServiceWorkOrderId;
+  if (!sourceColumn || !sourceId) return undefined;
+  const result = await client.query<{ id: string }>(
+    `SELECT id FROM finance.financial_documents
+     WHERE ${sourceColumn} = $1 AND document_type = $2 AND status = 'draft'
+     ORDER BY created_at DESC, id DESC LIMIT 1 FOR KEY SHARE`,
+    [sourceId, input.documentType],
+  );
+  return result.rows[0]?.id;
 }
 
 function headerQuery() {
@@ -1057,6 +1340,8 @@ function headerQuery() {
                  location.name AS business_location_name, register.name AS cash_register_name,
                  employee.display_name AS operator_name, document.customer_partner_id,
                  document.source_sales_invoice_id, source.invoice_number AS source_invoice_number,
+                 document.source_service_work_order_id,
+                 service_source.work_order_number AS source_service_work_order_number,
                  document.correction_of_document_id, document.correction_reason,
                  document.issue_date::text, document.tax_event_date::text, document.due_date::text,
                  document.currency_code, document.exchange_rate::text, document.rate_date::text,
@@ -1074,7 +1359,9 @@ function headerQuery() {
           LEFT JOIN organization.operators operator ON operator.id = document.operator_id
           LEFT JOIN identity.user_accounts account ON account.id = operator.account_id
           LEFT JOIN identity.employees employee ON employee.id = account.employee_id
-          LEFT JOIN sales.invoices source ON source.id = document.source_sales_invoice_id`;
+          LEFT JOIN sales.invoices source ON source.id = document.source_sales_invoice_id
+          LEFT JOIN service.work_orders service_source
+            ON service_source.id = document.source_service_work_order_id`;
 }
 
 function normalizeDate(value: string) {
@@ -1146,8 +1433,31 @@ async function claim(client: PoolClient, scope: string, key: string, hash: strin
   );
 }
 
-function isUniqueViolation(error: unknown): error is { code: '23505' } {
+function isUniqueViolation(error: unknown): error is { code: '23505'; constraint?: string } {
   return typeof error === 'object' && error !== null && 'code' in error && error.code === '23505';
+}
+
+function financialDocumentUniqueConflict(constraint: string | undefined): ApiErrorException {
+  if (
+    constraint === 'finance_financial_document_service_source_type_unique' ||
+    constraint === 'finance_financial_document_source_type_unique'
+  )
+    return new ApiErrorException(
+      'FINANCE_DOCUMENT_SOURCE_EXISTS',
+      'A draft already exists for this source. Open the existing draft to continue.',
+      HttpStatus.CONFLICT,
+    );
+  if (constraint === 'financial_documents_draft_number_key')
+    return new ApiErrorException(
+      'FINANCE_DOCUMENT_NUMBER_CONFLICT',
+      'A draft number could not be reserved. Try again.',
+      HttpStatus.CONFLICT,
+    );
+  return new ApiErrorException(
+    'FINANCE_DOCUMENT_CONFLICT',
+    'The financial document could not be saved because one of its references is already in use.',
+    HttpStatus.CONFLICT,
+  );
 }
 
 function asIso(value: string | Date) {

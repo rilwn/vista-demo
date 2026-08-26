@@ -1,6 +1,6 @@
 # Vista Integrated Information System — Remaining Implementation Plan
 
-Status date: 2026-08-25
+Status date: 2026-08-26
 Project: `BG16RFPR001-1.012-1324-C01`
 
 [`AGENTS.md`](AGENTS.md) is authoritative. This file contains only unfinished
@@ -62,7 +62,7 @@ enabled; every requirement remains traceable.
   mapping.
 - Complete the approved production storage, encryption, retention, malware-scan,
   and quarantine policy, plus managed attachments for financial documents, CRM
-  interactions, and warranty records.
+  interactions, and other remaining approved record types.
 - Deliver approved email and backup-SMS adapters, notification preferences,
   retry/reconciliation behavior, monitoring, alert hooks, and operational
   runbooks.
@@ -127,13 +127,7 @@ procurement-to-accounting and quotation-to-payment scenarios pass end to end.
 
 **Remaining**
 
-- Link completed Service work to payment-document issuance and complete the full
-  supplier, sale, service, return, and repair serial lifecycle.
-- Deliver the full technician calendar with capacity, overlap, and workload
-  controls, and apply those constraints to the existing mixed delivery and
-  Service route planner.
-- Deliver warranty monitoring, remaining-period and claim tracking, expiry
-  reminders, inspection scheduling, and subscription-generated service visits.
+- Complete the full supplier, sale, service, return, and repair serial lifecycle.
 - Deliver CRM ticket correlation and SLA notifications, reverse-logistics
   integration, Service reports/exports, and remaining technician mobile and
   accessibility acceptance.

@@ -4,6 +4,7 @@ import { AuditModule } from '../audit/audit.module.js';
 import { DatabaseModule } from '../database/database.module.js';
 import { FinanceModule } from '../finance/finance.module.js';
 import { SalesModule } from '../sales/sales.module.js';
+import { ServiceOperationsModule } from '../service/service.module.js';
 import { ObjectStorageModule } from '../storage/object-storage.module.js';
 import { FinanceReportExportDispatcherService } from './finance-report-export-dispatcher.service.js';
 import { FinanceReportExportsController } from './finance-report-exports.controller.js';
@@ -18,7 +19,14 @@ import { RecurringBillingScheduleService } from './recurring-billing-schedule.se
 @Module({
   controllers: [FinanceReportExportsController, JobsController],
   exports: [JobHandlerRegistry, JobQueueService],
-  imports: [AuditModule, DatabaseModule, FinanceModule, ObjectStorageModule, SalesModule],
+  imports: [
+    AuditModule,
+    DatabaseModule,
+    FinanceModule,
+    ObjectStorageModule,
+    SalesModule,
+    ServiceOperationsModule,
+  ],
   providers: [
     FinanceReportExportDispatcherService,
     FinanceReportExportsService,

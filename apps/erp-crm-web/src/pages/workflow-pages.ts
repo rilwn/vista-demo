@@ -643,6 +643,30 @@ export const workflowPages: WorkflowPageDefinition[] = [
       },
     ],
   ),
+  service(
+    'care',
+    'Warranty & inspections',
+    'Monitor warranty coverage, handle claims, and keep required device inspections on schedule.',
+    'Open register',
+    [
+      {
+        title: 'Warranty care',
+        items: [
+          'Remaining warranty period',
+          'Claim status and supporting files',
+          'Decision history',
+        ],
+      },
+      {
+        title: 'Inspection planning',
+        items: [
+          'Technical and metrological plans',
+          'Upcoming reminders',
+          'Completed inspection history',
+        ],
+      },
+    ],
+  ),
   logistics(
     'deliveries',
     'Deliveries',

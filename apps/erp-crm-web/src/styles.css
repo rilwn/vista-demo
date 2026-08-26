@@ -2145,6 +2145,39 @@ body {
   font-size: 0.74rem;
 }
 
+.financial-line-card.is-source-locked > header > div {
+  display: grid;
+  min-width: 0;
+  gap: 0.22rem;
+}
+
+.financial-line-card.is-source-locked > header > div span,
+.financial-source-lock {
+  color: var(--vista-muted);
+  font-size: 0.7rem;
+}
+
+.financial-source-lock {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.28rem 0.48rem;
+  border-radius: 999px;
+  color: var(--vista-success-strong);
+  background: color-mix(in srgb, var(--vista-success) 11%, var(--vista-surface));
+  font-weight: 720;
+}
+
+.financial-service-source {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.financial-line-grid.is-tax-review {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .financial-line-card > header button {
   display: grid;
   width: 1.8rem;
@@ -2469,6 +2502,11 @@ body {
 
   .financial-preview-total {
     align-items: flex-end;
+    flex-direction: column;
+  }
+
+  .financial-line-card.is-source-locked > header {
+    align-items: flex-start;
     flex-direction: column;
   }
 }
@@ -14257,6 +14295,740 @@ select.vista-field-input {
   }
 }
 
+/* Service care panel layout contract. */
+.service-care-drawer.security-drawer.is-wide {
+  width: min(100%, 46rem);
+  max-width: min(100%, 46rem);
+}
+
+.service-care-drawer > .service-drawer-header {
+  padding: 1rem clamp(1rem, 3vw, 1.5rem) 1.15rem;
+}
+
+.service-care-drawer > .security-drawer-body {
+  --drawer-body-inline: clamp(1rem, 3vw, 1.5rem);
+
+  display: block;
+  padding-top: 0 !important;
+}
+
+.service-care-drawer .service-form,
+.service-care-drawer .service-claim-preview,
+.service-care-drawer .service-inspection-preview {
+  display: grid;
+  min-width: 0;
+  align-content: start;
+  gap: 0;
+  padding: 0;
+}
+
+.service-care-drawer .service-form-section,
+.service-care-drawer .service-preview-section {
+  display: grid;
+  min-width: 0;
+  gap: 1rem;
+  padding: 1.25rem 0;
+  border-bottom: 1px solid var(--vista-line);
+}
+
+.service-care-drawer .service-form-section > header {
+  display: grid;
+  grid-template-columns: 1.7rem minmax(0, 1fr);
+  align-items: start;
+  justify-content: start;
+  gap: 0.72rem;
+}
+
+.service-care-drawer .service-form-section > header > span {
+  grid-column: 1;
+}
+
+.service-care-drawer .service-form-section > header > div {
+  display: grid;
+  grid-column: 2;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.service-care-drawer .service-form-section > header h3,
+.service-care-drawer .service-form-section > header p {
+  margin: 0;
+}
+
+.service-care-drawer .service-field,
+.service-care-drawer .service-form-grid,
+.service-care-drawer .vista-search-select-shell {
+  min-width: 0;
+}
+
+.service-care-drawer .service-field > span {
+  color: var(--vista-muted);
+  font-size: 0.72rem;
+  font-weight: 720;
+}
+
+.service-care-drawer .service-field > input,
+.service-care-drawer .service-field > select,
+.service-care-drawer .service-field > textarea,
+.service-care-drawer .vista-search-select-shell,
+.service-care-drawer .vista-search-select-shell > input.vista-search-select {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+}
+
+.service-care-drawer .service-field > textarea {
+  min-height: 7rem;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.service-care-drawer .service-selected-context {
+  min-width: 0;
+  padding: 0.85rem;
+  background: var(--vista-surface-muted);
+}
+
+.service-care-drawer .service-selected-context strong,
+.service-care-drawer .service-selected-context small {
+  overflow-wrap: anywhere;
+}
+
+.service-care-drawer .service-care-hero {
+  min-height: 0;
+  margin-top: 1.15rem;
+  padding: 1rem;
+  background: var(--vista-surface-muted);
+}
+
+.service-care-drawer .service-care-hero > div:first-child {
+  min-width: 0;
+}
+
+.service-care-drawer .service-care-hero h3,
+.service-care-drawer .service-care-hero p {
+  overflow-wrap: anywhere;
+}
+
+.service-care-drawer .service-preview-section > header {
+  align-items: start;
+}
+
+.service-care-drawer .service-preview-section > header > span {
+  display: inline-flex;
+  min-width: 1.7rem;
+  min-height: 1.7rem;
+  align-items: center;
+  justify-content: center;
+  padding: 0.2rem 0.45rem;
+  border-radius: 999px;
+  color: var(--vista-muted);
+  background: var(--vista-surface-muted);
+  font-size: 0.7rem;
+  font-weight: 740;
+}
+
+.service-care-drawer .service-decision-note {
+  border-radius: 0 0.65rem 0.65rem 0;
+}
+
+.service-care-drawer .service-claim-upload {
+  grid-template-columns: minmax(0, 1fr) auto;
+  min-width: 0;
+  padding: 0.75rem;
+  background: var(--vista-surface-muted);
+}
+
+.service-care-drawer .service-claim-upload input[type='file'] {
+  width: 100%;
+  min-width: 0;
+  color: var(--vista-muted);
+  font-size: 0.72rem;
+}
+
+.service-care-drawer .service-claim-upload input[type='file']::file-selector-button {
+  margin-right: 0.65rem;
+  padding: 0.48rem 0.65rem;
+  border: 1px solid var(--vista-line);
+  border-radius: 0.5rem;
+  color: var(--vista-ink);
+  background: var(--vista-surface);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+}
+
+.service-care-drawer .service-claim-decision {
+  margin: 1.15rem 0 0;
+}
+
+.service-care-drawer .service-care-facts {
+  margin-top: 1rem;
+  background: var(--vista-surface);
+}
+
+.service-care-drawer .service-care-facts > div {
+  min-height: 5.25rem;
+  align-content: center;
+}
+
+.service-inspection-record-action {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 1rem;
+  padding: 1rem;
+  border: 1px solid var(--vista-line);
+  border-radius: 0.85rem;
+  background: var(--vista-surface-muted);
+}
+
+.service-inspection-record-action > div {
+  display: grid;
+  min-width: 0;
+  gap: 0.25rem;
+}
+
+.service-inspection-record-action h3,
+.service-inspection-record-action p {
+  margin: 0;
+}
+
+.service-inspection-record-action h3 {
+  color: var(--vista-ink);
+  font-size: 0.86rem;
+}
+
+.service-inspection-record-action p {
+  max-width: 25rem;
+  color: var(--vista-muted);
+  font-size: 0.74rem;
+  line-height: 1.45;
+}
+
+.service-inspection-record-action > .vista-button {
+  width: auto;
+  min-height: 2.55rem;
+  flex: 0 0 auto;
+}
+
+.service-care-drawer .service-inspection-completion {
+  margin-top: 1rem;
+  padding: 0 1rem;
+  border: 1px solid var(--vista-line);
+  border-radius: 0.85rem;
+  background: var(--vista-surface-muted);
+}
+
+.service-care-drawer .service-inspection-completion .service-form-section {
+  border-bottom: 0;
+}
+
+.service-care-drawer .service-drawer-actions {
+  min-height: 4.35rem;
+}
+
+.service-inspection-grid > button:only-child {
+  grid-column: 1 / -1;
+  border-right: 0;
+}
+
+@media (max-width: 700px) {
+  .service-care-drawer.security-drawer.is-wide {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .service-inspection-record-action {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .service-inspection-record-action > .vista-button {
+    width: 100%;
+  }
+}
+
+@media (max-width: 560px) {
+  .service-care-drawer .service-form-grid,
+  .service-care-drawer .service-care-facts {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .service-care-drawer .service-claim-upload,
+  .service-care-drawer .service-claim-file {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .service-care-drawer .service-care-hero {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .service-care-drawer .service-due-date {
+    text-align: left;
+  }
+}
+
+/* Service care: warranty claims and required inspections */
+.service-care-workspace {
+  display: grid;
+  gap: 1rem;
+}
+
+.service-care-section {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 1rem;
+  box-shadow: var(--shadow-xs);
+  overflow: hidden;
+}
+
+.service-care-section > .service-view-toolbar {
+  margin: 0;
+  padding: 1rem 1.15rem;
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.service-care-section > .service-empty-inline {
+  margin: 0;
+  padding: 1.6rem 1.15rem;
+}
+
+.service-care-register {
+  display: grid;
+}
+
+.service-care-register > button {
+  display: grid;
+  grid-template-columns:
+    2.2rem minmax(10rem, 1fr) minmax(10rem, 1fr) minmax(8rem, 0.7fr)
+    auto 1.2rem;
+  align-items: center;
+  gap: 0.9rem;
+  min-width: 0;
+  padding: 0.9rem 1.15rem;
+  border: 0;
+  border-bottom: 1px solid var(--color-border-subtle);
+  color: var(--color-text);
+  background: var(--color-surface);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  transition: background 140ms ease;
+}
+
+.service-care-register > button:last-child {
+  border-bottom: 0;
+}
+
+.service-care-register > button:hover {
+  background: var(--color-surface-subtle);
+}
+
+.service-care-register > button > span:not(.service-care-record-mark, .service-care-status) {
+  display: grid;
+  min-width: 0;
+  gap: 0.16rem;
+}
+
+.service-care-register strong,
+.service-care-register small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.service-care-register small {
+  color: var(--color-text-muted);
+  font-size: 0.76rem;
+}
+
+.service-care-record-mark {
+  display: grid;
+  width: 2.2rem;
+  height: 2.2rem;
+  place-items: center;
+  border-radius: 0.7rem;
+  color: var(--color-primary-700);
+  background: var(--color-primary-soft);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.service-care-status {
+  width: max-content;
+  padding: 0.3rem 0.55rem;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 999px;
+  color: var(--color-text-muted);
+  background: var(--color-surface-subtle);
+  font-size: 0.7rem;
+  font-weight: 750;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.service-care-status.is-active,
+.service-care-status.is-approved,
+.service-care-status.is-closed {
+  color: var(--color-success);
+  border-color: color-mix(in srgb, var(--color-success) 28%, var(--color-border-subtle));
+  background: color-mix(in srgb, var(--color-success-soft) 72%, var(--color-surface));
+}
+
+.service-care-status.is-received,
+.service-care-status.is-under_review {
+  color: var(--color-warning);
+  border-color: color-mix(in srgb, var(--color-warning) 30%, var(--color-border-subtle));
+  background: color-mix(in srgb, var(--color-warning-soft) 65%, var(--color-surface));
+}
+
+.service-care-status.is-expired,
+.service-care-status.is-rejected {
+  color: var(--color-danger);
+  border-color: color-mix(in srgb, var(--color-danger) 27%, var(--color-border-subtle));
+  background: color-mix(in srgb, var(--color-danger) 9%, var(--color-surface));
+}
+
+.service-inspection-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.service-inspection-grid > button {
+  display: grid;
+  grid-template-columns: 2.5rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.85rem;
+  min-width: 0;
+  padding: 1rem 1.15rem;
+  border: 0;
+  border-right: 1px solid var(--color-border-subtle);
+  border-bottom: 1px solid var(--color-border-subtle);
+  color: var(--color-text);
+  background: var(--color-surface);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.service-inspection-grid > button:nth-child(even) {
+  border-right: 0;
+}
+
+.service-inspection-grid > button:hover {
+  background: var(--color-surface-subtle);
+}
+
+.service-inspection-grid > button > span:not(.service-inspection-icon) {
+  display: grid;
+  min-width: 0;
+  gap: 0.16rem;
+}
+
+.service-inspection-grid > button > span:last-child {
+  text-align: right;
+}
+
+.service-inspection-grid small,
+.service-inspection-grid em {
+  color: var(--color-text-muted);
+  font-size: 0.72rem;
+  font-style: normal;
+}
+
+.service-inspection-grid strong,
+.service-inspection-grid em {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.service-inspection-icon {
+  display: grid;
+  width: 2.5rem;
+  height: 2.5rem;
+  place-items: center;
+  border-radius: 0.75rem;
+  color: var(--color-primary-700);
+  background: var(--color-primary-soft);
+}
+
+.service-inspection-icon.is-due {
+  color: var(--color-warning);
+  background: var(--color-warning-soft);
+}
+
+.service-warranty-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+  padding: 1rem 1.15rem;
+}
+
+.service-warranty-grid article {
+  display: grid;
+  gap: 0.75rem;
+  min-width: 0;
+  padding: 0.9rem;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 0.85rem;
+  background: var(--color-surface-subtle);
+}
+
+.service-warranty-grid article > div {
+  display: grid;
+  min-width: 0;
+  gap: 0.14rem;
+}
+
+.service-warranty-grid article > div:first-child span,
+.service-warranty-grid article > span,
+.service-warranty-grid article small {
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+}
+
+.service-selected-context {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.8rem;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 0.8rem;
+  background: var(--color-surface-subtle);
+}
+
+.service-selected-context > span:not(.service-care-status) {
+  display: grid;
+  gap: 0.1rem;
+}
+
+.service-selected-context small {
+  color: var(--color-text-muted);
+}
+
+.service-claim-preview,
+.service-inspection-preview {
+  display: grid;
+  gap: 1rem;
+  padding-bottom: 1rem;
+}
+
+.service-care-hero {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 0.9rem;
+  background: linear-gradient(145deg, var(--color-surface-subtle), var(--color-surface));
+}
+
+.service-care-hero > div:first-child {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.service-care-hero span,
+.service-care-hero p,
+.service-due-date small {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: 0.76rem;
+}
+
+.service-care-hero h3 {
+  margin: 0;
+}
+
+.service-care-description {
+  margin: 0;
+  color: var(--color-text);
+  line-height: 1.65;
+  white-space: pre-wrap;
+}
+
+.service-decision-note {
+  margin-top: 0.8rem;
+  padding: 0.8rem;
+  border-left: 3px solid var(--color-primary-700);
+  background: var(--color-primary-soft);
+}
+
+.service-decision-note p {
+  margin: 0.3rem 0 0;
+}
+
+.service-claim-files {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.service-claim-file {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 0.7rem;
+  background: var(--color-surface-subtle);
+}
+
+.service-claim-file > span {
+  display: grid;
+  min-width: 0;
+  gap: 0.12rem;
+}
+
+.service-claim-file strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.service-claim-file small {
+  color: var(--color-text-muted);
+}
+
+.service-claim-upload {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.7rem;
+  border: 1px dashed var(--color-border);
+  border-radius: 0.75rem;
+}
+
+.service-claim-upload input {
+  min-width: 0;
+}
+
+.service-claim-decision {
+  display: grid;
+  gap: 0.8rem;
+  padding: 1rem;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 0.9rem;
+  background: var(--color-surface-subtle);
+}
+
+.service-claim-decision h3,
+.service-claim-decision p {
+  margin: 0;
+}
+
+.service-claim-decision p {
+  margin-top: 0.22rem;
+  color: var(--color-text-muted);
+}
+
+.service-claim-decision textarea {
+  width: 100%;
+  resize: vertical;
+}
+
+.service-care-facts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  overflow: hidden;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 0.85rem;
+}
+
+.service-care-facts > div {
+  display: grid;
+  gap: 0.2rem;
+  padding: 0.8rem;
+  border-right: 1px solid var(--color-border-subtle);
+}
+
+.service-care-facts > div:last-child {
+  border-right: 0;
+}
+
+.service-care-facts span {
+  color: var(--color-text-muted);
+  font-size: 0.72rem;
+}
+
+.service-due-date {
+  display: grid;
+  gap: 0.1rem;
+  text-align: right;
+}
+
+@media (max-width: 960px) {
+  .service-care-register > button {
+    grid-template-columns: 2.2rem minmax(0, 1fr) auto 1.2rem;
+  }
+
+  .service-care-register > button > span:nth-child(3),
+  .service-care-register > button > span:nth-child(4) {
+    display: none;
+  }
+
+  .service-warranty-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 700px) {
+  .service-inspection-grid,
+  .service-warranty-grid,
+  .service-care-facts {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .service-inspection-grid > button {
+    border-right: 0;
+  }
+
+  .service-care-facts > div {
+    border-right: 0;
+    border-bottom: 1px solid var(--color-border-subtle);
+  }
+
+  .service-care-facts > div:last-child {
+    border-bottom: 0;
+  }
+}
+
+@media (max-width: 520px) {
+  .service-care-register > button {
+    grid-template-columns: 2.2rem minmax(0, 1fr) 1.2rem;
+  }
+
+  .service-care-register > button > .service-care-status {
+    display: none;
+  }
+
+  .service-inspection-grid > button {
+    grid-template-columns: 2.5rem minmax(0, 1fr);
+  }
+
+  .service-inspection-grid > button > span:last-child {
+    grid-column: 2;
+    text-align: left;
+  }
+
+  .service-claim-upload,
+  .service-claim-file {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .service-claim-file > svg {
+    display: none;
+  }
+}
+
 /* Finance collection workspace */
 .finance-workspace {
   align-content: start;
@@ -15406,80 +16178,542 @@ select.vista-field-input {
   padding: 0.35rem 0.58rem;
 }
 
-.service-schedule-grid {
+.service-calendar-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.service-calendar-actions > button:not(.vista-button) {
+  display: inline-flex;
+  width: 2.25rem;
+  height: 2.25rem;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--vista-line-strong);
+  border-radius: 0.58rem;
+  color: var(--vista-ink);
+  background: var(--vista-surface);
+  cursor: pointer;
+}
+
+.service-calendar-actions > button:not(.vista-button):first-child .app-icon {
+  transform: rotate(180deg);
+}
+
+.service-calendar-actions > button:not(.vista-button):hover {
+  border-color: color-mix(in srgb, var(--vista-accent) 45%, var(--vista-line));
+  color: var(--vista-accent-strong);
+  background: var(--vista-accent-soft);
+}
+
+.service-calendar-period {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.75rem 1.2rem;
+  border-bottom: 1px solid var(--vista-line);
+  background: color-mix(in srgb, var(--vista-surface-muted) 78%, var(--vista-surface));
+}
+
+.service-calendar-period > div {
   display: grid;
-  gap: 0.8rem;
+  gap: 0.1rem;
+}
+
+.service-calendar-period > div span {
+  color: var(--vista-muted);
+  font-size: 0.63rem;
+  font-weight: 760;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.service-calendar-period > div strong {
+  color: var(--vista-ink);
+  font-size: 0.8rem;
+}
+
+.service-schedule-panel > .vista-alert,
+.service-calendar-message {
+  margin: 0.9rem 1rem 0;
+}
+
+.service-calendar-message {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+}
+
+.service-calendar-message .vista-alert {
+  flex: 1;
+}
+
+.service-workload-strip {
+  display: grid;
+  gap: 0.72rem;
   overflow-x: auto;
   padding: 1rem;
   background: var(--vista-surface-muted);
-  grid-auto-columns: minmax(12.5rem, 1fr);
+  grid-auto-columns: minmax(16rem, 20rem);
   grid-auto-flow: column;
+  scrollbar-width: thin;
 }
 
-.service-day-column {
-  overflow: hidden;
+.service-workload-card {
+  display: grid;
+  gap: 0.72rem;
+  padding: 0.88rem;
   border: 1px solid var(--vista-line);
-  border-radius: 0.8rem;
+  border-radius: 0.82rem;
   background: var(--vista-surface);
+  box-shadow: 0 0.3rem 1rem rgb(22 45 34 / 4%);
 }
 
-.service-day-column > header {
+.service-workload-card > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.7rem;
+}
+
+.service-workload-card > header > div {
+  display: grid;
+  min-width: 0;
+  gap: 0.16rem;
+}
+
+.service-workload-card > header strong {
+  overflow: hidden;
+  color: var(--vista-ink);
+  font-size: 0.8rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.service-workload-card > header > div span {
+  overflow: hidden;
+  color: var(--vista-muted);
+  font-size: 0.68rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.service-workload-card > header > span {
+  flex: 0 0 auto;
+  padding: 0.2rem 0.42rem;
+  border-radius: 999px;
+  font-size: 0.62rem;
+  font-weight: 740;
+}
+
+.service-workload-card > header > .is-ready {
+  color: var(--vista-accent-strong);
+  background: var(--vista-accent-soft);
+}
+
+.service-workload-card > header > .is-unconfigured {
+  color: var(--vista-warning-strong, #7c4a03);
+  background: var(--vista-warning-soft, #fff3d7);
+}
+
+.service-workload-meter {
+  height: 0.3rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--vista-line-soft);
+}
+
+.service-workload-meter > span {
+  display: block;
+  min-width: 0.22rem;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--vista-accent);
+}
+
+.service-workload-card dl {
+  display: grid;
+  margin: 0;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.service-workload-card dl > div {
+  display: grid;
+  gap: 0.14rem;
+}
+
+.service-workload-card dl > div + div {
+  padding-left: 0.62rem;
+  border-left: 1px solid var(--vista-line);
+}
+
+.service-workload-card dt {
+  color: var(--vista-muted);
+  font-size: 0.62rem;
+}
+
+.service-workload-card dd {
+  margin: 0;
+  color: var(--vista-ink);
+  font-size: 0.75rem;
+  font-weight: 760;
+}
+
+.service-manage-hours {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
-  padding: 0.75rem 0.82rem;
-  border-bottom: 1px solid var(--vista-line);
-}
-
-.service-day-column > header strong {
-  color: var(--vista-ink);
-  font-size: 0.78rem;
-}
-
-.service-day-column > header span {
-  color: var(--vista-muted);
-  font-size: 0.69rem;
-}
-
-.service-day-column > div {
-  display: grid;
-  gap: 0.45rem;
-  padding: 0.55rem;
-}
-
-.service-day-column button {
-  display: grid;
-  gap: 0.22rem;
-  border: 1px solid transparent;
-  border-radius: 0.62rem;
-  color: inherit;
-  background: var(--vista-surface-muted);
+  padding: 0.52rem 0 0;
+  border: 0;
+  border-top: 1px solid var(--vista-line-soft);
+  color: var(--vista-accent-strong);
+  background: transparent;
   cursor: pointer;
   font: inherit;
-  padding: 0.65rem;
+  font-size: 0.68rem;
+  font-weight: 730;
   text-align: left;
 }
 
-.service-day-column button:hover {
-  border-color: color-mix(in srgb, var(--vista-accent) 30%, var(--vista-line));
+.service-resource-calendar-wrap {
+  overflow-x: auto;
+  border-top: 1px solid var(--vista-line);
+  border-bottom: 1px solid var(--vista-line);
+  scrollbar-width: thin;
+}
+
+.service-resource-calendar {
+  display: grid;
+  min-width: 85rem;
+  background: var(--vista-line);
+  gap: 1px;
+  grid-template-columns: 12rem repeat(7, minmax(10.35rem, 1fr));
+}
+
+.service-resource-corner,
+.service-resource-calendar > header,
+.service-resource-person,
+.service-resource-day {
+  background: var(--vista-surface);
+}
+
+.service-resource-corner {
+  display: flex;
+  align-items: center;
+  padding: 0.72rem 0.9rem;
+  color: var(--vista-muted);
+  background: var(--vista-surface-muted);
+  font-size: 0.64rem;
+  font-weight: 760;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.service-resource-calendar > header {
+  display: flex;
+  align-items: baseline;
+  gap: 0.28rem;
+  padding: 0.68rem 0.72rem;
+  background: var(--vista-surface-muted);
+}
+
+.service-resource-calendar > header.is-today {
+  color: var(--vista-accent-strong);
   background: var(--vista-accent-soft);
 }
 
-.service-day-column button span,
-.service-day-column button small,
-.service-day-column button em {
+.service-resource-calendar > header span,
+.service-resource-calendar > header small {
   color: var(--vista-muted);
-  font-size: 0.7rem;
-  font-style: normal;
+  font-size: 0.63rem;
 }
 
-.service-day-column button strong {
-  overflow: hidden;
+.service-resource-calendar > header strong {
   color: var(--vista-ink);
-  font-size: 0.78rem;
+  font-size: 0.88rem;
+}
+
+.service-resource-person {
+  display: flex;
+  min-height: 8.8rem;
+  align-items: flex-start;
+  gap: 0.58rem;
+  padding: 0.82rem;
+}
+
+.service-resource-person > span {
+  display: inline-flex;
+  width: 1.9rem;
+  height: 1.9rem;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.55rem;
+  color: var(--vista-accent-strong);
+  background: var(--vista-accent-soft);
+  font-size: 0.66rem;
+  font-weight: 780;
+}
+
+.service-resource-person > div {
+  display: grid;
+  min-width: 0;
+  gap: 0.18rem;
+}
+
+.service-resource-person strong,
+.service-resource-person small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.service-resource-person strong {
+  color: var(--vista-ink);
+  font-size: 0.72rem;
+}
+
+.service-resource-person small {
+  color: var(--vista-muted);
+  font-size: 0.62rem;
+}
+
+.service-resource-day {
+  min-height: 8.8rem;
+  padding: 0.45rem;
+}
+
+.service-resource-day.is-unavailable {
+  background: repeating-linear-gradient(
+    -45deg,
+    var(--vista-surface-muted),
+    var(--vista-surface-muted) 0.42rem,
+    color-mix(in srgb, var(--vista-line-soft) 55%, var(--vista-surface)) 0.42rem,
+    color-mix(in srgb, var(--vista-line-soft) 55%, var(--vista-surface)) 0.84rem
+  );
+}
+
+.service-day-capacity {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.35rem;
+  min-height: 1.3rem;
+  padding: 0 0.14rem 0.35rem;
+}
+
+.service-day-capacity span,
+.service-day-capacity small {
+  color: var(--vista-muted);
+  font-size: 0.58rem;
+}
+
+.service-day-capacity span {
+  font-weight: 720;
+}
+
+.service-day-visits {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.service-day-visits button {
+  display: grid;
+  min-width: 0;
+  gap: 0.15rem;
+  padding: 0.48rem 0.52rem;
+  border: 1px solid color-mix(in srgb, var(--vista-accent) 20%, var(--vista-line));
+  border-left: 0.2rem solid var(--vista-accent);
+  border-radius: 0.48rem;
+  color: inherit;
+  background: color-mix(in srgb, var(--vista-accent-soft) 68%, var(--vista-surface));
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.service-day-visits button.is-critical,
+.service-day-visits button.is-high {
+  border-left-color: var(--vista-danger, #b42318);
+}
+
+.service-day-visits button:hover {
+  border-color: color-mix(in srgb, var(--vista-accent) 48%, var(--vista-line));
+  box-shadow: 0 0.3rem 0.8rem rgb(19 44 32 / 8%);
+}
+
+.service-day-visits button span,
+.service-day-visits button small,
+.service-day-visits button em {
+  overflow: hidden;
+  color: var(--vista-muted);
+  font-size: 0.58rem;
+  font-style: normal;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.service-day-visits button span {
+  color: var(--vista-accent-strong);
+  font-weight: 740;
+}
+
+.service-day-visits button strong {
+  overflow: hidden;
+  color: var(--vista-ink);
+  font-size: 0.67rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.service-calendar-empty-note {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.9rem 1rem;
+  color: var(--vista-muted);
+  background: var(--vista-surface-muted);
+}
+
+.service-calendar-empty-note > div {
+  display: grid;
+  gap: 0.12rem;
+}
+
+.service-calendar-empty-note strong {
+  color: var(--vista-ink);
+  font-size: 0.75rem;
+}
+
+.service-calendar-empty-note span {
+  font-size: 0.68rem;
+}
+
+.service-availability-form {
+  display: grid;
+  gap: 1rem;
+}
+
+.service-availability-intro {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.9rem;
+  border: 1px solid var(--vista-line);
+  border-radius: 0.78rem;
+  background: var(--vista-surface-muted);
+}
+
+.service-availability-intro > div {
+  display: grid;
+  gap: 0.22rem;
+}
+
+.service-availability-intro span,
+.service-availability-help strong {
+  color: var(--vista-ink);
+  font-size: 0.78rem;
+  font-weight: 760;
+}
+
+.service-availability-intro p,
+.service-availability-help p {
+  max-width: 31rem;
+  margin: 0;
+  color: var(--vista-muted);
+  font-size: 0.7rem;
+  line-height: 1.5;
+}
+
+.service-availability-table {
+  overflow: hidden;
+  border: 1px solid var(--vista-line);
+  border-radius: 0.82rem;
+}
+
+.service-availability-head,
+.service-availability-row {
+  display: grid;
+  align-items: center;
+  gap: 0.55rem;
+  grid-template-columns:
+    minmax(7rem, 1.25fr) repeat(2, minmax(5.6rem, 0.85fr)) minmax(7rem, 1fr)
+    minmax(5.5rem, 0.72fr);
+  padding: 0.62rem 0.7rem;
+}
+
+.service-availability-head {
+  color: var(--vista-muted);
+  background: var(--vista-surface-muted);
+  font-size: 0.58rem;
+  font-weight: 760;
+  letter-spacing: 0.035em;
+  text-transform: uppercase;
+}
+
+.service-availability-row + .service-availability-row {
+  border-top: 1px solid var(--vista-line-soft);
+}
+
+.service-availability-row:not(.is-enabled) {
+  background: color-mix(in srgb, var(--vista-surface-muted) 68%, var(--vista-surface));
+}
+
+.service-availability-row > label:not(.service-day-toggle) {
+  display: grid;
+  gap: 0.24rem;
+}
+
+.service-availability-row > label:not(.service-day-toggle) > span {
+  display: none;
+}
+
+.service-availability-row input[type='time'],
+.service-availability-row input[type='number'] {
+  width: 100%;
+  min-width: 0;
+  min-height: 2.28rem;
+  padding: 0.42rem 0.48rem;
+  border: 1px solid var(--vista-line-strong);
+  border-radius: 0.5rem;
+  color: var(--vista-ink);
+  background: var(--vista-surface);
+  font: inherit;
+  font-size: 0.68rem;
+}
+
+.service-availability-row input:disabled {
+  color: color-mix(in srgb, var(--vista-muted) 65%, transparent);
+  background: var(--vista-surface-muted);
+  cursor: not-allowed;
+}
+
+.service-day-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  color: var(--vista-ink);
+  font-size: 0.7rem;
+  font-weight: 730;
+  cursor: pointer;
+}
+
+.service-day-toggle input {
+  width: 1rem;
+  height: 1rem;
+  accent-color: var(--vista-accent);
+}
+
+.service-availability-help {
+  display: grid;
+  gap: 0.28rem;
+  padding: 0.78rem 0.85rem;
+  border-left: 0.2rem solid var(--vista-accent);
+  border-radius: 0.18rem 0.62rem 0.62rem 0.18rem;
+  background: var(--vista-accent-soft);
 }
 
 .service-device-picker label {
@@ -16028,6 +17262,34 @@ select.vista-field-input {
   color: var(--vista-ink);
 }
 
+.service-finance-handoff {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.9rem;
+  border: 1px solid color-mix(in srgb, var(--vista-accent) 24%, var(--vista-line));
+  border-radius: 0.8rem;
+  background: color-mix(in srgb, var(--vista-accent-soft) 45%, var(--vista-surface));
+}
+
+.service-finance-handoff > div {
+  display: grid;
+  min-width: 0;
+  gap: 0.2rem;
+}
+
+.service-finance-handoff span,
+.service-finance-handoff small {
+  color: var(--vista-muted);
+  font-size: 0.7rem;
+}
+
+.service-finance-handoff strong {
+  color: var(--vista-ink);
+  font-size: 0.82rem;
+}
+
 .service-time-entries,
 .service-part-editor {
   display: grid;
@@ -16157,6 +17419,65 @@ select.vista-field-input {
     flex: 1;
   }
 
+  .service-calendar-actions {
+    width: 100%;
+  }
+
+  .service-calendar-actions .vista-button {
+    flex: 1;
+  }
+
+  .service-calendar-period {
+    align-items: flex-start;
+  }
+
+  .service-calendar-message,
+  .service-availability-intro {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .service-availability-intro .vista-button {
+    width: 100%;
+  }
+
+  .service-availability-head {
+    display: none;
+  }
+
+  .service-availability-table {
+    display: grid;
+    gap: 0.7rem;
+    padding: 0.7rem;
+    border: 0;
+    border-radius: 0;
+    background: var(--vista-surface-muted);
+  }
+
+  .service-availability-row {
+    gap: 0.65rem;
+    padding: 0.75rem;
+    border: 1px solid var(--vista-line);
+    border-radius: 0.72rem;
+    background: var(--vista-surface);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .service-availability-row + .service-availability-row {
+    border-top: 1px solid var(--vista-line);
+  }
+
+  .service-day-toggle {
+    grid-column: 1 / -1;
+  }
+
+  .service-availability-row > label:not(.service-day-toggle) > span {
+    display: block;
+    color: var(--vista-muted);
+    font-size: 0.59rem;
+    font-weight: 720;
+  }
+
   .service-summary {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -16224,7 +17545,8 @@ select.vista-field-input {
   .service-preview-hero,
   .service-photo-upload > div,
   .service-drawer-actions,
-  .service-inline-actions {
+  .service-inline-actions,
+  .service-finance-handoff {
     align-items: stretch;
     flex-direction: column;
   }
@@ -16232,7 +17554,8 @@ select.vista-field-input {
   .service-preview-hero .vista-button,
   .service-photo-upload .vista-button,
   .service-drawer-actions .vista-button,
-  .service-inline-actions .vista-button {
+  .service-inline-actions .vista-button,
+  .service-finance-handoff .vista-button {
     width: 100%;
   }
 
@@ -18508,5 +19831,28 @@ select.vista-field-input {
   .supplier-invoice-preview-drawer .supplier-invoice-preview-hero > dl > div + div,
   .supplier-invoice-preview-drawer .supplier-invoice-line-money > div + div {
     border-top: 1px solid var(--vista-line);
+  }
+}
+
+/* Small-screen module navigation must keep every Service destination visible. */
+@media (max-width: 560px) {
+  .service-tabs {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    overflow: visible;
+  }
+
+  .service-tabs a {
+    display: flex;
+    min-height: 2.4rem;
+    align-items: center;
+    justify-content: center;
+    padding: 0.5rem;
+    text-align: center;
+    white-space: normal;
+  }
+
+  .service-tabs a:last-child {
+    grid-column: 1 / -1;
   }
 }

@@ -121,9 +121,8 @@ function pageForPath(
   if (pathname === '/modules/erp.finance/registers') {
     return hasPermission('erp.finance') ? <FinanceReportsPage /> : <NotFoundPage />;
   }
-  const servicePath = /^\/modules\/erp\.service\/(requests|work-orders|schedule|devices)$/u.exec(
-    pathname,
-  );
+  const servicePath =
+    /^\/modules\/erp\.service\/(requests|work-orders|schedule|devices|care)$/u.exec(pathname);
   if (servicePath?.[1]) {
     return hasPermission('erp.service') ? (
       <ServiceOperationsPage view={servicePath[1] as ServiceOperationsView} />

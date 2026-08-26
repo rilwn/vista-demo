@@ -473,7 +473,8 @@ invoice.
    register context. An unissued draft can be cancelled with a reason.
 
 The displayed `DINV`, `DPRO`, `DCN`, or `DDN` value is a concurrency-safe
-internal reference, not an official invoice number. Legal issuance, automatic
+internal reference. Its middle scope code separates location, register, and
+operator counters; it is not an official invoice number. Legal issuance, automatic
 BNB retrieval, accounting/VAT posting, fiscal/POS linkage, PDF/signature output,
 and email delivery are intentionally unavailable pending the approved finance,
 numbering, and document configuration.
@@ -611,6 +612,10 @@ Use the visible application navigation:
    issue can be recorded and later resumed without losing the activity history.
 3. Open **Routes** and select **Plan route**. Choose the date and employee, then
    add delivery stops and any scheduled Service visits in their planned order.
+   Selecting a Service visit uses its assigned technician, appointment date,
+   start, and duration. These fields stay locked to the Service schedule. For a
+   technician route, delivery stops must also fit the saved working hours,
+   remaining daily minutes, visit limit, and existing appointments.
 4. Open **Returns** and select **Register return**. Choose the original shipment,
    item, quantity, and shipped serials where required. Choose **Return to stock**
    or **Send to Service**, select the destination warehouse, and enter the reason.
@@ -632,25 +637,32 @@ parts. Test the complete Service core with two browser sessions (for example, a
 normal window and a private window), using visible application navigation only:
 
 1. In the first browser session, sign in as `dispatcher@vista.local`. From the
-   left navigation, choose **ERP → Service**, open **Service requests**, and
+   left navigation, choose **ERP → Service → Schedule**. An approving dispatcher
+   can choose **Manage working hours** for a technician and explicitly enable
+   each working day, start/end time, bookable minutes, and visit limit. The
+   calendar then shows that technician's appointments and remaining weekly
+   capacity. No working day is enabled implicitly.
+2. Open **Service requests** and
    select **New service request**. Select an active fixture customer, location,
    and device; use **Out of warranty** for a straightforward first run; add the
    source, priority, and problem; then save.
-2. In the request preview, select **Dispatch request**. Choose the fixture
+3. In the request preview, select **Dispatch request**. Choose the fixture
    technician, select a visit time, and choose **Assign visit**. The generated
-   work order is now assigned to that technician. Use **Back** to return to the
-   unchanged request register.
-3. In the second browser session, sign in as `technician@vista.local`. Choose
+   work order is now assigned to that technician. A visit outside the enabled
+   window, overlapping another active visit, or exceeding the daily limits is
+   rejected without creating a work order. Use **Back** to return to the unchanged
+   request register.
+4. In the second browser session, sign in as `technician@vista.local`. Choose
    **ERP → Service → Work orders**; the technician view shows only work assigned
    to that account. Open the work order created by the dispatcher. Select
    **Start work**. If useful, select a valid JPEG, PNG, or WebP file and choose
    **Upload photo**. Dispatch, rescheduling, and cancellation stay with the
    dispatcher or another approving service role.
-4. Select **Complete work**. Enter completion notes, working time, labor and
+5. Select **Complete work**. Enter completion notes, working time, labor and
    transport costs, and optionally a stocked fixture part. Serial- or
    batch-tracked parts require their matching evidence. Enter the customer
    representative, draw a signature, and select **Complete work**.
-5. Before leaving the completed work-order panel, verify the uploaded photo and
+6. Before leaving the completed work-order panel, verify the uploaded photo and
    signature there. Use **Back** to return to the work-order details, then
    **Back** again to the register. Open **Equipment history** and select the same
    active device to verify the completed service event, technician, and used
@@ -661,9 +673,18 @@ To test a warranty or subscription request, choose the fixture device with the
 corresponding active coverage. Do not use an expired warranty or a device without
 a matching active subscription; the API correctly prevents that request.
 
-The current Service workspace covers manual source capture, dispatch, technician
-work, stock deduction, evidence, and service-only history. Plan mixed delivery
-and Service routes under **ERP → Logistics → Routes**. Payment documents,
-service invoices, warranty cards and claims, inspection reminders, subscription
-visits, CRM ticket/SLA links, the full technician-capacity calendar, and the full
+Open **Warranty & inspections** to review warranty status and remaining days,
+open or progress a claim, attach supporting evidence, create a technical or
+metrological inspection plan, and retain a completed inspection result. Planned
+subscription visits appear in **Service requests** with their planned date and a
+Service plan source; that source is generated by the scheduler and cannot be
+selected during manual intake.
+
+The current Service workspace covers manual source capture, availability-aware
+dispatch, the technician workload calendar, technician work, stock deduction,
+evidence, linked Finance draft preparation, warranty care, inspection planning,
+subscription visits, and service-only history. Plan mixed
+delivery and Service routes under **ERP → Logistics → Routes**; route deliveries
+share the technician's Service capacity and overlap controls. Official payment
+documents, warranty cards, CRM ticket/SLA links, Service reports, and the full
 sales/supplier serial history remain pending.

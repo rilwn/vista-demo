@@ -13,6 +13,8 @@ import type {
   FinanceVatReviewReport,
   ProcurementSupplierRecord,
   SalesWorkflow,
+  ServiceInspectionPlan,
+  WarrantyClaim,
 } from '@vista/contracts';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -3601,6 +3603,7 @@ describe('ERP and CRM authenticated workspace', () => {
           total: '120.0000',
         },
       ],
+      serviceDrafts: [],
       scopes: [
         {
           branchId: '02bdb60e-8565-4725-896f-8c21cd7238ec',
@@ -3716,6 +3719,242 @@ describe('ERP and CRM authenticated workspace', () => {
     expect(
       within(preview).getByRole('button', { name: 'Back to financial documents' }),
     ).toBeTruthy();
+  });
+
+  it('hands completed Service charges to Finance and keeps the work order link visible', async () => {
+    const context = {
+      ...authenticationContext,
+      permissions: [
+        ...authenticationContext.permissions,
+        { action: 'view', module: 'erp.service' },
+        { action: 'edit', module: 'erp.service' },
+        { action: 'approve', module: 'erp.service' },
+        { action: 'view', module: 'erp.finance' },
+        { action: 'create', module: 'erp.finance' },
+      ],
+    };
+    storeAuthenticatedSession(context);
+    const customerId = '173bf6d2-ed2b-47b9-8622-40f37cce89a6';
+    const workOrderId = '6ea32bc2-3df9-428e-8c0c-d16d5b1089c8';
+    const locationId = 'ae8242a7-1744-4d0e-8ac1-32776f479672';
+    const entityId = 'd3695a90-2eb1-45f3-ad1d-a129ec31d983';
+    const workOrder = {
+      assignedTechnician: {
+        accountId: loginResponse.account.id,
+        displayName: 'Mila Petrova',
+        email: 'mila@example.invalid',
+        warehouseId: '3d5c14c5-c927-4116-98bb-832013a72c6e',
+        warehouseName: 'Technician van 1',
+      },
+      completedAt: '2026-08-24T12:00:00.000Z',
+      completionNotes: 'Printer feed adjusted and final test passed.',
+      createdAt: '2026-08-24T09:00:00.000Z',
+      customerEquipmentId: 'b3d80ea3-3b8b-469d-9b9f-8d48494e9374',
+      customerLocationId: 'f58ccfd8-054c-4563-ab90-af5ee609b489',
+      customerLocationName: 'Vratsa retail outlet',
+      customerName: 'River Market Ltd.',
+      customerPartnerId: customerId,
+      deviceName: 'Fiscal register FX-20',
+      history: [
+        {
+          changedAt: '2026-08-24T12:00:00.000Z',
+          id: 'b2951fd8-389a-46de-bc81-ad90d3758c2a',
+          nextStatus: 'completed',
+          previousStatus: 'in_progress',
+          reason: 'work_completed',
+        },
+      ],
+      id: workOrderId,
+      laborCostBgn: '75.0000',
+      laborMinutes: 90,
+      number: 'DEV-WO-FIN-0001',
+      parts: [],
+      partsCostBgn: '0.0000',
+      photos: [],
+      priority: 'normal',
+      problemDescription: 'Printer feed requires adjustment.',
+      requestId: '409de106-ac44-473a-9a91-ffb6f78b6de2',
+      requestNumber: 'DEV-SRV-FIN-0001',
+      scheduledEnd: '2026-08-24T12:00:00.000Z',
+      scheduledStart: '2026-08-24T10:00:00.000Z',
+      serialNumber: 'FX20-00918',
+      serviceType: 'out_of_warranty',
+      signature: { signedAt: '2026-08-24T12:00:00.000Z', signerName: 'Customer signer' },
+      startedAt: '2026-08-24T10:00:00.000Z',
+      status: 'completed',
+      timeEntries: [],
+      totalCostBgn: '90.0000',
+      transportCostBgn: '15.0000',
+      updatedAt: '2026-08-24T12:00:00.000Z',
+      version: 3,
+    };
+    const serviceLines = [
+      {
+        description: 'Service labour · DEV-WO-FIN-0001',
+        discountPercent: '0.0000',
+        quantity: '1.0000',
+        unitCode: 'SERVICE',
+        unitPrice: '75.0000',
+        vatTreatment: 'standard_20',
+      },
+      {
+        description: 'Transport · DEV-WO-FIN-0001',
+        discountPercent: '0.0000',
+        quantity: '1.0000',
+        unitCode: 'SERVICE',
+        unitPrice: '15.0000',
+        vatTreatment: 'standard_20',
+      },
+    ];
+    const references = {
+      businessTimezone: 'Europe/Sofia',
+      correctionDocuments: [],
+      customers: [{ id: customerId, name: 'River Market Ltd.' }],
+      products: [],
+      salesDrafts: [],
+      serviceDrafts: [
+        {
+          currencyCode: 'BGN',
+          customerName: 'River Market Ltd.',
+          customerPartnerId: customerId,
+          id: workOrderId,
+          linkedDocumentTypes: [],
+          lines: serviceLines,
+          number: 'DEV-WO-FIN-0001',
+          total: '90.0000',
+        },
+      ],
+      scopes: [
+        {
+          branchId: 'b06734ec-5a19-40a9-89a8-aa8c57c47411',
+          branchName: 'Vratsa Operations',
+          cashRegisters: [],
+          legalEntityId: entityId,
+          legalEntityName: 'Vista Service Demo Ltd.',
+          locationId,
+          locationName: 'Vratsa Service Centre',
+          operators: [],
+        },
+      ],
+    };
+    const financialDocument = {
+      bgnGrossTotal: '108.0000',
+      bgnNetTotal: '90.0000',
+      bgnVatTotal: '18.0000',
+      branchName: 'Vratsa Operations',
+      businessLocationId: locationId,
+      businessLocationName: 'Vratsa Service Centre',
+      createdAt: '2026-08-25T08:00:00.000Z',
+      currencyCode: 'BGN',
+      customerPartnerId: customerId,
+      customerSnapshot: { address: '1 Customer Street, Vratsa, BG', name: 'River Market Ltd.' },
+      documentType: 'invoice',
+      dueDate: '2026-09-08',
+      exchangeRate: '1.00000000',
+      grossTotal: '108.0000',
+      id: '44a1a302-4353-4b2e-a95a-e9023848b4ea',
+      issueDate: '2026-08-25',
+      issuerSnapshot: { address: '1 Service Street, Vratsa, BG', name: 'Vista Service Demo Ltd.' },
+      legalEntityId: entityId,
+      lines: serviceLines.map((line, index) => ({
+        ...line,
+        grossTotal: index ? '18.0000' : '90.0000',
+        id: index ? 'dbe84bb9-7a79-43d1-9993-a32705a81dbe' : '7da9b87b-b947-4ad0-8a33-af7f511a20d7',
+        lineNumber: index + 1,
+        netTotal: index ? '15.0000' : '75.0000',
+        vatAmount: index ? '3.0000' : '15.0000',
+        vatRate: '20.0000',
+      })),
+      netTotal: '90.0000',
+      number: 'DINV-VRATSA-2026-000021',
+      rateDate: '2026-08-25',
+      rateSource: 'internal_bgn',
+      sourceServiceWorkOrderId: workOrderId,
+      sourceServiceWorkOrderNumber: 'DEV-WO-FIN-0001',
+      status: 'draft',
+      taxEventDate: '2026-08-25',
+      vatSummary: [
+        {
+          netTotal: '90.0000',
+          vatAmount: '18.0000',
+          vatRate: '20.0000',
+          vatTreatment: 'standard_20',
+        },
+      ],
+      vatTotal: '18.0000',
+      version: 1,
+    };
+    let documents: unknown[] = [];
+    const fetchMock = vi.fn((input: string, options?: RequestInit) => {
+      if (input.endsWith('/auth/me')) return Promise.resolve(jsonResponse(context));
+      if (input.endsWith('/service/reference-data'))
+        return Promise.resolve(
+          jsonResponse({
+            businessTimezone: 'Europe/Sofia',
+            customers: [],
+            equipment: [],
+            locations: [],
+            parts: [],
+            subscriptions: [],
+            technicians: [],
+          }),
+        );
+      if (input.includes('/service/requests'))
+        return Promise.resolve(
+          jsonResponse({
+            items: [],
+            page: 1,
+            pageSize: 25,
+            summary: { completed: 0, inProgress: 0, new: 0, scheduled: 0 },
+            total: 0,
+            totalPages: 0,
+          }),
+        );
+      if (input.includes('/service/work-orders'))
+        return Promise.resolve(
+          jsonResponse({ items: [workOrder], page: 1, pageSize: 25, total: 1, totalPages: 1 }),
+        );
+      if (input.endsWith('/finance/financial-documents/reference-data'))
+        return Promise.resolve(jsonResponse(references));
+      if (input.endsWith('/finance/financial-documents') && options?.method === 'POST') {
+        documents = [financialDocument];
+        return Promise.resolve(jsonResponse(financialDocument, 201));
+      }
+      if (input.endsWith('/finance/financial-documents'))
+        return Promise.resolve(
+          jsonResponse({
+            items: documents,
+            page: 1,
+            pageSize: 25,
+            totalItems: documents.length,
+            totalPages: 1,
+          }),
+        );
+      return Promise.resolve(jsonResponse({}));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderApplication(['/modules/erp.service/work-orders']);
+    fireEvent.click(await screen.findByRole('button', { name: /DEV-WO-FIN-0001/u }));
+    let dialog = await screen.findByRole('dialog', { name: 'DEV-WO-FIN-0001' });
+    fireEvent.click(within(dialog).getByRole('button', { name: /Prepare invoice draft/u }));
+
+    dialog = await screen.findByRole('dialog', { name: 'New financial document' });
+    expect(within(dialog).getByText('Service labour · DEV-WO-FIN-0001')).toBeTruthy();
+    expect(within(dialog).getAllByText('Service charge')).toHaveLength(2);
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Prepare draft' }));
+
+    const preview = await screen.findByRole('dialog', { name: 'DINV-VRATSA-2026-000021' });
+    expect(within(preview).getByText('DEV-WO-FIN-0001')).toBeTruthy();
+    const createCall = fetchMock.mock.calls.find(
+      ([url, options]) =>
+        url.endsWith('/finance/financial-documents') && options?.method === 'POST',
+    );
+    expect(JSON.parse((createCall?.[1] as RequestInit).body as string)).toMatchObject({
+      currencyCode: 'BGN',
+      lines: serviceLines,
+      sourceServiceWorkOrderId: workOrderId,
+    });
   });
 
   it('issues a collection-linked cash receipt and shows it in the daily cash report', async () => {
@@ -4191,6 +4430,7 @@ describe('ERP and CRM authenticated workspace', () => {
           email: loginResponse.account.email,
         },
       ],
+      businessTimezone: 'Europe/Sofia',
       courierConnections: [
         { connected: false, provider: 'econt' },
         { connected: false, provider: 'speedy' },
@@ -4335,6 +4575,116 @@ describe('ERP and CRM authenticated workspace', () => {
     });
   });
 
+  it('keeps the authoritative Service appointment instant when planning its route', async () => {
+    const logisticsContext = {
+      ...authenticationContext,
+      permissions: [
+        ...authenticationContext.permissions,
+        { action: 'view', module: 'erp.logistics' },
+        { action: 'create', module: 'erp.logistics' },
+      ],
+    };
+    storeAuthenticatedSession(logisticsContext);
+    const workOrderId = '481ba138-38a8-4b49-bf20-c5896684ebdb';
+    const scheduledStart = '2026-08-27T10:00:00.000Z';
+    const scheduledEnd = '2026-08-27T11:00:00.000Z';
+    const references = {
+      assignees: [
+        {
+          accountId: loginResponse.account.id,
+          displayName: loginResponse.account.displayName,
+          email: loginResponse.account.email,
+        },
+      ],
+      businessTimezone: 'Europe/Sofia',
+      courierConnections: [
+        { connected: false, provider: 'econt' },
+        { connected: false, provider: 'speedy' },
+      ],
+      equipment: [],
+      locations: [],
+      serviceStops: [
+        {
+          assignedAccountId: loginResponse.account.id,
+          assignedTo: loginResponse.account.displayName,
+          customerName: 'Alfa Market Demo Ltd.',
+          id: workOrderId,
+          label: 'SR-2026-000021 · Demo Receipt Printer',
+          scheduledEnd,
+          scheduledStart,
+        },
+      ],
+      shipments: [],
+      warehouses: [],
+    };
+    const emptyPage = { items: [], page: 1, pageSize: 50, total: 0, totalPages: 0 };
+    const fetchMock = vi.fn((input: string, options?: RequestInit) => {
+      if (input.endsWith('/auth/me')) return Promise.resolve(jsonResponse(logisticsContext));
+      if (input.endsWith('/logistics/reference-data'))
+        return Promise.resolve(jsonResponse(references));
+      if (input.endsWith('/logistics/routes') && options?.method === 'POST')
+        return Promise.resolve(
+          jsonResponse(
+            {
+              assignedAccountId: loginResponse.account.id,
+              assignedTo: loginResponse.account.displayName,
+              createdAt: '2026-08-26T12:00:00.000Z',
+              id: '9c1bb414-cadf-4722-b192-55024fcb2b4c',
+              number: 'RTE-2026-000021',
+              routeDate: '2026-08-27',
+              status: 'planned',
+              stops: [],
+              title: 'Alfa printer visits',
+            },
+            201,
+          ),
+        );
+      if (input.includes('/logistics/deliveries')) return Promise.resolve(jsonResponse(emptyPage));
+      if (input.includes('/logistics/returns')) return Promise.resolve(jsonResponse(emptyPage));
+      if (input.includes('/logistics/routes')) return Promise.resolve(jsonResponse(emptyPage));
+      return Promise.resolve(jsonResponse({}));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderApplication(['/modules/erp.logistics/routes']);
+    expect(await screen.findByRole('heading', { name: 'Routes' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Plan route' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Plan route' });
+    expect(within(dialog).getByLabelText('Planned arrival')).toHaveProperty(
+      'value',
+      '2026-08-27T13:00',
+    );
+    expect(within(dialog).getByDisplayValue('60')).toHaveProperty('value', '60');
+    fireEvent.change(within(dialog).getByLabelText('Route title'), {
+      target: { value: 'Alfa printer visits' },
+    });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Plan route' }));
+
+    await waitFor(() =>
+      expect(
+        fetchMock.mock.calls.some(
+          ([url, options]) => url.endsWith('/logistics/routes') && options?.method === 'POST',
+        ),
+      ).toBe(true),
+    );
+    const createCall = fetchMock.mock.calls.find(
+      ([url, options]) => url.endsWith('/logistics/routes') && options?.method === 'POST',
+    );
+    expect(JSON.parse((createCall?.[1] as RequestInit).body as string)).toMatchObject({
+      assignedAccountId: loginResponse.account.id,
+      routeDate: '2026-08-27',
+      stops: [
+        {
+          plannedArrival: scheduledStart,
+          plannedDurationMinutes: 60,
+          serviceWorkOrderId: workOrderId,
+          stopType: 'service',
+        },
+      ],
+      title: 'Alfa printer visits',
+    });
+  });
+
   it('navigates from ERP Service to request intake and creates a dispatch-ready service request', async () => {
     const serviceContext = {
       ...authenticationContext,
@@ -4476,6 +4826,366 @@ describe('ERP and CRM authenticated workspace', () => {
       serviceType: 'warranty',
       sourceChannel: 'email',
     });
+  });
+
+  it('manages a warranty claim and records a completed device inspection', async () => {
+    const serviceContext = {
+      ...authenticationContext,
+      permissions: [
+        ...authenticationContext.permissions,
+        { action: 'view', module: 'erp.service' },
+        { action: 'create', module: 'erp.service' },
+        { action: 'edit', module: 'erp.service' },
+        { action: 'approve', module: 'erp.service' },
+      ],
+    };
+    storeAuthenticatedSession(serviceContext);
+    const customerId = '70f5a1e9-0a41-470e-87cf-67f699573f42';
+    const locationId = '8403ff16-4e6f-40ce-9abb-7d02a4a94b43';
+    const equipmentId = 'c8c5f3a4-dc2f-43f1-bac7-4dca0a6e5f4a';
+    const claim: WarrantyClaim = {
+      attachments: [],
+      customerEquipmentId: equipmentId,
+      customerLocationId: locationId,
+      customerLocationName: 'Vratsa retail outlet',
+      customerName: 'Mountain Retail Ltd.',
+      customerPartnerId: customerId,
+      description: 'The printer feed stops intermittently during a sale.',
+      deviceName: 'Fiscal register FX-20',
+      history: [
+        {
+          changedAt: '2026-08-26T08:00:00.000Z',
+          id: '9cc41d47-f285-49c4-9283-c7e49a629e15',
+          nextStatus: 'received',
+        },
+      ],
+      id: '41a5d738-beb1-42c2-a2db-1b3c47b37d09',
+      number: 'WCL-2026-000001',
+      receivedAt: '2026-08-26T08:00:00.000Z',
+      serialNumber: 'FX20-00918',
+      status: 'received',
+      updatedAt: '2026-08-26T08:00:00.000Z',
+      version: 1,
+    };
+    const inspection: ServiceInspectionPlan = {
+      active: true,
+      customerLocationName: 'Vratsa retail outlet',
+      customerName: 'Mountain Retail Ltd.',
+      deviceName: 'Fiscal register FX-20',
+      equipmentId,
+      id: 'd9ac7c92-539c-4f21-b716-3f1f7b752660',
+      inspectionType: 'technical',
+      intervalMonths: 12,
+      nextDueDate: '2026-08-26',
+      records: [],
+      reminderLeadDays: 30,
+      serialNumber: 'FX20-00918',
+      version: 1,
+    };
+    let currentClaim = claim;
+    let currentInspection = inspection;
+    const overview = () => ({
+      businessTimezone: 'Europe/Sofia',
+      claims: [currentClaim],
+      inspections: [currentInspection],
+      warranties: [
+        {
+          activeClaimCount: 1,
+          claimCount: 1,
+          customerLocationName: 'Vratsa retail outlet',
+          customerName: 'Mountain Retail Ltd.',
+          deviceName: 'Fiscal register FX-20',
+          equipmentId,
+          remainingDays: 353,
+          serialNumber: 'FX20-00918',
+          status: 'active',
+          warrantyEndsOn: '2027-08-14',
+        },
+      ],
+    });
+    const fetchMock = vi.fn((input: string, options?: RequestInit) => {
+      if (input.endsWith('/auth/me')) return Promise.resolve(jsonResponse(serviceContext));
+      if (input.endsWith('/service/reference-data'))
+        return Promise.resolve(
+          jsonResponse({
+            businessTimezone: 'Europe/Sofia',
+            customers: [{ id: customerId, name: 'Mountain Retail Ltd.' }],
+            equipment: [
+              {
+                active: true,
+                customerLocationId: locationId,
+                customerPartnerId: customerId,
+                deviceName: 'Fiscal register FX-20',
+                id: equipmentId,
+                serialNumber: 'FX20-00918',
+                status: 'active',
+                warrantyEndsOn: '2027-08-14',
+              },
+            ],
+            locations: [
+              { customerPartnerId: customerId, id: locationId, name: 'Vratsa retail outlet' },
+            ],
+            parts: [],
+            subscriptions: [],
+            technicians: [],
+          }),
+        );
+      if (input.endsWith('/service/care')) return Promise.resolve(jsonResponse(overview()));
+      if (input.includes('/service/requests'))
+        return Promise.resolve(
+          jsonResponse({
+            items: [],
+            page: 1,
+            pageSize: 25,
+            summary: { completed: 0, inProgress: 0, new: 0, scheduled: 0 },
+            total: 0,
+            totalPages: 0,
+          }),
+        );
+      if (input.includes('/service/work-orders'))
+        return Promise.resolve(
+          jsonResponse({ items: [], page: 1, pageSize: 25, total: 0, totalPages: 0 }),
+        );
+      if (
+        input.endsWith(`/service/warranty-claims/${claim.id}/transition`) &&
+        options?.method === 'POST'
+      ) {
+        currentClaim = {
+          ...currentClaim,
+          history: [
+            ...currentClaim.history,
+            {
+              changedAt: '2026-08-26T09:00:00.000Z',
+              id: '971bb2d7-1953-458a-a210-cc1be4911699',
+              nextStatus: 'under_review',
+              previousStatus: 'received',
+            },
+          ],
+          status: 'under_review',
+          version: 2,
+        };
+        return Promise.resolve(jsonResponse(currentClaim));
+      }
+      if (
+        input.endsWith(`/service/inspection-plans/${inspection.id}/complete`) &&
+        options?.method === 'POST'
+      ) {
+        currentInspection = {
+          ...currentInspection,
+          lastCompletedOn: '2026-08-26',
+          nextDueDate: '2027-08-26',
+          records: [
+            {
+              completedOn: '2026-08-26',
+              dueDate: '2026-08-26',
+              id: 'b33edf27-45a1-4d29-84d5-206866277b94',
+              notes: 'All functional checks passed.',
+              outcome: 'passed',
+            },
+          ],
+          version: 2,
+        };
+        return Promise.resolve(jsonResponse(currentInspection));
+      }
+      return Promise.resolve(jsonResponse({}));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderApplication(['/modules/erp.service/care']);
+
+    expect(await screen.findByRole('heading', { name: 'Warranty & inspections' })).toBeTruthy();
+    expect(await screen.findByText('WCL-2026-000001')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /WCL-2026-000001/u }));
+    let dialog = await screen.findByRole('dialog', { name: 'WCL-2026-000001' });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Start review' }));
+    expect((await within(dialog).findAllByText('Under review')).length).toBeGreaterThan(0);
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Close panel' }));
+
+    fireEvent.click(screen.getByRole('button', { name: /Technical Fiscal register FX-20/u }));
+    dialog = await screen.findByRole('dialog', { name: 'Technical inspection' });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Record completed inspection' }));
+    fireEvent.change(within(dialog).getByLabelText('Findings'), {
+      target: { value: 'All functional checks passed.' },
+    });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save inspection result' }));
+
+    expect(await within(dialog).findByText('All functional checks passed.')).toBeTruthy();
+    const transitionCall = fetchMock.mock.calls.find(
+      ([url, options]) =>
+        url.endsWith(`/service/warranty-claims/${claim.id}/transition`) &&
+        options?.method === 'POST',
+    );
+    expect(JSON.parse((transitionCall?.[1] as RequestInit).body as string)).toMatchObject({
+      expectedVersion: 1,
+      nextStatus: 'under_review',
+    });
+    const inspectionCall = fetchMock.mock.calls.find(
+      ([url, options]) =>
+        url.endsWith(`/service/inspection-plans/${inspection.id}/complete`) &&
+        options?.method === 'POST',
+    );
+    const inspectionBody = JSON.parse(
+      (inspectionCall?.[1] as RequestInit).body as string,
+    ) as Record<string, unknown>;
+    expect(inspectionBody).toMatchObject({
+      expectedVersion: 1,
+      notes: 'All functional checks passed.',
+      outcome: 'passed',
+    });
+    expect(inspectionBody.completedOn).toMatch(/^\d{4}-\d{2}-\d{2}$/u);
+  });
+
+  it('shows technician workload and saves working hours from the service schedule', async () => {
+    const serviceContext = {
+      ...authenticationContext,
+      permissions: [
+        ...authenticationContext.permissions,
+        { action: 'view', module: 'erp.service' },
+        { action: 'approve', module: 'erp.service' },
+      ],
+    };
+    storeAuthenticatedSession(serviceContext);
+    const technician = {
+      accountId: loginResponse.account.id,
+      displayName: loginResponse.account.displayName,
+      email: loginResponse.account.email,
+      warehouseId: technicianWarehouseFixture.id,
+      warehouseName: technicianWarehouseFixture.name,
+    };
+    const fetchMock = vi.fn((input: string, options?: RequestInit) => {
+      if (input.endsWith('/auth/me')) return Promise.resolve(jsonResponse(serviceContext));
+      if (input.endsWith('/service/reference-data'))
+        return Promise.resolve(
+          jsonResponse({
+            businessTimezone: 'Europe/Sofia',
+            customers: [],
+            equipment: [],
+            locations: [],
+            parts: [],
+            subscriptions: [],
+            technicians: [technician],
+          }),
+        );
+      if (input.includes('/service/schedule?')) {
+        const url = new URL(input, 'http://localhost');
+        const dateFrom = url.searchParams.get('dateFrom') ?? '2026-08-24';
+        const dates = Array.from({ length: 7 }, (_, index) => {
+          const date = new Date(`${dateFrom}T12:00:00.000Z`);
+          date.setUTCDate(date.getUTCDate() + index);
+          return date.toISOString().slice(0, 10);
+        });
+        return Promise.resolve(
+          jsonResponse({
+            businessTimezone: 'Europe/Sofia',
+            dateFrom,
+            dateTo: dates[6],
+            technicians: [
+              {
+                bookedMinutes: 60,
+                capacityMinutes: 2400,
+                days: dates.map((date, index) => ({
+                  bookedMinutes: index === 2 ? 60 : 0,
+                  ...(index < 5
+                    ? {
+                        capacityMinutes: 480,
+                        endsAt: '17:00',
+                        maxVisits: 6,
+                        remainingMinutes: index === 2 ? 420 : 480,
+                        startsAt: '08:00',
+                      }
+                    : {}),
+                  date,
+                  visits:
+                    index === 2
+                      ? [
+                          {
+                            customerLocationName: 'Vratsa retail outlet',
+                            customerName: 'Mountain Retail Ltd.',
+                            deviceName: 'Fiscal register FX-20',
+                            priority: 'high',
+                            requestNumber: 'SR-2026-000001',
+                            scheduledEnd: `${date}T10:00:00.000Z`,
+                            scheduledStart: `${date}T09:00:00.000Z`,
+                            status: 'scheduled',
+                            workOrderId: '8ff82289-4e28-4a7f-87d0-409ed7124e47',
+                            workOrderNumber: 'WO-2026-000001',
+                          },
+                        ]
+                      : [],
+                })),
+                policy: {
+                  configured: true,
+                  technicianAccountId: technician.accountId,
+                  version: 1,
+                  windows: Array.from({ length: 5 }, (_, index) => ({
+                    capacityMinutes: 480,
+                    endsAt: '17:00',
+                    maxVisits: 6,
+                    startsAt: '08:00',
+                    weekday: index + 1,
+                  })),
+                },
+                remainingMinutes: 2340,
+                technician,
+                visitCount: 1,
+              },
+            ],
+          }),
+        );
+      }
+      if (
+        input.includes(`/service/technicians/${technician.accountId}/schedule-policy`) &&
+        options?.method === 'PUT'
+      )
+        return Promise.resolve(
+          jsonResponse({
+            configured: true,
+            technicianAccountId: technician.accountId,
+            version: 2,
+            windows: [],
+          }),
+        );
+      if (input.includes('/service/requests'))
+        return Promise.resolve(
+          jsonResponse({
+            items: [],
+            page: 1,
+            pageSize: 25,
+            summary: { completed: 0, inProgress: 0, new: 0, scheduled: 0 },
+            total: 0,
+            totalPages: 0,
+          }),
+        );
+      if (input.includes('/service/work-orders'))
+        return Promise.resolve(
+          jsonResponse({ items: [], page: 1, pageSize: 25, total: 0, totalPages: 0 }),
+        );
+      return Promise.resolve(jsonResponse({}));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderApplication(['/modules/erp.service/schedule']);
+
+    expect(await screen.findByText('Mountain Retail Ltd.')).toBeTruthy();
+    expect(screen.getByText('1 visit')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /Manage working hours/u }));
+    const dialog = await screen.findByRole('dialog', { name: 'Working hours and capacity' });
+    expect(within(dialog).getByLabelText('Monday')).toHaveProperty('checked', true);
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Use Mon–Fri template' }));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save working hours' }));
+
+    expect(await screen.findByText('Mila Petrova’s working hours were updated.')).toBeTruthy();
+    const saveCall = fetchMock.mock.calls.find(
+      ([url, options]) =>
+        url.includes(`/service/technicians/${technician.accountId}/schedule-policy`) &&
+        options?.method === 'PUT',
+    );
+    const saved = JSON.parse((saveCall?.[1] as RequestInit).body as string) as {
+      expectedVersion: number;
+      windows: unknown[];
+    };
+    expect(saved.expectedVersion).toBe(1);
+    expect(saved.windows).toHaveLength(5);
   });
 });
 

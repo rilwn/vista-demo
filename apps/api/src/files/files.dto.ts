@@ -78,7 +78,7 @@ export class ManagedFilePageDto implements ManagedFilePage {
 
 export class ManagedFileListQueryDto {
   @ApiProperty({ format: 'uuid', type: String })
-  @IsUUID('4')
+  @IsUUID('loose')
   parentId!: string;
 
   @ApiProperty({ enum: managedFileParentTypes })
@@ -101,7 +101,7 @@ export class ManagedFileListQueryDto {
 
 export class ManagedFileUploadDto {
   @ApiProperty({ format: 'uuid', type: String })
-  @IsUUID('4')
+  @IsUUID('loose')
   parentId!: string;
 
   @ApiProperty({ enum: managedFileParentTypes })

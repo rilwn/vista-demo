@@ -104,7 +104,7 @@ export interface NotificationPage {
   unreadCount: number;
 }
 
-export const managedFileParentTypes = ['partner'] as const;
+export const managedFileParentTypes = ['partner', 'warranty_claim'] as const;
 export type ManagedFileParentType = (typeof managedFileParentTypes)[number];
 export type ManagedFileStatus = 'available' | 'deleted' | 'quarantined' | 'rejected';
 
@@ -1518,10 +1518,13 @@ export interface LogisticsAssigneeReference {
 
 export interface LogisticsServiceStopReference {
   addressLine: string;
+  assignedAccountId: string;
+  assignedTo: string;
   city: string;
   customerName: string;
   id: string;
   label: string;
+  scheduledEnd: string;
   scheduledStart: string;
 }
 
@@ -1532,6 +1535,7 @@ export interface LogisticsCourierConnection {
 
 export interface LogisticsReferenceData {
   assignees: LogisticsAssigneeReference[];
+  businessTimezone: string;
   courierConnections: LogisticsCourierConnection[];
   equipment: LogisticsEquipmentReference[];
   locations: LogisticsLocationReference[];
@@ -2268,6 +2272,27 @@ export interface FinancialDocumentSalesDraftReference {
   total: string;
 }
 
+export interface FinancialDocumentServiceDraftLineReference {
+  description: string;
+  discountPercent: string;
+  productId?: string;
+  quantity: string;
+  unitCode: string;
+  unitPrice: string;
+  vatTreatment: VatTreatment;
+}
+
+export interface FinancialDocumentServiceDraftReference {
+  currencyCode: 'BGN';
+  customerName: string;
+  customerPartnerId: string;
+  id: string;
+  linkedDocumentTypes: FinancialDocumentType[];
+  lines: FinancialDocumentServiceDraftLineReference[];
+  number: string;
+  total: string;
+}
+
 export interface FinancialDocumentCorrectionReference {
   currencyCode: string;
   customerName: string;
@@ -2283,6 +2308,7 @@ export interface FinancialDocumentReferenceData {
   customers: FinancialDocumentCustomerReference[];
   products: FinancialDocumentProductReference[];
   salesDrafts: FinancialDocumentSalesDraftReference[];
+  serviceDrafts: FinancialDocumentServiceDraftReference[];
   scopes: FinancialDocumentScopeReference[];
 }
 
@@ -2315,6 +2341,7 @@ export interface CreateFinancialDocumentRequest {
   rateDate: string;
   rateSource: string;
   sourceSalesInvoiceId?: string;
+  sourceServiceWorkOrderId?: string;
   taxEventDate: string;
 }
 
@@ -2379,6 +2406,8 @@ export interface FinancialDocument {
   rateSource: string;
   sourceSalesInvoiceId?: string;
   sourceSalesInvoiceNumber?: string;
+  sourceServiceWorkOrderId?: string;
+  sourceServiceWorkOrderNumber?: string;
   status: FinancialDocumentStatus;
   taxEventDate: string;
   vatSummary: FinancialDocumentVatSummary[];
@@ -2394,7 +2423,15 @@ export interface FinancialDocumentPage {
   totalPages: number;
 }
 
-export const serviceRequestChannels = ['telephone', 'email', 'customer_portal', 'on_site'] as const;
+export const manualServiceRequestChannels = [
+  'telephone',
+  'email',
+  'customer_portal',
+  'on_site',
+] as const;
+export type ManualServiceRequestChannel = (typeof manualServiceRequestChannels)[number];
+
+export const serviceRequestChannels = [...manualServiceRequestChannels, 'service_plan'] as const;
 export type ServiceRequestChannel = (typeof serviceRequestChannels)[number];
 
 export const serviceTypes = ['warranty', 'out_of_warranty', 'subscription'] as const;
@@ -2470,7 +2507,7 @@ export interface CreateServiceRequest {
   customerPartnerId: string;
   priority: ServicePriority;
   problemDescription: string;
-  sourceChannel: ServiceRequestChannel;
+  sourceChannel: ManualServiceRequestChannel;
   subscriptionContractId?: string;
   serviceType: ServiceType;
 }
@@ -2481,6 +2518,67 @@ export interface AssignServiceWorkOrderRequest {
   scheduledStart: string;
   technicianAccountId: string;
   technicianWarehouseId: string;
+}
+
+export interface ServiceTechnicianScheduleWindow {
+  capacityMinutes: number;
+  endsAt: string;
+  maxVisits: number;
+  startsAt: string;
+  weekday: number;
+}
+
+export interface ServiceTechnicianSchedulePolicy {
+  configured: boolean;
+  technicianAccountId: string;
+  version: number;
+  windows: ServiceTechnicianScheduleWindow[];
+}
+
+export interface UpdateServiceTechnicianSchedulePolicyRequest {
+  expectedVersion: number;
+  windows: ServiceTechnicianScheduleWindow[];
+}
+
+export interface ServiceScheduleAppointment {
+  customerLocationName: string;
+  customerName: string;
+  deviceName: string;
+  priority: ServicePriority;
+  requestNumber: string;
+  scheduledEnd: string;
+  scheduledStart: string;
+  status: ServiceWorkOrderStatus;
+  workOrderId: string;
+  workOrderNumber: string;
+}
+
+export interface ServiceScheduleDay {
+  bookedMinutes: number;
+  capacityMinutes?: number;
+  date: string;
+  endsAt?: string;
+  maxVisits?: number;
+  remainingMinutes?: number;
+  startsAt?: string;
+  visits: ServiceScheduleAppointment[];
+}
+
+export interface ServiceTechnicianWorkload {
+  bookedMinutes: number;
+  capacityMinutes?: number;
+  days: ServiceScheduleDay[];
+  policy: ServiceTechnicianSchedulePolicy;
+  remainingMinutes?: number;
+  technician: ServiceTechnicianReference;
+  visitCount: number;
+}
+
+export interface ServiceSchedule {
+  businessTimezone: string;
+  dateFrom: string;
+  dateTo: string;
+  technicians: ServiceTechnicianWorkload[];
 }
 
 export interface StartServiceWorkOrderRequest {
@@ -2528,6 +2626,7 @@ export interface ServiceRequest {
   deviceName: string;
   id: string;
   number: string;
+  plannedVisitDate?: string;
   priority: ServicePriority;
   problemDescription: string;
   scheduledEnd?: string;
@@ -2612,6 +2711,8 @@ export interface ServiceWorkOrder {
   customerName: string;
   customerPartnerId: string;
   deviceName: string;
+  financialDocumentId?: string;
+  financialDocumentNumber?: string;
   history: ServiceWorkOrderHistoryEntry[];
   id: string;
   laborCostBgn: string;
@@ -2665,6 +2766,128 @@ export interface ServiceEquipmentHistory {
   events: ServiceEquipmentHistoryEvent[];
   serialNumber: string;
   warrantyEndsOn?: string;
+}
+
+export const warrantyClaimStatuses = [
+  'received',
+  'under_review',
+  'approved',
+  'rejected',
+  'closed',
+] as const;
+export type WarrantyClaimStatus = (typeof warrantyClaimStatuses)[number];
+
+export const serviceInspectionTypes = ['technical', 'metrological'] as const;
+export type ServiceInspectionType = (typeof serviceInspectionTypes)[number];
+
+export interface ServiceWarrantySummary {
+  activeClaimCount: number;
+  claimCount: number;
+  customerLocationName: string;
+  customerName: string;
+  deviceName: string;
+  equipmentId: string;
+  remainingDays?: number;
+  serialNumber: string;
+  status: 'active' | 'expired' | 'not_recorded';
+  warrantyEndsOn?: string;
+}
+
+export interface WarrantyClaimHistoryEntry {
+  changedAt: string;
+  changedByName?: string;
+  id: string;
+  nextStatus: WarrantyClaimStatus;
+  note?: string;
+  previousStatus?: WarrantyClaimStatus;
+}
+
+export interface WarrantyClaim {
+  attachments: ManagedFile[];
+  customerEquipmentId: string;
+  customerLocationId: string;
+  customerLocationName: string;
+  customerName: string;
+  customerPartnerId: string;
+  decisionNote?: string;
+  description: string;
+  deviceName: string;
+  history: WarrantyClaimHistoryEntry[];
+  id: string;
+  number: string;
+  receivedAt: string;
+  serialNumber: string;
+  serviceRequestId?: string;
+  status: WarrantyClaimStatus;
+  updatedAt: string;
+  version: number;
+}
+
+export interface CreateWarrantyClaimRequest {
+  customerEquipmentId: string;
+  customerLocationId: string;
+  customerPartnerId: string;
+  description: string;
+  serviceRequestId?: string;
+}
+
+export interface TransitionWarrantyClaimRequest {
+  expectedVersion: number;
+  nextStatus: WarrantyClaimStatus;
+  note?: string;
+}
+
+export interface ServiceInspectionRecord {
+  completedOn: string;
+  dueDate: string;
+  id: string;
+  notes: string;
+  outcome: 'passed' | 'attention_required';
+}
+
+export interface ServiceInspectionPlan {
+  active: boolean;
+  customerLocationName: string;
+  customerName: string;
+  deviceName: string;
+  equipmentId: string;
+  id: string;
+  inspectionType: ServiceInspectionType;
+  intervalMonths: number;
+  lastCompletedOn?: string;
+  nextDueDate: string;
+  records: ServiceInspectionRecord[];
+  reminderLeadDays: number;
+  serialNumber: string;
+  version: number;
+}
+
+export interface CreateServiceInspectionPlanRequest {
+  customerEquipmentId: string;
+  inspectionType: ServiceInspectionType;
+  intervalMonths: number;
+  nextDueDate: string;
+  reminderLeadDays: number;
+}
+
+export interface CompleteServiceInspectionRequest {
+  completedOn: string;
+  expectedVersion: number;
+  notes: string;
+  outcome: 'passed' | 'attention_required';
+}
+
+export interface ServiceCareOverview {
+  businessTimezone: string;
+  claims: WarrantyClaim[];
+  inspections: ServiceInspectionPlan[];
+  warranties: ServiceWarrantySummary[];
+}
+
+export interface GenerateServicePlanVisitsResult {
+  asOf: string;
+  generatedCount: number;
+  requestIds: string[];
 }
 
 export interface SalesSubscriptionReferenceData {

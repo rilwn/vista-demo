@@ -17,21 +17,30 @@ import {
   ValidateNested,
 } from 'class-validator';
 import {
-  servicePriorities,
-  serviceRequestChannels,
-  serviceTypes,
   type AssignServiceWorkOrderRequest,
   type CancelServiceRequest,
+  type CompleteServiceInspectionRequest,
   type CompleteServiceWorkOrderRequest,
+  type CreateServiceInspectionPlanRequest,
   type CreateServiceRequest,
+  type CreateWarrantyClaimRequest,
+  type ServiceCareOverview,
   type ServiceEquipmentHistory,
   type ServiceEquipmentHistoryEvent,
+  type ServiceInspectionPlan,
+  type ServiceInspectionRecord,
   type ServicePartUsageInput,
   type ServiceReferenceData,
   type ServiceRequest,
   type ServiceRequestPage,
   type ServiceRequestStatus,
+  type ServiceSchedule,
+  type ServiceScheduleAppointment,
+  type ServiceScheduleDay,
+  type ServiceTechnicianSchedulePolicy,
+  type ServiceTechnicianScheduleWindow,
   type ServiceTechnicianReference,
+  type ServiceTechnicianWorkload,
   type ServiceWorkOrder,
   type ServiceWorkOrderHistoryEntry,
   type ServiceWorkOrderPartUsage,
@@ -39,23 +48,38 @@ import {
   type ServiceWorkOrderPhoto,
   type ServiceWorkOrderSignature,
   type ServiceWorkOrderTimeEntry,
+  type ServiceWarrantySummary,
   type StartServiceWorkOrderRequest,
+  type TransitionWarrantyClaimRequest,
   type ServiceWorkTimeEntryInput,
+  type UpdateServiceTechnicianSchedulePolicyRequest,
+  type WarrantyClaim,
+  type WarrantyClaimHistoryEntry,
+  manualServiceRequestChannels,
+  serviceInspectionTypes,
+  servicePriorities,
+  serviceRequestChannels,
+  serviceTypes,
+  warrantyClaimStatuses,
 } from '@vista/contracts';
+import { ManagedFileDto } from '../files/files.dto.js';
 
 const decimalPattern = /^\d+(\.\d{1,4})?$/u;
+const calendarDatePattern = /^\d{4}-\d{2}-\d{2}$/u;
+const localTimePattern = /^(?:[01]\d|2[0-3]):[0-5]\d$/u;
+const postgresUuid = 'loose' as const;
 
 export class CreateServiceRequestDto implements CreateServiceRequest {
   @ApiProperty({ format: 'uuid', type: String })
-  @IsUUID('4')
+  @IsUUID(postgresUuid)
   customerEquipmentId!: string;
 
   @ApiProperty({ format: 'uuid', type: String })
-  @IsUUID('4')
+  @IsUUID(postgresUuid)
   customerLocationId!: string;
 
   @ApiProperty({ format: 'uuid', type: String })
-  @IsUUID('4')
+  @IsUUID(postgresUuid)
   customerPartnerId!: string;
 
   @ApiProperty({ enum: servicePriorities })
@@ -67,13 +91,13 @@ export class CreateServiceRequestDto implements CreateServiceRequest {
   @MaxLength(4000)
   problemDescription!: string;
 
-  @ApiProperty({ enum: serviceRequestChannels })
-  @IsIn(serviceRequestChannels)
+  @ApiProperty({ enum: manualServiceRequestChannels })
+  @IsIn(manualServiceRequestChannels)
   sourceChannel!: CreateServiceRequest['sourceChannel'];
 
   @ApiPropertyOptional({ format: 'uuid', type: String })
   @IsOptional()
-  @IsUUID('4')
+  @IsUUID(postgresUuid)
   subscriptionContractId?: string;
 
   @ApiProperty({ enum: serviceTypes })
@@ -97,11 +121,11 @@ export class AssignServiceWorkOrderDto implements AssignServiceWorkOrderRequest 
   scheduledStart!: string;
 
   @ApiProperty({ format: 'uuid', type: String })
-  @IsUUID('4')
+  @IsUUID(postgresUuid)
   technicianAccountId!: string;
 
   @ApiProperty({ format: 'uuid', type: String })
-  @IsUUID('4')
+  @IsUUID(postgresUuid)
   technicianWarehouseId!: string;
 }
 
@@ -140,7 +164,7 @@ export class ServicePartUsageInputDto implements ServicePartUsageInput {
   batchNumber?: string;
 
   @ApiProperty({ format: 'uuid', type: String })
-  @IsUUID('4')
+  @IsUUID(postgresUuid)
   productId!: string;
 
   @ApiProperty({ example: '1.0000', type: String })
@@ -266,6 +290,66 @@ export class ListServiceWorkOrdersQueryDto {
   status?: ServiceWorkOrder['status'];
 }
 
+export class ServiceScheduleQueryDto {
+  @ApiProperty({ format: 'date', type: String })
+  @IsString()
+  @Matches(calendarDatePattern)
+  dateFrom!: string;
+
+  @ApiProperty({ format: 'date', type: String })
+  @IsString()
+  @Matches(calendarDatePattern)
+  dateTo!: string;
+}
+
+export class ServiceTechnicianScheduleWindowDto implements ServiceTechnicianScheduleWindow {
+  @ApiProperty({ maximum: 1440, minimum: 1, type: Number })
+  @Type(() => Number)
+  @IsInt()
+  @Max(1440)
+  @Min(1)
+  capacityMinutes!: number;
+
+  @ApiProperty({ example: '17:00', pattern: localTimePattern.source, type: String })
+  @IsString()
+  @Matches(localTimePattern)
+  endsAt!: string;
+
+  @ApiProperty({ maximum: 100, minimum: 1, type: Number })
+  @Type(() => Number)
+  @IsInt()
+  @Max(100)
+  @Min(1)
+  maxVisits!: number;
+
+  @ApiProperty({ example: '08:00', pattern: localTimePattern.source, type: String })
+  @IsString()
+  @Matches(localTimePattern)
+  startsAt!: string;
+
+  @ApiProperty({ maximum: 7, minimum: 1, type: Number })
+  @Type(() => Number)
+  @IsInt()
+  @Max(7)
+  @Min(1)
+  weekday!: number;
+}
+
+export class UpdateServiceTechnicianSchedulePolicyDto implements UpdateServiceTechnicianSchedulePolicyRequest {
+  @ApiProperty({ minimum: 0, type: Number })
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  expectedVersion!: number;
+
+  @ApiProperty({ isArray: true, maxItems: 7, type: ServiceTechnicianScheduleWindowDto })
+  @IsArray()
+  @ArrayMaxSize(7)
+  @ValidateNested({ each: true })
+  @Type(() => ServiceTechnicianScheduleWindowDto)
+  windows!: ServiceTechnicianScheduleWindow[];
+}
+
 class ServiceCustomerReferenceDto {
   @ApiProperty({ format: 'uuid', type: String }) id!: string;
   @ApiProperty({ type: String }) name!: string;
@@ -331,6 +415,59 @@ export class ServiceReferenceDataDto implements ServiceReferenceData {
 
 class ServiceTechnicianDto extends ServiceTechnicianReferenceDto {}
 
+export class ServiceTechnicianSchedulePolicyDto implements ServiceTechnicianSchedulePolicy {
+  @ApiProperty({ type: Boolean }) configured!: boolean;
+  @ApiProperty({ format: 'uuid', type: String }) technicianAccountId!: string;
+  @ApiProperty({ minimum: 0, type: Number }) version!: number;
+  @ApiProperty({ isArray: true, type: ServiceTechnicianScheduleWindowDto })
+  windows!: ServiceTechnicianScheduleWindow[];
+}
+
+class ServiceScheduleAppointmentDto implements ServiceScheduleAppointment {
+  @ApiProperty({ type: String }) customerLocationName!: string;
+  @ApiProperty({ type: String }) customerName!: string;
+  @ApiProperty({ type: String }) deviceName!: string;
+  @ApiProperty({ enum: servicePriorities }) priority!: ServiceScheduleAppointment['priority'];
+  @ApiProperty({ type: String }) requestNumber!: string;
+  @ApiProperty({ format: 'date-time', type: String }) scheduledEnd!: string;
+  @ApiProperty({ format: 'date-time', type: String }) scheduledStart!: string;
+  @ApiProperty({ enum: ['scheduled', 'in_progress'] })
+  status!: ServiceScheduleAppointment['status'];
+  @ApiProperty({ format: 'uuid', type: String }) workOrderId!: string;
+  @ApiProperty({ type: String }) workOrderNumber!: string;
+}
+
+class ServiceScheduleDayDto implements ServiceScheduleDay {
+  @ApiProperty({ minimum: 0, type: Number }) bookedMinutes!: number;
+  @ApiPropertyOptional({ minimum: 1, type: Number }) capacityMinutes?: number;
+  @ApiProperty({ format: 'date', type: String }) date!: string;
+  @ApiPropertyOptional({ example: '17:00', type: String }) endsAt?: string;
+  @ApiPropertyOptional({ minimum: 1, type: Number }) maxVisits?: number;
+  @ApiPropertyOptional({ minimum: 0, type: Number }) remainingMinutes?: number;
+  @ApiPropertyOptional({ example: '08:00', type: String }) startsAt?: string;
+  @ApiProperty({ isArray: true, type: ServiceScheduleAppointmentDto })
+  visits!: ServiceScheduleAppointment[];
+}
+
+class ServiceTechnicianWorkloadDto implements ServiceTechnicianWorkload {
+  @ApiProperty({ minimum: 0, type: Number }) bookedMinutes!: number;
+  @ApiPropertyOptional({ minimum: 0, type: Number }) capacityMinutes?: number;
+  @ApiProperty({ isArray: true, type: ServiceScheduleDayDto }) days!: ServiceScheduleDay[];
+  @ApiProperty({ type: ServiceTechnicianSchedulePolicyDto })
+  policy!: ServiceTechnicianSchedulePolicy;
+  @ApiPropertyOptional({ minimum: 0, type: Number }) remainingMinutes?: number;
+  @ApiProperty({ type: ServiceTechnicianDto }) technician!: ServiceTechnicianReference;
+  @ApiProperty({ minimum: 0, type: Number }) visitCount!: number;
+}
+
+export class ServiceScheduleDto implements ServiceSchedule {
+  @ApiProperty({ example: 'Europe/Sofia', type: String }) businessTimezone!: string;
+  @ApiProperty({ format: 'date', type: String }) dateFrom!: string;
+  @ApiProperty({ format: 'date', type: String }) dateTo!: string;
+  @ApiProperty({ isArray: true, type: ServiceTechnicianWorkloadDto })
+  technicians!: ServiceTechnicianWorkload[];
+}
+
 export class ServiceRequestDto implements ServiceRequest {
   @ApiPropertyOptional({ type: ServiceTechnicianDto })
   assignedTechnician?: ServiceTechnicianReference;
@@ -344,6 +481,7 @@ export class ServiceRequestDto implements ServiceRequest {
   @ApiProperty({ type: String }) deviceName!: string;
   @ApiProperty({ format: 'uuid', type: String }) id!: string;
   @ApiProperty({ type: String }) number!: string;
+  @ApiPropertyOptional({ format: 'date', type: String }) plannedVisitDate?: string;
   @ApiProperty({ enum: servicePriorities }) priority!: ServiceRequest['priority'];
   @ApiProperty({ type: String }) problemDescription!: string;
   @ApiPropertyOptional({ format: 'date-time', type: String }) scheduledEnd?: string;
@@ -499,4 +637,179 @@ export class ServiceEquipmentHistoryDto implements ServiceEquipmentHistory {
   events!: ServiceEquipmentHistory['events'];
   @ApiProperty({ type: String }) serialNumber!: string;
   @ApiPropertyOptional({ format: 'date', type: String }) warrantyEndsOn?: string;
+}
+
+export class CreateWarrantyClaimDto implements CreateWarrantyClaimRequest {
+  @ApiProperty({ format: 'uuid', type: String })
+  @IsUUID(postgresUuid)
+  customerEquipmentId!: string;
+
+  @ApiProperty({ format: 'uuid', type: String })
+  @IsUUID(postgresUuid)
+  customerLocationId!: string;
+
+  @ApiProperty({ format: 'uuid', type: String })
+  @IsUUID(postgresUuid)
+  customerPartnerId!: string;
+
+  @ApiProperty({ maxLength: 4000, type: String })
+  @IsString()
+  @MaxLength(4000)
+  description!: string;
+
+  @ApiPropertyOptional({ format: 'uuid', type: String })
+  @IsOptional()
+  @IsUUID(postgresUuid)
+  serviceRequestId?: string;
+}
+
+export class TransitionWarrantyClaimDto implements TransitionWarrantyClaimRequest {
+  @ApiProperty({ minimum: 1, type: Number })
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  expectedVersion!: number;
+
+  @ApiProperty({ enum: warrantyClaimStatuses })
+  @IsIn(warrantyClaimStatuses)
+  nextStatus!: TransitionWarrantyClaimRequest['nextStatus'];
+
+  @ApiPropertyOptional({ maxLength: 2000, type: String })
+  @IsOptional()
+  @IsString()
+  @MaxLength(2000)
+  note?: string;
+}
+
+export class CreateServiceInspectionPlanDto implements CreateServiceInspectionPlanRequest {
+  @ApiProperty({ format: 'uuid', type: String })
+  @IsUUID(postgresUuid)
+  customerEquipmentId!: string;
+
+  @ApiProperty({ enum: serviceInspectionTypes })
+  @IsIn(serviceInspectionTypes)
+  inspectionType!: CreateServiceInspectionPlanRequest['inspectionType'];
+
+  @ApiProperty({ maximum: 120, minimum: 1, type: Number })
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(120)
+  intervalMonths!: number;
+
+  @ApiProperty({ format: 'date', type: String })
+  @IsDateString()
+  nextDueDate!: string;
+
+  @ApiProperty({ maximum: 365, minimum: 0, type: Number })
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(365)
+  reminderLeadDays!: number;
+}
+
+export class CompleteServiceInspectionDto implements CompleteServiceInspectionRequest {
+  @ApiProperty({ format: 'date', type: String })
+  @IsDateString()
+  completedOn!: string;
+
+  @ApiProperty({ minimum: 1, type: Number })
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  expectedVersion!: number;
+
+  @ApiProperty({ maxLength: 2000, type: String })
+  @IsString()
+  @MaxLength(2000)
+  notes!: string;
+
+  @ApiProperty({ enum: ['passed', 'attention_required'] })
+  @IsIn(['passed', 'attention_required'])
+  outcome!: CompleteServiceInspectionRequest['outcome'];
+}
+
+class WarrantyClaimHistoryEntryDto implements WarrantyClaimHistoryEntry {
+  @ApiProperty({ format: 'date-time', type: String }) changedAt!: string;
+  @ApiPropertyOptional({ type: String }) changedByName?: string;
+  @ApiProperty({ format: 'uuid', type: String }) id!: string;
+  @ApiProperty({ enum: warrantyClaimStatuses })
+  nextStatus!: WarrantyClaimHistoryEntry['nextStatus'];
+  @ApiPropertyOptional({ type: String }) note?: string;
+  @ApiPropertyOptional({ enum: warrantyClaimStatuses })
+  previousStatus?: NonNullable<WarrantyClaimHistoryEntry['previousStatus']>;
+}
+
+export class WarrantyClaimDto implements WarrantyClaim {
+  @ApiProperty({ isArray: true, type: ManagedFileDto }) attachments!: WarrantyClaim['attachments'];
+  @ApiProperty({ format: 'uuid', type: String }) customerEquipmentId!: string;
+  @ApiProperty({ format: 'uuid', type: String }) customerLocationId!: string;
+  @ApiProperty({ type: String }) customerLocationName!: string;
+  @ApiProperty({ type: String }) customerName!: string;
+  @ApiProperty({ format: 'uuid', type: String }) customerPartnerId!: string;
+  @ApiPropertyOptional({ type: String }) decisionNote?: string;
+  @ApiProperty({ type: String }) description!: string;
+  @ApiProperty({ type: String }) deviceName!: string;
+  @ApiProperty({ isArray: true, type: WarrantyClaimHistoryEntryDto })
+  history!: WarrantyClaimHistoryEntry[];
+  @ApiProperty({ format: 'uuid', type: String }) id!: string;
+  @ApiProperty({ type: String }) number!: string;
+  @ApiProperty({ format: 'date-time', type: String }) receivedAt!: string;
+  @ApiProperty({ type: String }) serialNumber!: string;
+  @ApiPropertyOptional({ format: 'uuid', type: String }) serviceRequestId?: string;
+  @ApiProperty({ enum: warrantyClaimStatuses }) status!: WarrantyClaim['status'];
+  @ApiProperty({ format: 'date-time', type: String }) updatedAt!: string;
+  @ApiProperty({ minimum: 1, type: Number }) version!: number;
+}
+
+class ServiceWarrantySummaryDto implements ServiceWarrantySummary {
+  @ApiProperty({ minimum: 0, type: Number }) activeClaimCount!: number;
+  @ApiProperty({ minimum: 0, type: Number }) claimCount!: number;
+  @ApiProperty({ type: String }) customerLocationName!: string;
+  @ApiProperty({ type: String }) customerName!: string;
+  @ApiProperty({ type: String }) deviceName!: string;
+  @ApiProperty({ format: 'uuid', type: String }) equipmentId!: string;
+  @ApiPropertyOptional({ type: Number }) remainingDays?: number;
+  @ApiProperty({ type: String }) serialNumber!: string;
+  @ApiProperty({ enum: ['active', 'expired', 'not_recorded'] })
+  status!: ServiceWarrantySummary['status'];
+  @ApiPropertyOptional({ format: 'date', type: String }) warrantyEndsOn?: string;
+}
+
+class ServiceInspectionRecordDto implements ServiceInspectionRecord {
+  @ApiProperty({ format: 'date', type: String }) completedOn!: string;
+  @ApiProperty({ format: 'date', type: String }) dueDate!: string;
+  @ApiProperty({ format: 'uuid', type: String }) id!: string;
+  @ApiProperty({ type: String }) notes!: string;
+  @ApiProperty({ enum: ['passed', 'attention_required'] })
+  outcome!: ServiceInspectionRecord['outcome'];
+}
+
+export class ServiceInspectionPlanDto implements ServiceInspectionPlan {
+  @ApiProperty({ type: Boolean }) active!: boolean;
+  @ApiProperty({ type: String }) customerLocationName!: string;
+  @ApiProperty({ type: String }) customerName!: string;
+  @ApiProperty({ type: String }) deviceName!: string;
+  @ApiProperty({ format: 'uuid', type: String }) equipmentId!: string;
+  @ApiProperty({ format: 'uuid', type: String }) id!: string;
+  @ApiProperty({ enum: serviceInspectionTypes })
+  inspectionType!: ServiceInspectionPlan['inspectionType'];
+  @ApiProperty({ type: Number }) intervalMonths!: number;
+  @ApiPropertyOptional({ format: 'date', type: String }) lastCompletedOn?: string;
+  @ApiProperty({ format: 'date', type: String }) nextDueDate!: string;
+  @ApiProperty({ isArray: true, type: ServiceInspectionRecordDto })
+  records!: ServiceInspectionRecord[];
+  @ApiProperty({ type: Number }) reminderLeadDays!: number;
+  @ApiProperty({ type: String }) serialNumber!: string;
+  @ApiProperty({ minimum: 1, type: Number }) version!: number;
+}
+
+export class ServiceCareOverviewDto implements ServiceCareOverview {
+  @ApiProperty({ example: 'Europe/Sofia', type: String }) businessTimezone!: string;
+  @ApiProperty({ isArray: true, type: WarrantyClaimDto }) claims!: WarrantyClaim[];
+  @ApiProperty({ isArray: true, type: ServiceInspectionPlanDto })
+  inspections!: ServiceInspectionPlan[];
+  @ApiProperty({ isArray: true, type: ServiceWarrantySummaryDto })
+  warranties!: ServiceCareOverview['warranties'];
 }

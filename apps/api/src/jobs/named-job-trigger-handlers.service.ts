@@ -6,6 +6,7 @@ import { DatabaseService } from '../database/database.service.js';
 import { FinanceService } from '../finance/finance.service.js';
 import { StructuredLogger } from '../logging/structured-logger.service.js';
 import { SalesSubscriptionsService } from '../sales/sales-subscriptions.service.js';
+import { ServiceCareService } from '../service/service-care.service.js';
 import { FinanceReportExportsService } from './finance-report-exports.service.js';
 import { type BackgroundJobContext, JobHandlerRegistry } from './job-handler-registry.service.js';
 import { namedBackgroundJobs } from './named-background-jobs.js';
@@ -31,6 +32,7 @@ export class NamedJobTriggerHandlersService implements OnModuleInit {
     @Inject(FinanceService) private readonly finance: FinanceService,
     @Inject(FinanceReportExportsService)
     private readonly reportExports: FinanceReportExportsService,
+    @Inject(ServiceCareService) private readonly serviceCare: ServiceCareService,
   ) {}
 
   onModuleInit(): void {
@@ -47,7 +49,13 @@ export class NamedJobTriggerHandlersService implements OnModuleInit {
           ? await this.finance.detectPaymentStatuses(context)
           : context.name === 'report.generate' && typeof context.payload['exportId'] === 'string'
             ? await this.reportExports.generate(context)
-            : undefined;
+            : context.name === 'service.inspection-reminder.prepare'
+              ? await this.serviceCare.prepareInspectionReminders(context)
+              : context.name === 'service.plan-visit.generate'
+                ? await this.serviceCare.generateServicePlanVisits(context)
+                : context.name === 'crm.warranty-expiration.prepare'
+                  ? await this.serviceCare.prepareWarrantyReminders(context)
+                  : undefined;
     const eventId = deterministicUuid(`${context.name}\u0000${context.idempotencyKey}`);
     const outboxIdempotencyKey = `scheduled:${createHash('sha256')
       .update(`${context.name}\u0000${context.idempotencyKey}`)

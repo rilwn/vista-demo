@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
+import type { AppEnvironment } from '@vista/config';
 import type {
   CompleteLogisticsDeliveryRequest,
   CreateLogisticsDeliveryRequest,
@@ -28,6 +29,7 @@ import type {
   RequestSecurityMetadata,
 } from '../auth/authentication.types.js';
 import { ApiErrorException } from '../common/api-error.exception.js';
+import { APP_ENVIRONMENT } from '../config/config.module.js';
 import { DatabaseService } from '../database/database.service.js';
 import { InventoryService } from '../inventory/inventory.service.js';
 import { SalesService } from '../sales/sales.service.js';
@@ -120,6 +122,15 @@ interface RouteRow {
   version: number;
 }
 
+interface RouteStopSourceRow {
+  address_line: string;
+  assigned_account_id: string | null;
+  city: string;
+  label: string;
+  scheduled_end: string | null;
+  scheduled_start: string | null;
+}
+
 @Injectable()
 export class LogisticsService {
   constructor(
@@ -128,6 +139,7 @@ export class LogisticsService {
     @Inject(InventoryService) private readonly inventory: InventoryService,
     @Inject(ServiceOperationsService) private readonly service: ServiceOperationsService,
     @Inject(SalesService) private readonly sales: SalesService,
+    @Inject(APP_ENVIRONMENT) private readonly environment: AppEnvironment,
   ) {}
 
   async referenceData(): Promise<LogisticsReferenceData> {
@@ -228,26 +240,35 @@ export class LogisticsService {
            JOIN iam.role_permissions role_permission ON role_permission.role_id = assignment.role_id
            JOIN iam.permissions permission ON permission.id = role_permission.permission_id
            WHERE account.status = 'active' AND employee.active
-             AND permission.module = 'erp.logistics' AND permission.action = 'view'
+             AND permission.module IN ('erp.logistics', 'erp.service')
+             AND permission.action = 'view'
            ORDER BY employee.display_name, account.id`,
         ),
         pool.query<{
           address_line: string;
+          assigned_account_id: string;
+          assigned_to: string;
           city: string;
           customer_name: string;
           id: string;
           label: string;
+          scheduled_end: string;
           scheduled_start: string;
         }>(
           `SELECT work_order.id, partner.display_name AS customer_name,
+                  work_order.assigned_technician_account_id AS assigned_account_id,
+                  technician.display_name AS assigned_to,
                   concat(request.request_number, ' · ', equipment.device_name) AS label,
                   concat_ws(', ', location.address_line_1, location.address_line_2) AS address_line,
-                  location.city, work_order.scheduled_start::text
+                  location.city, work_order.scheduled_start::text, work_order.scheduled_end::text
            FROM service.work_orders work_order
            JOIN service.requests request ON request.id = work_order.service_request_id
            JOIN master_data.partners partner ON partner.id = request.customer_partner_id
            JOIN master_data.customer_locations location ON location.id = request.customer_location_id
            JOIN master_data.customer_equipment equipment ON equipment.id = request.customer_equipment_id
+           JOIN identity.user_accounts account
+             ON account.id = work_order.assigned_technician_account_id
+           JOIN identity.employees technician ON technician.id = account.employee_id
            WHERE work_order.status IN ('scheduled', 'in_progress')
              AND work_order.scheduled_start IS NOT NULL
            ORDER BY work_order.scheduled_start, work_order.id
@@ -275,6 +296,7 @@ export class LogisticsService {
         displayName: row.display_name,
         email: row.email,
       })),
+      businessTimezone: this.environment.BUSINESS_TIMEZONE,
       courierConnections: [
         { connected: false, provider: 'econt' },
         { connected: false, provider: 'speedy' },
@@ -299,10 +321,13 @@ export class LogisticsService {
       })),
       serviceStops: serviceStops.rows.map((row) => ({
         addressLine: row.address_line,
+        assignedAccountId: row.assigned_account_id,
+        assignedTo: row.assigned_to,
         city: row.city,
         customerName: row.customer_name,
         id: row.id,
         label: row.label,
+        scheduledEnd: asIso(row.scheduled_end),
         scheduledStart: asIso(row.scheduled_start),
       })),
       shipments: shipments.rows.map((row) => ({
@@ -856,6 +881,16 @@ export class LogisticsService {
   ): Promise<LogisticsRoutePlan> {
     const normalized = normalizeRoute(input);
     return this.command('logistics.route.create', key, normalized, async (client, commandKey) => {
+      await client.query(`SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, [
+        `service-schedule:${normalized.assignedAccountId}`,
+      ]);
+      const sourceLockKeys = normalized.stops
+        .map((stop) => `logistics-route-stop:${stop.deliveryId ?? stop.serviceWorkOrderId}`)
+        .sort();
+      for (const sourceLockKey of sourceLockKeys)
+        await client.query(`SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, [
+          sourceLockKey,
+        ]);
       const assignee = await client.query(
         `SELECT account.id
          FROM identity.user_accounts account
@@ -866,6 +901,9 @@ export class LogisticsService {
       );
       if (!assignee.rowCount)
         notFound('LOGISTICS_ASSIGNEE_NOT_FOUND', 'Choose an active employee for this route.');
+      const sources: RouteStopSourceRow[] = [];
+      for (const stop of normalized.stops) sources.push(await this.routeStopSource(client, stop));
+      await this.assertRouteAvailability(client, normalized, sources);
       const id = randomUUID();
       const number = await this.nextNumber(client, 'route_plan', 'RTE');
       await client.query(
@@ -883,7 +921,7 @@ export class LogisticsService {
         ],
       );
       for (const [index, stop] of normalized.stops.entries()) {
-        const source = await this.routeStopSource(client, stop);
+        const source = required(sources[index], 'Route stop source was not prepared.');
         await client.query(
           `INSERT INTO logistics.route_stops (
              id, route_plan_id, position, stop_type, delivery_id, service_work_order_id,
@@ -1074,15 +1112,228 @@ export class LogisticsService {
     return result.rows;
   }
 
+  private async assertRouteAvailability(
+    client: PoolClient,
+    route: ReturnType<typeof normalizeRoute>,
+    sources: RouteStopSourceRow[],
+  ): Promise<void> {
+    const serviceWorkOrderIds = route.stops
+      .map((stop) => stop.serviceWorkOrderId)
+      .filter((id): id is string => Boolean(id));
+    const prepared = route.stops.map((stop, index) => {
+      const source = required(sources[index], 'Route stop source was not prepared.');
+      const start = new Date(stop.plannedArrival);
+      const end = new Date(start.getTime() + stop.plannedDurationMinutes * 60_000);
+      if (stop.stopType === 'service') {
+        if (source.assigned_account_id !== route.assignedAccountId)
+          conflict(
+            'LOGISTICS_ROUTE_SERVICE_ASSIGNEE_MISMATCH',
+            'Assign the route to the technician responsible for every selected Service visit.',
+          );
+        const scheduledStart = new Date(
+          required(source.scheduled_start, 'Service start is missing.'),
+        );
+        const scheduledEnd = new Date(required(source.scheduled_end, 'Service end is missing.'));
+        if (
+          start.getTime() !== scheduledStart.getTime() ||
+          end.getTime() !== scheduledEnd.getTime()
+        )
+          conflict(
+            'LOGISTICS_ROUTE_SERVICE_TIME_MISMATCH',
+            'Keep each Service stop at its scheduled appointment time and duration.',
+          );
+      }
+      return { end: end.toISOString(), source, start: start.toISOString(), stop };
+    });
+
+    const ordered = [...prepared].sort((left, right) => left.start.localeCompare(right.start));
+    for (let index = 1; index < ordered.length; index += 1) {
+      const previous = required(ordered[index - 1], 'Previous route stop is missing.');
+      const current = required(ordered[index], 'Current route stop is missing.');
+      if (current.start < previous.end)
+        conflict(
+          'LOGISTICS_ROUTE_STOPS_OVERLAP',
+          'Two route stops overlap. Leave enough time to complete each stop before the next begins.',
+        );
+    }
+
+    const localStops: Array<
+      (typeof prepared)[number] & {
+        date: string;
+        endTime: string;
+        startTime: string;
+        weekday: number;
+      }
+    > = [];
+    for (const item of prepared) {
+      const local = await client.query<{
+        end_date: string;
+        end_time: string;
+        start_date: string;
+        start_time: string;
+        weekday: number;
+      }>(
+        `SELECT to_char($1::timestamptz AT TIME ZONE $3, 'YYYY-MM-DD') AS start_date,
+                to_char($2::timestamptz AT TIME ZONE $3, 'YYYY-MM-DD') AS end_date,
+                to_char($1::timestamptz AT TIME ZONE $3, 'HH24:MI') AS start_time,
+                to_char($2::timestamptz AT TIME ZONE $3, 'HH24:MI') AS end_time,
+                extract(isodow FROM ($1::timestamptz AT TIME ZONE $3))::int AS weekday`,
+        [item.start, item.end, this.environment.BUSINESS_TIMEZONE],
+      );
+      const row = required(local.rows[0], 'Route time conversion failed.');
+      if (row.start_date !== route.routeDate || row.end_date !== route.routeDate)
+        conflict(
+          'LOGISTICS_ROUTE_STOP_DATE_MISMATCH',
+          'Every stop must start and finish on the selected route date.',
+        );
+      localStops.push({
+        ...item,
+        date: row.start_date,
+        endTime: row.end_time,
+        startTime: row.start_time,
+        weekday: row.weekday,
+      });
+    }
+
+    for (const item of prepared) {
+      const existingRoute = await client.query<{ number: string }>(
+        `SELECT route.route_number AS number
+         FROM logistics.route_stops stop
+         JOIN logistics.route_plans route ON route.id = stop.route_plan_id
+         WHERE route.assigned_account_id = $1
+           AND route.status IN ('planned', 'in_progress')
+           AND tstzrange(
+                 stop.planned_arrival,
+                 stop.planned_arrival + stop.planned_duration_minutes * INTERVAL '1 minute',
+                 '[)'
+               ) && tstzrange($2::timestamptz, $3::timestamptz, '[)')
+         ORDER BY stop.planned_arrival, stop.id LIMIT 1`,
+        [route.assignedAccountId, item.start, item.end],
+      );
+      if (existingRoute.rows[0])
+        conflict(
+          'LOGISTICS_ROUTE_ASSIGNEE_OVERLAP',
+          `${existingRoute.rows[0].number} already uses part of this time. Choose another time or employee.`,
+        );
+
+      const existingService = await client.query<{ number: string }>(
+        `SELECT work_order.work_order_number AS number
+         FROM service.work_orders work_order
+         WHERE work_order.assigned_technician_account_id = $1
+           AND work_order.status IN ('scheduled', 'in_progress')
+           AND NOT (work_order.id = ANY($4::uuid[]))
+           AND tstzrange(work_order.scheduled_start, work_order.scheduled_end, '[)')
+               && tstzrange($2::timestamptz, $3::timestamptz, '[)')
+         ORDER BY work_order.scheduled_start, work_order.id LIMIT 1`,
+        [route.assignedAccountId, item.start, item.end, serviceWorkOrderIds],
+      );
+      if (existingService.rows[0])
+        conflict(
+          'LOGISTICS_ROUTE_SERVICE_OVERLAP',
+          `${existingService.rows[0].number} already occupies part of this time. Choose another time or employee.`,
+        );
+    }
+
+    const policy = await client.query<{ version: number }>(
+      `SELECT version FROM service.technician_schedule_policies
+       WHERE technician_account_id = $1`,
+      [route.assignedAccountId],
+    );
+    if (!policy.rows[0]) {
+      if (serviceWorkOrderIds.length)
+        conflict(
+          'LOGISTICS_ROUTE_TECHNICIAN_SCHEDULE_REQUIRED',
+          'Set the technician’s working hours in Service before planning this route.',
+        );
+      return;
+    }
+    const windows = await client.query<{
+      capacity_minutes: number;
+      ends_at: string;
+      max_visits: number;
+      starts_at: string;
+      weekday: number;
+    }>(
+      `SELECT weekday, to_char(starts_at, 'HH24:MI') AS starts_at,
+              to_char(ends_at, 'HH24:MI') AS ends_at, capacity_minutes, max_visits
+       FROM service.technician_schedule_windows
+       WHERE technician_account_id = $1`,
+      [route.assignedAccountId],
+    );
+    const windowByDay = new Map(windows.rows.map((window) => [window.weekday, window]));
+    for (const item of localStops) {
+      const window = windowByDay.get(item.weekday);
+      if (!window || item.startTime < window.starts_at || item.endTime > window.ends_at)
+        conflict(
+          'LOGISTICS_ROUTE_OUTSIDE_AVAILABILITY',
+          'Keep every route stop within the assigned technician’s working hours.',
+        );
+    }
+
+    const workload = await client.query<{ booked_minutes: string; visit_count: string }>(
+      `SELECT
+         (
+           COALESCE((
+             SELECT sum(ceil(extract(epoch FROM (work_order.scheduled_end - work_order.scheduled_start)) / 60))
+             FROM service.work_orders work_order
+             WHERE work_order.assigned_technician_account_id = $1
+               AND work_order.status IN ('scheduled', 'in_progress')
+               AND (work_order.scheduled_start AT TIME ZONE $3)::date = $2::date
+           ), 0)
+           + COALESCE((
+             SELECT sum(stop.planned_duration_minutes)
+             FROM logistics.route_stops stop
+             JOIN logistics.route_plans route ON route.id = stop.route_plan_id
+             WHERE route.assigned_account_id = $1
+               AND route.status IN ('planned', 'in_progress')
+               AND stop.stop_type = 'delivery'
+               AND (stop.planned_arrival AT TIME ZONE $3)::date = $2::date
+           ), 0)
+         )::text AS booked_minutes,
+         (
+           (SELECT count(*) FROM service.work_orders work_order
+            WHERE work_order.assigned_technician_account_id = $1
+              AND work_order.status IN ('scheduled', 'in_progress')
+              AND (work_order.scheduled_start AT TIME ZONE $3)::date = $2::date)
+           +
+           (SELECT count(*) FROM logistics.route_stops stop
+            JOIN logistics.route_plans route ON route.id = stop.route_plan_id
+            WHERE route.assigned_account_id = $1
+              AND route.status IN ('planned', 'in_progress')
+              AND stop.stop_type = 'delivery'
+              AND (stop.planned_arrival AT TIME ZONE $3)::date = $2::date)
+         )::text AS visit_count`,
+      [route.assignedAccountId, route.routeDate, this.environment.BUSINESS_TIMEZONE],
+    );
+    const proposedDeliveries = localStops.filter((item) => item.stop.stopType === 'delivery');
+    const addedMinutes = proposedDeliveries.reduce(
+      (total, item) => total + item.stop.plannedDurationMinutes,
+      0,
+    );
+    const bookedMinutes = Number(workload.rows[0]?.booked_minutes ?? 0);
+    const visitCount = Number(workload.rows[0]?.visit_count ?? 0);
+    const routeWindow = windowByDay.get(localStops[0]?.weekday ?? 0);
+    if (
+      routeWindow &&
+      (bookedMinutes + addedMinutes > routeWindow.capacity_minutes ||
+        visitCount + proposedDeliveries.length > routeWindow.max_visits)
+    )
+      conflict(
+        'LOGISTICS_ROUTE_CAPACITY_EXCEEDED',
+        'This route exceeds the technician’s available workload for the selected day.',
+      );
+  }
+
   private async routeStopSource(
     client: PoolClient,
     stop: ReturnType<typeof normalizeRoute>['stops'][number],
-  ) {
+  ): Promise<RouteStopSourceRow> {
     if (stop.stopType === 'delivery') {
-      const result = await client.query<{ address_line: string; city: string; label: string }>(
+      const result = await client.query<RouteStopSourceRow>(
         `SELECT concat(delivery.delivery_number, ' · ', partner.display_name) AS label,
                 concat_ws(', ', delivery.address_line_1, delivery.address_line_2) AS address_line,
-                delivery.city
+                delivery.city, NULL::uuid AS assigned_account_id,
+                NULL::text AS scheduled_start, NULL::text AS scheduled_end
          FROM logistics.deliveries delivery
          JOIN master_data.partners partner ON partner.id = delivery.customer_partner_id
          WHERE delivery.id = $1 AND delivery.status IN ('planned', 'in_transit', 'exception')
@@ -1104,10 +1355,11 @@ export class LogisticsService {
         );
       return required(row, 'Delivery route stop lookup failed');
     }
-    const result = await client.query<{ address_line: string; city: string; label: string }>(
+    const result = await client.query<RouteStopSourceRow>(
       `SELECT concat(request.request_number, ' · ', equipment.device_name) AS label,
               concat_ws(', ', location.address_line_1, location.address_line_2) AS address_line,
-              location.city
+              location.city, work_order.assigned_technician_account_id AS assigned_account_id,
+              work_order.scheduled_start::text, work_order.scheduled_end::text
        FROM service.work_orders work_order
        JOIN service.requests request ON request.id = work_order.service_request_id
        JOIN master_data.customer_locations location ON location.id = request.customer_location_id

@@ -257,6 +257,15 @@ export function listFinancialDocuments(token: string): Promise<FinancialDocument
   );
 }
 
+export function getFinancialDocument(token: string, id: string): Promise<FinancialDocument> {
+  return unwrapApiResponse(
+    apiClient.GET('/api/v1/finance/financial-documents/{id}', {
+      headers: authorizationHeaders(token),
+      params: { path: { id } },
+    }),
+  );
+}
+
 export function createFinancialDocument(
   token: string,
   key: string,

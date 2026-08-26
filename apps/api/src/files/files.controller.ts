@@ -29,6 +29,7 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import type { Response } from 'express';
+import { managedFileParentTypes } from '@vista/contracts';
 
 import type {
   AuthenticatedRequest,
@@ -62,7 +63,7 @@ export class FilesController {
   @Get()
   @RateLimitPolicy('read')
   @ApiQuery({ format: 'uuid', name: 'parentId', type: String })
-  @ApiQuery({ enum: ['partner'], name: 'parentType' })
+  @ApiQuery({ enum: managedFileParentTypes, name: 'parentType' })
   @ApiQuery({ minimum: 1, name: 'page', required: false, type: Number })
   @ApiQuery({ maximum: 100, minimum: 1, name: 'pageSize', required: false, type: Number })
   @ApiOkResponse({ type: ManagedFilePageDto })
@@ -114,7 +115,7 @@ export class FilesController {
       properties: {
         file: { format: 'binary', type: 'string' },
         parentId: { format: 'uuid', type: 'string' },
-        parentType: { enum: ['partner'], type: 'string' },
+        parentType: { enum: [...managedFileParentTypes], type: 'string' },
       },
       required: ['file', 'parentId', 'parentType'],
       type: 'object',

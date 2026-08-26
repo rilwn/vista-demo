@@ -50,6 +50,11 @@ describe('parseEnvironment', () => {
     expect(environment.FINANCE_PAYMENT_REMINDER_LEAD_DAYS).toBe(7);
     expect(environment.FINANCE_PAYMENT_STATUS_CRON).toBe('0 25 1 * * *');
     expect(environment.SALES_SUBSCRIPTION_INVOICE_CRON).toBe('0 15 1 * * *');
+    expect(environment.SERVICE_INSPECTION_REMINDER_CRON).toBe('0 35 1 * * *');
+    expect(environment.SERVICE_PLAN_VISIT_HORIZON_DAYS).toBe(90);
+    expect(environment.SERVICE_PLAN_VISIT_CRON).toBe('0 45 1 * * *');
+    expect(environment.SERVICE_WARRANTY_REMINDER_LEAD_DAYS).toBe(30);
+    expect(environment.SERVICE_WARRANTY_REMINDER_CRON).toBe('0 40 1 * * *');
     expect(environment.PASSWORD_EXPIRY_DAYS).toBe(0);
     expect(environment.PASSWORD_HISTORY_COUNT).toBe(5);
     expect(environment.PASSWORD_MIN_LENGTH).toBe(12);

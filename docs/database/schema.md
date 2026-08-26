@@ -290,7 +290,10 @@ constrained to the selected business location.
 
 `draft_document_sequences` allocates internal `DINV`, `DPRO`, `DCN`, and `DDN`
 references under transactional row locks for each location, optional
-register/operator, document type, and year. They are workflow references only.
+register/operator, document type, and year. Each displayed reference includes a
+stable scope fingerprint so independent register/operator counters cannot produce
+the same reference. Source-linked retries reopen the active draft instead of
+creating a duplicate. They are workflow references only.
 `official_number` remains null until the approved legal numbering and issuance
 rules are implemented. Draft creation/cancellation is audited and outbox-backed;
 the migration deliberately does not claim BNB retrieval, accounting/VAT posting,
@@ -385,16 +388,44 @@ transaction to atomically issue parts from the assigned technician warehouse;
 serial and batch rules remain enforced by that ledger. Images and signatures are
 stored as controlled binary evidence and are available only through the
 parent-record authorization boundary. Internal `SRV` and `WO` sequences are
-operational identifiers, not fiscal or accounting document numbers. The migration
-does not implement payment documents, warranty claims, inspections, route
-planning, or full sales/supplier serial history; those remain separate required
-workflows.
+operational identifiers, not fiscal or accounting document numbers. That
+migration did not itself implement payment documents, warranty care, inspection
+planning, route planning, or full sales/supplier serial history; later migrations
+own those separate workflows.
+
+Migration `0041_service_finance_link` links one completed, chargeable Service
+work order to its prepared Finance document without copying or recalculating the
+Service cost basis. The restrictive unique link makes a replay reopen the same
+draft instead of creating a second financial document.
+
+Migration `0042_service_technician_schedule` adds one versioned weekly schedule
+policy per technician and explicit business-time windows for enabled weekdays.
+Each window stores its start/end, bookable minutes, and visit limit; no production
+working day is inferred. Service assignment uses a technician-scoped advisory
+lock and rejects work outside those windows, overlapping active work orders, or
+daily minute/visit overflow. The Logistics route planner takes the same lock and
+counts delivery stops alongside Service appointments, while keeping Service route
+stops tied to their assigned technician and original appointment window.
+
+Migration `0043_service_care_management` adds the warranty-claim register and
+its append-only status history, one technical or metrological inspection plan
+per registered device, immutable inspection results, and retry-safe links from
+subscription occurrences to generated Service requests. Claim and inspection
+commands use optimistic versions, idempotency records, audit events, and the
+transactional outbox. Planned visits retain their contract, equipment, due date,
+generated request, and source job, while a uniqueness constraint prevents the
+same occurrence from generating twice. Inspection reminder lead times, the
+warranty reminder lead time, and the forward plan-visit window remain
+configurable rather than becoming permanent client policy.
 
 Migration `0033_managed_file_versions` turns the foundation `files.objects`
 metadata into immutable logical-file histories. Every replacement keeps its own
 object key, checksum, issuer, timestamp, and monotonically increasing version
 under one `version_group_id`; the previous object is retained through
-`replaces_object_id`. The first authorized parent is a canonical partner record.
+`replaces_object_id`. Authorized parents currently include canonical partner
+records and warranty claims. Each parent keeps its own module permissions; a
+Service technician can only access a claim in their assigned work scope unless
+they hold Service approval authority.
 Current uploads accept configured PDF/JPEG/PNG/WebP types, enforce a configured
 size ceiling, inspect the file signature, and store content in the private
 S3-compatible bucket. Downloads re-check byte length and SHA-256 before returning

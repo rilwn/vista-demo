@@ -4,6 +4,7 @@ import type { DatabaseService } from '../database/database.service.js';
 import type { FinanceService } from '../finance/finance.service.js';
 import type { StructuredLogger } from '../logging/structured-logger.service.js';
 import type { SalesSubscriptionsService } from '../sales/sales-subscriptions.service.js';
+import type { ServiceCareService } from '../service/service-care.service.js';
 import { JobHandlerRegistry } from './job-handler-registry.service.js';
 import type { FinanceReportExportsService } from './finance-report-exports.service.js';
 import { namedBackgroundJobs } from './named-background-jobs.js';
@@ -105,6 +106,30 @@ describe('NamedJobTriggerHandlersService', () => {
     expect(generateReport).toHaveBeenCalledWith(context);
     expect(query).toHaveBeenCalledTimes(1);
   });
+
+  it.each([
+    ['service.inspection-reminder.prepare', 'prepareInspectionReminders'],
+    ['service.plan-visit.generate', 'generateServicePlanVisits'],
+    ['crm.warranty-expiration.prepare', 'prepareWarrantyReminders'],
+  ] as const)('runs %s as domain work before its durable handoff', async (name, method) => {
+    const { registry, service, serviceCare } = createSubject();
+    service.onModuleInit();
+    const context = {
+      attemptNumber: 1,
+      correlationId: `correlation-${name}`,
+      enqueuedAt: '2026-08-26T01:35:00.000Z',
+      idempotencyKey: `scheduled-${name}-2026-08-26`,
+      jobId: `job-${name}`,
+      maxAttempts: 5,
+      name,
+      payload: { asOf: '2026-08-26' },
+      retryAllowed: true,
+    } as const;
+
+    await registry.execute(context);
+
+    expect(serviceCare[method]).toHaveBeenCalledWith(context);
+  });
 });
 
 function createSubject(
@@ -128,8 +153,15 @@ function createSubject(
   } as unknown as SalesSubscriptionsService;
   const finance = { detectPaymentStatuses } as unknown as FinanceService;
   const reportExports = { generate: generateReport } as unknown as FinanceReportExportsService;
+  const serviceCareSpies = {
+    generateServicePlanVisits: vi.fn(),
+    prepareInspectionReminders: vi.fn(),
+    prepareWarrantyReminders: vi.fn(),
+  };
+  const serviceCare = serviceCareSpies as unknown as ServiceCareService;
   return {
     registry,
+    serviceCare: serviceCareSpies,
     service: new NamedJobTriggerHandlersService(
       database,
       registry,
@@ -137,6 +169,7 @@ function createSubject(
       subscriptions,
       finance,
       reportExports,
+      serviceCare,
     ),
   };
 }

@@ -8,6 +8,7 @@ import {
   Inject,
   Param,
   Post,
+  Put,
   Query,
   Req,
   Res,
@@ -37,19 +38,31 @@ import { RateLimitPolicy } from '../security/rate-limit.decorator.js';
 import {
   AssignServiceWorkOrderDto,
   CancelServiceRequestDto,
+  CompleteServiceInspectionDto,
   CompleteServiceWorkOrderDto,
+  CreateServiceInspectionPlanDto,
   CreateServiceRequestDto,
+  CreateWarrantyClaimDto,
   ListServiceRequestsQueryDto,
   ListServiceWorkOrdersQueryDto,
+  ServiceCareOverviewDto,
   ServiceEquipmentHistoryDto,
+  ServiceInspectionPlanDto,
   ServiceReferenceDataDto,
   ServiceRequestDto,
   ServiceRequestPageDto,
+  ServiceScheduleDto,
+  ServiceScheduleQueryDto,
+  ServiceTechnicianSchedulePolicyDto,
   ServiceWorkOrderDto,
   ServiceWorkOrderPageDto,
   ServiceWorkOrderPhotoDto,
   StartServiceWorkOrderDto,
+  TransitionWarrantyClaimDto,
+  UpdateServiceTechnicianSchedulePolicyDto,
+  WarrantyClaimDto,
 } from './service.dto.js';
+import { ServiceCareService } from './service-care.service.js';
 import { ServiceOperationsService, type ServicePhotoUpload } from './service.service.js';
 
 interface UploadedPhotoFile {
@@ -66,7 +79,76 @@ interface UploadedPhotoFile {
 export class ServiceOperationsController {
   constructor(
     @Inject(ServiceOperationsService) private readonly service: ServiceOperationsService,
+    @Inject(ServiceCareService) private readonly care: ServiceCareService,
   ) {}
+
+  @Get('care')
+  @RateLimitPolicy('read')
+  @RequirePermissions({ action: 'view', module: 'erp.service' })
+  @ApiOkResponse({ type: ServiceCareOverviewDto })
+  careOverview(@Req() request: AuthenticatedRequest): Promise<ServiceCareOverviewDto> {
+    return this.care.overview(request.authentication);
+  }
+
+  @Post('warranty-claims')
+  @HttpCode(HttpStatus.CREATED)
+  @RequirePermissions({ action: 'create', module: 'erp.service' })
+  @ApiBody({ type: CreateWarrantyClaimDto })
+  @ApiCreatedResponse({ type: WarrantyClaimDto })
+  @ApiHeader({ name: 'Idempotency-Key', required: true })
+  createWarrantyClaim(
+    @Body() input: CreateWarrantyClaimDto,
+    @Headers('idempotency-key') key: string | undefined,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<WarrantyClaimDto> {
+    return this.care.createClaim(input, key, request.authentication, metadata(request));
+  }
+
+  @Post('warranty-claims/:id/transition')
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissions({ action: 'approve', module: 'erp.service' })
+  @ApiBody({ type: TransitionWarrantyClaimDto })
+  @ApiOkResponse({ type: WarrantyClaimDto })
+  @ApiHeader({ name: 'Idempotency-Key', required: true })
+  @ApiParam({ format: 'uuid', name: 'id' })
+  transitionWarrantyClaim(
+    @Param('id') id: string,
+    @Body() input: TransitionWarrantyClaimDto,
+    @Headers('idempotency-key') key: string | undefined,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<WarrantyClaimDto> {
+    return this.care.transitionClaim(id, input, key, request.authentication, metadata(request));
+  }
+
+  @Post('inspection-plans')
+  @HttpCode(HttpStatus.CREATED)
+  @RequirePermissions({ action: 'approve', module: 'erp.service' })
+  @ApiBody({ type: CreateServiceInspectionPlanDto })
+  @ApiCreatedResponse({ type: ServiceInspectionPlanDto })
+  @ApiHeader({ name: 'Idempotency-Key', required: true })
+  createInspectionPlan(
+    @Body() input: CreateServiceInspectionPlanDto,
+    @Headers('idempotency-key') key: string | undefined,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<ServiceInspectionPlanDto> {
+    return this.care.createInspectionPlan(input, key, request.authentication, metadata(request));
+  }
+
+  @Post('inspection-plans/:id/complete')
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissions({ action: 'edit', module: 'erp.service' })
+  @ApiBody({ type: CompleteServiceInspectionDto })
+  @ApiOkResponse({ type: ServiceInspectionPlanDto })
+  @ApiHeader({ name: 'Idempotency-Key', required: true })
+  @ApiParam({ format: 'uuid', name: 'id' })
+  completeInspection(
+    @Param('id') id: string,
+    @Body() input: CompleteServiceInspectionDto,
+    @Headers('idempotency-key') key: string | undefined,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<ServiceInspectionPlanDto> {
+    return this.care.completeInspection(id, input, key, request.authentication, metadata(request));
+  }
 
   @Get('reference-data')
   @RateLimitPolicy('read')
@@ -74,6 +156,41 @@ export class ServiceOperationsController {
   @ApiOkResponse({ type: ServiceReferenceDataDto })
   referenceData(@Req() request: AuthenticatedRequest): Promise<ServiceReferenceDataDto> {
     return this.service.referenceData(request.authentication);
+  }
+
+  @Get('schedule')
+  @RateLimitPolicy('read')
+  @RequirePermissions({ action: 'view', module: 'erp.service' })
+  @ApiOkResponse({ type: ServiceScheduleDto })
+  @ApiQuery({ format: 'date', name: 'dateFrom', type: String })
+  @ApiQuery({ format: 'date', name: 'dateTo', type: String })
+  schedule(
+    @Query() query: ServiceScheduleQueryDto,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<ServiceScheduleDto> {
+    return this.service.schedule(query, request.authentication);
+  }
+
+  @Put('technicians/:id/schedule-policy')
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissions({ action: 'approve', module: 'erp.service' })
+  @ApiBody({ type: UpdateServiceTechnicianSchedulePolicyDto })
+  @ApiHeader({ name: 'Idempotency-Key', required: true })
+  @ApiOkResponse({ type: ServiceTechnicianSchedulePolicyDto })
+  @ApiParam({ format: 'uuid', name: 'id' })
+  updateSchedulePolicy(
+    @Param('id') id: string,
+    @Body() input: UpdateServiceTechnicianSchedulePolicyDto,
+    @Headers('idempotency-key') key: string | undefined,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<ServiceTechnicianSchedulePolicyDto> {
+    return this.service.updateSchedulePolicy(
+      id,
+      input,
+      key,
+      request.authentication,
+      metadata(request),
+    );
   }
 
   @Get('requests')

@@ -37,6 +37,8 @@ import type {
   ServiceReferenceData,
   ServiceRequest,
   ServiceRequestPage,
+  ServiceSchedule,
+  ServiceTechnicianSchedulePolicy,
   ServiceWorkOrder,
   ServiceWorkOrderPhoto,
   ServiceWorkOrderPage,
@@ -46,6 +48,10 @@ import type {
   LogisticsReferenceData,
   LogisticsReturn,
   LogisticsRoutePlan,
+  ManagedFile,
+  ServiceCareOverview,
+  ServiceInspectionPlan,
+  WarrantyClaim,
 } from '@vista/contracts';
 import { Pool } from 'pg';
 import request from 'supertest';
@@ -70,6 +76,7 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
   let database: Pool;
   let databaseName: string;
   let token: string;
+  let viewerAccountId: string;
   let viewerToken: string;
   let customerId: string;
   let customerLocationId: string;
@@ -107,10 +114,8 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
       new URL('../src/database/migrations', import.meta.url),
     );
     await migrateUp(database, migrationDirectory);
-    expect(await migrateDown(database, migrationDirectory)).toBe('0040_finance_journal_vat_review');
-    expect(await migrateUp(database, migrationDirectory)).toContain(
-      '0040_finance_journal_vat_review',
-    );
+    expect(await migrateDown(database, migrationDirectory)).toBe('0043_service_care_management');
+    expect(await migrateUp(database, migrationDirectory)).toContain('0043_service_care_management');
 
     Object.assign(process.env, {
       BUSINESS_TIMEZONE: 'Europe/Sofia',
@@ -161,6 +166,7 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
       `sales-viewer-${runId}@example.invalid`,
       passwordHash,
     );
+    viewerAccountId = viewerId;
     await grantPermissions(database, creatorId, ['create', 'edit', 'view']);
     await grantPermissions(database, viewerId, ['view']);
     await grantFinancePermissions(database, creatorId, ['create', 'edit', 'view']);
@@ -179,6 +185,7 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
     } = await seedSalesData(database, creatorId, runId));
     ({ cashOperatorId, cashRegisterId, technicianWarehouseId } =
       await seedServiceTechnicianWarehouse(database, creatorId, productId, runId));
+    await seedServiceSchedulePolicy(database, creatorId, creatorId);
     token = await login(application, `sales-${runId}@example.invalid`);
     viewerToken = await login(application, `sales-viewer-${runId}@example.invalid`);
   }, 30_000);
@@ -1523,6 +1530,39 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
 
     const unitCode = references.products.find((product) => product.id === productId)?.unitCode;
     if (!unitCode) throw new Error('Financial document test product unit was not found');
+    const naturalReplay = await request(application.getHttpServer())
+      .post('/api/v1/finance/financial-documents')
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', `financial-document-natural-replay-${runId}`)
+      .send(invoiceInput)
+      .expect(201);
+    expect((naturalReplay.body as FinancialDocument).id).toBe(invoice.id);
+
+    const registerScopedInvoiceResponse = await request(application.getHttpServer())
+      .post('/api/v1/finance/financial-documents')
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', `financial-document-register-scope-${runId}`)
+      .send({
+        ...invoiceInput,
+        cashRegisterId,
+        lines: [
+          {
+            description: 'Register-scoped numbering check',
+            discountPercent: '0',
+            productId,
+            quantity: '1',
+            unitCode,
+            unitPrice: '10',
+            vatTreatment: 'standard_20',
+          },
+        ],
+        sourceSalesInvoiceId: undefined,
+      })
+      .expect(201);
+    const registerScopedInvoice = registerScopedInvoiceResponse.body as FinancialDocument;
+    expect(registerScopedInvoice.number).not.toBe(invoice.number);
+    expect(registerScopedInvoice.number).toMatch(/^DINV-.+-[A-F0-9]{12}-\d{4}-\d{6}$/u);
+
     const correctionResponse = await request(application.getHttpServer())
       .post('/api/v1/finance/financial-documents')
       .set('authorization', `Bearer ${token}`)
@@ -1612,7 +1652,7 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
       .get('/api/v1/finance/financial-documents?page=1&pageSize=10')
       .set('authorization', `Bearer ${token}`)
       .expect(200);
-    expect(register.body).toMatchObject({ page: 1, pageSize: 10, totalItems: 6 });
+    expect(register.body).toMatchObject({ page: 1, pageSize: 10, totalItems: 7 });
 
     const evidence = await database.query<{ audit_count: string; outbox_count: string }>(
       `SELECT
@@ -1621,7 +1661,7 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
          (SELECT count(*)::text FROM integration.outbox_events
           WHERE event_type LIKE 'finance.financial-document.%') AS outbox_count`,
     );
-    expect(evidence.rows[0]).toEqual({ audit_count: '7', outbox_count: '7' });
+    expect(evidence.rows[0]).toEqual({ audit_count: '8', outbox_count: '8' });
   });
 
   it('maintains scoped price lists and resolves one deterministic future price', async () => {
@@ -1929,6 +1969,227 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
     expect(evidence.rows[0]).toEqual({ audit_count: '3', draft_count: '1', outbox_count: '3' });
   });
 
+  it('manages warranty claims, inspections, reminders, and planned Service visits without duplicate work', async () => {
+    await request(application.getHttpServer())
+      .get('/api/v1/service/care')
+      .set('authorization', `Bearer ${viewerToken}`)
+      .expect(403);
+
+    const claimKey = `service-warranty-claim-${runId}`;
+    const claimInput = {
+      customerEquipmentId: equipmentId,
+      customerLocationId,
+      customerPartnerId: customerId,
+      description: 'The fiscal register display loses contrast during operation.',
+    };
+    const claimResponse = await request(application.getHttpServer())
+      .post('/api/v1/service/warranty-claims')
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', claimKey)
+      .send(claimInput)
+      .expect(201);
+    const claim = claimResponse.body as WarrantyClaim;
+    expect(claim).toMatchObject({
+      customerEquipmentId: equipmentId,
+      status: 'received',
+      version: 1,
+    });
+    expect(claim.number).toMatch(/^WCL-\d{4}-\d{6}$/u);
+
+    const claimReplay = await request(application.getHttpServer())
+      .post('/api/v1/service/warranty-claims')
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', claimKey)
+      .send(claimInput)
+      .expect(201);
+    expect((claimReplay.body as WarrantyClaim).id).toBe(claim.id);
+
+    const reviewResponse = await request(application.getHttpServer())
+      .post(`/api/v1/service/warranty-claims/${claim.id}/transition`)
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', `service-warranty-review-${runId}`)
+      .send({ expectedVersion: 1, nextStatus: 'under_review' })
+      .expect(200);
+    const review = reviewResponse.body as WarrantyClaim;
+    expect(review).toMatchObject({ status: 'under_review', version: 2 });
+
+    await request(application.getHttpServer())
+      .post(`/api/v1/service/warranty-claims/${claim.id}/transition`)
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', `service-warranty-missing-note-${runId}`)
+      .send({ expectedVersion: 2, nextStatus: 'approved' })
+      .expect(400);
+
+    const approvedResponse = await request(application.getHttpServer())
+      .post(`/api/v1/service/warranty-claims/${claim.id}/transition`)
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', `service-warranty-approve-${runId}`)
+      .send({
+        expectedVersion: 2,
+        nextStatus: 'approved',
+        note: 'The display fault is covered by the active warranty.',
+      })
+      .expect(200);
+    expect(approvedResponse.body as WarrantyClaim).toMatchObject({
+      decisionNote: 'The display fault is covered by the active warranty.',
+      status: 'approved',
+      version: 3,
+    });
+
+    const uploadedResponse = await request(application.getHttpServer())
+      .post('/api/v1/files')
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', `service-warranty-file-${runId}`)
+      .field('parentType', 'warranty_claim')
+      .field('parentId', claim.id)
+      .attach('file', Buffer.from('%PDF-1.4\n1 0 obj\n<<>>\nendobj\n%%EOF'), {
+        contentType: 'application/pdf',
+        filename: 'warranty-assessment.pdf',
+      })
+      .expect(201);
+    const attachment = uploadedResponse.body as ManagedFile;
+    expect(attachment).toMatchObject({
+      originalName: 'warranty-assessment.pdf',
+      parentId: claim.id,
+      parentType: 'warranty_claim',
+      status: 'available',
+    });
+
+    const planKey = `service-inspection-plan-${runId}`;
+    const planInput = {
+      customerEquipmentId: equipmentId,
+      inspectionType: 'technical',
+      intervalMonths: 12,
+      nextDueDate: '2026-09-02',
+      reminderLeadDays: 30,
+    };
+    const planResponse = await request(application.getHttpServer())
+      .post('/api/v1/service/inspection-plans')
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', planKey)
+      .send(planInput)
+      .expect(201);
+    const plan = planResponse.body as ServiceInspectionPlan;
+    expect(plan).toMatchObject({ nextDueDate: '2026-09-02', version: 1 });
+
+    const planReplay = await request(application.getHttpServer())
+      .post('/api/v1/service/inspection-plans')
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', planKey)
+      .send(planInput)
+      .expect(201);
+    expect((planReplay.body as ServiceInspectionPlan).id).toBe(plan.id);
+
+    const handlers = application.get(JobHandlerRegistry);
+    const inspectionJob = {
+      attemptNumber: 1,
+      correlationId: `inspection-reminder-${runId}`,
+      enqueuedAt: '2026-08-26T01:35:00.000Z',
+      idempotencyKey: `inspection-reminder-2026-08-26-${runId}`,
+      jobId: `inspection-reminder-${runId}`,
+      maxAttempts: 5,
+      name: 'service.inspection-reminder.prepare',
+      payload: { asOf: '2026-08-26' },
+      retryAllowed: true,
+    } as const;
+    await expect(handlers.execute(inspectionJob)).resolves.toMatchObject({
+      notificationCount: 1,
+    });
+    await expect(handlers.execute({ ...inspectionJob, attemptNumber: 2 })).resolves.toMatchObject({
+      deduplicated: true,
+      notificationCount: 0,
+    });
+
+    const completedPlanResponse = await request(application.getHttpServer())
+      .post(`/api/v1/service/inspection-plans/${plan.id}/complete`)
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', `service-inspection-complete-${runId}`)
+      .send({
+        completedOn: '2026-09-02',
+        expectedVersion: 1,
+        notes: 'All technical checks passed.',
+        outcome: 'passed',
+      })
+      .expect(200);
+    expect(completedPlanResponse.body as ServiceInspectionPlan).toMatchObject({
+      lastCompletedOn: '2026-09-02',
+      nextDueDate: '2027-09-02',
+      records: [expect.objectContaining({ outcome: 'passed' })],
+      version: 2,
+    });
+
+    const planVisitJob = {
+      attemptNumber: 1,
+      correlationId: `plan-visit-${runId}`,
+      enqueuedAt: '2026-08-26T01:45:00.000Z',
+      idempotencyKey: `plan-visit-2026-08-26-${runId}`,
+      jobId: `plan-visit-${runId}`,
+      maxAttempts: 5,
+      name: 'service.plan-visit.generate',
+      payload: { asOf: '2026-08-26' },
+      retryAllowed: true,
+    } as const;
+    await expect(handlers.execute(planVisitJob)).resolves.toMatchObject({ generatedCount: 1 });
+    await expect(handlers.execute({ ...planVisitJob, attemptNumber: 2 })).resolves.toMatchObject({
+      deduplicated: true,
+      generatedCount: 0,
+    });
+
+    const overviewResponse = await request(application.getHttpServer())
+      .get('/api/v1/service/care')
+      .set('authorization', `Bearer ${token}`)
+      .expect(200);
+    const overview = overviewResponse.body as ServiceCareOverview;
+    expect(overview.claims).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          attachments: [expect.objectContaining({ id: attachment.id })],
+          id: claim.id,
+          status: 'approved',
+        }),
+      ]),
+    );
+    expect(overview.inspections).toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: plan.id, nextDueDate: '2027-09-02' })]),
+    );
+
+    const requestPageResponse = await request(application.getHttpServer())
+      .get('/api/v1/service/requests?page=1&pageSize=100')
+      .set('authorization', `Bearer ${token}`)
+      .expect(200);
+    expect((requestPageResponse.body as ServiceRequestPage).items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ plannedVisitDate: '2026-10-01', sourceChannel: 'service_plan' }),
+      ]),
+    );
+
+    const evidence = await database.query<{
+      audit_count: string;
+      generation_count: string;
+      notification_count: string;
+      outbox_count: string;
+    }>(
+      `SELECT
+         (SELECT count(*)::text FROM audit.events
+          WHERE action IN ('service.warranty-claim.created',
+            'service.warranty-claim.status-changed', 'service.inspection-plan.created',
+            'service.inspection.completed', 'service.plan-visit.generated')) AS audit_count,
+         (SELECT count(*)::text FROM integration.outbox_events
+          WHERE event_type IN ('service.warranty-claim.created',
+            'service.warranty-claim.status-changed', 'service.inspection-plan.created',
+            'service.inspection.completed', 'service.plan-visit.generated')) AS outbox_count,
+         (SELECT count(*)::text FROM service.subscription_visit_generations) AS generation_count,
+         (SELECT count(*)::text FROM notifications.messages
+          WHERE template_key = 'service.inspection.due') AS notification_count`,
+    );
+    expect(evidence.rows[0]).toEqual({
+      audit_count: '6',
+      generation_count: '1',
+      notification_count: '1',
+      outbox_count: '6',
+    });
+  });
+
   it('carries a service request through technician work, evidence, parts, signature, and serial history', async () => {
     await request(application.getHttpServer())
       .get('/api/v1/service/reference-data')
@@ -1952,6 +2213,54 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
         expect.objectContaining({ productId, warehouseId: technicianWarehouseId }),
       ]),
     );
+
+    const schedulePolicyInput = {
+      expectedVersion: 1,
+      windows: Array.from({ length: 7 }, (_, index) => ({
+        capacityMinutes: 540,
+        endsAt: '18:00',
+        maxVisits: 5,
+        startsAt: '08:00',
+        weekday: index + 1,
+      })),
+    };
+    await request(application.getHttpServer())
+      .put(`/api/v1/service/technicians/${creatorAccountId}/schedule-policy`)
+      .set('authorization', `Bearer ${viewerToken}`)
+      .set('idempotency-key', `service-schedule-viewer-${runId}`)
+      .send(schedulePolicyInput)
+      .expect(403);
+    const schedulePolicyKey = `service-schedule-policy-${runId}`;
+    const policyResponse = await request(application.getHttpServer())
+      .put(`/api/v1/service/technicians/${creatorAccountId}/schedule-policy`)
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', schedulePolicyKey)
+      .send(schedulePolicyInput)
+      .expect(200);
+    const schedulePolicy = policyResponse.body as ServiceTechnicianSchedulePolicy;
+    expect(schedulePolicy).toMatchObject({
+      configured: true,
+      technicianAccountId: creatorAccountId,
+      version: 2,
+    });
+    expect(schedulePolicy.windows).toEqual(
+      expect.arrayContaining([expect.objectContaining({ capacityMinutes: 540, weekday: 1 })]),
+    );
+    expect(schedulePolicy.windows).toHaveLength(7);
+    const policyReplay = await request(application.getHttpServer())
+      .put(`/api/v1/service/technicians/${creatorAccountId}/schedule-policy`)
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', schedulePolicyKey)
+      .send(schedulePolicyInput)
+      .expect(200);
+    expect((policyReplay.body as ServiceTechnicianSchedulePolicy).version).toBe(2);
+    const stalePolicy = await request(application.getHttpServer())
+      .put(`/api/v1/service/technicians/${creatorAccountId}/schedule-policy`)
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', `service-schedule-policy-stale-${runId}`)
+      .send(schedulePolicyInput)
+      .expect(409);
+    expect(stalePolicy.body.error.code).toBe('SERVICE_SCHEDULE_POLICY_VERSION_CONFLICT');
 
     const requestInput = {
       customerEquipmentId: equipmentId,
@@ -1991,8 +2300,8 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
     expect(requestPage).toMatchObject({
       page: 1,
       pageSize: 25,
-      summary: { new: 1 },
-      total: 1,
+      summary: { new: 2 },
+      total: 2,
       totalPages: 1,
     });
     expect(requestPage.items).toEqual(
@@ -2016,6 +2325,159 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
     expect(assigned.workOrderId).toBeTypeOf('string');
     expect(assigned.workOrderNumber).toMatch(/^WO-/u);
     if (!assigned.workOrderId) throw new Error('Assigned request did not include a work order.');
+
+    const conflictingScheduleRequestResponse = await request(application.getHttpServer())
+      .post('/api/v1/service/requests')
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', `service-schedule-conflict-create-${runId}`)
+      .send({
+        ...requestInput,
+        problemDescription: 'Second visit used to verify technician scheduling controls.',
+      })
+      .expect(201);
+    const conflictingScheduleRequest = conflictingScheduleRequestResponse.body as ServiceRequest;
+    const deliveryRouteOverlap = await request(application.getHttpServer())
+      .post(`/api/v1/service/requests/${conflictingScheduleRequest.id}/assign`)
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', `service-route-overlap-${runId}`)
+      .send({
+        expectedVersion: conflictingScheduleRequest.version,
+        scheduledEnd: '2026-08-26T08:00:00.000Z',
+        scheduledStart: '2026-08-26T07:30:00.000Z',
+        technicianAccountId: creatorAccountId,
+        technicianWarehouseId,
+      })
+      .expect(409);
+    expect(deliveryRouteOverlap.body.error.code).toBe('SERVICE_TECHNICIAN_ROUTE_OVERLAP');
+    const outsideHours = await request(application.getHttpServer())
+      .post(`/api/v1/service/requests/${conflictingScheduleRequest.id}/assign`)
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', `service-schedule-outside-${runId}`)
+      .send({
+        expectedVersion: conflictingScheduleRequest.version,
+        scheduledEnd: '2099-09-01T05:00:00.000Z',
+        scheduledStart: '2099-09-01T04:00:00.000Z',
+        technicianAccountId: creatorAccountId,
+        technicianWarehouseId,
+      })
+      .expect(409);
+    expect(outsideHours.body.error.code).toBe('SERVICE_TECHNICIAN_OUTSIDE_AVAILABILITY');
+    const overlappingVisit = await request(application.getHttpServer())
+      .post(`/api/v1/service/requests/${conflictingScheduleRequest.id}/assign`)
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', `service-schedule-overlap-${runId}`)
+      .send({
+        expectedVersion: conflictingScheduleRequest.version,
+        scheduledEnd: '2099-09-01T10:30:00.000Z',
+        scheduledStart: '2099-09-01T09:30:00.000Z',
+        technicianAccountId: creatorAccountId,
+        technicianWarehouseId,
+      })
+      .expect(409);
+    expect(overlappingVisit.body.error.code).toBe('SERVICE_TECHNICIAN_SCHEDULE_OVERLAP');
+
+    const scheduleResponse = await request(application.getHttpServer())
+      .get('/api/v1/service/schedule?dateFrom=2099-09-01&dateTo=2099-09-07')
+      .set('authorization', `Bearer ${token}`)
+      .expect(200);
+    const schedule = scheduleResponse.body as ServiceSchedule;
+    expect(schedule.businessTimezone).toBe('Europe/Sofia');
+    expect(schedule.dateFrom).toBe('2099-09-01');
+    expect(schedule.dateTo).toBe('2099-09-07');
+    expect(schedule.technicians).toHaveLength(1);
+    expect(schedule.technicians[0]?.bookedMinutes).toBe(60);
+    expect(schedule.technicians[0]?.capacityMinutes).toBe(3780);
+    expect(schedule.technicians[0]?.technician.accountId).toBe(creatorAccountId);
+    expect(schedule.technicians[0]?.visitCount).toBe(1);
+    expect(schedule.technicians[0]?.days).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          bookedMinutes: 60,
+          capacityMinutes: 540,
+          date: '2099-09-01',
+          visits: [expect.objectContaining({ workOrderId: assigned.workOrderId })],
+        }),
+      ]),
+    );
+
+    const logisticsReferencesResponse = await request(application.getHttpServer())
+      .get('/api/v1/logistics/reference-data')
+      .set('authorization', `Bearer ${token}`)
+      .expect(200);
+    const logisticsReferences = logisticsReferencesResponse.body as LogisticsReferenceData;
+    expect(logisticsReferences.businessTimezone).toBe('Europe/Sofia');
+    expect(logisticsReferences.serviceStops).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          assignedAccountId: creatorAccountId,
+          id: assigned.workOrderId,
+          scheduledEnd: '2099-09-01T10:00:00.000Z',
+          scheduledStart: '2099-09-01T09:00:00.000Z',
+        }),
+      ]),
+    );
+    const wrongRouteAssignee = await request(application.getHttpServer())
+      .post('/api/v1/logistics/routes')
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', `service-route-wrong-assignee-${runId}`)
+      .send({
+        assignedAccountId: viewerAccountId,
+        routeDate: '2099-09-01',
+        stops: [
+          {
+            plannedArrival: '2099-09-01T09:00:00.000Z',
+            plannedDurationMinutes: 60,
+            serviceWorkOrderId: assigned.workOrderId,
+            stopType: 'service',
+          },
+        ],
+        title: 'Wrong technician route',
+      })
+      .expect(409);
+    expect(wrongRouteAssignee.body.error.code).toBe('LOGISTICS_ROUTE_SERVICE_ASSIGNEE_MISMATCH');
+    const wrongServiceTime = await request(application.getHttpServer())
+      .post('/api/v1/logistics/routes')
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', `service-route-wrong-time-${runId}`)
+      .send({
+        assignedAccountId: creatorAccountId,
+        routeDate: '2099-09-01',
+        stops: [
+          {
+            plannedArrival: '2099-09-01T10:00:00.000Z',
+            plannedDurationMinutes: 60,
+            serviceWorkOrderId: assigned.workOrderId,
+            stopType: 'service',
+          },
+        ],
+        title: 'Wrong appointment time',
+      })
+      .expect(409);
+    expect(wrongServiceTime.body.error.code).toBe('LOGISTICS_ROUTE_SERVICE_TIME_MISMATCH');
+    const serviceRouteResponse = await request(application.getHttpServer())
+      .post('/api/v1/logistics/routes')
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', `service-route-${runId}`)
+      .send({
+        assignedAccountId: creatorAccountId,
+        notes: 'Service appointment route.',
+        routeDate: '2099-09-01',
+        stops: [
+          {
+            plannedArrival: '2099-09-01T09:00:00.000Z',
+            plannedDurationMinutes: 60,
+            serviceWorkOrderId: assigned.workOrderId,
+            stopType: 'service',
+          },
+        ],
+        title: 'Technician Service route',
+      })
+      .expect(201);
+    expect(serviceRouteResponse.body as LogisticsRoutePlan).toMatchObject({
+      assignedAccountId: creatorAccountId,
+      routeDate: '2099-09-01',
+      stops: [expect.objectContaining({ serviceWorkOrderId: assigned.workOrderId })],
+    });
 
     const scheduledResponse = await request(application.getHttpServer())
       .get(`/api/v1/service/work-orders/${assigned.workOrderId}`)
@@ -2176,6 +2638,101 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
       expect.arrayContaining([expect.objectContaining({ workOrderNumber: completed.number })]),
     );
 
+    const financeReferencesResponse = await request(application.getHttpServer())
+      .get('/api/v1/finance/financial-documents/reference-data')
+      .set('authorization', `Bearer ${token}`)
+      .expect(200);
+    const financeReferences = financeReferencesResponse.body as FinancialDocumentReferenceData;
+    const serviceDraft = financeReferences.serviceDrafts.find((draft) => draft.id === completed.id);
+    const financeScope = financeReferences.scopes[0];
+    expect(serviceDraft).toMatchObject({
+      currencyCode: 'BGN',
+      customerPartnerId: customerId,
+      linkedDocumentTypes: [],
+      number: completed.number,
+      total: '57.0000',
+    });
+    expect(serviceDraft?.lines).toEqual([
+      expect.objectContaining({
+        description: `Service labour · ${completed.number}`,
+        unitPrice: '40.0000',
+      }),
+      expect.objectContaining({ productId, quantity: '1.0000', unitPrice: '7.0000' }),
+      expect.objectContaining({
+        description: `Transport · ${completed.number}`,
+        unitPrice: '10.0000',
+      }),
+    ]);
+    if (!serviceDraft || !financeScope)
+      throw new Error('Completed Service work was not offered to Finance');
+    const businessDate = (
+      await database.query<{ date: string }>(
+        "SELECT (now() AT TIME ZONE 'Europe/Sofia')::date::text AS date",
+      )
+    ).rows[0]?.date;
+    if (!businessDate) throw new Error('Finance business date was not available');
+    const serviceInvoiceInput = {
+      businessLocationId: financeScope.locationId,
+      currencyCode: 'BGN',
+      customerPartnerId: customerId,
+      documentType: 'invoice',
+      dueDate: businessDate,
+      exchangeRate: '1',
+      issueDate: businessDate,
+      legalEntityId: financeScope.legalEntityId,
+      lines: serviceDraft.lines,
+      rateDate: businessDate,
+      rateSource: 'internal_bgn',
+      sourceServiceWorkOrderId: completed.id,
+      taxEventDate: businessDate,
+    };
+    const changedChargesResponse = await request(application.getHttpServer())
+      .post('/api/v1/finance/financial-documents')
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', `service-finance-changed-${runId}`)
+      .send({
+        ...serviceInvoiceInput,
+        lines: serviceDraft.lines.map((line, index) =>
+          index === 0 ? { ...line, unitPrice: '41' } : line,
+        ),
+      })
+      .expect(400);
+    expect(changedChargesResponse.body.error.code).toBe('FINANCE_SERVICE_CHARGES_CHANGED');
+
+    const serviceFinanceKey = `service-finance-${runId}`;
+    const financeDraftResponse = await request(application.getHttpServer())
+      .post('/api/v1/finance/financial-documents')
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', serviceFinanceKey)
+      .send(serviceInvoiceInput)
+      .expect(201);
+    const financeDraft = financeDraftResponse.body as FinancialDocument;
+    expect(financeDraft).toMatchObject({
+      bgnGrossTotal: '68.4000',
+      bgnNetTotal: '57.0000',
+      bgnVatTotal: '11.4000',
+      sourceServiceWorkOrderId: completed.id,
+      sourceServiceWorkOrderNumber: completed.number,
+      status: 'draft',
+    });
+    const financeDraftReplay = await request(application.getHttpServer())
+      .post('/api/v1/finance/financial-documents')
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', serviceFinanceKey)
+      .send(serviceInvoiceInput)
+      .expect(201);
+    expect((financeDraftReplay.body as FinancialDocument).id).toBe(financeDraft.id);
+    const linkedWorkOrder = (
+      await request(application.getHttpServer())
+        .get(`/api/v1/service/work-orders/${completed.id}`)
+        .set('authorization', `Bearer ${token}`)
+        .expect(200)
+    ).body as ServiceWorkOrder;
+    expect(linkedWorkOrder).toMatchObject({
+      financialDocumentId: financeDraft.id,
+      financialDocumentNumber: financeDraft.number,
+    });
+
     await database.query(
       "UPDATE master_data.customer_equipment SET status = 'retired' WHERE id = $1",
       [equipmentId],
@@ -2245,6 +2802,8 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
         productId,
         `scope-two-${runId}`,
       );
+    await seedServiceSchedulePolicy(database, firstTechnicianAccountId, creatorAccountId);
+    await seedServiceSchedulePolicy(database, secondTechnicianAccountId, creatorAccountId);
     const firstTechnicianToken = await login(
       application,
       `service-tech-one-${runId}@example.invalid`,
@@ -2328,6 +2887,23 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
     expect(ownReferences.technicians).toEqual([
       expect.objectContaining({ accountId: firstTechnicianAccountId }),
     ]);
+
+    const ownScheduleResponse = await request(application.getHttpServer())
+      .get('/api/v1/service/schedule?dateFrom=2099-10-01&dateTo=2099-10-07')
+      .set('authorization', `Bearer ${firstTechnicianToken}`)
+      .expect(200);
+    const ownSchedule = ownScheduleResponse.body as ServiceSchedule;
+    expect(ownSchedule.technicians).toHaveLength(1);
+    expect(ownSchedule.technicians[0]).toMatchObject({
+      technician: { accountId: firstTechnicianAccountId },
+      visitCount: 1,
+    });
+    await request(application.getHttpServer())
+      .put(`/api/v1/service/technicians/${firstTechnicianAccountId}/schedule-policy`)
+      .set('authorization', `Bearer ${firstTechnicianToken}`)
+      .set('idempotency-key', `service-scope-policy-denied-${runId}`)
+      .send({ expectedVersion: 1, windows: [] })
+      .expect(403);
 
     const ownRequestsResponse = await request(application.getHttpServer())
       .get('/api/v1/service/requests?page=1&pageSize=25')
@@ -2895,6 +3471,27 @@ async function seedServiceTechnicianWarehouse(
     cashRegisterId,
     technicianWarehouseId: warehouseId,
   };
+}
+
+async function seedServiceSchedulePolicy(
+  pool: Pool,
+  technicianAccountId: string,
+  actorAccountId: string,
+) {
+  await pool.query(
+    `INSERT INTO service.technician_schedule_policies (
+       technician_account_id, created_by, updated_by
+     ) VALUES ($1, $2, $2)`,
+    [technicianAccountId, actorAccountId],
+  );
+  await pool.query(
+    `INSERT INTO service.technician_schedule_windows (
+       technician_account_id, weekday, starts_at, ends_at, capacity_minutes, max_visits
+     )
+     SELECT $1, weekday, TIME '00:00', TIME '23:59', 1439, 100
+     FROM generate_series(1, 7) AS weekday`,
+    [technicianAccountId],
+  );
 }
 
 const tinyPng = Buffer.from(

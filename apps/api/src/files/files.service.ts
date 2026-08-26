@@ -414,28 +414,37 @@ export class FilesService {
     action: 'edit' | 'view',
     auth: AuthenticationContext,
   ): Promise<void> {
-    if (parentType !== 'partner') {
-      throw new ApiErrorException(
-        'FILE_PARENT_TYPE_UNSUPPORTED',
-        'This record type does not support managed files yet.',
-        HttpStatus.BAD_REQUEST,
-      );
-    }
-    if (!hasPermission(auth.permissions, { action, module: 'crm' })) {
+    const module = parentType === 'partner' ? 'crm' : 'erp.service';
+    if (!hasPermission(auth.permissions, { action, module })) {
       throw new ApiErrorException(
         'FILE_PARENT_ACCESS_DENIED',
         'You do not have access to files for this record.',
         HttpStatus.FORBIDDEN,
       );
     }
-    const parent = await queryable.query<{ id: string }>(
-      'SELECT id FROM master_data.partners WHERE id = $1',
-      [parentId],
-    );
+    const parent =
+      parentType === 'partner'
+        ? await queryable.query<{ id: string }>(
+            'SELECT id FROM master_data.partners WHERE id = $1',
+            [parentId],
+          )
+        : await queryable.query<{ id: string }>(
+            `SELECT claim.id
+             FROM service.warranty_claims claim
+             LEFT JOIN service.requests request ON request.id = claim.service_request_id
+             LEFT JOIN service.work_orders work_order ON work_order.service_request_id = request.id
+             WHERE claim.id = $1
+               AND ($2::boolean OR work_order.assigned_technician_account_id = $3)`,
+            [
+              parentId,
+              hasPermission(auth.permissions, { action: 'approve', module: 'erp.service' }),
+              auth.accountId,
+            ],
+          );
     if (!parent.rows[0]) {
       throw new ApiErrorException(
         'FILE_PARENT_NOT_FOUND',
-        'The related partner record was not found.',
+        'The related record was not found or is not available to your account.',
         HttpStatus.NOT_FOUND,
       );
     }

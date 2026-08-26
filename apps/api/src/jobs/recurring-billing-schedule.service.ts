@@ -7,6 +7,9 @@ import { JobQueueService } from './job-queue.service.js';
 
 export const recurringBillingScheduleId = 'sales.subscription-invoice.daily';
 export const financePaymentStatusScheduleId = 'finance.payment-status.daily';
+export const serviceInspectionReminderScheduleId = 'service.inspection-reminder.daily';
+export const serviceWarrantyReminderScheduleId = 'service.warranty-reminder.daily';
+export const servicePlanVisitScheduleId = 'service.plan-visit.daily';
 
 @Injectable()
 export class RecurringBillingScheduleService implements OnApplicationBootstrap {
@@ -40,5 +43,38 @@ export class RecurringBillingScheduleService implements OnApplicationBootstrap {
       nextRunAt: paymentStatusSchedule.nextRunAt,
       scheduleId: paymentStatusSchedule.id,
     });
+    const serviceSchedules = [
+      {
+        id: serviceInspectionReminderScheduleId,
+        name: 'service.inspection-reminder.prepare',
+        pattern: this.environment.SERVICE_INSPECTION_REMINDER_CRON,
+        responsibility: 'inspection-reminders',
+      },
+      {
+        id: serviceWarrantyReminderScheduleId,
+        name: 'crm.warranty-expiration.prepare',
+        pattern: this.environment.SERVICE_WARRANTY_REMINDER_CRON,
+        responsibility: 'warranty-reminders',
+      },
+      {
+        id: servicePlanVisitScheduleId,
+        name: 'service.plan-visit.generate',
+        pattern: this.environment.SERVICE_PLAN_VISIT_CRON,
+        responsibility: 'subscription-service-visits',
+      },
+    ];
+    for (const definition of serviceSchedules) {
+      const schedule = await this.jobs.upsertSchedule({
+        id: definition.id,
+        name: definition.name,
+        pattern: definition.pattern,
+        payload: { responsibility: definition.responsibility },
+        timezone: this.environment.BUSINESS_TIMEZONE,
+      });
+      this.logger.event('info', `${definition.name}.schedule.ready`, {
+        nextRunAt: schedule.nextRunAt,
+        scheduleId: schedule.id,
+      });
+    }
   }
 }

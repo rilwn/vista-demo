@@ -9,6 +9,7 @@ import { FilesService } from './files.service.js';
 
 @Module({
   controllers: [FilesController],
+  exports: [FilesService],
   imports: [AuditModule, DatabaseModule, LoggingModule, ObjectStorageModule],
   providers: [FilesService],
 })

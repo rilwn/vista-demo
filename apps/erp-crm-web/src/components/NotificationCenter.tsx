@@ -131,6 +131,8 @@ function notificationTitle(notification: NotificationMessage): string {
   if (notification.templateKey === 'inventory.low_stock') return 'Low stock needs attention';
   if (notification.templateKey === 'finance.payment.upcoming') return 'Payment is due soon';
   if (notification.templateKey === 'finance.payment.overdue') return 'Payment is overdue';
+  if (notification.templateKey === 'service.inspection.due') return 'Inspection is due';
+  if (notification.templateKey === 'service.warranty.due') return 'Warranty is nearing expiry';
   return 'New notification';
 }
 
@@ -149,6 +151,16 @@ function notificationDetail(notification: NotificationMessage): string {
     const amount = money(value(notification.payload, 'outstandingBgn'));
     const dueDate = dateValue(notification.payload, 'dueDate');
     return `${number} · ${counterparty} · ${amount} outstanding · due ${dueDate}.`;
+  }
+  if (
+    notification.templateKey === 'service.inspection.due' ||
+    notification.templateKey === 'service.warranty.due'
+  ) {
+    const device = value(notification.payload, 'deviceName');
+    const serial = value(notification.payload, 'serialNumber');
+    const customer = value(notification.payload, 'customerName');
+    const dueDate = dateValue(notification.payload, 'dueDate');
+    return `${device} · ${serial} · ${customer} · ${dueDate}.`;
   }
   return 'Open this notification for more details.';
 }

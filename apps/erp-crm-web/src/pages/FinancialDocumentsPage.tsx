@@ -14,12 +14,14 @@ import { ApiClientError } from '../api/client';
 import {
   cancelFinancialDocument,
   createFinancialDocument,
+  getFinancialDocument,
   getFinancialDocumentReferenceData,
   listFinancialDocuments,
 } from '../api/finance';
 import { useAuth } from '../auth/AuthProvider';
 import { Icon } from '../components/Icon';
 import { financialDocumentMessages as copy } from '../messages';
+import { useRouter } from '../routing/Router';
 import { FinanceTabs } from './FinanceBankPage';
 
 const emptyReferences: FinancialDocumentReferenceData = {
@@ -28,6 +30,7 @@ const emptyReferences: FinancialDocumentReferenceData = {
   customers: [],
   products: [],
   salesDrafts: [],
+  serviceDrafts: [],
   scopes: [],
 };
 
@@ -37,9 +40,11 @@ interface DraftLine extends CreateFinancialDocumentLineRequest {
 
 export function FinancialDocumentsPage() {
   const { hasPermission, session } = useAuth();
+  const { location, navigate } = useRouter();
   const token = session?.sessionToken ?? '';
   const data = useFinancialDocuments(token);
   const [creating, setCreating] = useState(false);
+  const [serviceWorkOrderId, setServiceWorkOrderId] = useState<string | undefined>();
   const [selected, setSelected] = useState<FinancialDocument | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [typeFilter, setTypeFilter] = useState<'all' | FinancialDocumentType>('all');
@@ -51,6 +56,24 @@ export function FinancialDocumentsPage() {
       (typeFilter === 'all' || document.documentType === typeFilter) &&
       (statusFilter === 'all' || document.status === statusFilter),
   );
+
+  useEffect(() => {
+    if (data.loading) return;
+    const handoff = financialDocumentRouteState(location.state);
+    if (!handoff) return;
+    if (handoff.financialDocumentId) {
+      const document = data.documents.find((item) => item.id === handoff.financialDocumentId);
+      if (document) setSelected(document);
+      else
+        void getFinancialDocument(token, handoff.financialDocumentId)
+          .then(setSelected)
+          .catch(() => setNotice('The linked Finance draft could not be opened. Try again.'));
+    } else if (handoff.serviceWorkOrderId && canCreate) {
+      setServiceWorkOrderId(handoff.serviceWorkOrderId);
+      setCreating(true);
+    }
+    navigate(location.pathname, { replace: true, state: null });
+  }, [canCreate, data.documents, data.loading, location.pathname, location.state, navigate, token]);
 
   if (data.loading) return <DocumentState title={copy.loading} />;
   if (data.error)
@@ -71,7 +94,12 @@ export function FinancialDocumentsPage() {
           <p>{copy.subtitle}</p>
         </div>
         {canCreate ? (
-          <Button onClick={() => setCreating(true)}>
+          <Button
+            onClick={() => {
+              setServiceWorkOrderId(undefined);
+              setCreating(true);
+            }}
+          >
             <Icon name="plus" size={16} /> {copy.addDocument}
           </Button>
         ) : null}
@@ -190,6 +218,7 @@ export function FinancialDocumentsPage() {
             data.reload();
           }}
           references={data.references}
+          {...(serviceWorkOrderId ? { serviceWorkOrderId } : {})}
           token={token}
         />
       ) : null}
@@ -214,21 +243,29 @@ function CreateDocumentDrawer({
   onBack,
   onSaved,
   references,
+  serviceWorkOrderId,
   token,
 }: {
   onBack: () => void;
   onSaved: (document: FinancialDocument) => void;
   references: FinancialDocumentReferenceData;
+  serviceWorkOrderId?: string;
   token: string;
 }) {
   const firstScope = references.scopes[0];
+  const initialServiceDraft = references.serviceDrafts.find(
+    (draft) => draft.id === serviceWorkOrderId && !draft.linkedDocumentTypes.includes('invoice'),
+  );
   const [documentType, setDocumentType] = useState<FinancialDocumentType>('invoice');
-  const [sourceMode, setSourceMode] = useState<'manual' | 'sales'>('sales');
+  const [sourceMode, setSourceMode] = useState<'manual' | 'sales' | 'service'>(
+    initialServiceDraft ? 'service' : 'sales',
+  );
   const [scopeId, setScopeId] = useState(firstScope?.locationId ?? '');
   const [cashRegisterId, setCashRegisterId] = useState('');
   const [operatorId, setOperatorId] = useState('');
   const [customerId, setCustomerId] = useState(references.customers[0]?.id ?? '');
   const [salesDraftId, setSalesDraftId] = useState(references.salesDrafts[0]?.id ?? '');
+  const [serviceDraftId, setServiceDraftId] = useState(initialServiceDraft?.id ?? '');
   const [correctionId, setCorrectionId] = useState(references.correctionDocuments[0]?.id ?? '');
   const [correctionReason, setCorrectionReason] = useState('');
   const businessDate = today(references.businessTimezone);
@@ -241,6 +278,9 @@ function CreateDocumentDrawer({
   const [rateSource, setRateSource] = useState('internal_bgn');
   const [notes, setNotes] = useState('');
   const [lines, setLines] = useState<DraftLine[]>([emptyLine()]);
+  const [serviceLines, setServiceLines] = useState<DraftLine[]>(
+    initialServiceDraft ? draftLines(initialServiceDraft.lines, 'service') : [],
+  );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const selectedScope = references.scopes.find((scope) => scope.locationId === scopeId);
@@ -250,12 +290,20 @@ function CreateDocumentDrawer({
     [documentType, references.salesDrafts],
   );
   const selectedSalesDraft = eligibleSalesDrafts.find((draft) => draft.id === salesDraftId);
+  const eligibleServiceDrafts = useMemo(
+    () =>
+      references.serviceDrafts.filter((draft) => !draft.linkedDocumentTypes.includes(documentType)),
+    [documentType, references.serviceDrafts],
+  );
+  const selectedServiceDraft = eligibleServiceDrafts.find((draft) => draft.id === serviceDraftId);
   const correction = references.correctionDocuments.find((item) => item.id === correctionId);
   const isCorrection = documentType === 'credit_note' || documentType === 'debit_note';
   const effectiveLines =
     sourceMode === 'sales' && selectedSalesDraft
       ? selectedSalesDraft.lines.map((line, index) => ({ ...line, key: `source-${index}` }))
-      : lines;
+      : sourceMode === 'service'
+        ? serviceLines
+        : lines;
   const totals = calculatePreview(effectiveLines, currencyCode === 'BGN' ? '1' : exchangeRate);
 
   useEffect(() => {
@@ -270,13 +318,38 @@ function CreateDocumentDrawer({
     if (sourceMode === 'sales' && selectedSalesDraft) {
       setCustomerId(selectedSalesDraft.customerPartnerId);
       setCurrencyCode(selectedSalesDraft.currencyCode);
+    } else if (sourceMode === 'service' && selectedServiceDraft) {
+      setCustomerId(selectedServiceDraft.customerPartnerId);
+      setCurrencyCode('BGN');
     }
-  }, [correction, isCorrection, selectedSalesDraft, sourceMode]);
+  }, [correction, isCorrection, selectedSalesDraft, selectedServiceDraft, sourceMode]);
 
   useEffect(() => {
     if (!isCorrection && sourceMode === 'sales' && !selectedSalesDraft)
       setSalesDraftId(eligibleSalesDrafts[0]?.id ?? '');
   }, [eligibleSalesDrafts, isCorrection, selectedSalesDraft, sourceMode]);
+
+  useEffect(() => {
+    if (isCorrection || sourceMode !== 'service') return;
+    const source =
+      selectedServiceDraft ??
+      eligibleServiceDrafts.find((draft) => draft.id === serviceWorkOrderId) ??
+      eligibleServiceDrafts[0];
+    if (!source) {
+      setServiceDraftId('');
+      setServiceLines([]);
+      return;
+    }
+    if (source.id !== serviceDraftId) setServiceDraftId(source.id);
+    setServiceLines(draftLines(source.lines, 'service'));
+  }, [
+    eligibleServiceDrafts,
+    isCorrection,
+    selectedServiceDraft,
+    serviceDraftId,
+    serviceWorkOrderId,
+    sourceMode,
+  ]);
 
   useEffect(() => {
     if (currencyCode === 'BGN') {
@@ -315,6 +388,8 @@ function CreateDocumentDrawer({
       return setError(
         'Choose an unlinked Sales draft, or switch the document source to manual entry.',
       );
+    if (sourceMode === 'service' && !selectedServiceDraft)
+      return setError('Choose completed Service work, or select another document source.');
     setBusy(true);
     setError(null);
     try {
@@ -331,12 +406,17 @@ function CreateDocumentDrawer({
         exchangeRate,
         issueDate,
         legalEntityId: selectedScope.legalEntityId,
-        ...(sourceMode === 'manual' ? { lines: lines.map(withoutKey) } : {}),
+        ...(sourceMode === 'manual'
+          ? { lines: lines.map(withoutKey) }
+          : sourceMode === 'service'
+            ? { lines: serviceLines.map(withoutKey) }
+            : {}),
         ...(notes.trim() ? { notes: notes.trim() } : {}),
         ...(operatorId ? { operatorId } : {}),
         rateDate,
         rateSource,
         ...(sourceMode === 'sales' ? { sourceSalesInvoiceId: salesDraftId } : {}),
+        ...(sourceMode === 'service' ? { sourceServiceWorkOrderId: serviceDraftId } : {}),
         taxEventDate,
       };
       onSaved(await createFinancialDocument(token, crypto.randomUUID(), input));
@@ -380,9 +460,12 @@ function CreateDocumentDrawer({
               <Field label={copy.sourceMode}>
                 <select
                   value={sourceMode}
-                  onChange={(event) => setSourceMode(event.target.value as 'manual' | 'sales')}
+                  onChange={(event) =>
+                    setSourceMode(event.target.value as 'manual' | 'sales' | 'service')
+                  }
                 >
                   <option value="sales">{copy.salesDraft}</option>
+                  <option value="service">{copy.serviceDraft}</option>
                   <option value="manual">{copy.manualEntry}</option>
                 </select>
               </Field>
@@ -406,7 +489,7 @@ function CreateDocumentDrawer({
             </Field>
             <Field label={copy.customer}>
               <select
-                disabled={sourceMode === 'sales' || isCorrection}
+                disabled={sourceMode !== 'manual' || isCorrection}
                 required
                 value={customerId}
                 onChange={(event) => setCustomerId(event.target.value)}
@@ -436,6 +519,27 @@ function CreateDocumentDrawer({
                   <small>
                     No unlinked Sales draft is available for this document type. Choose Manual
                     document or cancel the existing draft first.
+                  </small>
+                ) : null}
+              </Field>
+            ) : null}
+            {sourceMode === 'service' && !isCorrection ? (
+              <Field label={copy.serviceDraft}>
+                <select
+                  required
+                  value={serviceDraftId}
+                  onChange={(event) => setServiceDraftId(event.target.value)}
+                >
+                  {eligibleServiceDrafts.map((draft) => (
+                    <option key={draft.id} value={draft.id}>
+                      {draft.number} · {draft.customerName} · {formatMoney(draft.total, 'BGN')}
+                    </option>
+                  ))}
+                </select>
+                {!eligibleServiceDrafts.length ? (
+                  <small>
+                    No completed Service work is ready for this document type. Complete a charged
+                    work order or cancel its existing draft first.
                   </small>
                 ) : null}
               </Field>
@@ -523,6 +627,7 @@ function CreateDocumentDrawer({
             ) : null}
             <Field label={copy.currency}>
               <input
+                disabled={sourceMode === 'service'}
                 maxLength={3}
                 pattern="[A-Za-z]{3}"
                 required
@@ -570,6 +675,76 @@ function CreateDocumentDrawer({
               {effectiveLines.map((line) => (
                 <LineSummary key={line.key} line={line} />
               ))}
+            </div>
+          ) : sourceMode === 'service' && !isCorrection ? (
+            <div className="financial-service-source">
+              <InlineAlert tone="info">
+                Labour, parts, and transport come from the completed work order. Review the VAT
+                treatment for every line before preparing the draft.
+              </InlineAlert>
+              <div className="financial-line-editor">
+                {serviceLines.map((line) => (
+                  <div className="financial-line-card is-source-locked" key={line.key}>
+                    <header>
+                      <div>
+                        <strong>{line.description}</strong>
+                        <span>
+                          {line.quantity} {line.unitCode} × {formatMoney(line.unitPrice, 'BGN')}
+                        </span>
+                      </div>
+                      <span className="financial-source-lock">
+                        <Icon name="check" size={14} /> Service charge
+                      </span>
+                    </header>
+                    <div className="financial-line-grid is-tax-review">
+                      <Field label={copy.vatTreatment} wide>
+                        <select
+                          value={line.vatTreatment}
+                          onChange={(event) =>
+                            setServiceLines((current) =>
+                              current.map((item) =>
+                                item.key === line.key
+                                  ? {
+                                      ...item,
+                                      vatTreatment: event.target.value as VatTreatment,
+                                    }
+                                  : item,
+                              ),
+                            )
+                          }
+                        >
+                          {vatTreatments.map((treatment) => (
+                            <option key={treatment} value={treatment}>
+                              {vatLabel(treatment)}
+                            </option>
+                          ))}
+                        </select>
+                      </Field>
+                      {line.vatTreatment === 'ica' ? (
+                        <Field label={copy.vatRate} wide>
+                          <input
+                            max="100"
+                            min="0"
+                            required
+                            step="0.0001"
+                            type="number"
+                            value={line.vatRate ?? '20'}
+                            onChange={(event) =>
+                              setServiceLines((current) =>
+                                current.map((item) =>
+                                  item.key === line.key
+                                    ? { ...item, vatRate: event.target.value }
+                                    : item,
+                                ),
+                              )
+                            }
+                          />
+                        </Field>
+                      ) : null}
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           ) : (
             <div className="financial-line-editor">
@@ -722,7 +897,8 @@ function CreateDocumentDrawer({
             disabled={
               !references.scopes.length ||
               !references.customers.length ||
-              (sourceMode === 'sales' && !selectedSalesDraft)
+              (sourceMode === 'sales' && !selectedSalesDraft) ||
+              (sourceMode === 'service' && !selectedServiceDraft)
             }
             type="submit"
           >
@@ -884,7 +1060,9 @@ function DocumentPreviewDrawer({
             <Info label="Rate source" value={document.rateSource} />
           </dl>
         </section>
-        {document.sourceSalesInvoiceNumber || document.correctionOf ? (
+        {document.sourceSalesInvoiceNumber ||
+        document.sourceServiceWorkOrderNumber ||
+        document.correctionOf ? (
           <section className="financial-document-preview-section">
             <header>
               <h3>{copy.originalSource}</h3>
@@ -892,6 +1070,12 @@ function DocumentPreviewDrawer({
             {document.sourceSalesInvoiceNumber ? (
               <p>
                 Prepared from Sales draft <strong>{document.sourceSalesInvoiceNumber}</strong>.
+              </p>
+            ) : null}
+            {document.sourceServiceWorkOrderNumber ? (
+              <p>
+                Prepared from completed Service work{' '}
+                <strong>{document.sourceServiceWorkOrderNumber}</strong>.
               </p>
             ) : null}
             {document.correctionOf ? (
@@ -1191,6 +1375,29 @@ function emptyLine(): DraftLine {
     unitPrice: '0',
     vatTreatment: 'standard_20',
   };
+}
+function draftLines(
+  lines: FinancialDocumentReferenceData['serviceDrafts'][number]['lines'],
+  prefix: string,
+): DraftLine[] {
+  return lines.map((line, index) => ({ ...line, key: `${prefix}-${index}` }));
+}
+
+function financialDocumentRouteState(
+  state: unknown,
+): { financialDocumentId?: string; serviceWorkOrderId?: string } | undefined {
+  if (!state || typeof state !== 'object') return undefined;
+  const candidate = state as Record<string, unknown>;
+  const financialDocumentId =
+    typeof candidate.financialDocumentId === 'string' ? candidate.financialDocumentId : undefined;
+  const serviceWorkOrderId =
+    typeof candidate.serviceWorkOrderId === 'string' ? candidate.serviceWorkOrderId : undefined;
+  return financialDocumentId || serviceWorkOrderId
+    ? {
+        ...(financialDocumentId ? { financialDocumentId } : {}),
+        ...(serviceWorkOrderId ? { serviceWorkOrderId } : {}),
+      }
+    : undefined;
 }
 function withoutKey(line: DraftLine): CreateFinancialDocumentLineRequest {
   return {

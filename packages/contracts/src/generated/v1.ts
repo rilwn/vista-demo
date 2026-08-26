@@ -2277,6 +2277,22 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/service/care': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['ServiceOperationsController_careOverview'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/service/equipment/{id}/history': {
     parameters: {
       query?: never;
@@ -2287,6 +2303,38 @@ export interface paths {
     get: operations['ServiceOperationsController_equipmentHistory'];
     put?: never;
     post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/service/inspection-plans': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['ServiceOperationsController_createInspectionPlan'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/service/inspection-plans/{id}/complete': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['ServiceOperationsController_completeInspection'];
     delete?: never;
     options?: never;
     head?: never;
@@ -2367,6 +2415,70 @@ export interface paths {
     get?: never;
     put?: never;
     post: operations['ServiceOperationsController_cancelRequest'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/service/schedule': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['ServiceOperationsController_schedule'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/service/technicians/{id}/schedule-policy': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put: operations['ServiceOperationsController_updateSchedulePolicy'];
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/service/warranty-claims': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['ServiceOperationsController_createWarrantyClaim'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/service/warranty-claims/{id}/transition': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['ServiceOperationsController_transitionWarrantyClaim'];
     delete?: never;
     options?: never;
     head?: never;
@@ -2970,6 +3082,14 @@ export interface components {
       proofNotes?: string;
       recipientName: string;
     };
+    CompleteServiceInspectionDto: {
+      /** Format: date */
+      completedOn: string;
+      expectedVersion: number;
+      notes: string;
+      /** @enum {string} */
+      outcome: 'passed' | 'attention_required';
+    };
     CompleteServiceWorkOrderDto: {
       completionNotes: string;
       expectedVersion: number;
@@ -3215,6 +3335,8 @@ export interface components {
       rateSource: string;
       /** Format: uuid */
       sourceSalesInvoiceId?: string;
+      /** Format: uuid */
+      sourceServiceWorkOrderId?: string;
       /** Format: date */
       taxEventDate: string;
     };
@@ -3456,6 +3578,16 @@ export interface components {
       name: string;
       permissions: components['schemas']['SecurityPermissionDto'][];
     };
+    CreateServiceInspectionPlanDto: {
+      /** Format: uuid */
+      customerEquipmentId: string;
+      /** @enum {string} */
+      inspectionType: 'technical' | 'metrological';
+      intervalMonths: number;
+      /** Format: date */
+      nextDueDate: string;
+      reminderLeadDays: number;
+    };
     CreateServiceRequestDto: {
       /** Format: uuid */
       customerEquipmentId: string;
@@ -3548,6 +3680,17 @@ export interface components {
       technicianOperatorId?: string;
       /** @enum {string} */
       type?: 'standard' | 'technician';
+    };
+    CreateWarrantyClaimDto: {
+      /** Format: uuid */
+      customerEquipmentId: string;
+      /** Format: uuid */
+      customerLocationId: string;
+      /** Format: uuid */
+      customerPartnerId: string;
+      description: string;
+      /** Format: uuid */
+      serviceRequestId?: string;
     };
     CustomerAssetVersionDto: {
       expectedVersion: number;
@@ -4329,6 +4472,9 @@ export interface components {
       /** Format: uuid */
       sourceSalesInvoiceId?: string;
       sourceSalesInvoiceNumber?: string;
+      /** Format: uuid */
+      sourceServiceWorkOrderId?: string;
+      sourceServiceWorkOrderNumber?: string;
       /** @enum {string} */
       status: 'draft' | 'cancelled';
       /** Format: date */
@@ -4389,6 +4535,7 @@ export interface components {
       products: components['schemas']['FinancialDocumentProductReferenceDto'][];
       salesDrafts: components['schemas']['FinancialDocumentSalesDraftReferenceDto'][];
       scopes: components['schemas']['FinancialDocumentScopeReferenceDto'][];
+      serviceDrafts: components['schemas']['FinancialDocumentServiceDraftReferenceDto'][];
     };
     FinancialDocumentSalesDraftLineReferenceDto: {
       description: string;
@@ -4425,6 +4572,30 @@ export interface components {
       locationId: string;
       locationName: string;
       operators: components['schemas']['FinancialDocumentNamedReferenceDto'][];
+    };
+    FinancialDocumentServiceDraftLineReferenceDto: {
+      description: string;
+      discountPercent: string;
+      /** Format: uuid */
+      productId?: string;
+      quantity: string;
+      unitCode: string;
+      unitPrice: string;
+      /** @enum {string} */
+      vatTreatment: 'standard_20' | 'reduced_9' | 'zero' | 'exempt' | 'ica';
+    };
+    FinancialDocumentServiceDraftReferenceDto: {
+      /** @enum {string} */
+      currencyCode: 'BGN';
+      customerName: string;
+      /** Format: uuid */
+      customerPartnerId: string;
+      /** Format: uuid */
+      id: string;
+      lines: components['schemas']['FinancialDocumentServiceDraftLineReferenceDto'][];
+      linkedDocumentTypes: ('invoice' | 'proforma' | 'credit_note' | 'debit_note')[];
+      number: string;
+      total: string;
     };
     FinancialDocumentVatSummaryDto: {
       netTotal: string;
@@ -4714,6 +4885,7 @@ export interface components {
     };
     LogisticsReferenceDataDto: {
       assignees: components['schemas']['LogisticsAssigneeReferenceDto'][];
+      businessTimezone: string;
       courierConnections: components['schemas']['LogisticsCourierConnectionDto'][];
       equipment: components['schemas']['LogisticsEquipmentReferenceDto'][];
       locations: components['schemas']['LogisticsLocationReferenceDto'][];
@@ -4825,11 +4997,16 @@ export interface components {
     };
     LogisticsServiceStopReferenceDto: {
       addressLine: string;
+      /** Format: uuid */
+      assignedAccountId: string;
+      assignedTo: string;
       city: string;
       customerName: string;
       /** Format: uuid */
       id: string;
       label: string;
+      /** Format: date-time */
+      scheduledEnd: string;
       /** Format: date-time */
       scheduledStart: string;
     };
@@ -4884,7 +5061,7 @@ export interface components {
       /** Format: uuid */
       parentId: string;
       /** @enum {string} */
-      parentType: 'partner';
+      parentType: 'partner' | 'warranty_claim';
       /** Format: date-time */
       scannedAt?: string;
       /** @enum {string} */
@@ -5614,6 +5791,13 @@ export interface components {
       /** Format: uuid */
       id: string;
     };
+    ServiceCareOverviewDto: {
+      /** @example Europe/Sofia */
+      businessTimezone: string;
+      claims: components['schemas']['WarrantyClaimDto'][];
+      inspections: components['schemas']['ServiceInspectionPlanDto'][];
+      warranties: components['schemas']['ServiceWarrantySummaryDto'][];
+    };
     ServiceCustomerReferenceDto: {
       /** Format: uuid */
       id: string;
@@ -5658,6 +5842,38 @@ export interface components {
       status: 'active' | 'under_repair' | 'retired';
       /** Format: date */
       warrantyEndsOn?: string;
+    };
+    ServiceInspectionPlanDto: {
+      active: boolean;
+      customerLocationName: string;
+      customerName: string;
+      deviceName: string;
+      /** Format: uuid */
+      equipmentId: string;
+      /** Format: uuid */
+      id: string;
+      /** @enum {string} */
+      inspectionType: 'technical' | 'metrological';
+      intervalMonths: number;
+      /** Format: date */
+      lastCompletedOn?: string;
+      /** Format: date */
+      nextDueDate: string;
+      records: components['schemas']['ServiceInspectionRecordDto'][];
+      reminderLeadDays: number;
+      serialNumber: string;
+      version: number;
+    };
+    ServiceInspectionRecordDto: {
+      /** Format: date */
+      completedOn: string;
+      /** Format: date */
+      dueDate: string;
+      /** Format: uuid */
+      id: string;
+      notes: string;
+      /** @enum {string} */
+      outcome: 'passed' | 'attention_required';
     };
     ServiceLocationReferenceDto: {
       /** Format: uuid */
@@ -5713,6 +5929,8 @@ export interface components {
       /** Format: uuid */
       id: string;
       number: string;
+      /** Format: date */
+      plannedVisitDate?: string;
       /** @enum {string} */
       priority: 'low' | 'normal' | 'high' | 'critical';
       problemDescription: string;
@@ -5724,7 +5942,7 @@ export interface components {
       /** @enum {string} */
       serviceType: 'warranty' | 'out_of_warranty' | 'subscription';
       /** @enum {string} */
-      sourceChannel: 'telephone' | 'email' | 'customer_portal' | 'on_site';
+      sourceChannel: 'telephone' | 'email' | 'customer_portal' | 'on_site' | 'service_plan';
       /** @enum {string} */
       status: 'new' | 'scheduled' | 'in_progress' | 'completed' | 'cancelled';
       /** Format: uuid */
@@ -5749,6 +5967,45 @@ export interface components {
       inProgress: number;
       new: number;
       scheduled: number;
+    };
+    ServiceScheduleAppointmentDto: {
+      customerLocationName: string;
+      customerName: string;
+      deviceName: string;
+      /** @enum {string} */
+      priority: 'low' | 'normal' | 'high' | 'critical';
+      requestNumber: string;
+      /** Format: date-time */
+      scheduledEnd: string;
+      /** Format: date-time */
+      scheduledStart: string;
+      /** @enum {string} */
+      status: 'scheduled' | 'in_progress';
+      /** Format: uuid */
+      workOrderId: string;
+      workOrderNumber: string;
+    };
+    ServiceScheduleDayDto: {
+      bookedMinutes: number;
+      capacityMinutes?: number;
+      /** Format: date */
+      date: string;
+      /** @example 17:00 */
+      endsAt?: string;
+      maxVisits?: number;
+      remainingMinutes?: number;
+      /** @example 08:00 */
+      startsAt?: string;
+      visits: components['schemas']['ServiceScheduleAppointmentDto'][];
+    };
+    ServiceScheduleDto: {
+      /** @example Europe/Sofia */
+      businessTimezone: string;
+      /** Format: date */
+      dateFrom: string;
+      /** Format: date */
+      dateTo: string;
+      technicians: components['schemas']['ServiceTechnicianWorkloadDto'][];
     };
     ServiceSubscriptionContractDto: {
       active: boolean;
@@ -5807,6 +6064,46 @@ export interface components {
       /** Format: uuid */
       warehouseId: string;
       warehouseName: string;
+    };
+    ServiceTechnicianSchedulePolicyDto: {
+      configured: boolean;
+      /** Format: uuid */
+      technicianAccountId: string;
+      version: number;
+      windows: components['schemas']['ServiceTechnicianScheduleWindowDto'][];
+    };
+    ServiceTechnicianScheduleWindowDto: {
+      capacityMinutes: number;
+      /** @example 17:00 */
+      endsAt: string;
+      maxVisits: number;
+      /** @example 08:00 */
+      startsAt: string;
+      weekday: number;
+    };
+    ServiceTechnicianWorkloadDto: {
+      bookedMinutes: number;
+      capacityMinutes?: number;
+      days: components['schemas']['ServiceScheduleDayDto'][];
+      policy: components['schemas']['ServiceTechnicianSchedulePolicyDto'];
+      remainingMinutes?: number;
+      technician: components['schemas']['ServiceTechnicianDto'];
+      visitCount: number;
+    };
+    ServiceWarrantySummaryDto: {
+      activeClaimCount: number;
+      claimCount: number;
+      customerLocationName: string;
+      customerName: string;
+      deviceName: string;
+      /** Format: uuid */
+      equipmentId: string;
+      remainingDays?: number;
+      serialNumber: string;
+      /** @enum {string} */
+      status: 'active' | 'expired' | 'not_recorded';
+      /** Format: date */
+      warrantyEndsOn?: string;
     };
     ServiceWorkOrderDto: {
       assignedTechnician?: components['schemas']['ServiceTechnicianDto'];
@@ -6251,6 +6548,12 @@ export interface components {
       /** Format: uuid */
       toWarehouseId: string;
     };
+    TransitionWarrantyClaimDto: {
+      expectedVersion: number;
+      /** @enum {string} */
+      nextStatus: 'received' | 'under_review' | 'approved' | 'rejected' | 'closed';
+      note?: string;
+    };
     UnitDto: {
       active: boolean;
       code: string;
@@ -6358,6 +6661,10 @@ export interface components {
       validTo?: string;
       visitFrequencyMonths: number;
     };
+    UpdateServiceTechnicianSchedulePolicyDto: {
+      expectedVersion: number;
+      windows: components['schemas']['ServiceTechnicianScheduleWindowDto'][];
+    };
     UpdateSupplierClaimStatusDto: {
       expectedVersion: number;
       note?: string;
@@ -6405,6 +6712,46 @@ export interface components {
       /** @enum {string} */
       type: 'standard' | 'technician';
       version: number;
+    };
+    WarrantyClaimDto: {
+      attachments: components['schemas']['ManagedFileDto'][];
+      /** Format: uuid */
+      customerEquipmentId: string;
+      /** Format: uuid */
+      customerLocationId: string;
+      customerLocationName: string;
+      customerName: string;
+      /** Format: uuid */
+      customerPartnerId: string;
+      decisionNote?: string;
+      description: string;
+      deviceName: string;
+      history: components['schemas']['WarrantyClaimHistoryEntryDto'][];
+      /** Format: uuid */
+      id: string;
+      number: string;
+      /** Format: date-time */
+      receivedAt: string;
+      serialNumber: string;
+      /** Format: uuid */
+      serviceRequestId?: string;
+      /** @enum {string} */
+      status: 'received' | 'under_review' | 'approved' | 'rejected' | 'closed';
+      /** Format: date-time */
+      updatedAt: string;
+      version: number;
+    };
+    WarrantyClaimHistoryEntryDto: {
+      /** Format: date-time */
+      changedAt: string;
+      changedByName?: string;
+      /** Format: uuid */
+      id: string;
+      /** @enum {string} */
+      nextStatus: 'received' | 'under_review' | 'approved' | 'rejected' | 'closed';
+      note?: string;
+      /** @enum {string} */
+      previousStatus?: 'received' | 'under_review' | 'approved' | 'rejected' | 'closed';
     };
   };
   responses: never;
@@ -7009,7 +7356,7 @@ export interface operations {
         page?: number;
         pageSize?: number;
         parentId: string;
-        parentType: 'partner';
+        parentType: 'partner' | 'warranty_claim';
       };
       header?: never;
       path?: never;
@@ -7058,7 +7405,7 @@ export interface operations {
           /** Format: uuid */
           parentId: string;
           /** @enum {string} */
-          parentType: 'partner';
+          parentType: 'partner' | 'warranty_claim';
         };
       };
     };
@@ -12929,6 +13276,39 @@ export interface operations {
       };
     };
   };
+  ServiceOperationsController_careOverview: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ServiceCareOverviewDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
   ServiceOperationsController_equipmentHistory: {
     parameters: {
       query?: never;
@@ -12946,6 +13326,86 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['ServiceEquipmentHistoryDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  ServiceOperationsController_createInspectionPlan: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['CreateServiceInspectionPlanDto'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ServiceInspectionPlanDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  ServiceOperationsController_completeInspection: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path: {
+        id: unknown;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['CompleteServiceInspectionDto'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ServiceInspectionPlanDto'];
         };
       };
       /** @description The endpoint request limit was exceeded. */
@@ -13172,6 +13632,163 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['ServiceRequestDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  ServiceOperationsController_schedule: {
+    parameters: {
+      query: {
+        dateFrom: string;
+        dateTo: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ServiceScheduleDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  ServiceOperationsController_updateSchedulePolicy: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path: {
+        id: unknown;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['UpdateServiceTechnicianSchedulePolicyDto'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ServiceTechnicianSchedulePolicyDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  ServiceOperationsController_createWarrantyClaim: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['CreateWarrantyClaimDto'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['WarrantyClaimDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  ServiceOperationsController_transitionWarrantyClaim: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path: {
+        id: unknown;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['TransitionWarrantyClaimDto'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['WarrantyClaimDto'];
         };
       };
       /** @description The endpoint request limit was exceeded. */

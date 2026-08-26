@@ -649,6 +649,13 @@ async function ensureOperationalFixtures(
     partners.alfaStoreLocation,
     partners.printerEquipment,
   );
+  await ensureServiceCareFixtures(
+    client,
+    managerId,
+    partners.alfa,
+    partners.alfaStoreLocation,
+    partners.printerEquipment,
+  );
 }
 
 async function repairKnownFixtureValidationDefects(client: PoolClient): Promise<void> {
@@ -2210,6 +2217,23 @@ async function ensureScheduledServiceFixture(
   alfaStoreLocationId: string,
   printerEquipmentId: string,
 ): Promise<void> {
+  await client.query(
+    `INSERT INTO service.technician_schedule_policies (
+       technician_account_id, created_by, updated_by
+     ) VALUES ($1, $2, $2)
+     ON CONFLICT (technician_account_id) DO NOTHING`,
+    [technicianId, managerId],
+  );
+  await client.query(
+    `INSERT INTO service.technician_schedule_windows (
+       technician_account_id, weekday, starts_at, ends_at, capacity_minutes, max_visits
+     )
+     SELECT $1, weekday, TIME '08:00', TIME '17:00', 480, 6
+     FROM generate_series(1, 5) AS weekday
+     ON CONFLICT (technician_account_id, weekday) DO NOTHING`,
+    [technicianId],
+  );
+
   const requestId = fixtureId('service-request:scheduled');
   const workOrderId = fixtureId('service-work-order:scheduled');
   await insertFixtureRow(
@@ -2229,13 +2253,23 @@ async function ensureScheduledServiceFixture(
     client,
     'service.work_orders',
     workOrderId,
-    `INSERT INTO service.work_orders (
+    `WITH next_visit AS (
+       SELECT (now() AT TIME ZONE 'Europe/Sofia')::date
+         + CASE extract(isodow FROM ((now() AT TIME ZONE 'Europe/Sofia')::date + 1))
+             WHEN 6 THEN 3
+             WHEN 7 THEN 2
+             ELSE 1
+           END::integer AS visit_date
+     )
+     INSERT INTO service.work_orders (
        id, work_order_number, service_request_id, assigned_technician_account_id,
        technician_warehouse_id, scheduled_start, scheduled_end, status, created_by, updated_by
-     ) VALUES (
-       $1, 'DEV-WO-0001', $2, $3, $4, now() + INTERVAL '1 day',
-       now() + INTERVAL '1 day 1 hour', 'scheduled', $5, $5
-     ) ON CONFLICT (id) DO NOTHING`,
+     )
+     SELECT $1, 'DEV-WO-0001', $2, $3, $4,
+       (visit_date + TIME '10:00') AT TIME ZONE 'Europe/Sofia',
+       (visit_date + TIME '11:00') AT TIME ZONE 'Europe/Sofia', 'scheduled', $5, $5
+     FROM next_visit
+     ON CONFLICT (id) DO NOTHING`,
     [workOrderId, requestId, technicianId, technicianWarehouseId, managerId],
   );
   const historyId = fixtureId('service-work-order-history:scheduled');
@@ -2247,6 +2281,121 @@ async function ensureScheduledServiceFixture(
        id, work_order_id, previous_status, next_status, reason, changed_by
      ) VALUES ($1, $2, NULL, 'scheduled', 'fixture_created', $3) ON CONFLICT (id) DO NOTHING`,
     [historyId, workOrderId, managerId],
+  );
+
+  const completedRequestId = fixtureId('service-request:finance-ready');
+  const completedWorkOrderId = fixtureId('service-work-order:finance-ready');
+  await insertFixtureRow(
+    client,
+    'service.requests',
+    completedRequestId,
+    `INSERT INTO service.requests (
+       id, request_number, customer_partner_id, customer_location_id, customer_equipment_id,
+       source_channel, service_type, priority, problem_description, status, completed_at,
+       created_by, updated_by
+     ) VALUES (
+       $1, 'DEV-SRV-FIN-0001', $2, $3, $4, 'on_site', 'out_of_warranty', 'normal',
+       'Completed demonstration repair ready for Finance review.', 'completed', now() - INTERVAL '1 day',
+       $5, $5
+     ) ON CONFLICT (id) DO NOTHING`,
+    [completedRequestId, alfaPartnerId, alfaStoreLocationId, printerEquipmentId, managerId],
+  );
+  const signature = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+    'base64',
+  );
+  await insertFixtureRow(
+    client,
+    'service.work_orders',
+    completedWorkOrderId,
+    `INSERT INTO service.work_orders (
+       id, work_order_number, service_request_id, assigned_technician_account_id,
+       technician_warehouse_id, scheduled_start, scheduled_end, started_at, completed_at,
+       status, completion_notes, labor_minutes, labor_cost_bgn, parts_cost_bgn,
+       transport_cost_bgn, total_cost_bgn, signer_name, signature_media_type,
+       signature_data, signature_sha256, signed_at, created_by, updated_by
+     ) VALUES (
+       $1, 'DEV-WO-FIN-0001', $2, $3, $4, now() - INTERVAL '1 day 2 hours',
+       now() - INTERVAL '1 day', now() - INTERVAL '1 day 2 hours', now() - INTERVAL '1 day',
+       'completed', 'Printer feed was adjusted and the device passed its final test.',
+       90, 75.0000, 0.0000, 15.0000, 90.0000, 'Alfa Market Representative',
+       'image/png', $5, $6, now() - INTERVAL '1 day', $7, $7
+     ) ON CONFLICT (id) DO NOTHING`,
+    [
+      completedWorkOrderId,
+      completedRequestId,
+      technicianId,
+      technicianWarehouseId,
+      signature,
+      createHash('sha256').update(signature).digest('hex'),
+      managerId,
+    ],
+  );
+  await insertFixtureRow(
+    client,
+    'service.work_order_time_entries',
+    fixtureId('service-time-entry:finance-ready'),
+    `INSERT INTO service.work_order_time_entries (
+       id, work_order_id, work_date, minutes, note, recorded_by
+     ) VALUES ($1, $2, current_date - 1, 90, 'Diagnosis, adjustment, and final test.', $3)
+     ON CONFLICT (id) DO NOTHING`,
+    [fixtureId('service-time-entry:finance-ready'), completedWorkOrderId, technicianId],
+  );
+  await insertFixtureRow(
+    client,
+    'service.work_order_status_history',
+    fixtureId('service-work-order-history:finance-ready'),
+    `INSERT INTO service.work_order_status_history (
+       id, work_order_id, previous_status, next_status, reason, changed_by, changed_at
+     ) VALUES ($1, $2, 'in_progress', 'completed', 'work_completed', $3, now() - INTERVAL '1 day')
+     ON CONFLICT (id) DO NOTHING`,
+    [fixtureId('service-work-order-history:finance-ready'), completedWorkOrderId, technicianId],
+  );
+}
+
+async function ensureServiceCareFixtures(
+  client: PoolClient,
+  managerId: string,
+  customerPartnerId: string,
+  customerLocationId: string,
+  equipmentId: string,
+): Promise<void> {
+  const claimId = fixtureId('service-warranty-claim:received');
+  await insertFixtureRow(
+    client,
+    'service.warranty_claims',
+    claimId,
+    `INSERT INTO service.warranty_claims (
+       id, claim_number, customer_partner_id, customer_location_id,
+       customer_equipment_id, description, created_by, updated_by
+     ) VALUES (
+       $1, 'DEV-WCL-0001', $2, $3, $4,
+       'Intermittent paper-feed fault reported while the device is under warranty.', $5, $5
+     ) ON CONFLICT (id) DO NOTHING`,
+    [claimId, customerPartnerId, customerLocationId, equipmentId, managerId],
+  );
+  const historyId = fixtureId('service-warranty-claim-history:received');
+  await insertFixtureRow(
+    client,
+    'service.warranty_claim_status_history',
+    historyId,
+    `INSERT INTO service.warranty_claim_status_history (
+       id, warranty_claim_id, previous_status, next_status, changed_by
+     ) VALUES ($1, $2, NULL, 'received', $3) ON CONFLICT (id) DO NOTHING`,
+    [historyId, claimId, managerId],
+  );
+
+  const planId = fixtureId('service-inspection-plan:printer-technical');
+  await insertFixtureRow(
+    client,
+    'service.equipment_inspection_plans',
+    planId,
+    `INSERT INTO service.equipment_inspection_plans (
+       id, customer_equipment_id, inspection_type, interval_months,
+       next_due_date, reminder_lead_days, created_by, updated_by
+     ) VALUES ($1, $2, 'technical', 12, CURRENT_DATE + 7, 30, $3, $3)
+     ON CONFLICT (id) DO NOTHING`,
+    [planId, equipmentId, managerId],
   );
 }
 

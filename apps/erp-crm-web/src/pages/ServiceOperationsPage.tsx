@@ -2,18 +2,31 @@ import { Button, InlineAlert } from '@vista/ui';
 import type {
   AssignServiceWorkOrderRequest,
   CompleteServiceWorkOrderRequest,
+  CompleteServiceInspectionRequest,
   CreateServiceRequest,
+  CreateServiceInspectionPlanRequest,
+  CreateWarrantyClaimRequest,
+  ManagedFile,
+  ManualServiceRequestChannel,
+  ServiceCareOverview,
   ServiceEquipmentHistory,
+  ServiceInspectionPlan,
   ServicePartUsageInput,
   ServicePriority,
   ServiceReferenceData,
   ServiceRequest,
   ServiceRequestPage,
   ServiceRequestChannel,
+  ServiceSchedule,
+  ServiceScheduleDay,
+  ServiceTechnicianScheduleWindow,
+  ServiceTechnicianWorkload,
   ServiceType,
   ServiceWorkOrder,
   ServiceWorkOrderPage,
   ServiceWorkTimeEntryInput,
+  TransitionWarrantyClaimRequest,
+  WarrantyClaim,
 } from '@vista/contracts';
 import {
   type FormEvent,
@@ -30,24 +43,32 @@ import { ApiClientError } from '../api/client';
 import {
   assignServiceWorkOrder,
   cancelServiceRequest,
+  completeServiceInspection,
   completeServiceWorkOrder,
+  createServiceInspectionPlan,
   createServiceRequest,
+  createWarrantyClaim,
   fetchServicePhoto,
   fetchServiceSignature,
   getServiceEquipmentHistory,
+  getServiceCareOverview,
   getServiceReferenceData,
+  getServiceSchedule,
   getServiceWorkOrder,
   listMyServiceWork,
   listServiceRequests,
   listServiceWorkOrders,
   startServiceWorkOrder,
+  transitionWarrantyClaim,
+  updateServiceTechnicianSchedulePolicy,
   uploadServicePhoto,
 } from '../api/service';
+import { downloadManagedFile, uploadManagedFile } from '../api/files';
 import { useAuth } from '../auth/AuthProvider';
 import { Icon } from '../components/Icon';
-import { Link } from '../routing/Router';
+import { Link, useRouter } from '../routing/Router';
 
-export type ServiceOperationsView = 'devices' | 'requests' | 'schedule' | 'work-orders';
+export type ServiceOperationsView = 'care' | 'devices' | 'requests' | 'schedule' | 'work-orders';
 
 const emptyReferences: ServiceReferenceData = {
   businessTimezone: 'UTC',
@@ -82,6 +103,8 @@ export function ServiceOperationsPage({ view }: { view: ServiceOperationsView })
   const canCreate = hasPermission('erp.service', 'create');
   const canEdit = hasPermission('erp.service', 'edit');
   const canApprove = hasPermission('erp.service', 'approve');
+  const canCreateFinance = hasPermission('erp.finance', 'create');
+  const canViewFinance = hasPermission('erp.finance', 'view');
   const [requestListPage, setRequestListPage] = useState(1);
   const [workOrderListPage, setWorkOrderListPage] = useState(1);
   const data = useServiceData(token, requestListPage, workOrderListPage, canApprove);
@@ -157,6 +180,13 @@ export function ServiceOperationsPage({ view }: { view: ServiceOperationsView })
         >
           Equipment history
         </Link>
+        <Link
+          className={({ isActive }) => (isActive ? 'is-active' : undefined)}
+          end
+          to="/modules/erp.service/care"
+        >
+          Warranty &amp; inspections
+        </Link>
       </nav>
 
       {notice ? (
@@ -195,14 +225,23 @@ export function ServiceOperationsPage({ view }: { view: ServiceOperationsView })
       {view === 'schedule' ? (
         <ServiceScheduleView
           canApprove={canApprove}
-          onOpen={setSelectedWorkOrder}
-          onPageChange={setWorkOrderListPage}
-          page={data.workOrderPage}
+          onOpen={(id) => void openWorkOrder(id)}
+          token={token}
           timezone={businessTimezone}
         />
       ) : null}
       {view === 'devices' ? (
         <ServiceDevicesView
+          references={data.references}
+          token={token}
+          timezone={businessTimezone}
+        />
+      ) : null}
+      {view === 'care' ? (
+        <ServiceCareView
+          canApprove={canApprove}
+          canCreate={canCreate}
+          canEdit={canEdit}
           references={data.references}
           token={token}
           timezone={businessTimezone}
@@ -245,7 +284,9 @@ export function ServiceOperationsPage({ view }: { view: ServiceOperationsView })
       {selectedWorkOrder ? (
         <ServiceWorkOrderDrawer
           canApprove={canApprove}
+          canCreateFinance={canCreateFinance}
           canEdit={canEdit}
+          canViewFinance={canViewFinance}
           currentAccountId={session?.context.accountId ?? ''}
           onBack={() => setSelectedWorkOrder(null)}
           onSaved={(workOrder, message) => {
@@ -328,7 +369,11 @@ function ServiceRequestsView({
                       <span>{request.assignedTechnician?.displayName ?? 'Technician pending'}</span>
                     </>
                   ) : (
-                    <span>Needs dispatch</span>
+                    <span>
+                      {request.plannedVisitDate
+                        ? `Planned for ${formatDate(request.plannedVisitDate, timezone)}`
+                        : 'Needs dispatch'}
+                    </span>
                   )}
                 </div>
                 <ServiceStatus status={request.status} />
@@ -447,30 +492,53 @@ function ServiceWorkOrdersView({
 function ServiceScheduleView({
   canApprove,
   onOpen,
-  onPageChange,
-  page,
+  token,
   timezone,
 }: {
   canApprove: boolean;
-  onOpen: (workOrder: ServiceWorkOrder) => void;
-  onPageChange: (page: number) => void;
-  page: ServiceWorkOrderPage;
+  onOpen: (workOrderId: string) => void;
+  token: string;
   timezone: string;
 }) {
-  const scheduled = useMemo(
+  const [dateFrom, setDateFrom] = useState(() => startOfBusinessWeek(today(timezone)));
+  const dateTo = useMemo(() => addCalendarDays(dateFrom, 6), [dateFrom]);
+  const [schedule, setSchedule] = useState<ServiceSchedule | null>(null);
+  const [editing, setEditing] = useState<ServiceTechnicianWorkload | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      setSchedule(await getServiceSchedule(token, dateFrom, dateTo));
+    } catch (caught) {
+      setError(errorText(caught, 'The technician schedule could not be loaded.'));
+    } finally {
+      setLoading(false);
+    }
+  }, [dateFrom, dateTo, token]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const appointments = useMemo(
     () =>
-      page.items
-        .filter(
-          (workOrder) =>
-            workOrder.scheduledStart &&
-            (workOrder.status === 'scheduled' || workOrder.status === 'in_progress'),
-        )
-        .sort((left, right) =>
-          (left.scheduledStart ?? '').localeCompare(right.scheduledStart ?? ''),
-        ),
-    [page.items],
+      schedule?.technicians.reduce(
+        (count, technician) =>
+          count + technician.days.reduce((dayCount, day) => dayCount + day.visits.length, 0),
+        0,
+      ) ?? 0,
+    [schedule],
   );
-  const groups = useMemo(() => groupSchedule(scheduled), [scheduled]);
+
+  function moveWeek(days: number) {
+    setDateFrom((current) => addCalendarDays(current, days));
+    setNotice(null);
+  }
+
   return (
     <section className="service-schedule-panel">
       <div className="service-view-toolbar">
@@ -478,44 +546,446 @@ function ServiceScheduleView({
           <h2>{canApprove ? 'Technician schedule' : 'My schedule'}</h2>
           <p>
             {canApprove
-              ? 'Appointments are grouped by business day so workload remains visible at a glance.'
-              : 'Your assigned appointments are grouped by business day.'}
+              ? 'Compare appointments with each technician’s working hours and daily capacity.'
+              : 'Review your visits, working hours, and remaining capacity for the week.'}
           </p>
         </div>
-        <span className="service-schedule-count">{scheduled.length} upcoming</span>
+        <div className="service-calendar-actions">
+          <button aria-label="Previous week" onClick={() => moveWeek(-7)} type="button">
+            <Icon name="arrow" size={15} />
+          </button>
+          <Button
+            onClick={() => setDateFrom(startOfBusinessWeek(today(timezone)))}
+            variant="secondary"
+          >
+            This week
+          </Button>
+          <button aria-label="Next week" onClick={() => moveWeek(7)} type="button">
+            <Icon name="arrow" size={15} />
+          </button>
+        </div>
       </div>
-      {!scheduled.length ? (
-        <ServiceState title="No scheduled visits">
-          <p>Dispatch a request to place it on a technician’s schedule.</p>
+      <div className="service-calendar-period">
+        <div>
+          <span>Week</span>
+          <strong>{formatScheduleRange(dateFrom, dateTo, timezone)}</strong>
+        </div>
+        <span className="service-schedule-count">
+          {appointments} visit{appointments === 1 ? '' : 's'}
+        </span>
+      </div>
+
+      {notice ? <InlineAlert tone="success">{notice}</InlineAlert> : null}
+      {error ? (
+        <div className="service-calendar-message">
+          <InlineAlert tone="error">{error}</InlineAlert>
+          <Button onClick={() => void load()} variant="secondary">
+            Try again
+          </Button>
+        </div>
+      ) : null}
+      {loading ? <ServiceState title="Loading technician schedule" /> : null}
+      {!loading && !error && schedule && !schedule.technicians.length ? (
+        <ServiceState title="No active technicians">
+          <p>Add a technician operator and mobile warehouse in Business structure first.</p>
         </ServiceState>
-      ) : (
-        <div className="service-schedule-grid">
-          {groups.map(([day, appointments]) => (
-            <section className="service-day-column" key={day}>
-              <header>
-                <strong>{formatScheduleDay(day, timezone)}</strong>
-                <span>
-                  {appointments.length} visit{appointments.length === 1 ? '' : 's'}
-                </span>
-              </header>
+      ) : null}
+      {!loading && !error && schedule?.technicians.length ? (
+        <>
+          <div className="service-workload-strip">
+            {schedule.technicians.map((workload) => (
+              <TechnicianWorkloadCard
+                canApprove={canApprove}
+                key={workload.technician.accountId}
+                onEdit={() => setEditing(workload)}
+                workload={workload}
+              />
+            ))}
+          </div>
+          <div className="service-resource-calendar-wrap">
+            <div className="service-resource-calendar">
+              <div className="service-resource-corner">Technician</div>
+              {calendarDates(dateFrom, dateTo).map((date) => (
+                <header className={date === today(timezone) ? 'is-today' : undefined} key={date}>
+                  <span>{weekdayShort(date, timezone)}</span>
+                  <strong>{calendarDayNumber(date)}</strong>
+                  <small>{calendarMonthShort(date, timezone)}</small>
+                </header>
+              ))}
+              {schedule.technicians.map((workload) => (
+                <TechnicianCalendarRow
+                  key={workload.technician.accountId}
+                  onOpen={onOpen}
+                  timezone={timezone}
+                  workload={workload}
+                />
+              ))}
+            </div>
+          </div>
+          {!appointments ? (
+            <div className="service-calendar-empty-note">
+              <Icon name="service" size={18} />
               <div>
-                {appointments.map((workOrder) => (
-                  <button key={workOrder.id} onClick={() => onOpen(workOrder)} type="button">
-                    <span>{formatTime(workOrder.scheduledStart!, timezone)}</span>
-                    <strong>{workOrder.customerName}</strong>
-                    <small>
-                      {workOrder.assignedTechnician?.displayName ?? 'Technician pending'}
-                    </small>
-                    <em>{workOrder.deviceName}</em>
-                  </button>
-                ))}
+                <strong>No visits in this week</strong>
+                <span>Assign a service request to place it on the schedule.</span>
               </div>
-            </section>
+            </div>
+          ) : null}
+        </>
+      ) : null}
+
+      {editing ? (
+        <TechnicianAvailabilityDrawer
+          onBack={() => setEditing(null)}
+          onSaved={async (name) => {
+            setEditing(null);
+            setNotice(`${name}’s working hours were updated.`);
+            await load();
+          }}
+          token={token}
+          workload={editing}
+        />
+      ) : null}
+    </section>
+  );
+}
+
+function TechnicianWorkloadCard({
+  canApprove,
+  onEdit,
+  workload,
+}: {
+  canApprove: boolean;
+  onEdit: () => void;
+  workload: ServiceTechnicianWorkload;
+}) {
+  const hasCapacity = workload.capacityMinutes !== undefined;
+  const percent = hasCapacity
+    ? Math.min(
+        100,
+        Math.round((workload.bookedMinutes / Math.max(workload.capacityMinutes!, 1)) * 100),
+      )
+    : 0;
+  return (
+    <article className="service-workload-card">
+      <header>
+        <div>
+          <strong>{workload.technician.displayName}</strong>
+          <span>{workload.technician.warehouseName}</span>
+        </div>
+        <span className={workload.policy.configured ? 'is-ready' : 'is-unconfigured'}>
+          {workload.policy.configured ? 'Hours set' : 'Hours needed'}
+        </span>
+      </header>
+      <div className="service-workload-meter" aria-label={`${percent}% of weekly capacity booked`}>
+        <span style={{ width: `${percent}%` }} />
+      </div>
+      <dl>
+        <div>
+          <dt>Booked</dt>
+          <dd>{formatScheduleMinutes(workload.bookedMinutes)}</dd>
+        </div>
+        <div>
+          <dt>Available</dt>
+          <dd>{hasCapacity ? formatScheduleMinutes(workload.remainingMinutes ?? 0) : 'Not set'}</dd>
+        </div>
+        <div>
+          <dt>Visits</dt>
+          <dd>{workload.visitCount}</dd>
+        </div>
+      </dl>
+      {canApprove ? (
+        <button className="service-manage-hours" onClick={onEdit} type="button">
+          Manage working hours <Icon name="arrow" size={14} />
+        </button>
+      ) : null}
+    </article>
+  );
+}
+
+function TechnicianCalendarRow({
+  onOpen,
+  timezone,
+  workload,
+}: {
+  onOpen: (workOrderId: string) => void;
+  timezone: string;
+  workload: ServiceTechnicianWorkload;
+}) {
+  return (
+    <>
+      <div className="service-resource-person">
+        <span>{initials(workload.technician.displayName)}</span>
+        <div>
+          <strong>{workload.technician.displayName}</strong>
+          <small>{workload.technician.warehouseName}</small>
+        </div>
+      </div>
+      {workload.days.map((day) => (
+        <ServiceCalendarCell day={day} key={day.date} onOpen={onOpen} timezone={timezone} />
+      ))}
+    </>
+  );
+}
+
+function ServiceCalendarCell({
+  day,
+  onOpen,
+  timezone,
+}: {
+  day: ServiceScheduleDay;
+  onOpen: (workOrderId: string) => void;
+  timezone: string;
+}) {
+  return (
+    <div
+      className={`service-resource-day${day.capacityMinutes === undefined ? ' is-unavailable' : ''}`}
+    >
+      <div className="service-day-capacity">
+        {day.capacityMinutes === undefined ? (
+          <span>Unavailable</span>
+        ) : (
+          <>
+            <span>
+              {formatScheduleMinutes(day.bookedMinutes)} /{' '}
+              {formatScheduleMinutes(day.capacityMinutes)}
+            </span>
+            <small>
+              {day.startsAt}–{day.endsAt}
+            </small>
+          </>
+        )}
+      </div>
+      <div className="service-day-visits">
+        {day.visits.map((visit) => (
+          <button
+            className={`is-${visit.priority}`}
+            key={visit.workOrderId}
+            onClick={() => onOpen(visit.workOrderId)}
+            title={`${visit.customerName} · ${visit.deviceName}`}
+            type="button"
+          >
+            <span>
+              {formatTime(visit.scheduledStart, timezone)}–
+              {formatTime(visit.scheduledEnd, timezone)}
+            </span>
+            <strong>{visit.customerName}</strong>
+            <small>{visit.customerLocationName}</small>
+            <em>{visit.workOrderNumber}</em>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+interface AvailabilityWindowForm {
+  capacityMinutes: number;
+  enabled: boolean;
+  endsAt: string;
+  maxVisits: number;
+  startsAt: string;
+  weekday: number;
+}
+
+const scheduleWeekdays = [
+  'Monday',
+  'Tuesday',
+  'Wednesday',
+  'Thursday',
+  'Friday',
+  'Saturday',
+  'Sunday',
+];
+
+function TechnicianAvailabilityDrawer({
+  onBack,
+  onSaved,
+  token,
+  workload,
+}: {
+  onBack: () => void;
+  onSaved: (technicianName: string) => Promise<void>;
+  token: string;
+  workload: ServiceTechnicianWorkload;
+}) {
+  const [windows, setWindows] = useState<AvailabilityWindowForm[]>(() =>
+    scheduleWeekdays.map((_, index) => {
+      const saved = workload.policy.windows.find((window) => window.weekday === index + 1);
+      return {
+        capacityMinutes: saved?.capacityMinutes ?? 480,
+        enabled: Boolean(saved),
+        endsAt: saved?.endsAt ?? '17:00',
+        maxVisits: saved?.maxVisits ?? 6,
+        startsAt: saved?.startsAt ?? '08:00',
+        weekday: index + 1,
+      };
+    }),
+  );
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  function updateWindow(weekday: number, patch: Partial<AvailabilityWindowForm>) {
+    setWindows((current) =>
+      current.map((window) => (window.weekday === weekday ? { ...window, ...patch } : window)),
+    );
+  }
+
+  function useWeekdayTemplate() {
+    setWindows((current) =>
+      current.map((window) => ({
+        ...window,
+        capacityMinutes: 480,
+        enabled: window.weekday <= 5,
+        endsAt: '17:00',
+        maxVisits: 6,
+        startsAt: '08:00',
+      })),
+    );
+  }
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      const enabledWindows: ServiceTechnicianScheduleWindow[] = windows
+        .filter((window) => window.enabled)
+        .map(({ capacityMinutes, endsAt, maxVisits, startsAt, weekday }) => ({
+          capacityMinutes,
+          endsAt,
+          maxVisits,
+          startsAt,
+          weekday,
+        }));
+      await updateServiceTechnicianSchedulePolicy(
+        token,
+        workload.technician.accountId,
+        crypto.randomUUID(),
+        { expectedVersion: workload.policy.version, windows: enabledWindows },
+      );
+      await onSaved(workload.technician.displayName);
+    } catch (caught) {
+      setError(errorText(caught, 'The working hours could not be saved.'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <ServiceDrawer
+      busy={busy}
+      onBack={onBack}
+      subtitle={`${workload.technician.displayName} · ${workload.technician.warehouseName}`}
+      title="Working hours and capacity"
+    >
+      <form className="service-availability-form" onSubmit={(event) => void submit(event)}>
+        <section className="service-availability-intro">
+          <div>
+            <span>Weekly availability</span>
+            <p>
+              Only enabled days accept new visits. Capacity can be lower than the full time window.
+            </p>
+          </div>
+          <Button onClick={useWeekdayTemplate} type="button" variant="secondary">
+            Use Mon–Fri template
+          </Button>
+        </section>
+        {error ? <InlineAlert tone="error">{error}</InlineAlert> : null}
+        <div className="service-availability-table">
+          <div className="service-availability-head" aria-hidden="true">
+            <span>Day</span>
+            <span>Start</span>
+            <span>End</span>
+            <span>Bookable minutes</span>
+            <span>Visit limit</span>
+          </div>
+          {windows.map((window, index) => (
+            <div
+              className={`service-availability-row${window.enabled ? ' is-enabled' : ''}`}
+              key={window.weekday}
+            >
+              <label className="service-day-toggle">
+                <input
+                  checked={window.enabled}
+                  onChange={(event) =>
+                    updateWindow(window.weekday, { enabled: event.target.checked })
+                  }
+                  type="checkbox"
+                />
+                <span>{scheduleWeekdays[index]}</span>
+              </label>
+              <label>
+                <span>Start</span>
+                <input
+                  disabled={!window.enabled}
+                  onChange={(event) =>
+                    updateWindow(window.weekday, { startsAt: event.target.value })
+                  }
+                  required={window.enabled}
+                  type="time"
+                  value={window.startsAt}
+                />
+              </label>
+              <label>
+                <span>End</span>
+                <input
+                  disabled={!window.enabled}
+                  onChange={(event) => updateWindow(window.weekday, { endsAt: event.target.value })}
+                  required={window.enabled}
+                  type="time"
+                  value={window.endsAt}
+                />
+              </label>
+              <label>
+                <span>Bookable minutes</span>
+                <input
+                  disabled={!window.enabled}
+                  max="1440"
+                  min="15"
+                  onChange={(event) =>
+                    updateWindow(window.weekday, { capacityMinutes: Number(event.target.value) })
+                  }
+                  required={window.enabled}
+                  step="15"
+                  type="number"
+                  value={window.capacityMinutes}
+                />
+              </label>
+              <label>
+                <span>Visit limit</span>
+                <input
+                  disabled={!window.enabled}
+                  max="100"
+                  min="1"
+                  onChange={(event) =>
+                    updateWindow(window.weekday, { maxVisits: Number(event.target.value) })
+                  }
+                  required={window.enabled}
+                  type="number"
+                  value={window.maxVisits}
+                />
+              </label>
+            </div>
           ))}
         </div>
-      )}
-      <ServicePager onPageChange={onPageChange} page={page} />
-    </section>
+        <div className="service-availability-help">
+          <strong>How capacity works</strong>
+          <p>
+            A visit must fit inside the day’s start and end time. It is also blocked when it
+            overlaps another visit or exceeds the bookable minutes or visit limit.
+          </p>
+        </div>
+        <div className="service-drawer-actions service-availability-actions">
+          <Button busy={busy} type="submit">
+            Save working hours
+          </Button>
+          <Button disabled={busy} onClick={onBack} type="button" variant="secondary">
+            Cancel
+          </Button>
+        </div>
+      </form>
+    </ServiceDrawer>
   );
 }
 
@@ -635,6 +1105,1003 @@ function ServiceDevicesView({
   );
 }
 
+function ServiceCareView({
+  canApprove,
+  canCreate,
+  canEdit,
+  references,
+  token,
+  timezone,
+}: {
+  canApprove: boolean;
+  canCreate: boolean;
+  canEdit: boolean;
+  references: ServiceReferenceData;
+  token: string;
+  timezone: string;
+}) {
+  const [overview, setOverview] = useState<ServiceCareOverview | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [revision, setRevision] = useState(0);
+  const [creatingClaim, setCreatingClaim] = useState(false);
+  const [creatingInspection, setCreatingInspection] = useState(false);
+  const [selectedClaim, setSelectedClaim] = useState<WarrantyClaim | null>(null);
+  const [selectedInspection, setSelectedInspection] = useState<ServiceInspectionPlan | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    setError(null);
+    void getServiceCareOverview(token)
+      .then((result) => active && setOverview(result))
+      .catch(
+        (caught) =>
+          active &&
+          setError(errorText(caught, 'Warranty and inspection records could not be loaded.')),
+      )
+      .finally(() => active && setLoading(false));
+    return () => {
+      active = false;
+    };
+  }, [revision, token]);
+
+  function reload() {
+    setRevision((current) => current + 1);
+  }
+
+  function updateClaim(claim: WarrantyClaim) {
+    setSelectedClaim(claim);
+    setOverview((current) =>
+      current
+        ? {
+            ...current,
+            claims: current.claims.map((item) => (item.id === claim.id ? claim : item)),
+          }
+        : current,
+    );
+  }
+
+  function updateInspection(plan: ServiceInspectionPlan) {
+    setSelectedInspection(plan);
+    setOverview((current) =>
+      current
+        ? {
+            ...current,
+            inspections: current.inspections.map((item) => (item.id === plan.id ? plan : item)),
+          }
+        : current,
+    );
+  }
+
+  if (loading) return <ServiceState title="Loading warranty and inspection work" />;
+  if (error || !overview)
+    return (
+      <ServiceState title="Warranty and inspection work could not be loaded">
+        <Button onClick={reload} variant="secondary">
+          Try again
+        </Button>
+      </ServiceState>
+    );
+
+  const activeWarranties = overview.warranties.filter((item) => item.status === 'active').length;
+  const expiringSoon = overview.warranties.filter(
+    (item) =>
+      item.remainingDays !== undefined && item.remainingDays >= 0 && item.remainingDays <= 30,
+  ).length;
+  const openClaims = overview.claims.filter((item) => item.status !== 'closed').length;
+  const todayValue = today(timezone);
+  const inspectionsDue = overview.inspections.filter(
+    (item) => item.active && item.nextDueDate <= todayValue,
+  ).length;
+
+  return (
+    <div className="service-care-workspace">
+      <section aria-label="Warranty and inspection summary" className="service-summary">
+        <ServiceMetric label="Active warranties" value={String(activeWarranties)} />
+        <ServiceMetric
+          label="Expiring in 30 days"
+          {...(expiringSoon ? { tone: 'warning' as const } : {})}
+          value={String(expiringSoon)}
+        />
+        <ServiceMetric
+          label="Open claims"
+          {...(openClaims ? { tone: 'warning' as const } : {})}
+          value={String(openClaims)}
+        />
+        <ServiceMetric
+          label="Inspections due"
+          {...(inspectionsDue ? { tone: 'warning' as const } : {})}
+          value={String(inspectionsDue)}
+        />
+      </section>
+
+      <section className="service-care-section">
+        <header className="service-view-toolbar">
+          <div>
+            <h2>Warranty claims</h2>
+            <p>Keep the decision, evidence, and claim history with the registered device.</p>
+          </div>
+          {canCreate ? (
+            <Button onClick={() => setCreatingClaim(true)}>
+              <Icon name="plus" size={16} /> New warranty claim
+            </Button>
+          ) : null}
+        </header>
+        {!overview.claims.length ? (
+          <p className="service-empty-inline">No warranty claims have been recorded.</p>
+        ) : (
+          <div className="service-care-register">
+            {overview.claims.map((claim) => (
+              <button key={claim.id} onClick={() => setSelectedClaim(claim)} type="button">
+                <span className="service-care-record-mark">W</span>
+                <span>
+                  <strong>{claim.number}</strong>
+                  <small>
+                    {claim.customerName} · {claim.customerLocationName}
+                  </small>
+                </span>
+                <span>
+                  <strong>{claim.deviceName}</strong>
+                  <small>{claim.serialNumber}</small>
+                </span>
+                <span>
+                  <strong>{formatDateTime(claim.receivedAt, timezone)}</strong>
+                  <small>
+                    {claim.attachments.length} file{claim.attachments.length === 1 ? '' : 's'}
+                  </small>
+                </span>
+                <CareStatus value={claim.status} />
+                <Icon name="arrow" size={16} />
+              </button>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section className="service-care-section">
+        <header className="service-view-toolbar">
+          <div>
+            <h2>Inspection schedule</h2>
+            <p>
+              Technical and metrological checks use the frequency and reminder set for each device.
+            </p>
+          </div>
+          {canApprove ? (
+            <Button onClick={() => setCreatingInspection(true)} variant="secondary">
+              <Icon name="plus" size={16} /> Add inspection plan
+            </Button>
+          ) : null}
+        </header>
+        {!overview.inspections.length ? (
+          <p className="service-empty-inline">No inspection plans have been added.</p>
+        ) : (
+          <div className="service-inspection-grid">
+            {overview.inspections.map((plan) => {
+              const due = plan.nextDueDate <= todayValue;
+              return (
+                <button key={plan.id} onClick={() => setSelectedInspection(plan)} type="button">
+                  <span className={`service-inspection-icon${due ? ' is-due' : ''}`}>
+                    <Icon name="activity" size={18} />
+                  </span>
+                  <span>
+                    <small>{inspectionTypeLabel(plan.inspectionType)}</small>
+                    <strong>{plan.deviceName}</strong>
+                    <em>
+                      {plan.customerName} · {plan.serialNumber}
+                    </em>
+                  </span>
+                  <span>
+                    <small>{due ? 'Due now' : 'Next inspection'}</small>
+                    <strong>{formatDate(plan.nextDueDate, timezone)}</strong>
+                    <em>
+                      Every {plan.intervalMonths} month{plan.intervalMonths === 1 ? '' : 's'}
+                    </em>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </section>
+
+      <section className="service-care-section">
+        <header className="service-view-toolbar">
+          <div>
+            <h2>Warranty coverage</h2>
+            <p>Coverage is calculated from the warranty date on the shared equipment register.</p>
+          </div>
+        </header>
+        <div className="service-warranty-grid">
+          {overview.warranties.map((item) => (
+            <article key={item.equipmentId}>
+              <div>
+                <strong>{item.deviceName}</strong>
+                <span>
+                  {item.customerName} · {item.serialNumber}
+                </span>
+              </div>
+              <CareStatus value={item.status} />
+              <div>
+                <small>{item.warrantyEndsOn ? 'Coverage ends' : 'Coverage date'}</small>
+                <strong>
+                  {item.warrantyEndsOn ? formatDate(item.warrantyEndsOn, timezone) : 'Not recorded'}
+                </strong>
+              </div>
+              <span>
+                {item.claimCount} claim{item.claimCount === 1 ? '' : 's'}
+              </span>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      {creatingClaim ? (
+        <NewWarrantyClaimDrawer
+          onBack={() => setCreatingClaim(false)}
+          onSaved={(claim) => {
+            setCreatingClaim(false);
+            reload();
+            setSelectedClaim(claim);
+          }}
+          references={references}
+          token={token}
+        />
+      ) : null}
+      {creatingInspection ? (
+        <NewInspectionPlanDrawer
+          existing={overview.inspections}
+          onBack={() => setCreatingInspection(false)}
+          onSaved={(plan) => {
+            setCreatingInspection(false);
+            reload();
+            setSelectedInspection(plan);
+          }}
+          references={references}
+          token={token}
+          timezone={timezone}
+        />
+      ) : null}
+      {selectedClaim ? (
+        <WarrantyClaimDrawer
+          canApprove={canApprove}
+          canEdit={canEdit}
+          claim={selectedClaim}
+          onBack={() => setSelectedClaim(null)}
+          onChanged={updateClaim}
+          token={token}
+          timezone={timezone}
+        />
+      ) : null}
+      {selectedInspection ? (
+        <InspectionPlanDrawer
+          canEdit={canEdit}
+          onBack={() => setSelectedInspection(null)}
+          onChanged={updateInspection}
+          plan={selectedInspection}
+          token={token}
+          timezone={timezone}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function NewWarrantyClaimDrawer({
+  onBack,
+  onSaved,
+  references,
+  token,
+}: {
+  onBack: () => void;
+  onSaved: (claim: WarrantyClaim) => void;
+  references: ServiceReferenceData;
+  token: string;
+}) {
+  const equipment = references.equipment.filter((item) => item.active && item.status !== 'retired');
+  const [equipmentId, setEquipmentId] = useState(equipment[0]?.id ?? '');
+  const [description, setDescription] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const selected = equipment.find((item) => item.id === equipmentId);
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!selected) return;
+    const input: CreateWarrantyClaimRequest = {
+      customerEquipmentId: selected.id,
+      customerLocationId: selected.customerLocationId,
+      customerPartnerId: selected.customerPartnerId,
+      description,
+    };
+    setBusy(true);
+    setError(null);
+    try {
+      onSaved(await createWarrantyClaim(token, crypto.randomUUID(), input));
+    } catch (caught) {
+      setError(errorText(caught, 'The warranty claim could not be saved.'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <ServiceDrawer
+      busy={busy}
+      onBack={onBack}
+      subtitle="Registered customer equipment"
+      title="New warranty claim"
+      variant="care"
+    >
+      <form className="service-form" onSubmit={(event) => void submit(event)}>
+        {error ? <InlineAlert tone="error">{error}</InlineAlert> : null}
+        <FormSection
+          index="1"
+          title="Device"
+          description="Choose the affected device from the shared equipment register."
+        >
+          <ServiceField label="Customer device">
+            <select
+              onChange={(event) => setEquipmentId(event.target.value)}
+              required
+              value={equipmentId}
+            >
+              <option value="">Choose device</option>
+              {equipment.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.deviceName} · {item.serialNumber} ·{' '}
+                  {customerName(references, item.customerPartnerId)}
+                </option>
+              ))}
+            </select>
+          </ServiceField>
+          {selected ? (
+            <div className="service-selected-context">
+              <Icon name="service" size={17} />
+              <span>
+                <strong>{customerName(references, selected.customerPartnerId)}</strong>
+                <small>{locationName(references, selected.customerLocationId)}</small>
+              </span>
+              <CareStatus value={warrantyStatus(selected.warrantyEndsOn)} />
+            </div>
+          ) : null}
+        </FormSection>
+        <FormSection
+          index="2"
+          title="Claim details"
+          description="Describe the reported fault and the circumstances clearly."
+        >
+          <ServiceField label="Description">
+            <textarea
+              maxLength={4000}
+              onChange={(event) => setDescription(event.target.value)}
+              placeholder="Describe the fault, when it appeared, and any checks already completed."
+              required
+              rows={6}
+              value={description}
+            />
+          </ServiceField>
+        </FormSection>
+        <DrawerActions
+          busy={busy}
+          disabled={!selected}
+          onBack={onBack}
+          submitLabel="Create claim"
+        />
+      </form>
+    </ServiceDrawer>
+  );
+}
+
+function NewInspectionPlanDrawer({
+  existing,
+  onBack,
+  onSaved,
+  references,
+  token,
+  timezone,
+}: {
+  existing: ServiceInspectionPlan[];
+  onBack: () => void;
+  onSaved: (plan: ServiceInspectionPlan) => void;
+  references: ServiceReferenceData;
+  token: string;
+  timezone: string;
+}) {
+  const equipment = references.equipment.filter((item) => item.active && item.status !== 'retired');
+  const [equipmentId, setEquipmentId] = useState(equipment[0]?.id ?? '');
+  const [inspectionType, setInspectionType] =
+    useState<CreateServiceInspectionPlanRequest['inspectionType']>('technical');
+  const [intervalMonths, setIntervalMonths] = useState(12);
+  const [nextDueDate, setNextDueDate] = useState(today(timezone));
+  const [reminderLeadDays, setReminderLeadDays] = useState(30);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const duplicate = existing.some(
+    (item) => item.equipmentId === equipmentId && item.inspectionType === inspectionType,
+  );
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      onSaved(
+        await createServiceInspectionPlan(token, crypto.randomUUID(), {
+          customerEquipmentId: equipmentId,
+          inspectionType,
+          intervalMonths,
+          nextDueDate,
+          reminderLeadDays,
+        }),
+      );
+    } catch (caught) {
+      setError(errorText(caught, 'The inspection plan could not be saved.'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <ServiceDrawer
+      busy={busy}
+      onBack={onBack}
+      subtitle="Device, frequency, and reminder"
+      title="Add inspection plan"
+      variant="care"
+    >
+      <form className="service-form" onSubmit={(event) => void submit(event)}>
+        {error ? <InlineAlert tone="error">{error}</InlineAlert> : null}
+        <FormSection
+          index="1"
+          title="Inspection"
+          description="Use the inspection requirement approved for this device."
+        >
+          <ServiceField label="Customer device">
+            <select
+              onChange={(event) => setEquipmentId(event.target.value)}
+              required
+              value={equipmentId}
+            >
+              <option value="">Choose device</option>
+              {equipment.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.deviceName} · {item.serialNumber} ·{' '}
+                  {customerName(references, item.customerPartnerId)}
+                </option>
+              ))}
+            </select>
+          </ServiceField>
+          <div className="service-form-grid">
+            <ServiceField label="Inspection type">
+              <select
+                onChange={(event) =>
+                  setInspectionType(
+                    event.target.value as CreateServiceInspectionPlanRequest['inspectionType'],
+                  )
+                }
+                value={inspectionType}
+              >
+                <option value="technical">Technical</option>
+                <option value="metrological">Metrological</option>
+              </select>
+            </ServiceField>
+            <ServiceField label="Frequency (months)">
+              <input
+                max="120"
+                min="1"
+                onChange={(event) => setIntervalMonths(Number(event.target.value))}
+                required
+                type="number"
+                value={intervalMonths}
+              />
+            </ServiceField>
+          </div>
+        </FormSection>
+        <FormSection
+          index="2"
+          title="First due date"
+          description="Set when the next inspection is due and how early Service should be reminded."
+        >
+          <div className="service-form-grid">
+            <ServiceField label="Next due date">
+              <input
+                onChange={(event) => setNextDueDate(event.target.value)}
+                required
+                type="date"
+                value={nextDueDate}
+              />
+            </ServiceField>
+            <ServiceField label="Reminder (days before)">
+              <input
+                max="365"
+                min="0"
+                onChange={(event) => setReminderLeadDays(Number(event.target.value))}
+                required
+                type="number"
+                value={reminderLeadDays}
+              />
+            </ServiceField>
+          </div>
+          {duplicate ? (
+            <InlineAlert tone="warning">This device already has that inspection plan.</InlineAlert>
+          ) : null}
+        </FormSection>
+        <DrawerActions
+          busy={busy}
+          disabled={!equipmentId || duplicate}
+          onBack={onBack}
+          submitLabel="Add inspection plan"
+        />
+      </form>
+    </ServiceDrawer>
+  );
+}
+
+function WarrantyClaimDrawer({
+  canApprove,
+  canEdit,
+  claim,
+  onBack,
+  onChanged,
+  token,
+  timezone,
+}: {
+  canApprove: boolean;
+  canEdit: boolean;
+  claim: WarrantyClaim;
+  onBack: () => void;
+  onChanged: (claim: WarrantyClaim) => void;
+  token: string;
+  timezone: string;
+}) {
+  const [note, setNote] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [file, setFile] = useState<File | null>(null);
+
+  async function transition(nextStatus: TransitionWarrantyClaimRequest['nextStatus']) {
+    setBusy(true);
+    setError(null);
+    try {
+      const input: TransitionWarrantyClaimRequest = {
+        expectedVersion: claim.version,
+        nextStatus,
+        ...(note.trim() ? { note: note.trim() } : {}),
+      };
+      onChanged(await transitionWarrantyClaim(token, claim.id, crypto.randomUUID(), input));
+      setNote('');
+    } catch (caught) {
+      setError(errorText(caught, 'The claim status could not be changed.'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function upload() {
+    if (!file) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const uploaded = await uploadManagedFile(
+        token,
+        'warranty_claim',
+        claim.id,
+        crypto.randomUUID(),
+        file,
+      );
+      onChanged({ ...claim, attachments: [...claim.attachments, uploaded] });
+      setFile(null);
+    } catch (caught) {
+      setError(errorText(caught, 'The supporting file could not be uploaded.'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <ServiceDrawer
+      busy={busy}
+      onBack={onBack}
+      subtitle={`${claim.customerName} · ${claim.deviceName}`}
+      title={claim.number}
+      variant="care"
+    >
+      <div className="service-claim-preview">
+        {error ? <InlineAlert tone="error">{error}</InlineAlert> : null}
+        <section className="service-care-hero">
+          <div>
+            <span>Warranty claim</span>
+            <h3>{claim.deviceName}</h3>
+            <p>
+              {claim.serialNumber} · {claim.customerLocationName}
+            </p>
+          </div>
+          <CareStatus value={claim.status} />
+        </section>
+        <section className="service-preview-section">
+          <header>
+            <div>
+              <h3>Reported issue</h3>
+              <p>Received {formatDateTime(claim.receivedAt, timezone)}</p>
+            </div>
+          </header>
+          <p className="service-care-description">{claim.description}</p>
+          {claim.decisionNote ? (
+            <div className="service-decision-note">
+              <strong>Decision note</strong>
+              <p>{claim.decisionNote}</p>
+            </div>
+          ) : null}
+        </section>
+        <section className="service-preview-section">
+          <header>
+            <div>
+              <h3>Supporting files</h3>
+              <p>Photos, reports, and documents follow this claim’s access rules.</p>
+            </div>
+            <span>{claim.attachments.length}</span>
+          </header>
+          <div className="service-claim-files">
+            {claim.attachments.map((attachment) => (
+              <ClaimFile key={attachment.id} file={attachment} token={token} />
+            ))}
+            {canEdit && claim.status !== 'closed' ? (
+              <div className="service-claim-upload">
+                <input
+                  accept="application/pdf,image/jpeg,image/png,image/webp"
+                  aria-label="Supporting file"
+                  onChange={(event) => setFile(event.target.files?.[0] ?? null)}
+                  type="file"
+                />
+                <Button
+                  disabled={!file}
+                  onClick={() => void upload()}
+                  type="button"
+                  variant="secondary"
+                >
+                  Upload file
+                </Button>
+              </div>
+            ) : null}
+          </div>
+        </section>
+        <section className="service-preview-section">
+          <header>
+            <div>
+              <h3>Claim history</h3>
+              <p>Every workflow decision remains recorded.</p>
+            </div>
+          </header>
+          <ol className="service-history-list is-compact">
+            {claim.history.map((entry) => (
+              <li key={entry.id}>
+                <span aria-hidden="true" />
+                <div>
+                  <strong>{claimStatusLabel(entry.nextStatus)}</strong>
+                  {entry.note ? <p>{entry.note}</p> : null}
+                  <small>
+                    {formatDateTime(entry.changedAt, timezone)}
+                    {entry.changedByName ? ` · ${entry.changedByName}` : ''}
+                  </small>
+                </div>
+              </li>
+            ))}
+          </ol>
+        </section>
+        {canApprove && claim.status !== 'closed' ? (
+          <section className="service-claim-decision">
+            <div>
+              <h3>Next step</h3>
+              <p>{claimNextStep(claim.status)}</p>
+            </div>
+            {claim.status === 'under_review' ? (
+              <textarea
+                maxLength={2000}
+                onChange={(event) => setNote(event.target.value)}
+                placeholder="Record the findings and decision reason."
+                required
+                rows={3}
+                value={note}
+              />
+            ) : null}
+            <div className="service-drawer-actions">
+              {claim.status === 'received' ? (
+                <Button onClick={() => void transition('under_review')} type="button">
+                  Start review
+                </Button>
+              ) : null}
+              {claim.status === 'under_review' ? (
+                <>
+                  <Button
+                    disabled={!note.trim()}
+                    onClick={() => void transition('approved')}
+                    type="button"
+                  >
+                    Approve claim
+                  </Button>
+                  <Button
+                    disabled={!note.trim()}
+                    onClick={() => void transition('rejected')}
+                    type="button"
+                    variant="secondary"
+                  >
+                    Reject claim
+                  </Button>
+                </>
+              ) : null}
+              {claim.status === 'approved' || claim.status === 'rejected' ? (
+                <Button onClick={() => void transition('closed')} type="button">
+                  Close claim
+                </Button>
+              ) : null}
+            </div>
+          </section>
+        ) : null}
+      </div>
+    </ServiceDrawer>
+  );
+}
+
+function InspectionPlanDrawer({
+  canEdit,
+  onBack,
+  onChanged,
+  plan,
+  token,
+  timezone,
+}: {
+  canEdit: boolean;
+  onBack: () => void;
+  onChanged: (plan: ServiceInspectionPlan) => void;
+  plan: ServiceInspectionPlan;
+  token: string;
+  timezone: string;
+}) {
+  const [completing, setCompleting] = useState(false);
+  const [completedOn, setCompletedOn] = useState(today(timezone));
+  const [outcome, setOutcome] = useState<CompleteServiceInspectionRequest['outcome']>('passed');
+  const [notes, setNotes] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      onChanged(
+        await completeServiceInspection(token, plan.id, crypto.randomUUID(), {
+          completedOn,
+          expectedVersion: plan.version,
+          notes,
+          outcome,
+        }),
+      );
+      setCompleting(false);
+      setNotes('');
+    } catch (caught) {
+      setError(errorText(caught, 'The inspection result could not be saved.'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <ServiceDrawer
+      busy={busy}
+      onBack={onBack}
+      subtitle={`${plan.customerName} · ${plan.serialNumber}`}
+      title={`${inspectionTypeLabel(plan.inspectionType)} inspection`}
+      variant="care"
+    >
+      <div className="service-inspection-preview">
+        {error ? <InlineAlert tone="error">{error}</InlineAlert> : null}
+        <section className="service-care-hero">
+          <div>
+            <span>Inspection plan</span>
+            <h3>{plan.deviceName}</h3>
+            <p>{plan.customerLocationName}</p>
+          </div>
+          <div className="service-due-date">
+            <small>Next due</small>
+            <strong>{formatDate(plan.nextDueDate, timezone)}</strong>
+          </div>
+        </section>
+        <section className="service-care-facts">
+          <div>
+            <span>Frequency</span>
+            <strong>Every {plan.intervalMonths} months</strong>
+          </div>
+          <div>
+            <span>Reminder</span>
+            <strong>{plan.reminderLeadDays} days before</strong>
+          </div>
+          <div>
+            <span>Last completed</span>
+            <strong>
+              {plan.lastCompletedOn
+                ? formatDate(plan.lastCompletedOn, timezone)
+                : 'No completion yet'}
+            </strong>
+          </div>
+        </section>
+        {canEdit && !completing ? (
+          <section className="service-inspection-record-action">
+            <div>
+              <h3>After the inspection</h3>
+              <p>Once the check has taken place, save its date, outcome, and findings here.</p>
+            </div>
+            <Button onClick={() => setCompleting(true)}>Record completed inspection</Button>
+          </section>
+        ) : null}
+        {completing ? (
+          <form
+            className="service-form service-inspection-completion"
+            onSubmit={(event) => void submit(event)}
+          >
+            <FormSection
+              index="1"
+              title="Inspection result"
+              description="Record the date, outcome, and findings from the completed check."
+            >
+              <div className="service-form-grid">
+                <ServiceField label="Completed on">
+                  <input
+                    onChange={(event) => setCompletedOn(event.target.value)}
+                    required
+                    type="date"
+                    value={completedOn}
+                  />
+                </ServiceField>
+                <ServiceField label="Outcome">
+                  <select
+                    onChange={(event) =>
+                      setOutcome(event.target.value as CompleteServiceInspectionRequest['outcome'])
+                    }
+                    value={outcome}
+                  >
+                    <option value="passed">Passed</option>
+                    <option value="attention_required">Attention required</option>
+                  </select>
+                </ServiceField>
+              </div>
+              <ServiceField label="Findings">
+                <textarea
+                  maxLength={2000}
+                  onChange={(event) => setNotes(event.target.value)}
+                  placeholder="Record checks completed, readings, and any follow-up needed."
+                  required
+                  rows={4}
+                  value={notes}
+                />
+              </ServiceField>
+            </FormSection>
+            <DrawerActions
+              backLabel="Cancel"
+              busy={busy}
+              onBack={() => setCompleting(false)}
+              submitLabel="Save inspection result"
+            />
+          </form>
+        ) : null}
+        <section className="service-preview-section">
+          <header>
+            <div>
+              <h3>Completed inspections</h3>
+              <p>Previous results remain available for this device.</p>
+            </div>
+            <span>{plan.records.length}</span>
+          </header>
+          {!plan.records.length ? (
+            <p className="service-empty-inline">No completed inspection has been recorded.</p>
+          ) : (
+            <ol className="service-history-list is-compact">
+              {plan.records.map((record) => (
+                <li key={record.id}>
+                  <span aria-hidden="true" />
+                  <div>
+                    <strong>{record.outcome === 'passed' ? 'Passed' : 'Attention required'}</strong>
+                    <p>{record.notes}</p>
+                    <small>
+                      {formatDate(record.completedOn, timezone)} · due{' '}
+                      {formatDate(record.dueDate, timezone)}
+                    </small>
+                  </div>
+                </li>
+              ))}
+            </ol>
+          )}
+        </section>
+      </div>
+    </ServiceDrawer>
+  );
+}
+
+function ClaimFile({ file, token }: { file: ManagedFile; token: string }) {
+  const [busy, setBusy] = useState(false);
+  async function download() {
+    setBusy(true);
+    try {
+      const result = await downloadManagedFile(token, file);
+      const url = URL.createObjectURL(result.blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = result.fileName;
+      anchor.click();
+      URL.revokeObjectURL(url);
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <div className="service-claim-file">
+      <Icon name="finance" size={17} />
+      <span>
+        <strong>{file.originalName}</strong>
+        <small>
+          {formatFileSize(file.byteSize)} · Version {file.version}
+        </small>
+      </span>
+      <Button busy={busy} onClick={() => void download()} variant="quiet">
+        Download
+      </Button>
+    </div>
+  );
+}
+
+function CareStatus({ value }: { value: string }) {
+  return <span className={`service-care-status is-${value}`}>{claimStatusLabel(value)}</span>;
+}
+function claimStatusLabel(value: string) {
+  return (
+    (
+      {
+        active: 'Active',
+        approved: 'Approved',
+        closed: 'Closed',
+        expired: 'Expired',
+        not_recorded: 'Not recorded',
+        received: 'Received',
+        rejected: 'Rejected',
+        under_review: 'Under review',
+      } as Record<string, string>
+    )[value] ?? value
+  );
+}
+function inspectionTypeLabel(value: ServiceInspectionPlan['inspectionType']) {
+  return value === 'technical' ? 'Technical' : 'Metrological';
+}
+function claimNextStep(value: WarrantyClaim['status']) {
+  return (
+    {
+      approved: 'Confirm the approved work is complete, then close the claim.',
+      received: 'Start the review when the supporting details are ready.',
+      rejected: 'Confirm the customer has been informed, then close the claim.',
+      under_review: 'Record the findings before approving or rejecting the claim.',
+      closed: '',
+    } as const
+  )[value];
+}
+function customerName(references: ServiceReferenceData, id: string) {
+  return references.customers.find((item) => item.id === id)?.name ?? 'Customer';
+}
+function locationName(references: ServiceReferenceData, id: string) {
+  return references.locations.find((item) => item.id === id)?.name ?? 'Service location';
+}
+function warrantyStatus(endsOn?: string) {
+  return !endsOn
+    ? 'not_recorded'
+    : endsOn >= new Date().toISOString().slice(0, 10)
+      ? 'active'
+      : 'expired';
+}
+function formatFileSize(bytes: number) {
+  return bytes < 1024 * 1024
+    ? `${Math.max(1, Math.round(bytes / 1024))} KB`
+    : `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
 function NewServiceRequestDrawer({
   onBack,
   onSaved,
@@ -668,7 +2135,7 @@ function NewServiceRequestDrawer({
       item.customerLocationId === customerLocationId,
   );
   const [customerEquipmentId, setCustomerEquipmentId] = useState(initialEquipment?.id ?? '');
-  const [sourceChannel, setSourceChannel] = useState<ServiceRequestChannel>('telephone');
+  const [sourceChannel, setSourceChannel] = useState<ManualServiceRequestChannel>('telephone');
   const [serviceType, setServiceType] = useState<ServiceType>('warranty');
   const [subscriptionContractId, setSubscriptionContractId] = useState('');
   const [priority, setPriority] = useState<ServicePriority>('normal');
@@ -810,7 +2277,7 @@ function NewServiceRequestDrawer({
                   <ServiceField label="Request source">
                     <select
                       onChange={(event) =>
-                        setSourceChannel(event.target.value as ServiceRequestChannel)
+                        setSourceChannel(event.target.value as ManualServiceRequestChannel)
                       }
                       value={sourceChannel}
                     >
@@ -1194,7 +2661,9 @@ function AssignServiceRequestForm({
 
 function ServiceWorkOrderDrawer({
   canApprove,
+  canCreateFinance,
   canEdit,
+  canViewFinance,
   currentAccountId,
   onBack,
   onSaved,
@@ -1204,7 +2673,9 @@ function ServiceWorkOrderDrawer({
   workOrder,
 }: {
   canApprove: boolean;
+  canCreateFinance: boolean;
   canEdit: boolean;
+  canViewFinance: boolean;
   currentAccountId: string;
   onBack: () => void;
   onSaved: (workOrder: ServiceWorkOrder, message: string) => void;
@@ -1213,6 +2684,7 @@ function ServiceWorkOrderDrawer({
   timezone: string;
   workOrder: ServiceWorkOrder;
 }) {
+  const { navigate } = useRouter();
   const [mode, setMode] = useState<'details' | 'complete'>('details');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -1350,17 +2822,36 @@ function ServiceWorkOrderDrawer({
             </div>
           </section>
         ) : null}
-        <ServiceWorkEvidence token={token} timezone={timezone} workOrder={workOrder} />
+        <ServiceWorkEvidence
+          canCreateFinance={canCreateFinance}
+          canViewFinance={canViewFinance}
+          onOpenFinance={() =>
+            navigate('/modules/erp.finance/invoices', {
+              state: workOrder.financialDocumentId
+                ? { financialDocumentId: workOrder.financialDocumentId }
+                : { serviceWorkOrderId: workOrder.id },
+            })
+          }
+          token={token}
+          timezone={timezone}
+          workOrder={workOrder}
+        />
       </div>
     </ServiceDrawer>
   );
 }
 
 function ServiceWorkEvidence({
+  canCreateFinance,
+  canViewFinance,
+  onOpenFinance,
   token,
   timezone,
   workOrder,
 }: {
+  canCreateFinance: boolean;
+  canViewFinance: boolean;
+  onOpenFinance: () => void;
   token: string;
   timezone: string;
   workOrder: ServiceWorkOrder;
@@ -1443,6 +2934,27 @@ function ServiceWorkEvidence({
                 Customer confirmation captured from{' '}
                 <strong>{workOrder.signature.signerName}</strong>
               </span>
+            </div>
+          ) : null}
+          {Number(workOrder.totalCostBgn) > 0 &&
+          ((workOrder.financialDocumentId && canViewFinance) || canCreateFinance) ? (
+            <div className="service-finance-handoff">
+              <div>
+                <span>{workOrder.financialDocumentId ? 'Finance draft' : 'Ready for Finance'}</span>
+                <strong>
+                  {workOrder.financialDocumentNumber ??
+                    'Prepare an invoice draft from these charges'}
+                </strong>
+                <small>
+                  {workOrder.financialDocumentId
+                    ? 'The work order and Finance draft remain linked.'
+                    : 'Finance will review VAT before saving the draft.'}
+                </small>
+              </div>
+              <Button onClick={onOpenFinance} variant="secondary">
+                {workOrder.financialDocumentId ? 'Open Finance draft' : 'Prepare invoice draft'}
+                <Icon name="arrow" size={15} />
+              </Button>
             </div>
           ) : null}
         </section>
@@ -1933,12 +3445,14 @@ function ServiceDrawer({
   onBack,
   subtitle,
   title,
+  variant,
 }: {
   busy: boolean;
   children: ReactNode;
   onBack: () => void;
   subtitle: string;
   title: string;
+  variant?: 'care';
 }) {
   const drawerRef = useRef<HTMLElement | null>(null);
 
@@ -1993,7 +3507,7 @@ function ServiceDrawer({
       <aside
         aria-label={title}
         aria-modal="true"
-        className="security-drawer is-wide service-drawer"
+        className={`security-drawer is-wide service-drawer${variant === 'care' ? ' service-care-drawer' : ''}`}
         ref={drawerRef}
         role="dialog"
         tabIndex={-1}
@@ -2063,11 +3577,13 @@ function ServiceField({ children, label }: { children: ReactNode; label: string 
 }
 
 function DrawerActions({
+  backLabel = 'Back',
   busy,
   disabled,
   onBack,
   submitLabel,
 }: {
+  backLabel?: string;
   busy: boolean;
   disabled?: boolean;
   onBack: () => void;
@@ -2079,7 +3595,7 @@ function DrawerActions({
         {submitLabel}
       </Button>
       <Button disabled={busy} onClick={onBack} type="button" variant="secondary">
-        Back
+        {backLabel}
       </Button>
     </div>
   );
@@ -2218,6 +3734,11 @@ function partInput(part: PartForm): ServicePartUsageInput {
 
 function pageMeta(view: ServiceOperationsView) {
   return {
+    care: {
+      description:
+        'Monitor warranty coverage, handle claims, and keep required inspections on schedule.',
+      title: 'Warranty & inspections',
+    },
     devices: {
       description:
         'Follow each registered serial through its service work, technician, and used parts.',
@@ -2241,7 +3762,7 @@ function pageMeta(view: ServiceOperationsView) {
   }[view];
 }
 
-const sourceChannels: ServiceRequestChannel[] = [
+const sourceChannels: ManualServiceRequestChannel[] = [
   'telephone',
   'email',
   'customer_portal',
@@ -2255,6 +3776,7 @@ function sourceLabel(value: ServiceRequestChannel) {
     customer_portal: 'Customer portal',
     email: 'Email',
     on_site: 'On-site visit',
+    service_plan: 'Service plan',
     telephone: 'Telephone',
   }[value];
 }
@@ -2293,22 +3815,59 @@ function historyLabel(reason: string) {
   );
 }
 
-function groupSchedule(workOrders: ServiceWorkOrder[]): Array<[string, ServiceWorkOrder[]]> {
-  const groups = new Map<string, ServiceWorkOrder[]>();
-  for (const workOrder of workOrders) {
-    const day = workOrder.scheduledStart!.slice(0, 10);
-    groups.set(day, [...(groups.get(day) ?? []), workOrder]);
-  }
-  return [...groups.entries()].slice(0, 7);
+function startOfBusinessWeek(value: string) {
+  const date = new Date(`${value}T12:00:00Z`);
+  const weekday = date.getUTCDay() || 7;
+  date.setUTCDate(date.getUTCDate() - weekday + 1);
+  return date.toISOString().slice(0, 10);
 }
 
-function formatScheduleDay(value: string, timezone: string) {
-  return new Intl.DateTimeFormat('en-GB', {
-    day: 'numeric',
-    month: 'short',
-    timeZone: timezone,
-    weekday: 'short',
-  }).format(new Date(`${value}T12:00:00Z`));
+function addCalendarDays(value: string, days: number) {
+  const date = new Date(`${value}T12:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+function calendarDates(dateFrom: string, dateTo: string) {
+  const dates: string[] = [];
+  for (let date = dateFrom; date <= dateTo; date = addCalendarDays(date, 1)) dates.push(date);
+  return dates;
+}
+
+function formatScheduleRange(dateFrom: string, dateTo: string, timezone: string) {
+  return `${formatDate(dateFrom, timezone)} – ${formatDate(dateTo, timezone)}`;
+}
+
+function weekdayShort(value: string, timezone: string) {
+  return new Intl.DateTimeFormat('en-GB', { timeZone: timezone, weekday: 'short' }).format(
+    new Date(`${value}T12:00:00Z`),
+  );
+}
+
+function calendarMonthShort(value: string, timezone: string) {
+  return new Intl.DateTimeFormat('en-GB', { month: 'short', timeZone: timezone }).format(
+    new Date(`${value}T12:00:00Z`),
+  );
+}
+
+function calendarDayNumber(value: string) {
+  return String(Number(value.slice(8, 10)));
+}
+
+function formatScheduleMinutes(value: number) {
+  if (value < 60) return `${value}m`;
+  const hours = Math.floor(value / 60);
+  const minutes = value % 60;
+  return `${hours}h${minutes ? ` ${minutes}m` : ''}`;
+}
+
+function initials(value: string) {
+  return value
+    .split(/\s+/u)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join('');
 }
 
 function formatDate(value: string, timezone: string) {
@@ -2409,5 +3968,24 @@ function zonedParts(value: Date, timezone: string) {
 }
 
 function errorText(error: unknown, fallback: string) {
-  return error instanceof ApiClientError ? error.message : fallback;
+  if (!(error instanceof ApiClientError)) return fallback;
+  if (error.message !== 'Request validation failed') return error.message;
+  const detailText = error.details.map((detail) => detail.message).join(' ');
+  const fieldMessage = serviceValidationMessages.find(([field]) => detailText.includes(field));
+  return fieldMessage?.[1] ?? 'Review the entered details and try again.';
 }
+
+const serviceValidationMessages: ReadonlyArray<readonly [string, string]> = [
+  ['customerEquipmentId', 'Choose an active registered device.'],
+  ['customerLocationId', 'Choose the customer’s Service location.'],
+  ['customerPartnerId', 'Choose a customer.'],
+  ['problemDescription', 'Describe the reported problem.'],
+  ['sourceChannel', 'Choose how the request was received.'],
+  ['subscriptionContractId', 'Choose an active Service subscription.'],
+  ['serviceType', 'Choose the Service type.'],
+  ['technicianAccountId', 'Choose an active technician.'],
+  ['technicianWarehouseId', 'Choose the technician’s warehouse.'],
+  ['scheduledStart', 'Choose a valid visit start time.'],
+  ['scheduledEnd', 'Choose a valid visit end time.'],
+  ['productId', 'Choose an available spare part.'],
+];

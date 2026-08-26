@@ -451,7 +451,7 @@ export const moduleMessages = {
     label: 'Sales',
   },
   'erp.service': {
-    description: 'Service requests, work orders, technicians, and service history.',
+    description: 'Service requests, field work, warranty care, inspections, and service history.',
     label: 'Service',
   },
   'erp.logistics': {
@@ -558,7 +558,7 @@ export const financialDocumentMessages = {
   draft: 'Draft',
   dueDate: 'Due date',
   emptyDescription:
-    'Prepare an invoice or proforma from a Sales draft, or create a controlled manual document.',
+    'Prepare an invoice or proforma from Sales or completed Service work, or enter one manually.',
   emptyTitle: 'No financial document drafts yet',
   exchangeRate: 'BGN exchange rate',
   foreignRateHint:
@@ -583,6 +583,7 @@ export const financialDocumentMessages = {
   removeLine: 'Remove line',
   retry: 'Try again',
   salesDraft: 'Prepared Sales draft',
+  serviceDraft: 'Completed Service work',
   saveCancellation: 'Confirm cancellation',
   scope: 'Issuing location',
   sourceMode: 'Document source',

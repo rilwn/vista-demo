@@ -14,7 +14,12 @@ import type {
   ServiceRequest,
   ServiceRequestPage,
   ServiceRequestStatus,
+  ServiceSchedule,
+  ServiceScheduleAppointment,
+  ServiceTechnicianSchedulePolicy,
+  ServiceTechnicianScheduleWindow,
   ServiceTechnicianReference,
+  UpdateServiceTechnicianSchedulePolicyRequest,
   ServiceWorkOrder,
   ServiceWorkOrderHistoryEntry,
   ServiceWorkOrderPage,
@@ -57,6 +62,7 @@ interface RequestRow {
   customer_partner_id: string;
   device_name: string;
   id: string;
+  planned_visit_date: string | null;
   priority: ServiceRequest['priority'];
   problem_description: string;
   request_number: string;
@@ -89,6 +95,8 @@ interface WorkOrderRow {
   customer_name: string;
   customer_partner_id: string;
   device_name: string;
+  financial_document_id: string | null;
+  financial_document_number: string | null;
   id: string;
   labor_cost_bgn: string;
   labor_minutes: number;
@@ -187,6 +195,35 @@ interface TechnicianRow {
   warehouse_name: string;
 }
 
+interface SchedulePolicyRow {
+  technician_account_id: string;
+  version: number;
+}
+
+interface ScheduleWindowRow {
+  capacity_minutes: number;
+  ends_at: string;
+  max_visits: number;
+  starts_at: string;
+  technician_account_id: string;
+  weekday: number;
+}
+
+interface ScheduleAppointmentRow {
+  customer_location_name: string;
+  customer_name: string;
+  device_name: string;
+  local_date: string;
+  priority: ServiceScheduleAppointment['priority'];
+  request_number: string;
+  scheduled_end: string | Date;
+  scheduled_start: string | Date;
+  status: ServiceScheduleAppointment['status'];
+  technician_account_id: string;
+  work_order_id: string;
+  work_order_number: string;
+}
+
 interface NormalizedCompletion {
   completionNotes: string;
   laborCostBgn: string;
@@ -215,6 +252,11 @@ interface ServiceWorkOrderListQuery {
   page?: number;
   pageSize?: number;
   status?: ServiceWorkOrderStatus;
+}
+
+interface ServiceScheduleQuery {
+  dateFrom: string;
+  dateTo: string;
 }
 
 @Injectable()
@@ -373,6 +415,199 @@ export class ServiceOperationsService {
       })),
       technicians: technicians.rows.map(mapTechnician),
     };
+  }
+
+  async schedule(
+    query: ServiceScheduleQuery,
+    auth: AuthenticationContext,
+  ): Promise<ServiceSchedule> {
+    const { dateFrom, dateTo } = scheduleDateRange(query.dateFrom, query.dateTo);
+    const visibilityAccountId = serviceVisibilityAccountId(auth);
+    const pool = this.database.getPool();
+    const technicians = await pool.query<TechnicianRow>(
+      `${technicianQuery()} AND ($1::uuid IS NULL OR account.id = $1) ORDER BY employee.display_name, account.id`,
+      [visibilityAccountId],
+    );
+    const technicianIds = technicians.rows.map((row) => row.account_id);
+    if (!technicianIds.length)
+      return {
+        businessTimezone: this.environment.BUSINESS_TIMEZONE,
+        dateFrom,
+        dateTo,
+        technicians: [],
+      };
+    const [policies, windows, appointments] = await Promise.all([
+      pool.query<SchedulePolicyRow>(
+        `SELECT technician_account_id, version
+         FROM service.technician_schedule_policies
+         WHERE technician_account_id = ANY($1::uuid[])
+         ORDER BY technician_account_id`,
+        [technicianIds],
+      ),
+      pool.query<ScheduleWindowRow>(
+        `SELECT technician_account_id, weekday, starts_at::text, ends_at::text,
+                capacity_minutes, max_visits
+         FROM service.technician_schedule_windows
+         WHERE technician_account_id = ANY($1::uuid[])
+         ORDER BY technician_account_id, weekday`,
+        [technicianIds],
+      ),
+      pool.query<ScheduleAppointmentRow>(
+        `SELECT work_order.id AS work_order_id,
+                work_order.work_order_number, work_order.assigned_technician_account_id
+                  AS technician_account_id,
+                work_order.scheduled_start, work_order.scheduled_end, work_order.status,
+                request.request_number, request.priority,
+                partner.display_name AS customer_name, location.name AS customer_location_name,
+                equipment.device_name,
+                to_char(work_order.scheduled_start AT TIME ZONE $4, 'YYYY-MM-DD') AS local_date
+         FROM service.work_orders work_order
+         JOIN service.requests request ON request.id = work_order.service_request_id
+         JOIN master_data.partners partner ON partner.id = request.customer_partner_id
+         JOIN master_data.customer_locations location ON location.id = request.customer_location_id
+         JOIN master_data.customer_equipment equipment ON equipment.id = request.customer_equipment_id
+         WHERE work_order.assigned_technician_account_id = ANY($1::uuid[])
+           AND work_order.status IN ('scheduled', 'in_progress')
+           AND work_order.scheduled_start < (($3::date + 1)::timestamp AT TIME ZONE $4)
+           AND work_order.scheduled_end > ($2::date::timestamp AT TIME ZONE $4)
+         ORDER BY work_order.assigned_technician_account_id, work_order.scheduled_start,
+                  work_order.id`,
+        [technicianIds, dateFrom, dateTo, this.environment.BUSINESS_TIMEZONE],
+      ),
+    ]);
+    const dates = calendarDates(dateFrom, dateTo);
+    return {
+      businessTimezone: this.environment.BUSINESS_TIMEZONE,
+      dateFrom,
+      dateTo,
+      technicians: technicians.rows.map((technicianRow) => {
+        const technician = mapTechnician(technicianRow);
+        const policyRow = policies.rows.find(
+          (row) => row.technician_account_id === technician.accountId,
+        );
+        const policyWindows = windows.rows
+          .filter((row) => row.technician_account_id === technician.accountId)
+          .map(mapScheduleWindow);
+        const policy: ServiceTechnicianSchedulePolicy = {
+          configured: Boolean(policyRow),
+          technicianAccountId: technician.accountId,
+          version: policyRow?.version ?? 0,
+          windows: policyWindows,
+        };
+        const days = dates.map((date) => {
+          const window = policyWindows.find((item) => item.weekday === isoWeekday(date));
+          const visits = appointments.rows
+            .filter(
+              (row) =>
+                row.technician_account_id === technician.accountId && row.local_date === date,
+            )
+            .map(mapScheduleAppointment);
+          const bookedMinutes = visits.reduce(
+            (total, visit) => total + appointmentMinutes(visit.scheduledStart, visit.scheduledEnd),
+            0,
+          );
+          return {
+            bookedMinutes,
+            ...(window
+              ? {
+                  capacityMinutes: window.capacityMinutes,
+                  endsAt: window.endsAt,
+                  maxVisits: window.maxVisits,
+                  remainingMinutes: Math.max(0, window.capacityMinutes - bookedMinutes),
+                  startsAt: window.startsAt,
+                }
+              : {}),
+            date,
+            visits,
+          };
+        });
+        const bookedMinutes = days.reduce((total, day) => total + day.bookedMinutes, 0);
+        const capacityMinutes = days.reduce((total, day) => total + (day.capacityMinutes ?? 0), 0);
+        return {
+          bookedMinutes,
+          ...(policy.configured ? { capacityMinutes } : {}),
+          days,
+          policy,
+          ...(policy.configured
+            ? { remainingMinutes: Math.max(0, capacityMinutes - bookedMinutes) }
+            : {}),
+          technician,
+          visitCount: days.reduce((total, day) => total + day.visits.length, 0),
+        };
+      }),
+    };
+  }
+
+  async updateSchedulePolicy(
+    technicianAccountId: string,
+    input: UpdateServiceTechnicianSchedulePolicyRequest,
+    key: string | undefined,
+    auth: AuthenticationContext,
+    metadata: RequestSecurityMetadata,
+  ): Promise<ServiceTechnicianSchedulePolicy> {
+    this.assertServiceDispatchAccess(auth);
+    const normalized = normalizeSchedulePolicy(input);
+    return this.command(
+      `service.technician.schedule-policy:${technicianAccountId}`,
+      key,
+      normalized,
+      200,
+      async (client, commandKey) => {
+        await this.requireTechnicianAccount(client, technicianAccountId);
+        const current = await this.loadSchedulePolicy(client, technicianAccountId, true);
+        if (current.version !== normalized.expectedVersion)
+          throw new ApiErrorException(
+            'SERVICE_SCHEDULE_POLICY_VERSION_CONFLICT',
+            'This availability plan changed after it was opened. Refresh and try again.',
+            HttpStatus.CONFLICT,
+          );
+        if (current.configured)
+          await client.query(
+            `UPDATE service.technician_schedule_policies
+             SET version = version + 1, updated_by = $2, updated_at = now()
+             WHERE technician_account_id = $1`,
+            [technicianAccountId, auth.accountId],
+          );
+        else
+          await client.query(
+            `INSERT INTO service.technician_schedule_policies (
+               technician_account_id, created_by, updated_by
+             ) VALUES ($1, $2, $2)`,
+            [technicianAccountId, auth.accountId],
+          );
+        await client.query(
+          `DELETE FROM service.technician_schedule_windows WHERE technician_account_id = $1`,
+          [technicianAccountId],
+        );
+        for (const window of normalized.windows)
+          await client.query(
+            `INSERT INTO service.technician_schedule_windows (
+               technician_account_id, weekday, starts_at, ends_at, capacity_minutes, max_visits
+             ) VALUES ($1,$2,$3,$4,$5,$6)`,
+            [
+              technicianAccountId,
+              window.weekday,
+              window.startsAt,
+              window.endsAt,
+              window.capacityMinutes,
+              window.maxVisits,
+            ],
+          );
+        const result = await this.loadSchedulePolicy(client, technicianAccountId);
+        await this.sideEffects(
+          client,
+          'service_schedule_policy',
+          technicianAccountId,
+          'service.technician.schedule-policy.updated',
+          result,
+          auth,
+          metadata,
+          commandKey,
+          current,
+        );
+        return result;
+      },
+    );
   }
 
   async requests(
@@ -718,16 +953,23 @@ export class ServiceOperationsService {
            WHERE service_request_id = $1 FOR UPDATE`,
           [id],
         );
+        if (existing.rows[0]?.status && existing.rows[0].status !== 'scheduled')
+          throw new ApiErrorException(
+            'SERVICE_WORK_ORDER_NOT_RESCHEDULABLE',
+            'Only a scheduled work order can be reassigned.',
+            HttpStatus.CONFLICT,
+          );
+        await this.assertTechnicianAvailability(
+          client,
+          technician.accountId,
+          normalized.scheduledStart,
+          normalized.scheduledEnd,
+          existing.rows[0]?.id,
+        );
         let workOrderId: string;
         let workOrderVersion: number;
         if (existing.rows[0]) {
           const workOrder = existing.rows[0];
-          if (workOrder.status !== 'scheduled')
-            throw new ApiErrorException(
-              'SERVICE_WORK_ORDER_NOT_RESCHEDULABLE',
-              'Only a scheduled work order can be reassigned.',
-              HttpStatus.CONFLICT,
-            );
           workOrderId = workOrder.id;
           workOrderVersion = workOrder.version + 1;
           await client.query(
@@ -1439,6 +1681,197 @@ export class ServiceOperationsService {
     return mapTechnician(row);
   }
 
+  private async requireTechnicianAccount(
+    client: PoolClient,
+    accountId: string,
+  ): Promise<ServiceTechnicianReference> {
+    const result = await client.query<TechnicianRow>(
+      `${technicianQuery()} AND account.id = $1 FOR KEY SHARE`,
+      [accountId],
+    );
+    const row = result.rows[0];
+    if (!row)
+      throw new ApiErrorException(
+        'SERVICE_TECHNICIAN_INVALID',
+        'Choose an active technician with an assigned mobile warehouse.',
+        HttpStatus.BAD_REQUEST,
+      );
+    return mapTechnician(row);
+  }
+
+  private async loadSchedulePolicy(
+    client: PoolClient,
+    technicianAccountId: string,
+    lock = false,
+  ): Promise<ServiceTechnicianSchedulePolicy> {
+    const policy = await client.query<SchedulePolicyRow>(
+      `SELECT technician_account_id, version
+       FROM service.technician_schedule_policies
+       WHERE technician_account_id = $1${lock ? ' FOR UPDATE' : ''}`,
+      [technicianAccountId],
+    );
+    const row = policy.rows[0];
+    if (!row)
+      return {
+        configured: false,
+        technicianAccountId,
+        version: 0,
+        windows: [],
+      };
+    const windows = await client.query<ScheduleWindowRow>(
+      `SELECT technician_account_id, weekday, starts_at::text, ends_at::text,
+              capacity_minutes, max_visits
+       FROM service.technician_schedule_windows
+       WHERE technician_account_id = $1 ORDER BY weekday`,
+      [technicianAccountId],
+    );
+    return {
+      configured: true,
+      technicianAccountId,
+      version: row.version,
+      windows: windows.rows.map(mapScheduleWindow),
+    };
+  }
+
+  private async assertTechnicianAvailability(
+    client: PoolClient,
+    technicianAccountId: string,
+    scheduledStart: string,
+    scheduledEnd: string,
+    excludedWorkOrderId?: string,
+  ): Promise<void> {
+    await client.query(`SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, [
+      `service-schedule:${technicianAccountId}`,
+    ]);
+    const policy = await this.loadSchedulePolicy(client, technicianAccountId, true);
+    if (!policy.configured)
+      throw new ApiErrorException(
+        'SERVICE_TECHNICIAN_SCHEDULE_NOT_CONFIGURED',
+        'Set this technician’s working hours before assigning a visit.',
+        HttpStatus.CONFLICT,
+      );
+    const local = await client.query<{
+      end_date: string;
+      end_time: string;
+      start_date: string;
+      start_time: string;
+      weekday: number;
+    }>(
+      `SELECT to_char($1::timestamptz AT TIME ZONE $3, 'YYYY-MM-DD') AS start_date,
+              to_char($2::timestamptz AT TIME ZONE $3, 'YYYY-MM-DD') AS end_date,
+              to_char($1::timestamptz AT TIME ZONE $3, 'HH24:MI') AS start_time,
+              to_char($2::timestamptz AT TIME ZONE $3, 'HH24:MI') AS end_time,
+              extract(isodow FROM ($1::timestamptz AT TIME ZONE $3))::int AS weekday`,
+      [scheduledStart, scheduledEnd, this.environment.BUSINESS_TIMEZONE],
+    );
+    const localTime = required(local.rows[0], 'Service schedule conversion failed.');
+    const window = policy.windows.find((item) => item.weekday === localTime.weekday);
+    if (
+      localTime.start_date !== localTime.end_date ||
+      !window ||
+      localTime.start_time < window.startsAt ||
+      localTime.end_time > window.endsAt
+    )
+      throw new ApiErrorException(
+        'SERVICE_TECHNICIAN_OUTSIDE_AVAILABILITY',
+        'Choose a time within this technician’s working hours on one business day.',
+        HttpStatus.CONFLICT,
+      );
+    const overlap = await client.query<{ number: string }>(
+      `SELECT work_order_number AS number
+       FROM service.work_orders
+       WHERE assigned_technician_account_id = $1
+         AND status IN ('scheduled', 'in_progress')
+         AND id IS DISTINCT FROM $4::uuid
+         AND tstzrange(scheduled_start, scheduled_end, '[)')
+             && tstzrange($2::timestamptz, $3::timestamptz, '[)')
+       ORDER BY scheduled_start, id LIMIT 1`,
+      [technicianAccountId, scheduledStart, scheduledEnd, excludedWorkOrderId ?? null],
+    );
+    if (overlap.rows[0])
+      throw new ApiErrorException(
+        'SERVICE_TECHNICIAN_SCHEDULE_OVERLAP',
+        `${overlap.rows[0].number} already occupies part of this time. Choose another time or technician.`,
+        HttpStatus.CONFLICT,
+      );
+    const routeOverlap = await client.query<{ number: string }>(
+      `SELECT route.route_number AS number
+       FROM logistics.route_stops stop
+       JOIN logistics.route_plans route ON route.id = stop.route_plan_id
+       WHERE route.assigned_account_id = $1
+         AND route.status IN ('planned', 'in_progress')
+         AND tstzrange(
+               stop.planned_arrival,
+               stop.planned_arrival + stop.planned_duration_minutes * INTERVAL '1 minute',
+               '[)'
+             ) && tstzrange($2::timestamptz, $3::timestamptz, '[)')
+       ORDER BY stop.planned_arrival, stop.id LIMIT 1`,
+      [technicianAccountId, scheduledStart, scheduledEnd],
+    );
+    if (routeOverlap.rows[0])
+      throw new ApiErrorException(
+        'SERVICE_TECHNICIAN_ROUTE_OVERLAP',
+        `${routeOverlap.rows[0].number} already uses part of this time. Choose another time or technician.`,
+        HttpStatus.CONFLICT,
+      );
+    const workload = await client.query<{ booked_minutes: string; visit_count: string }>(
+      `SELECT
+         (
+           COALESCE((
+             SELECT sum(ceil(extract(epoch FROM (work_order.scheduled_end - work_order.scheduled_start)) / 60))
+             FROM service.work_orders work_order
+             WHERE work_order.assigned_technician_account_id = $1
+               AND work_order.status IN ('scheduled', 'in_progress')
+               AND work_order.id IS DISTINCT FROM $3::uuid
+               AND (work_order.scheduled_start AT TIME ZONE $4)::date = $2::date
+           ), 0)
+           + COALESCE((
+             SELECT sum(stop.planned_duration_minutes)
+             FROM logistics.route_stops stop
+             JOIN logistics.route_plans route ON route.id = stop.route_plan_id
+             WHERE route.assigned_account_id = $1
+               AND route.status IN ('planned', 'in_progress')
+               AND stop.stop_type = 'delivery'
+               AND (stop.planned_arrival AT TIME ZONE $4)::date = $2::date
+           ), 0)
+         )::text AS booked_minutes,
+         (
+           (SELECT count(*)
+            FROM service.work_orders work_order
+            WHERE work_order.assigned_technician_account_id = $1
+              AND work_order.status IN ('scheduled', 'in_progress')
+              AND work_order.id IS DISTINCT FROM $3::uuid
+              AND (work_order.scheduled_start AT TIME ZONE $4)::date = $2::date)
+           +
+           (SELECT count(*)
+            FROM logistics.route_stops stop
+            JOIN logistics.route_plans route ON route.id = stop.route_plan_id
+            WHERE route.assigned_account_id = $1
+              AND route.status IN ('planned', 'in_progress')
+              AND stop.stop_type = 'delivery'
+              AND (stop.planned_arrival AT TIME ZONE $4)::date = $2::date)
+         )::text AS visit_count`,
+      [
+        technicianAccountId,
+        localTime.start_date,
+        excludedWorkOrderId ?? null,
+        this.environment.BUSINESS_TIMEZONE,
+      ],
+    );
+    const bookedMinutes = Number(workload.rows[0]?.booked_minutes ?? 0);
+    const visitCount = Number(workload.rows[0]?.visit_count ?? 0);
+    const requestedMinutes = appointmentMinutes(scheduledStart, scheduledEnd);
+    if (
+      bookedMinutes + requestedMinutes > window.capacityMinutes ||
+      visitCount + 1 > window.maxVisits
+    )
+      throw new ApiErrorException(
+        'SERVICE_TECHNICIAN_CAPACITY_EXCEEDED',
+        'This visit exceeds the technician’s available workload for that day. Choose another time or technician.',
+        HttpStatus.CONFLICT,
+      );
+  }
+
   private assertTechnicianAccess(workOrder: LockedWorkOrderRow, auth: AuthenticationContext): void {
     if (workOrder.assigned_technician_account_id === auth.accountId) return;
     if (serviceVisibilityAccountId(auth) !== undefined)
@@ -1577,6 +2010,7 @@ function requestQuery(): string {
                  request.subscription_contract_id, request.source_channel, request.service_type,
                  request.priority, request.problem_description, request.status, request.completed_at,
                  request.created_at, request.updated_at, request.version,
+                 visit_generation.planned_date::text AS planned_visit_date,
                  partner.display_name AS customer_name, location.name AS customer_location_name,
                  equipment.device_name, equipment.serial_number,
                  work_order.id AS work_order_id, work_order.work_order_number,
@@ -1592,6 +2026,8 @@ function requestQuery(): string {
           JOIN master_data.customer_locations location ON location.id = request.customer_location_id
           JOIN master_data.customer_equipment equipment ON equipment.id = request.customer_equipment_id
           LEFT JOIN service.work_orders work_order ON work_order.service_request_id = request.id
+          LEFT JOIN service.subscription_visit_generations visit_generation
+            ON visit_generation.service_request_id = request.id
           LEFT JOIN identity.user_accounts technician_account
             ON technician_account.id = work_order.assigned_technician_account_id
           LEFT JOIN identity.employees technician_employee
@@ -1616,7 +2052,9 @@ function workOrderQuery(): string {
                  equipment.device_name, equipment.serial_number,
                  technician_employee.display_name AS technician_display_name,
                  technician_employee.email AS technician_email,
-                 technician_warehouse.name AS technician_warehouse_name
+                 technician_warehouse.name AS technician_warehouse_name,
+                 financial_document.id AS financial_document_id,
+                 financial_document.draft_number AS financial_document_number
           FROM service.work_orders work_order
           JOIN service.requests request ON request.id = work_order.service_request_id
           JOIN master_data.partners partner ON partner.id = request.customer_partner_id
@@ -1627,7 +2065,14 @@ function workOrderQuery(): string {
           LEFT JOIN identity.employees technician_employee
             ON technician_employee.id = technician_account.employee_id
           LEFT JOIN master_data.warehouses technician_warehouse
-            ON technician_warehouse.id = work_order.technician_warehouse_id`;
+            ON technician_warehouse.id = work_order.technician_warehouse_id
+          LEFT JOIN LATERAL (
+            SELECT document.id, document.draft_number
+            FROM finance.financial_documents document
+            WHERE document.source_service_work_order_id = work_order.id
+              AND document.document_type = 'invoice' AND document.status = 'draft'
+            ORDER BY document.created_at DESC, document.id DESC LIMIT 1
+          ) financial_document ON true`;
 }
 
 function technicianQuery(): string {
@@ -1660,6 +2105,31 @@ function mapTechnician(row: TechnicianRow): ServiceTechnicianReference {
   };
 }
 
+function mapScheduleWindow(row: ScheduleWindowRow): ServiceTechnicianScheduleWindow {
+  return {
+    capacityMinutes: row.capacity_minutes,
+    endsAt: row.ends_at.slice(0, 5),
+    maxVisits: row.max_visits,
+    startsAt: row.starts_at.slice(0, 5),
+    weekday: row.weekday,
+  };
+}
+
+function mapScheduleAppointment(row: ScheduleAppointmentRow): ServiceScheduleAppointment {
+  return {
+    customerLocationName: row.customer_location_name,
+    customerName: row.customer_name,
+    deviceName: row.device_name,
+    priority: row.priority,
+    requestNumber: row.request_number,
+    scheduledEnd: asIso(row.scheduled_end),
+    scheduledStart: asIso(row.scheduled_start),
+    status: row.status,
+    workOrderId: row.work_order_id,
+    workOrderNumber: row.work_order_number,
+  };
+}
+
 function mapRequest(row: RequestRow): ServiceRequest {
   const assignedTechnician = technicianFromRequest(row);
   return {
@@ -1674,6 +2144,7 @@ function mapRequest(row: RequestRow): ServiceRequest {
     deviceName: row.device_name,
     id: row.id,
     number: row.request_number,
+    ...(row.planned_visit_date ? { plannedVisitDate: row.planned_visit_date } : {}),
     priority: row.priority,
     problemDescription: row.problem_description,
     ...(row.work_order_scheduled_end ? { scheduledEnd: asIso(row.work_order_scheduled_end) } : {}),
@@ -1731,6 +2202,10 @@ function mapWorkOrder(
     customerName: row.customer_name,
     customerPartnerId: row.customer_partner_id,
     deviceName: row.device_name,
+    ...(row.financial_document_id ? { financialDocumentId: row.financial_document_id } : {}),
+    ...(row.financial_document_number
+      ? { financialDocumentNumber: row.financial_document_number }
+      : {}),
     history: history.map(mapHistory),
     id: row.id,
     laborCostBgn: row.labor_cost_bgn,
@@ -1884,6 +2359,67 @@ function normalizeAssignment(input: AssignServiceWorkOrderRequest) {
     scheduledStart,
     technicianAccountId: input.technicianAccountId,
     technicianWarehouseId: input.technicianWarehouseId,
+  };
+}
+
+function normalizeSchedulePolicy(input: UpdateServiceTechnicianSchedulePolicyRequest) {
+  if (!Number.isInteger(input.expectedVersion) || input.expectedVersion < 0)
+    throw new ApiErrorException(
+      'SERVICE_SCHEDULE_POLICY_VERSION_INVALID',
+      'Refresh the availability plan before saving it.',
+      HttpStatus.BAD_REQUEST,
+    );
+  const weekdays = new Set<number>();
+  const windows = input.windows.map((window) => {
+    if (!Number.isInteger(window.weekday) || window.weekday < 1 || window.weekday > 7)
+      throw new ApiErrorException(
+        'SERVICE_SCHEDULE_WEEKDAY_INVALID',
+        'Choose a valid weekday.',
+        HttpStatus.BAD_REQUEST,
+      );
+    if (weekdays.has(window.weekday))
+      throw new ApiErrorException(
+        'SERVICE_SCHEDULE_WEEKDAY_DUPLICATE',
+        'Each weekday can have one working window.',
+        HttpStatus.BAD_REQUEST,
+      );
+    weekdays.add(window.weekday);
+    const startsAt = localTime(window.startsAt);
+    const endsAt = localTime(window.endsAt);
+    const windowMinutes = minutesFromTime(endsAt) - minutesFromTime(startsAt);
+    if (windowMinutes <= 0)
+      throw new ApiErrorException(
+        'SERVICE_SCHEDULE_WINDOW_INVALID',
+        'The working day must end after it starts.',
+        HttpStatus.BAD_REQUEST,
+      );
+    if (
+      !Number.isInteger(window.capacityMinutes) ||
+      window.capacityMinutes < 1 ||
+      window.capacityMinutes > windowMinutes
+    )
+      throw new ApiErrorException(
+        'SERVICE_SCHEDULE_CAPACITY_INVALID',
+        'Daily capacity must fit inside the working window.',
+        HttpStatus.BAD_REQUEST,
+      );
+    if (!Number.isInteger(window.maxVisits) || window.maxVisits < 1 || window.maxVisits > 100)
+      throw new ApiErrorException(
+        'SERVICE_SCHEDULE_VISIT_LIMIT_INVALID',
+        'Daily visit limit must be between 1 and 100.',
+        HttpStatus.BAD_REQUEST,
+      );
+    return {
+      capacityMinutes: window.capacityMinutes,
+      endsAt,
+      maxVisits: window.maxVisits,
+      startsAt,
+      weekday: window.weekday,
+    };
+  });
+  return {
+    expectedVersion: input.expectedVersion,
+    windows: windows.sort((a, b) => a.weekday - b.weekday),
   };
 }
 
@@ -2074,6 +2610,60 @@ function date(value: string, code: string): string {
   if (!/^\d{4}-\d{2}-\d{2}$/u.test(value) || Number.isNaN(Date.parse(`${value}T00:00:00Z`)))
     throw new ApiErrorException(code, 'Enter a valid date.', HttpStatus.BAD_REQUEST);
   return value;
+}
+
+function scheduleDateRange(dateFromValue: string, dateToValue: string) {
+  const dateFrom = date(dateFromValue, 'SERVICE_SCHEDULE_DATE_FROM_INVALID');
+  const dateTo = date(dateToValue, 'SERVICE_SCHEDULE_DATE_TO_INVALID');
+  const start = Date.parse(`${dateFrom}T00:00:00Z`);
+  const end = Date.parse(`${dateTo}T00:00:00Z`);
+  if (end < start)
+    throw new ApiErrorException(
+      'SERVICE_SCHEDULE_DATE_RANGE_INVALID',
+      'The schedule end date must be on or after the start date.',
+      HttpStatus.BAD_REQUEST,
+    );
+  if ((end - start) / 86_400_000 > 30)
+    throw new ApiErrorException(
+      'SERVICE_SCHEDULE_DATE_RANGE_TOO_LARGE',
+      'Open up to 31 calendar days at a time.',
+      HttpStatus.BAD_REQUEST,
+    );
+  return { dateFrom, dateTo };
+}
+
+function calendarDates(dateFrom: string, dateTo: string): string[] {
+  const dates: string[] = [];
+  for (
+    let cursor = Date.parse(`${dateFrom}T00:00:00Z`), end = Date.parse(`${dateTo}T00:00:00Z`);
+    cursor <= end;
+    cursor += 86_400_000
+  )
+    dates.push(new Date(cursor).toISOString().slice(0, 10));
+  return dates;
+}
+
+function isoWeekday(value: string): number {
+  return new Date(`${value}T12:00:00Z`).getUTCDay() || 7;
+}
+
+function appointmentMinutes(start: string, end: string): number {
+  return Math.ceil((Date.parse(end) - Date.parse(start)) / 60_000);
+}
+
+function localTime(value: string): string {
+  if (!/^(?:[01]\d|2[0-3]):[0-5]\d$/u.test(value))
+    throw new ApiErrorException(
+      'SERVICE_SCHEDULE_TIME_INVALID',
+      'Enter a valid time.',
+      HttpStatus.BAD_REQUEST,
+    );
+  return value;
+}
+
+function minutesFromTime(value: string): number {
+  const [hours = '0', minutes = '0'] = value.split(':');
+  return Number(hours) * 60 + Number(minutes);
 }
 
 function dateTime(value: string, code: string): string {

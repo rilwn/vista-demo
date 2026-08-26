@@ -49,6 +49,15 @@ location/device subscription period and advances the next billing date in the
 same transaction. The resulting draft follows the separate Finance collection
 and legal-issuance workflows.
 
+`service.inspection-reminder.prepare`, `crm.warranty-expiration.prepare`, and
+`service.plan-visit.generate` are active Service-care handlers with stable daily
+schedules. Inspection reminders use each plan's lead time; warranty reminders
+use `SERVICE_WARRANTY_REMINDER_LEAD_DAYS`; planned visits use
+`SERVICE_PLAN_VISIT_HORIZON_DAYS`. Notification and occurrence uniqueness keys,
+transaction locks, and persisted generation links make retries return no new
+work. Generated visits enter the normal Service request register with their
+planned date and cannot be created through manual intake.
+
 `report.generate` is active for the controlled Finance aging, turnover, Sales
 journal, Purchase journal, and VAT review catalogue. The API saves an owner-scoped
 export before dispatch. A short database
@@ -58,7 +67,7 @@ creating two outputs. Retried attempts update the same lifecycle record and
 deterministic private object; completed replays return the saved result. CSV,
 Excel, and PDF files retain checksum, size, row-count, and audit evidence.
 
-The other remaining named handlers form the durable boundary for domains
+The remaining later-phase handlers form the durable boundary for domains
 delivered in later ordered phases. A successful handler writes one deterministic
 `scheduler.<job-name>.requested` event to the transactional outbox. Replaying the
 same logical run cannot create a second event. Success therefore means that the

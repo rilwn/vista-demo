@@ -6,6 +6,9 @@ import {
   financePaymentStatusScheduleId,
   RecurringBillingScheduleService,
   recurringBillingScheduleId,
+  serviceInspectionReminderScheduleId,
+  servicePlanVisitScheduleId,
+  serviceWarrantyReminderScheduleId,
 } from './recurring-billing-schedule.service.js';
 
 describe('RecurringBillingScheduleService', () => {
@@ -21,7 +24,11 @@ describe('RecurringBillingScheduleService', () => {
         id: financePaymentStatusScheduleId,
         name: 'finance.payment-status.detect',
         nextRunAt: '2026-08-13T22:25:00.000Z',
-      });
+      })
+      .mockImplementation((input: { id: string; name: string }) => ({
+        id: input.id,
+        name: input.name,
+      }));
     const jobs = {
       upsertSchedule,
     } as unknown as JobQueueService;
@@ -32,6 +39,9 @@ describe('RecurringBillingScheduleService', () => {
         FINANCE_PAYMENT_STATUS_CRON: '0 25 1 * * *',
         NODE_ENV: 'production',
         SALES_SUBSCRIPTION_INVOICE_CRON: '0 15 1 * * *',
+        SERVICE_INSPECTION_REMINDER_CRON: '0 35 1 * * *',
+        SERVICE_PLAN_VISIT_CRON: '0 45 1 * * *',
+        SERVICE_WARRANTY_REMINDER_CRON: '0 40 1 * * *',
       } as unknown as AppEnvironment,
       jobs,
       logger as never,
@@ -63,6 +73,27 @@ describe('RecurringBillingScheduleService', () => {
       'finance.payment-status.schedule.ready',
       expect.objectContaining({ scheduleId: financePaymentStatusScheduleId }),
     );
+    expect(upsertSchedule).toHaveBeenCalledWith({
+      id: serviceInspectionReminderScheduleId,
+      name: 'service.inspection-reminder.prepare',
+      pattern: '0 35 1 * * *',
+      payload: { responsibility: 'inspection-reminders' },
+      timezone: 'Europe/Sofia',
+    });
+    expect(upsertSchedule).toHaveBeenCalledWith({
+      id: serviceWarrantyReminderScheduleId,
+      name: 'crm.warranty-expiration.prepare',
+      pattern: '0 40 1 * * *',
+      payload: { responsibility: 'warranty-reminders' },
+      timezone: 'Europe/Sofia',
+    });
+    expect(upsertSchedule).toHaveBeenCalledWith({
+      id: servicePlanVisitScheduleId,
+      name: 'service.plan-visit.generate',
+      pattern: '0 45 1 * * *',
+      payload: { responsibility: 'subscription-service-visits' },
+      timezone: 'Europe/Sofia',
+    });
   });
 
   it('does not install production schedules in unit-test applications', async () => {

@@ -312,9 +312,10 @@ and lifecycle responses use optimistic versions and preserve inactive history.
 Hard deletion, equipment moves, serial/product identity changes, and merges are
 not exposed.
 
-## Managed partner files
+## Managed record files
 
-The first shared managed-file parent is the canonical partner record:
+Shared managed-file parents currently include canonical partner records and
+Service warranty claims:
 
 - `GET /api/v1/files?parentType=partner&parentId=<uuid>` returns only the latest
   immutable version of each logical file with bounded pagination.
@@ -325,8 +326,9 @@ The first shared managed-file parent is the canonical partner record:
 - `POST /api/v1/files/:id/versions` appends a replacement without overwriting the
   prior object.
 
-Listing, history, and download inherit `crm:view` from the partner; upload and
-replacement inherit `crm:edit`. Both commands require an `Idempotency-Key` and
+Partner files inherit `crm:view`/`crm:edit`. Warranty-claim files inherit
+`erp.service:view`/`erp.service:edit` plus the claim's dispatcher or assigned-
+technician scope. Both commands require an `Idempotency-Key` and
 an exact retry returns the original metadata without writing another object,
 audit event, or outbox event. The configurable allowlist currently supports PDF,
 JPEG, PNG, and WebP, with a 10 MB development default and 25 MB hard ceiling.
@@ -336,7 +338,7 @@ S3-compatible storage while PostgreSQL retains metadata and checksums only.
 There is deliberately no delete endpoint before the approved retention policy.
 The current `structural-signature` inspection rejects disguised content but is
 not a malware scan; the approved production scanner/quarantine adapter and the
-remaining attachment parents stay pending.
+remaining financial-document and CRM-interaction parents stay pending.
 
 ## Product category master data
 
@@ -717,7 +719,9 @@ and daily route planning:
   original shipment lines; `/returns/:id/receive` posts the linked inventory
   return and opens a Service request for repair dispositions; and
 - `/routes` lists date-filtered route plans and creates one ordered set of
-  customer-delivery and scheduled-Service stops for an active employee.
+  customer-delivery and scheduled-Service stops for an active employee. Service
+  stops keep their scheduled technician/time; shared schedule locks reject stop
+  overlap, out-of-hours work, and configured technician-capacity overflow.
 
 Reads require `erp.logistics:view`, creation requires `erp.logistics:create`, and
 status/receiving commands require `erp.logistics:edit`. Every command requires an
@@ -777,9 +781,10 @@ the quotation or a saved document.
 
 ## Service operations
 
-The current Service API is an authorized request-to-completion core. It does not
-claim to issue a payment document or provide warranty, inspection, CRM-ticket,
-route, or full sales-lifecycle behavior.
+The current Service API covers authorized request-to-completion work, technician
+scheduling, warranty claims, warranty monitoring, required-device inspections,
+and subscription-generated visits. It does not claim official payment issuance,
+CRM-ticket correlation, or full sales/supplier serial-lifecycle behavior.
 
 - `GET /api/v1/service/reference-data` returns the shared customer/location
   choices, active technicians with their mapped technician warehouses, available
@@ -793,9 +798,27 @@ route, or full sales-lifecycle behavior.
   `/work-orders/:id` expose paged dispatcher and assigned-technician records.
   The list routes support bounded `page`/`pageSize` values and an optional
   status.
+- `GET /api/v1/service/schedule?dateFrom=YYYY-MM-DD&dateTo=YYYY-MM-DD` returns up
+  to 31 calendar days of technician appointments, explicit working windows,
+  booked/remaining minutes, visit counts, and configured limits. A technician
+  without Service approval receives only their own workload.
+- `PUT /api/v1/service/technicians/:id/schedule-policy` version-checks and replaces
+  the approving dispatcher's explicit weekday windows. Each window includes
+  start, end, bookable minutes, and visit limit; an empty window list makes the
+  technician unavailable until another approved change.
 - `GET /api/v1/service/equipment/:id/history` returns the service-only timeline
   for one serial: work orders, service outcome, technician, dates, and used
   parts. It intentionally does not yet join sales, supplier, or handover events.
+- `GET /api/v1/service/care` returns warranty status and remaining days, claim
+  counts and status history, authorized claim attachments, inspection plans, and
+  completed inspection results.
+- `POST /api/v1/service/warranty-claims` opens one device-bound claim;
+  `POST /api/v1/service/warranty-claims/:id/transition` enforces
+  `Received → Under review → Approved or Rejected → Closed` and requires a
+  recorded decision when approving or rejecting.
+- `POST /api/v1/service/inspection-plans` creates a technical or metrological
+  cadence; `POST /api/v1/service/inspection-plans/:id/complete` retains the
+  result and advances the next due date from the recorded completion date.
 - `POST /api/v1/service/requests` records one selected telephone, email,
   customer-portal, or on-site source with a canonical customer/location/device,
   problem, priority, and warranty/out-of-warranty/subscription coverage type.
@@ -824,10 +847,14 @@ Completion issues parts from the assigned technician warehouse within the same
 PostgreSQL transaction, so a failed inventory issue rolls back the work
 completion.
 
-Request and appointment display use `BUSINESS_TIMEZONE`. The Service schedule is
-currently date-grouped and does not yet enforce technician capacity or overlap
-rules. Scheduled work is available to the mixed route planner under Logistics,
-but the full technician calendar remains pending. Payment-document issuance,
-warranty cards and claims, inspection reminders, subscription-generated visits,
-CRM ticket correlation/SLA, reports/exports, and a complete sale-to-service
-serial timeline also remain pending.
+Request and appointment display use `BUSINESS_TIMEZONE`. Assignment and route
+planning take the same technician-scoped transaction lock. A new or rescheduled
+visit must fit one enabled business-day window and cannot overlap active work or
+exceed the daily minute/visit limits. Scheduled work is available to the mixed
+route planner under Logistics, where delivery time also consumes a configured
+technician's capacity. Daily retry-safe jobs prepare inspection and warranty-
+expiry reminders and create upcoming Service requests from active subscription
+plans. Their lead/horizon settings and schedules are environment-configurable.
+Official payment issuance, warranty-card generation, CRM ticket correlation/SLA,
+Service reports/exports, and a complete sale-to-service serial timeline remain
+pending.

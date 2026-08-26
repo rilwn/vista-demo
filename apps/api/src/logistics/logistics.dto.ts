@@ -382,10 +382,13 @@ class LogisticsAssigneeReferenceDto {
 
 class LogisticsServiceStopReferenceDto {
   @ApiProperty({ type: String }) addressLine!: string;
+  @ApiProperty({ format: 'uuid', type: String }) assignedAccountId!: string;
+  @ApiProperty({ type: String }) assignedTo!: string;
   @ApiProperty({ type: String }) city!: string;
   @ApiProperty({ type: String }) customerName!: string;
   @ApiProperty({ format: 'uuid', type: String }) id!: string;
   @ApiProperty({ type: String }) label!: string;
+  @ApiProperty({ format: 'date-time', type: String }) scheduledEnd!: string;
   @ApiProperty({ format: 'date-time', type: String }) scheduledStart!: string;
 }
 
@@ -397,6 +400,7 @@ class LogisticsCourierConnectionDto {
 export class LogisticsReferenceDataDto implements LogisticsReferenceData {
   @ApiProperty({ isArray: true, type: LogisticsAssigneeReferenceDto })
   assignees!: LogisticsReferenceData['assignees'];
+  @ApiProperty({ type: String }) businessTimezone!: string;
   @ApiProperty({ isArray: true, type: LogisticsCourierConnectionDto })
   courierConnections!: LogisticsReferenceData['courierConnections'];
   @ApiProperty({ isArray: true, type: LogisticsEquipmentReferenceDto })

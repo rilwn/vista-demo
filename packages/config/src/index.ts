@@ -79,6 +79,11 @@ const environmentSchema = z
       .regex(/^[a-z0-9-]+$/)
       .default('vista'),
     SALES_SUBSCRIPTION_INVOICE_CRON: z.string().min(1).default('0 15 1 * * *'),
+    SERVICE_INSPECTION_REMINDER_CRON: z.string().min(1).default('0 35 1 * * *'),
+    SERVICE_PLAN_VISIT_HORIZON_DAYS: z.coerce.number().int().min(1).max(365).default(90),
+    SERVICE_PLAN_VISIT_CRON: z.string().min(1).default('0 45 1 * * *'),
+    SERVICE_WARRANTY_REMINDER_LEAD_DAYS: z.coerce.number().int().min(1).max(365).default(30),
+    SERVICE_WARRANTY_REMINDER_CRON: z.string().min(1).default('0 40 1 * * *'),
     LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
     NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
     NOTIFICATION_DISPATCH_INTERVAL_MS: z.coerce.number().int().positive().default(5_000),

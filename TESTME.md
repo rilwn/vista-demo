@@ -1,44 +1,53 @@
-# Test the supplier-invoice UI fixes
+# Test warranty claims and inspections
 
 ## Start
 
-1. If development is already running, stop it once with `Ctrl+C` so the shared
-   choice-field update is reloaded.
-2. Run `npm run dev`.
-3. Open the ERP/CRM app and sign in as `manager@vista.local`.
+1. Stop development once with `Ctrl+C`, then run `npm run dev`.
+2. Open the ERP/CRM app and sign in as `manager@vista.local` with your existing
+   fixture password.
+3. From the sidebar choose **ERP → Service → Warranty & inspections**.
 
-## 1. Check the invoice panels
+Expected: the page shows warranty coverage, warranty claims, and required
+inspections.
 
-1. From the sidebar choose **ERP → Procurement → Supplier invoices**.
-2. Select **Record supplier invoice**.
-3. Select **Purchase order**. Type `TechSupply`, then choose the adapter order
-   from the list beneath the field.
+## 1. Complete a warranty claim
 
-Expected: the choices appear in a clean light panel that matches the app, not a
-black browser menu. The form has three clear sections, readable quantity
-comparisons, aligned fields, square product checkboxes, a scrolling body, and a
-fitted action bar. Select **Back**; no invoice needs to be saved.
+1. Select **New warranty claim**.
+2. Use these values:
+   - Equipment: **Demo Receipt Printer · DEMO-PRINTER-ALFA-01 · Alfa Market Demo Ltd.**
+   - Description: `Printer stops feeding paper after several receipts.`
+3. Select **Create claim**.
+4. In the claim panel, select **Start review**.
+5. Enter decision note `Warranty repair approved after technical review.` and
+   select **Approve**.
+6. Select **Close claim**, then use **Back**.
 
-4. Find `TEST-VAT-2026-0825-01` and select **Preview**.
+Expected: the claim is **Closed** and its history shows **Received**, **Under
+review**, **Approved**, and **Closed** once each.
 
-Expected: the invoice total, supplier details, VAT status, order quantities,
-and line values are separated clearly. **Back** returns to the invoice list.
+Optional evidence check: before closing the claim, choose a PDF, JPEG, PNG, or
+WebP file smaller than 10 MB and select **Upload file**. The file should remain
+available from the claim panel.
 
-## 2. Check the Finance warning
+## 2. Record a completed inspection
 
-1. From the sidebar choose **ERP → Finance → Finance reports**.
-2. Select **Document journals → Purchases → Apply**.
+This records an inspection that has already taken place. It does not schedule a
+new technician visit.
 
-Expected: the warning names the earlier invoice without VAT details and
-explains that it remains in the journal but is excluded from VAT totals. This
-is expected historical data, not a failed test.
+1. Stay on **ERP → Service → Warranty & inspections**.
+2. Find the **Inspection schedule** section.
+3. Select the card that shows:
+   - Type: **Technical**
+   - Device: **Demo Receipt Printer**
+   - Serial number: **DEMO-PRINTER-ALFA-01**
+4. In the right panel, select **Record completed inspection** under **After the
+   inspection**.
+5. Enter:
+   - Completed on: `2026-08-26`
+   - Outcome: **Passed**
+   - Findings: `Printer passed the scheduled technical inspection.`
+6. Select **Save inspection result**.
 
-## 3. Check searchable choices
-
-Open any create panel with a choice field, such as **ERP → Sales → Quotations →
-New quotation**. Type part of a customer, warehouse, or product name and choose
-the matching suggestion.
-
-Expected: single-choice fields filter suggestions while typing. Multiple serial
-number lists have their own search field and preserve multiple selection. Press
-the arrow keys and **Enter** once to confirm keyboard selection also works.
+Expected: the inspection shows the saved result, the last completion date is
+`26 Aug 2026`, the result appears under **Completed inspections**, and the next
+due date moves to `26 Aug 2027`. Select **Back** to return to the care page.
