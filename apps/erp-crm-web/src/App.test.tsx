@@ -625,6 +625,65 @@ describe('ERP and CRM authenticated workspace', () => {
     );
   });
 
+  it('keeps the New ticket fields scrollable above an edge-to-edge action footer', async () => {
+    const crmContext = {
+      ...authenticationContext,
+      permissions: [...authenticationContext.permissions, { action: 'create', module: 'crm' }],
+    };
+    storeAuthenticatedSession(crmContext);
+    const fetchMock = vi.fn((input: string) => {
+      if (input.endsWith('/auth/me')) return Promise.resolve(jsonResponse(crmContext));
+      if (input.endsWith('/crm/tickets/reference-data')) {
+        return Promise.resolve(
+          jsonResponse({
+            assignees: [],
+            businessTimezone: 'Europe/Sofia',
+            categories: [{ code: 'billing', id: 'category-1', name: 'Billing' }],
+            customers: [{ id: partner.id, name: partner.displayName }],
+            equipment: [],
+            locations: [],
+            slaPolicies: [
+              {
+                id: 'sla-1',
+                name: 'Standard care',
+                priority: 'normal',
+                responseMinutes: 240,
+                resolutionMinutes: 1440,
+              },
+            ],
+            subscriptions: [],
+          }),
+        );
+      }
+      if (input.includes('/crm/tickets?')) {
+        return Promise.resolve(
+          jsonResponse({
+            items: [],
+            page: 1,
+            pageSize: 25,
+            summary: { atRisk: 0, breached: 0, open: 0, unassigned: 0 },
+            total: 0,
+            totalPages: 0,
+          }),
+        );
+      }
+      return Promise.resolve(jsonResponse({}));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderApplication(['/modules/crm/tickets']);
+
+    fireEvent.click(await screen.findByRole('button', { name: /New ticket/u }));
+    const dialog = await screen.findByRole('dialog', { name: 'New ticket' });
+    const form = dialog.querySelector<HTMLFormElement>('.crm-ticket-form');
+    expect(form).toBeTruthy();
+    expect(form?.children[0]?.classList.contains('crm-ticket-form-scroll')).toBe(true);
+    expect(form?.children[1]?.classList.contains('crm-ticket-drawer-actions')).toBe(true);
+    const footer = form?.children[1] as HTMLElement;
+    expect(within(footer).getByRole('button', { name: 'Create ticket' })).toBeTruthy();
+    expect(within(footer).getByRole('button', { name: 'Back' })).toBeTruthy();
+  });
+
   it('uploads an immutable partner document from the nested partner view', async () => {
     const contextWithEdit = {
       ...authenticationContext,
@@ -1480,6 +1539,75 @@ describe('ERP and CRM authenticated workspace', () => {
         return Promise.resolve(
           jsonResponse({ ...reservation, remainingQuantity: '0.0000', status: 'released' }),
         );
+      if (input.endsWith('/warehouse/serial-traceability/FDA-ALPHA-0001'))
+        return Promise.resolve(
+          jsonResponse({
+            currentCustody: { displayName: 'Main retail site', type: 'customer' },
+            currentWarehouse: {
+              displayName: warehouseFixture.name,
+              id: warehouseFixture.id,
+            },
+            customer: { displayName: 'Alfa Market Ltd.', id: partner.id },
+            customerEquipment: {
+              id: 'aa11ca8d-44dd-49ee-87f8-a9924666294e',
+              location: {
+                displayName: 'Main retail site',
+                id: 'c4cb4711-b0cd-4b72-a876-bf1466b4cecc',
+              },
+              status: 'active',
+            },
+            events: [
+              {
+                actor: { displayName: 'Warehouse Manager', id: authenticationContext.accountId },
+                eventId: 'movement:receipt',
+                eventType: 'receipt',
+                occurredAt: '2026-08-01T08:00:00.000Z',
+                referenceId: 'DEL-2026-081',
+                referenceType: 'Supplier delivery',
+                supplier: { displayName: 'TechSupply Ltd.', id: partner.id },
+                warehouse: { displayName: warehouseFixture.name, id: warehouseFixture.id },
+              },
+              {
+                customer: { displayName: 'Alfa Market Ltd.', id: partner.id },
+                customerLocation: {
+                  displayName: 'Main retail site',
+                  id: 'c4cb4711-b0cd-4b72-a876-bf1466b4cecc',
+                },
+                details: [{ label: 'Accepted by', value: 'Elena Petrova' }],
+                eventId: 'handover:one',
+                eventType: 'handover',
+                occurredAt: '2026-08-05T10:00:00.000Z',
+                referenceId: 'HO-2026-000081',
+                referenceType: 'Equipment handover',
+              },
+              {
+                customer: { displayName: 'Alfa Market Ltd.', id: partner.id },
+                customerLocation: {
+                  displayName: 'Main retail site',
+                  id: 'c4cb4711-b0cd-4b72-a876-bf1466b4cecc',
+                },
+                description: 'Display connection repaired and tested.',
+                details: [
+                  { label: 'Working time', value: '45 minutes' },
+                  { label: 'Repair cost', value: 'BGN 72.0000' },
+                ],
+                eventId: 'repair-completed:one',
+                eventType: 'repair_completed',
+                occurredAt: '2026-08-12T11:30:00.000Z',
+                referenceId: 'WO-2026-000041',
+                referenceType: 'Service work order',
+                technician: {
+                  displayName: 'Service Technician',
+                  id: authenticationContext.accountId,
+                },
+              },
+            ],
+            product: { displayName: inventoryProductFixture.name, id: inventoryProductFixture.id },
+            serialItemId: '77886c8d-5812-413d-a93c-c2bcbb4f27df',
+            serialNumber: 'FDA-ALPHA-0001',
+            status: 'issued',
+          }),
+        );
       return Promise.resolve(jsonResponse({}));
     });
     vi.stubGlobal('fetch', fetchMock);
@@ -1498,6 +1626,15 @@ describe('ERP and CRM authenticated workspace', () => {
     expect(await screen.findByText('active')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Release' }));
     expect(await screen.findByText('released')).toBeTruthy();
+
+    fireEvent.change(screen.getByLabelText('Serial number'), {
+      target: { value: 'FDA-ALPHA-0001' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Trace serial' }));
+    expect(await screen.findByText('Accepted by customer')).toBeTruthy();
+    expect(screen.getByText('Repair completed')).toBeTruthy();
+    expect(screen.getByText('Service Technician')).toBeTruthy();
+    expect(screen.getAllByText('Main retail site').length).toBeGreaterThan(0);
 
     const commands = fetchMock.mock.calls.filter(([, options]) => options?.method === 'POST');
     expect(commands.map(([url]) => url)).toEqual([
@@ -2080,6 +2217,19 @@ describe('ERP and CRM authenticated workspace', () => {
 
     fireEvent.click(screen.getByRole('button', { name: messages.procurement.newOrder }));
     const createDialog = screen.getByRole('dialog', { name: messages.procurement.orderTitle });
+    expect(within(createDialog).getByRole('heading', { name: 'Order details' })).toBeTruthy();
+    expect(within(createDialog).getByRole('heading', { name: 'Products' })).toBeTruthy();
+    expect(
+      within(createDialog).getByRole<HTMLButtonElement>('button', {
+        name: 'All products added',
+      }).disabled,
+    ).toBe(true);
+    expect(
+      within(createDialog)
+        .getByRole('button', { name: messages.procurement.save })
+        .closest('footer')
+        ?.classList.contains('procurement-drawer-actions'),
+    ).toBe(true);
     fireEvent.change(within(createDialog).getByLabelText(messages.procurement.quantity), {
       target: { value: '2' },
     });
@@ -2095,6 +2245,25 @@ describe('ERP and CRM authenticated workspace', () => {
 
     fireEvent.click(screen.getByRole('button', { name: messages.procurement.receive }));
     const receiptDialog = screen.getByRole('dialog', { name: messages.procurement.receiveTitle });
+    expect(receiptDialog.classList.contains('goods-receipt-drawer')).toBe(true);
+    expect(
+      within(receiptDialog).getByRole('heading', { name: 'Products in this delivery' }),
+    ).toBeTruthy();
+    const includeProduct = within(receiptDialog).getByRole<HTMLInputElement>('checkbox', {
+      name: new RegExp(inventoryProductFixture.name, 'u'),
+    });
+    expect(includeProduct.classList.contains('procurement-receive-checkbox')).toBe(true);
+    expect(includeProduct.checked).toBe(true);
+    fireEvent.click(includeProduct);
+    expect(
+      within(receiptDialog).getByLabelText<HTMLInputElement>(messages.procurement.quantity)
+        .disabled,
+    ).toBe(true);
+    fireEvent.click(includeProduct);
+    expect(
+      within(receiptDialog).getByLabelText<HTMLInputElement>(messages.procurement.quantity)
+        .disabled,
+    ).toBe(false);
     fireEvent.change(within(receiptDialog).getByLabelText(messages.procurement.deliveryReference), {
       target: { value: 'DEL-2026-42' },
     });
@@ -2701,11 +2870,15 @@ describe('ERP and CRM authenticated workspace', () => {
     storeAuthenticatedSession(salesContext);
     const customerId = 'a4eaf510-58f1-49c2-90cc-ce61c102352c';
     const productId = '773e9308-d4d8-43d7-9cf0-9dc20f2de1dc';
+    const customerLocationId = '54c81e2d-a18b-4fc4-b444-a4459ca40a5b';
     const warehouseId = '5c8c6996-585c-4375-a239-1c5be14b88f0';
     let workflow: SalesWorkflow | undefined;
     const references = {
       batches: [],
       customers: [{ id: customerId, name: 'Vista Retail Customer Ltd.' }],
+      customerLocations: [
+        { customerPartnerId: customerId, id: customerLocationId, name: 'Main retail site' },
+      ],
       products: [
         {
           id: productId,
@@ -2829,6 +3002,8 @@ describe('ERP and CRM authenticated workspace', () => {
             ...workflow!.handover!,
             acceptedAt: '2026-08-12T08:12:00.000Z',
             acceptedByName: 'Elena Customer',
+            customerLocationId,
+            customerLocationName: 'Main retail site',
             status: 'accepted',
             version: 2,
           },
@@ -2898,6 +3073,9 @@ describe('ERP and CRM authenticated workspace', () => {
 
     preview = await screen.findByRole('dialog', { name: 'Q-2026-000001' });
     expect(within(preview).getAllByText('HO-2026-000001')).toHaveLength(2);
+    fireEvent.change(within(preview).getByRole('combobox', { name: /Receiving location/ }), {
+      target: { value: customerLocationId },
+    });
     fireEvent.change(within(preview).getByLabelText('Customer representative'), {
       target: { value: 'Elena Customer' },
     });
@@ -5130,8 +5308,14 @@ describe('ERP and CRM authenticated workspace', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
 
-    renderApplication(['/modules/erp.service/reports']);
+    renderApplication(['/modules/erp.service']);
 
+    expect(await screen.findByRole('heading', { name: 'Service' })).toBeTruthy();
+    fireEvent.click(
+      screen.getByRole('link', {
+        name: /Service reports Review request volume, completion, technician workload/u,
+      }),
+    );
     expect(await screen.findByRole('heading', { name: 'Service reports' })).toBeTruthy();
     expect((await screen.findAllByText('Mila Petrova')).length).toBeGreaterThan(0);
     expect(screen.getAllByText('2h 30m').length).toBeGreaterThan(0);

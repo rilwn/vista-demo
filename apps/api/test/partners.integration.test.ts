@@ -95,9 +95,17 @@ describe.skipIf(!runInfrastructureTests)('partner master-data vertical slice', (
       new URL('../src/database/migrations', import.meta.url),
     );
     await migrateUp(database, migrationDirectory);
-    const salesRolledBack = await migrateDown(database, migrationDirectory);
+    const laterMigrationsRolledBack: string[] = [];
+    let salesRolledBack = await migrateDown(database, migrationDirectory);
+    while (salesRolledBack && salesRolledBack !== '0026_sales_workflow_foundation') {
+      laterMigrationsRolledBack.push(salesRolledBack);
+      salesRolledBack = await migrateDown(database, migrationDirectory);
+    }
     if (salesRolledBack !== '0026_sales_workflow_foundation') {
       throw new Error('Expected to roll back sales workflow before supplier controls');
+    }
+    if (!laterMigrationsRolledBack.includes('0046_serial_lifecycle_traceability')) {
+      throw new Error('The serial lifecycle migration was not exercised during rollback');
     }
     const supplierControlsRolledBack = await migrateDown(database, migrationDirectory);
     if (supplierControlsRolledBack !== '0025_procurement_supplier_controls') {
@@ -121,7 +129,8 @@ describe.skipIf(!runInfrastructureTests)('partner master-data vertical slice', (
       !reapplied.includes('0023_employee_password_change') ||
       !reapplied.includes('0024_procurement_purchase_receiving') ||
       !reapplied.includes('0025_procurement_supplier_controls') ||
-      !reapplied.includes('0026_sales_workflow_foundation')
+      !reapplied.includes('0026_sales_workflow_foundation') ||
+      !reapplied.includes('0046_serial_lifecycle_traceability')
     ) {
       throw new Error('The reliable integration and dependent migrations could not be reapplied');
     }
@@ -1827,7 +1836,7 @@ describe.skipIf(!runInfrastructureTests)('partner master-data vertical slice', (
     });
     const returnedSerialTrace = returnedTrace.body as SerialTraceability;
     expect(returnedSerialTrace.events.at(-1)).toMatchObject({
-      eventType: 'return',
+      eventType: 'return_received',
       movementId: postedReturn.id,
       referenceId: `return-${runId}`,
     });

@@ -3036,6 +3036,8 @@ export interface components {
     AcceptSalesHandoverDto: {
       acceptanceNotes?: string;
       acceptedByName: string;
+      /** Format: uuid */
+      customerLocationId: string;
       expectedVersion: number;
     };
     AccountRecoveryHandoffDto: {
@@ -5844,6 +5846,13 @@ export interface components {
       /** Format: uuid */
       warehouseId: string;
     };
+    SalesCustomerLocationOptionDto: {
+      /** Format: uuid */
+      customerPartnerId: string;
+      /** Format: uuid */
+      id: string;
+      name: string;
+    };
     SalesCustomerOptionDto: {
       /** Format: uuid */
       id: string;
@@ -5956,6 +5965,7 @@ export interface components {
     };
     SalesReferenceDataDto: {
       batches: components['schemas']['SalesBatchOptionDto'][];
+      customerLocations: components['schemas']['SalesCustomerLocationOptionDto'][];
       customers: components['schemas']['SalesCustomerOptionDto'][];
       products: components['schemas']['SalesProductOptionDto'][];
       serials: components['schemas']['SalesSerialOptionDto'][];
@@ -6118,7 +6128,10 @@ export interface components {
       userAgent?: string;
     };
     SerialTraceabilityDto: {
-      currentWarehouse: components['schemas']['SerialTracePartyDto'];
+      currentCustody: components['schemas']['SerialTraceCustodyDto'];
+      currentWarehouse?: components['schemas']['SerialTracePartyDto'];
+      customer?: components['schemas']['SerialTracePartyDto'];
+      customerEquipment?: components['schemas']['SerialTraceCustomerEquipmentDto'];
       events: components['schemas']['SerialTraceEventDto'][];
       product: components['schemas']['SerialTracePartyDto'];
       /** Format: uuid */
@@ -6127,14 +6140,46 @@ export interface components {
       /** @enum {string} */
       status: 'available' | 'issued' | 'missing';
     };
-    SerialTraceEventDto: {
-      actor: components['schemas']['SerialTracePartyDto'];
-      customer?: components['schemas']['SerialTracePartyDto'];
+    SerialTraceCustodyDto: {
+      displayName: string;
       /** @enum {string} */
-      eventType: 'receipt' | 'transfer' | 'issue' | 'return' | 'stocktake';
+      type: 'customer' | 'service' | 'warehouse';
+    };
+    SerialTraceCustomerEquipmentDto: {
+      /** Format: uuid */
+      id: string;
+      location: components['schemas']['SerialTracePartyDto'];
+      /** @enum {string} */
+      status: 'active' | 'under_repair' | 'retired';
+    };
+    SerialTraceDetailDto: {
+      label: string;
+      value: string;
+    };
+    SerialTraceEventDto: {
+      actor?: components['schemas']['SerialTracePartyDto'];
+      customer?: components['schemas']['SerialTracePartyDto'];
+      customerLocation?: components['schemas']['SerialTracePartyDto'];
+      description?: string;
+      details?: components['schemas']['SerialTraceDetailDto'][];
+      eventId: string;
+      /** @enum {string} */
+      eventType:
+        | 'receipt'
+        | 'transfer'
+        | 'sale'
+        | 'handover'
+        | 'issue'
+        | 'return_registered'
+        | 'return_received'
+        | 'service_requested'
+        | 'service_scheduled'
+        | 'service_started'
+        | 'repair_completed'
+        | 'stocktake';
       fromWarehouse?: components['schemas']['SerialTracePartyDto'];
       /** Format: uuid */
-      movementId: string;
+      movementId?: string;
       /** Format: date-time */
       occurredAt: string;
       referenceId: string;
@@ -6142,8 +6187,8 @@ export interface components {
       supplier?: components['schemas']['SerialTracePartyDto'];
       technician?: components['schemas']['SerialTracePartyDto'];
       toWarehouse?: components['schemas']['SerialTracePartyDto'];
-      unitCostBgn: string;
-      warehouse: components['schemas']['SerialTracePartyDto'];
+      unitCostBgn?: string;
+      warehouse?: components['schemas']['SerialTracePartyDto'];
     };
     SerialTracePartyDto: {
       displayName: string;

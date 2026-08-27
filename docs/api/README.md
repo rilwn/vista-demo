@@ -463,9 +463,14 @@ Provider dispatch and optional FIFO remain later workflows.
 
 Serial receipts may link an active supplier partner; issues may link an active
 customer and technician account. The traceability route returns current custody
-and a chronological receipt/transfer/issue/stocktake timeline with actors,
-references, costs, and available party evidence. Missing links are not guessed.
-Unknown serials return the stable `SERIAL_NOT_FOUND` code.
+and one chronological supplier-receipt, transfer, Sales shipment, customer
+handover, reverse-return, Service-request, technician, and repair timeline with
+actors, references, costs, and available party evidence. Accepting a Sales
+handover requires an active location belonging to the customer and registers or
+links every sold serial as customer equipment. A repair return can select only
+the equipment carrying that exact shipped serial; unrelated customer equipment
+is rejected. Missing links are not guessed. Unknown serials return the stable
+`SERIAL_NOT_FOUND` code.
 
 ## Procurement purchase orders and receiving
 

@@ -14,7 +14,12 @@ export function ModulePage({ moduleKey }: { moduleKey: string }) {
     return <Navigate replace to="/not-found" />;
   }
 
-  const pages = pagesForModule(moduleKey);
+  const pages = pagesForModule(moduleKey).filter(
+    (page) =>
+      moduleKey !== 'erp.service' ||
+      page.slug !== 'reports' ||
+      hasPermission('erp.service', 'approve'),
+  );
 
   return (
     <div className="page-stack">

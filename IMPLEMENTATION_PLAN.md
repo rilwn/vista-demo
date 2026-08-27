@@ -1,6 +1,6 @@
 # Vista Integrated Information System — Remaining Implementation Plan
 
-Status date: 2026-08-26
+Status date: 2026-08-27
 Project: `BG16RFPR001-1.012-1324-C01`
 
 [`AGENTS.md`](AGENTS.md) is authoritative. This file contains only unfinished
@@ -27,8 +27,8 @@ relevant technical documentation—not here.
 1. Phase 0 runs continuously and unblocks irreversible decisions.
 2. Complete the remaining shared platform services before depending on them in
    ERP, CRM, POS, or Backup workflows.
-3. Close the remaining ERP/finance/logistics and Service requirements before
-   cross-module CRM and POS completion.
+3. Close the remaining ERP/finance/logistics requirements before cross-module
+   CRM and POS completion.
 4. Deliver POS online operation before offline operation.
 5. Complete Backup/DR against the approved inventory and hardware, then harden,
    deploy, and hand over the whole system.
@@ -83,8 +83,6 @@ development-only credentials or behavior.
 - Apply approved production organization, location, warehouse, operator, cash
   register, category, unit, product-code, barcode, and tracking-policy data
   without inventing client rules.
-- Complete full lifecycle serial traceability across supplier receipt, sale,
-  repair, return, customer, and technician activity.
 - Enable FIFO only if selected, with separate valuation, migration, concurrency,
   and reporting acceptance.
 
@@ -92,8 +90,8 @@ development-only credentials or behavior.
 costing policy.
 
 **Accept when:** ERP remains the authoritative shared master-data source;
-duplicate, serial, stock, reservation, valuation, and traceability invariants are
-proven under concurrency; no production topology or tracking rule is inferred.
+duplicate, stock, reservation, and valuation invariants are proven under
+concurrency; no production topology or tracking rule is inferred.
 
 ## Phase 3 — Complete finance, documents, logistics, and ERP reporting
 
@@ -123,19 +121,6 @@ and the approved business timezone.
 allocations, taxes, rates, exports, and integration recovery are tested; the
 procurement-to-accounting and quotation-to-payment scenarios pass end to end.
 
-## Phase 4 — Complete Service
-
-**Remaining**
-
-- Complete the full supplier, sale, service, return, and repair serial lifecycle.
-
-**Depends on:** SVC-001, SLA-001, Phase 3 finance/logistics behavior, and
-approved scheduling and signature policies.
-
-**Accept when:** all Service commands are authorized, audited, retry-safe, and
-preserve complete serial history; calendar, warranty, payment, technician, and
-mobile scenarios pass end to end.
-
 ## Phase 5 — Complete CRM
 
 **Remaining**
@@ -149,8 +134,8 @@ mobile scenarios pass end to end.
   NPS, referrals, reproducible analytics/dashboards, exports, ERP/POS
   synchronization, and external APIs.
 
-**Depends on:** SLA-001, CRM-001, CRM-002, KPI-001, SVC-001, and Phase 4
-correlation rules.
+**Depends on:** SLA-001, CRM-001, CRM-002, KPI-001, SVC-001, and the established
+Service correlation rules.
 
 **Accept when:** CRM does not create conflicting ERP-owned records; KPI formulas
 are documented; all remaining required CRM workflows and export paths pass.

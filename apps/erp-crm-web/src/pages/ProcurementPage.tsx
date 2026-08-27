@@ -282,6 +282,10 @@ function PurchaseOrderDrawer({
   const [lines, setLines] = useState<OrderLineDraft[]>([emptyOrderLine(referenceData)]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const canSubmit =
+    Boolean(supplierPartnerId && warehouseId && currencyCode) &&
+    lines.length > 0 &&
+    lines.every(completeOrderLine);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -314,13 +318,25 @@ function PurchaseOrderDrawer({
 
   return (
     <ProcurementDrawer
+      actions={
+        <>
+          <Button disabled={busy} onClick={onClose} type="button" variant="quiet">
+            {messages.procurement.close}
+          </Button>
+          <Button disabled={busy || !canSubmit} form="purchase-order-form" type="submit">
+            {busy ? messages.procurement.saving : messages.procurement.save}
+          </Button>
+        </>
+      }
       busy={busy}
+      drawerClassName="purchase-order-drawer"
       onClose={onClose}
       subtitle={messages.procurement.orderSubtitle}
       title={messages.procurement.orderTitle}
     >
       <form
-        className="procurement-form"
+        className="procurement-form procurement-order-form"
+        id="purchase-order-form"
         onSubmit={(event) => {
           void submit(event);
         }}
@@ -333,115 +349,137 @@ function PurchaseOrderDrawer({
             Add at least one supplier, product, and warehouse before creating an order.
           </InlineAlert>
         ) : null}
-        <div className="procurement-form-grid">
-          <SelectField
-            label={messages.procurement.supplier}
-            onChange={setSupplierPartnerId}
-            options={referenceData.suppliers.map((supplier) => [supplier.id, supplier.name])}
-            value={supplierPartnerId}
-          />
-          <SelectField
-            label={messages.procurement.warehouse}
-            onChange={setWarehouseId}
-            options={referenceData.warehouses.map((warehouse) => [warehouse.id, warehouse.name])}
-            value={warehouseId}
-          />
-          <label>
-            <span>{messages.procurement.currency}</span>
-            <input
-              maxLength={3}
-              onChange={(event) => setCurrencyCode(event.target.value.toUpperCase())}
-              required
-              value={currencyCode}
+        <section
+          aria-labelledby="purchase-order-details-heading"
+          className="procurement-order-details"
+        >
+          <header className="procurement-order-section-heading">
+            <div>
+              <h3 id="purchase-order-details-heading">Order details</h3>
+              <p>Choose the supplier, receiving warehouse, and order currency.</p>
+            </div>
+          </header>
+          <div className="procurement-order-details-grid">
+            <SelectField
+              label={messages.procurement.supplier}
+              onChange={setSupplierPartnerId}
+              options={referenceData.suppliers.map((supplier) => [supplier.id, supplier.name])}
+              value={supplierPartnerId}
             />
-          </label>
-        </div>
+            <SelectField
+              label={messages.procurement.warehouse}
+              onChange={setWarehouseId}
+              options={referenceData.warehouses.map((warehouse) => [warehouse.id, warehouse.name])}
+              value={warehouseId}
+            />
+            <label className="procurement-currency-field">
+              <span>{messages.procurement.currency}</span>
+              <input
+                aria-describedby="purchase-order-currency-hint"
+                maxLength={3}
+                onChange={(event) => setCurrencyCode(event.target.value.toUpperCase())}
+                required
+                value={currencyCode}
+              />
+              <small id="purchase-order-currency-hint">Three-letter code</small>
+            </label>
+          </div>
+        </section>
 
         <section className="procurement-lines-editor">
           <header>
             <div>
-              <strong>Products</strong>
-              <span>Prices use the order currency. Quantities support four decimal places.</span>
+              <h3>Products</h3>
+              <p>Add each product once with its quantity, price, and expected delivery date.</p>
             </div>
             <Button
-              onClick={() => setLines((current) => [...current, emptyOrderLine(referenceData)])}
+              disabled={lines.length >= referenceData.products.length}
+              onClick={() =>
+                setLines((current) => [
+                  ...current,
+                  emptyOrderLine(
+                    referenceData,
+                    current.map((line) => line.productId),
+                  ),
+                ])
+              }
               type="button"
-              variant="quiet"
+              variant="secondary"
             >
-              {messages.procurement.addLine}
+              <Icon name="plus" size={16} />
+              {lines.length >= referenceData.products.length
+                ? 'All products added'
+                : messages.procurement.addLine}
             </Button>
           </header>
           {lines.map((line, index) => (
-            <div className="procurement-order-line-editor" key={line.key}>
-              <SelectField
-                label={messages.procurement.product}
-                onChange={(value) => updateOrderLine(setLines, line.key, { productId: value })}
-                options={referenceData.products.map((product) => [
-                  product.id,
-                  `${product.productCode} · ${product.name}`,
-                ])}
-                value={line.productId}
-              />
-              <label>
-                <span>{messages.procurement.quantity}</span>
-                <input
-                  inputMode="decimal"
-                  onChange={(event) =>
-                    updateOrderLine(setLines, line.key, { quantity: event.target.value })
-                  }
-                  pattern="\d+(\.\d{1,4})?"
-                  required
-                  value={line.quantity}
+            <article className="procurement-order-line-editor" key={line.key}>
+              <header>
+                <div>
+                  <span>Order item</span>
+                  <strong>{index + 1}</strong>
+                </div>
+                {lines.length > 1 ? (
+                  <button
+                    aria-label={`${messages.procurement.removeLine} ${index + 1}`}
+                    className="procurement-remove-line"
+                    onClick={() =>
+                      setLines((current) => current.filter((item) => item.key !== line.key))
+                    }
+                    type="button"
+                  >
+                    <Icon name="close" size={16} />
+                  </button>
+                ) : null}
+              </header>
+              <div className="procurement-order-line-fields">
+                <SelectField
+                  label={messages.procurement.product}
+                  onChange={(value) => updateOrderLine(setLines, line.key, { productId: value })}
+                  options={orderProductOptions(referenceData, lines, line.key)}
+                  value={line.productId}
                 />
-              </label>
-              <label>
-                <span>{messages.procurement.unitPrice}</span>
-                <input
-                  inputMode="decimal"
-                  onChange={(event) =>
-                    updateOrderLine(setLines, line.key, { unitPrice: event.target.value })
-                  }
-                  pattern="\d+(\.\d{1,4})?"
-                  required
-                  value={line.unitPrice}
-                />
-              </label>
-              <label>
-                <span>{messages.procurement.expectedDate}</span>
-                <input
-                  onChange={(event) =>
-                    updateOrderLine(setLines, line.key, {
-                      expectedDeliveryDate: event.target.value,
-                    })
-                  }
-                  required
-                  type="date"
-                  value={line.expectedDeliveryDate}
-                />
-              </label>
-              {lines.length > 1 ? (
-                <button
-                  aria-label={`${messages.procurement.removeLine} ${index + 1}`}
-                  className="procurement-remove-line"
-                  onClick={() =>
-                    setLines((current) => current.filter((item) => item.key !== line.key))
-                  }
-                  type="button"
-                >
-                  <Icon name="close" size={16} />
-                </button>
-              ) : null}
-            </div>
+                <label>
+                  <span>{messages.procurement.quantity}</span>
+                  <input
+                    inputMode="decimal"
+                    onChange={(event) =>
+                      updateOrderLine(setLines, line.key, { quantity: event.target.value })
+                    }
+                    pattern="\d+(\.\d{1,4})?"
+                    required
+                    value={line.quantity}
+                  />
+                </label>
+                <label>
+                  <span>{messages.procurement.unitPrice}</span>
+                  <input
+                    inputMode="decimal"
+                    onChange={(event) =>
+                      updateOrderLine(setLines, line.key, { unitPrice: event.target.value })
+                    }
+                    pattern="\d+(\.\d{1,4})?"
+                    required
+                    value={line.unitPrice}
+                  />
+                </label>
+                <label>
+                  <span>{messages.procurement.expectedDate}</span>
+                  <input
+                    onChange={(event) =>
+                      updateOrderLine(setLines, line.key, {
+                        expectedDeliveryDate: event.target.value,
+                      })
+                    }
+                    required
+                    type="date"
+                    value={line.expectedDeliveryDate}
+                  />
+                </label>
+              </div>
+            </article>
           ))}
         </section>
-        <div className="security-drawer-actions">
-          <Button disabled={busy} onClick={onClose} type="button" variant="quiet">
-            {messages.procurement.close}
-          </Button>
-          <Button disabled={busy} type="submit">
-            {busy ? messages.procurement.saving : messages.procurement.save}
-          </Button>
-        </div>
       </form>
     </ProcurementDrawer>
   );
@@ -487,6 +525,7 @@ function GoodsReceiptDrawer({
   const [supplierDeliveryReference, setSupplierDeliveryReference] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const includedLineCount = lines.filter((line) => line.include).length;
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -524,19 +563,31 @@ function GoodsReceiptDrawer({
 
   return (
     <ProcurementDrawer
+      actions={
+        <>
+          <Button disabled={busy} onClick={onClose} type="button" variant="quiet">
+            {messages.procurement.close}
+          </Button>
+          <Button disabled={busy} form="goods-receipt-form" type="submit">
+            {busy ? 'Recording delivery' : messages.procurement.receive}
+          </Button>
+        </>
+      }
       busy={busy}
+      drawerClassName="goods-receipt-drawer"
       onClose={onClose}
       subtitle={messages.procurement.receiveSubtitle}
       title={messages.procurement.receiveTitle}
     >
       <form
         className="procurement-form"
+        id="goods-receipt-form"
         onSubmit={(event) => {
           void submit(event);
         }}
       >
         {error ? <InlineAlert tone="error">{error}</InlineAlert> : null}
-        <div className="procurement-receipt-summary">
+        <section aria-label="Delivery destination" className="procurement-receipt-summary">
           <div>
             <span>{messages.procurement.supplier}</span>
             <strong>{order.supplierName}</strong>
@@ -545,8 +596,8 @@ function GoodsReceiptDrawer({
             <span>{messages.procurement.warehouse}</span>
             <strong>{order.warehouseName}</strong>
           </div>
-        </div>
-        <label>
+        </section>
+        <label className="procurement-delivery-reference-field">
           <span>{messages.procurement.deliveryReference}</span>
           <input
             maxLength={120}
@@ -555,33 +606,52 @@ function GoodsReceiptDrawer({
             value={supplierDeliveryReference}
           />
         </label>
-        <section className="procurement-receive-lines">
+        <section aria-labelledby="receipt-products-heading" className="procurement-receive-lines">
+          <header className="procurement-receive-lines-heading">
+            <div>
+              <h3 id="receipt-products-heading">Products in this delivery</h3>
+              <p>Select only the products that arrived and enter the quantity received now.</p>
+            </div>
+            <span>
+              {includedLineCount} of {dueLines.length} selected
+            </span>
+          </header>
           {dueLines.map((line) => {
             const draft = lines.find((item) => item.orderLineId === line.id);
             const product = referenceData.products.find((item) => item.id === line.productId);
             if (!draft) return null;
+            const remainingQuantity = subtractDecimal(line.orderedQuantity, line.deliveredQuantity);
+            const remainingId = `receipt-line-${line.id}-remaining`;
             return (
-              <fieldset className="procurement-receive-line" key={line.id}>
-                <legend>
-                  <label>
+              <article
+                className={`procurement-receive-line${draft.include ? '' : ' is-excluded'}`}
+                key={line.id}
+              >
+                <header>
+                  <label className="procurement-receive-toggle">
                     <input
+                      aria-describedby={remainingId}
                       checked={draft.include}
+                      className="procurement-receive-checkbox"
                       onChange={(event) =>
                         updateReceiptLine(setLines, line.id, { include: event.target.checked })
                       }
                       type="checkbox"
                     />
-                    <span>{line.productName}</span>
+                    <span>
+                      <strong>{line.productName}</strong>
+                      <small id={remainingId}>{remainingQuantity} remaining to receive</small>
+                    </span>
                   </label>
-                </legend>
-                <p>{subtractDecimal(line.orderedQuantity, line.deliveredQuantity)} remaining</p>
-                <div className="procurement-form-grid">
+                </header>
+                <div className="procurement-form-grid procurement-receive-line-fields">
                   <label>
                     <span>{messages.procurement.quantity}</span>
                     <input
                       disabled={!draft.include}
                       inputMode="decimal"
-                      max={subtractDecimal(line.orderedQuantity, line.deliveredQuantity)}
+                      max={remainingQuantity}
+                      min="0.0001"
                       onChange={(event) =>
                         updateReceiptLine(setLines, line.id, { quantity: event.target.value })
                       }
@@ -614,6 +684,7 @@ function GoodsReceiptDrawer({
                           serialNumbers: event.target.value,
                         })
                       }
+                      placeholder="Enter one serial number per line"
                       required={draft.include}
                       rows={3}
                       value={draft.serialNumbers}
@@ -653,32 +724,28 @@ function GoodsReceiptDrawer({
                     ) : null}
                   </div>
                 ) : null}
-              </fieldset>
+              </article>
             );
           })}
         </section>
-        <div className="security-drawer-actions">
-          <Button disabled={busy} onClick={onClose} type="button" variant="quiet">
-            {messages.procurement.close}
-          </Button>
-          <Button disabled={busy} type="submit">
-            {busy ? 'Recording delivery' : messages.procurement.receive}
-          </Button>
-        </div>
       </form>
     </ProcurementDrawer>
   );
 }
 
 function ProcurementDrawer({
+  actions,
   busy,
   children,
+  drawerClassName,
   onClose,
   subtitle,
   title,
 }: {
+  actions: React.ReactNode;
   busy: boolean;
   children: React.ReactNode;
+  drawerClassName?: string;
   onClose: () => void;
   subtitle: string;
   title: string;
@@ -695,7 +762,7 @@ function ProcurementDrawer({
       <aside
         aria-label={title}
         aria-modal="true"
-        className="security-drawer is-wide procurement-drawer"
+        className={`security-drawer is-wide procurement-drawer${drawerClassName ? ` ${drawerClassName}` : ''}`}
         role="dialog"
       >
         <header className="procurement-drawer-header">
@@ -723,6 +790,7 @@ function ProcurementDrawer({
           </button>
         </header>
         <div className="security-drawer-body">{children}</div>
+        <footer className="procurement-drawer-actions">{actions}</footer>
       </aside>
     </div>
   );
@@ -818,14 +886,31 @@ function ProcurementState({ children, title }: { children: React.ReactNode; titl
   );
 }
 
-function emptyOrderLine(referenceData: ProcurementReferenceData): OrderLineDraft {
+function emptyOrderLine(
+  referenceData: ProcurementReferenceData,
+  excludedProductIds: Iterable<string> = [],
+): OrderLineDraft {
+  const excluded = new Set(excludedProductIds);
   return {
     expectedDeliveryDate: '',
     key: crypto.randomUUID(),
-    productId: referenceData.products[0]?.id ?? '',
+    productId: referenceData.products.find((product) => !excluded.has(product.id))?.id ?? '',
     quantity: '1',
     unitPrice: '',
   };
+}
+
+function orderProductOptions(
+  referenceData: ProcurementReferenceData,
+  lines: OrderLineDraft[],
+  currentLineKey: string,
+): Array<[string, string]> {
+  const used = new Set(
+    lines.filter((line) => line.key !== currentLineKey).map((line) => line.productId),
+  );
+  return referenceData.products
+    .filter((product) => !used.has(product.id))
+    .map((product) => [product.id, `${product.productCode} · ${product.name}`]);
 }
 
 function completeOrderLine(line: OrderLineDraft) {
@@ -863,11 +948,25 @@ function procurementError(caught: unknown, fallback: string) {
     BATCH_TRACKING_REQUIRED: 'Enter the supplier batch number for each received batch.',
     EXPIRY_REQUIRED: 'Enter the expiry date for each received batch.',
     PROCUREMENT_PRODUCT_NOT_FOUND: 'A selected product is no longer available.',
+    PURCHASE_ORDER_PRODUCT_DUPLICATE: 'Add each product only once to this purchase order.',
     PURCHASE_ORDER_OVER_RECEIPT: 'A quantity is greater than the amount still due.',
     RECEIPT_BGN_COST_REQUIRED: 'Enter the BGN valuation cost for this foreign-currency order.',
     SERIAL_TRACKING_REQUIRED: 'Enter one serial number for every received serialised item.',
+    SUPPLIER_NOT_FOUND: 'Choose an active supplier.',
+    WAREHOUSE_NOT_FOUND: 'Choose an active receiving warehouse.',
   };
-  return errors[caught.code] ?? fallback;
+  const mapped = errors[caught.code];
+  if (mapped) return mapped;
+  if (caught.message !== 'Request validation failed') return caught.message;
+  const details = caught.details.map((detail) => detail.message).join(' ');
+  if (details.includes('currencyCode')) return 'Enter a three-letter currency code such as BGN.';
+  if (details.includes('expectedDeliveryDate')) return 'Choose a valid expected delivery date.';
+  if (details.includes('productId')) return 'Choose an available product.';
+  if (details.includes('quantity')) return 'Enter a quantity greater than zero.';
+  if (details.includes('supplierPartnerId')) return 'Choose an active supplier.';
+  if (details.includes('unitPrice')) return 'Enter a valid unit price.';
+  if (details.includes('warehouseId')) return 'Choose an active receiving warehouse.';
+  return fallback;
 }
 
 function statusLabel(status: PurchaseOrderStatus) {

@@ -155,6 +155,10 @@ export class AcceptSalesHandoverDto implements AcceptSalesHandoverRequest {
   @MaxLength(2000)
   acceptanceNotes?: string;
 
+  @ApiProperty({ format: 'uuid', type: String })
+  @IsUUID('loose')
+  customerLocationId!: string;
+
   @ApiProperty({ minimum: 1, type: Number })
   @Type(() => Number)
   @IsInt()
@@ -165,6 +169,10 @@ export class AcceptSalesHandoverDto implements AcceptSalesHandoverRequest {
 class SalesCustomerOptionDto {
   @ApiProperty({ format: 'uuid', type: String }) id!: string;
   @ApiProperty({ type: String }) name!: string;
+}
+
+class SalesCustomerLocationOptionDto extends SalesCustomerOptionDto {
+  @ApiProperty({ format: 'uuid', type: String }) customerPartnerId!: string;
 }
 
 class SalesProductOptionDto extends SalesCustomerOptionDto {
@@ -190,6 +198,8 @@ export class SalesReferenceDataDto implements SalesReferenceData {
   batches!: SalesReferenceData['batches'];
   @ApiProperty({ isArray: true, type: SalesCustomerOptionDto })
   customers!: SalesReferenceData['customers'];
+  @ApiProperty({ isArray: true, type: SalesCustomerLocationOptionDto })
+  customerLocations!: SalesReferenceData['customerLocations'];
   @ApiProperty({ isArray: true, type: SalesProductOptionDto })
   products!: SalesReferenceData['products'];
   @ApiProperty({ isArray: true, type: SalesSerialOptionDto })

@@ -374,10 +374,11 @@ until stock first recovers. Queue dispatch is active for in-system delivery.
 Optional FIFO remains disabled until selected.
 
 Open **Warehouse → Reservations & serial trace**, then scan or enter a serial.
-The result shows product, current custody/status, supplier receipt, transfers,
-customer issue, linked return, technician, references, and actors in time order. Missing party
-evidence is shown as absent rather than invented; unknown serials remain a clear
-not-found state.
+The result follows the device from its supplier receipt through warehouse
+transfers, shipment, customer acceptance, return, Service intake, assigned
+technician, and completed repair. It also shows the current custodian and the
+customer location where sold equipment is registered. Missing evidence is shown
+as absent rather than guessed; unknown serials remain a clear not-found state.
 
 ## Purchase orders and goods receipts
 

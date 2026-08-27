@@ -422,179 +422,182 @@ function NewTicketDrawer({
       title="New ticket"
     >
       <form className="crm-ticket-form" onSubmit={(event) => void submit(event)}>
-        {error ? <InlineAlert tone="error">{error}</InlineAlert> : null}
-        <DrawerSection
-          index="1"
-          title="Customer"
-          description="A location and device are optional until Service work is needed."
-        >
-          <TicketField label="Customer">
-            <select
-              onChange={(event) => changeCustomer(event.target.value)}
-              required
-              value={customerPartnerId}
-            >
-              {references.customers.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.name}
-                </option>
-              ))}
-            </select>
-          </TicketField>
-          <div className="crm-ticket-form-grid">
-            <TicketField label="Location (optional)">
+        <div className="crm-ticket-form-scroll">
+          {error ? <InlineAlert tone="error">{error}</InlineAlert> : null}
+          <DrawerSection
+            index="1"
+            title="Customer"
+            description="A location and device are optional until Service work is needed."
+          >
+            <TicketField label="Customer">
               <select
-                onChange={(event) => changeLocation(event.target.value)}
-                value={customerLocationId}
-              >
-                <option value="">Not selected</option>
-                {locations.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.name}
-                  </option>
-                ))}
-              </select>
-            </TicketField>
-            <TicketField label="Device (optional)">
-              <select
-                disabled={!customerLocationId}
-                onChange={(event) => {
-                  setCustomerEquipmentId(event.target.value);
-                  setServiceSubscriptionContractId('');
-                }}
-                value={customerEquipmentId}
-              >
-                <option value="">Not selected</option>
-                {equipment.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.deviceName} · {item.serialNumber}
-                  </option>
-                ))}
-              </select>
-            </TicketField>
-          </div>
-          {subscriptions.length ? (
-            <TicketField label="Service subscription (optional)">
-              <select
-                onChange={(event) => setServiceSubscriptionContractId(event.target.value)}
-                value={serviceSubscriptionContractId}
-              >
-                <option value="">No contract selected</option>
-                {subscriptions.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.number}
-                  </option>
-                ))}
-              </select>
-            </TicketField>
-          ) : null}
-        </DrawerSection>
-
-        <DrawerSection
-          index="2"
-          title="Ticket details"
-          description="Describe the issue in the customer’s language."
-        >
-          <div className="crm-ticket-form-grid">
-            <TicketField label="Channel">
-              <select
-                onChange={(event) => setChannel(event.target.value as CrmTicketChannel)}
-                value={channel}
-              >
-                {channels.map((item) => (
-                  <option key={item} value={item}>
-                    {channelLabel(item)}
-                  </option>
-                ))}
-              </select>
-            </TicketField>
-            <TicketField label="Category">
-              <select
-                onChange={(event) => setCategoryId(event.target.value)}
+                onChange={(event) => changeCustomer(event.target.value)}
                 required
-                value={categoryId}
+                value={customerPartnerId}
               >
-                {references.categories.map((item) => (
+                {references.customers.map((item) => (
                   <option key={item.id} value={item.id}>
                     {item.name}
                   </option>
                 ))}
               </select>
             </TicketField>
-          </div>
-          <TicketField label="Subject">
-            <input
-              maxLength={255}
-              onChange={(event) => setSubject(event.target.value)}
-              placeholder="Short description of the customer’s issue"
-              required
-              value={subject}
-            />
-          </TicketField>
-          <TicketField label="Details">
-            <textarea
-              maxLength={4000}
-              onChange={(event) => setDescription(event.target.value)}
-              placeholder="What happened, when it started, and what the customer needs"
-              required
-              rows={5}
-              value={description}
-            />
-          </TicketField>
-        </DrawerSection>
+            <div className="crm-ticket-form-grid">
+              <TicketField label="Location (optional)">
+                <select
+                  onChange={(event) => changeLocation(event.target.value)}
+                  value={customerLocationId}
+                >
+                  <option value="">Not selected</option>
+                  {locations.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.name}
+                    </option>
+                  ))}
+                </select>
+              </TicketField>
+              <TicketField label="Device (optional)">
+                <select
+                  disabled={!customerLocationId}
+                  onChange={(event) => {
+                    setCustomerEquipmentId(event.target.value);
+                    setServiceSubscriptionContractId('');
+                  }}
+                  value={customerEquipmentId}
+                >
+                  <option value="">Not selected</option>
+                  {equipment.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.deviceName} · {item.serialNumber}
+                    </option>
+                  ))}
+                </select>
+              </TicketField>
+            </div>
+            {subscriptions.length ? (
+              <TicketField label="Service subscription (optional)">
+                <select
+                  onChange={(event) => setServiceSubscriptionContractId(event.target.value)}
+                  value={serviceSubscriptionContractId}
+                >
+                  <option value="">No contract selected</option>
+                  {subscriptions.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.number}
+                    </option>
+                  ))}
+                </select>
+              </TicketField>
+            ) : null}
+          </DrawerSection>
 
-        <DrawerSection
-          index="3"
-          title="Ownership & SLA"
-          description="The ticket keeps the response and resolution times selected here."
-        >
-          <div className="crm-ticket-form-grid">
-            <TicketField label="Priority">
-              <select
-                onChange={(event) => setPriority(event.target.value as CrmTicketPriority)}
-                value={priority}
-              >
-                {priorities.map((item) => (
-                  <option key={item} value={item}>
-                    {priorityLabel(item)}
-                  </option>
-                ))}
-              </select>
+          <DrawerSection
+            index="2"
+            title="Ticket details"
+            description="Describe the issue in the customer’s language."
+          >
+            <div className="crm-ticket-form-grid">
+              <TicketField label="Channel">
+                <select
+                  onChange={(event) => setChannel(event.target.value as CrmTicketChannel)}
+                  value={channel}
+                >
+                  {channels.map((item) => (
+                    <option key={item} value={item}>
+                      {channelLabel(item)}
+                    </option>
+                  ))}
+                </select>
+              </TicketField>
+              <TicketField label="Category">
+                <select
+                  onChange={(event) => setCategoryId(event.target.value)}
+                  required
+                  value={categoryId}
+                >
+                  {references.categories.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.name}
+                    </option>
+                  ))}
+                </select>
+              </TicketField>
+            </div>
+            <TicketField label="Subject">
+              <input
+                maxLength={255}
+                onChange={(event) => setSubject(event.target.value)}
+                placeholder="Short description of the customer’s issue"
+                required
+                value={subject}
+              />
             </TicketField>
-            <TicketField label="Assigned to">
+            <TicketField label="Details">
+              <textarea
+                maxLength={4000}
+                onChange={(event) => setDescription(event.target.value)}
+                placeholder="What happened, when it started, and what the customer needs"
+                required
+                rows={5}
+                value={description}
+              />
+            </TicketField>
+          </DrawerSection>
+
+          <DrawerSection
+            index="3"
+            title="Ownership & SLA"
+            description="The ticket keeps the response and resolution times selected here."
+          >
+            <div className="crm-ticket-form-grid">
+              <TicketField label="Priority">
+                <select
+                  onChange={(event) => setPriority(event.target.value as CrmTicketPriority)}
+                  value={priority}
+                >
+                  {priorities.map((item) => (
+                    <option key={item} value={item}>
+                      {priorityLabel(item)}
+                    </option>
+                  ))}
+                </select>
+              </TicketField>
+              <TicketField label="Assigned to">
+                <select
+                  onChange={(event) => setAssignedToAccountId(event.target.value)}
+                  value={assignedToAccountId}
+                >
+                  <option value="">Leave unassigned</option>
+                  {references.assignees.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.displayName}
+                    </option>
+                  ))}
+                </select>
+              </TicketField>
+            </div>
+            <TicketField label="SLA rule">
               <select
-                onChange={(event) => setAssignedToAccountId(event.target.value)}
-                value={assignedToAccountId}
+                onChange={(event) => setSlaPolicyId(event.target.value)}
+                required
+                value={slaPolicyId}
               >
-                <option value="">Leave unassigned</option>
-                {references.assignees.map((item) => (
+                {policies.map((item) => (
                   <option key={item.id} value={item.id}>
-                    {item.displayName}
+                    {item.name} · respond {duration(item.responseMinutes)} · resolve{' '}
+                    {duration(item.resolutionMinutes)}
                   </option>
                 ))}
               </select>
             </TicketField>
-          </div>
-          <TicketField label="SLA rule">
-            <select
-              onChange={(event) => setSlaPolicyId(event.target.value)}
-              required
-              value={slaPolicyId}
-            >
-              {policies.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.name} · respond {duration(item.responseMinutes)} · resolve{' '}
-                  {duration(item.resolutionMinutes)}
-                </option>
-              ))}
-            </select>
-          </TicketField>
-          {!policies.length ? (
-            <InlineAlert tone="warning">
-              No active SLA rule applies to this priority. Ask a CRM administrator to configure one.
-            </InlineAlert>
-          ) : null}
-        </DrawerSection>
+            {!policies.length ? (
+              <InlineAlert tone="warning">
+                No active SLA rule applies to this priority. Ask a CRM administrator to configure
+                one.
+              </InlineAlert>
+            ) : null}
+          </DrawerSection>
+        </div>
         <DrawerActions
           busy={busy}
           disabled={!customerPartnerId || !categoryId || !slaPolicyId}

@@ -532,6 +532,7 @@ function WorkflowDrawer({
   const [error, setError] = useState<string | null>(null);
   const [acceptedByName, setAcceptedByName] = useState('');
   const [acceptanceNotes, setAcceptanceNotes] = useState('');
+  const [customerLocationId, setCustomerLocationId] = useState('');
 
   async function act(action: () => Promise<SalesWorkflow>, message: string) {
     setBusy(true);
@@ -580,6 +581,7 @@ function WorkflowDrawer({
         acceptSalesHandover(token, workflow.handover!.id, crypto.randomUUID(), {
           acceptedByName,
           ...(acceptanceNotes.trim() ? { acceptanceNotes } : {}),
+          customerLocationId,
           expectedVersion: workflow.handover!.version,
         }),
       'Customer acceptance recorded on the handover certificate.',
@@ -763,6 +765,9 @@ function WorkflowDrawer({
                 <span>
                   {workflow.handover.acceptedAt ? formatDateTime(workflow.handover.acceptedAt) : ''}
                 </span>
+                {workflow.handover.customerLocationName ? (
+                  <p>Received at {workflow.handover.customerLocationName}</p>
+                ) : null}
                 {workflow.handover.acceptanceNotes ? (
                   <p>{workflow.handover.acceptanceNotes}</p>
                 ) : null}
@@ -770,6 +775,22 @@ function WorkflowDrawer({
             </div>
           ) : canEdit ? (
             <div className="sales-handover-form">
+              <SalesField label="Receiving location">
+                <select
+                  onChange={(event) => setCustomerLocationId(event.target.value)}
+                  value={customerLocationId}
+                >
+                  <option value="">Choose customer location</option>
+                  {references.customerLocations
+                    .filter((location) => location.customerPartnerId === workflow.customerPartnerId)
+                    .map((location) => (
+                      <option key={location.id} value={location.id}>
+                        {location.name}
+                      </option>
+                    ))}
+                </select>
+                <small>Sold serial numbers will be registered to this location.</small>
+              </SalesField>
               <SalesField label="Customer representative">
                 <input
                   maxLength={255}
@@ -787,7 +808,7 @@ function WorkflowDrawer({
                 />
               </SalesField>
               <Button
-                disabled={busy || !acceptedByName.trim()}
+                disabled={busy || !acceptedByName.trim() || !customerLocationId}
                 onClick={() => void acceptHandover()}
               >
                 Record customer acceptance
@@ -937,6 +958,7 @@ function useSalesData(token: string) {
   const [references, setReferences] = useState<SalesReferenceData>({
     batches: [],
     customers: [],
+    customerLocations: [],
     products: [],
     serials: [],
     warehouses: [],

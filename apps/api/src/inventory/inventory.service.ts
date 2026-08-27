@@ -60,11 +60,21 @@ type TraceMovementRow = {
   actor_name: string;
   customer_id: string | null;
   customer_name: string | null;
-  event_type: 'issue' | 'receipt' | 'return' | 'stocktake';
+  event_type: SerialTraceEvent['eventType'];
+  goods_receipt_number: string | null;
+  handover_number: string | null;
+  handover_status: string | null;
   movement_id: string;
   occurred_at: string;
   reference_id: string;
   reference_type: string;
+  order_number: string | null;
+  purchase_order_number: string | null;
+  quotation_number: string | null;
+  return_disposition: string | null;
+  return_number: string | null;
+  return_reason: string | null;
+  shipment_number: string | null;
   supplier_id: string | null;
   supplier_name: string | null;
   technician_id: string | null;
@@ -88,10 +98,64 @@ type TraceTransferRow = Omit<
   to_warehouse_id: string;
   to_warehouse_name: string;
 };
+type TraceHandoverRow = {
+  accepted_at: string;
+  accepted_by_name: string;
+  certificate_id: string;
+  certificate_number: string;
+  customer_id: string;
+  customer_location_id: string | null;
+  customer_location_name: string | null;
+  customer_name: string;
+};
+type TraceReturnRow = {
+  actor_id: string;
+  actor_name: string;
+  created_at: string;
+  customer_id: string;
+  customer_location_id: string;
+  customer_location_name: string;
+  customer_name: string;
+  destination_warehouse_id: string;
+  destination_warehouse_name: string;
+  disposition: string;
+  reason: string;
+  return_id: string;
+  return_number: string;
+};
+type TraceServiceRow = {
+  actor_id: string;
+  actor_name: string;
+  completed_at: string | null;
+  completion_notes: string | null;
+  customer_id: string;
+  customer_location_id: string;
+  customer_location_name: string;
+  customer_name: string;
+  labor_cost_bgn: string | null;
+  labor_minutes: number | null;
+  part_summary: string | null;
+  parts_cost_bgn: string | null;
+  problem_description: string;
+  request_created_at: string;
+  request_id: string;
+  request_number: string;
+  scheduled_at: string | null;
+  scheduled_start: string | null;
+  service_type: string;
+  started_at: string | null;
+  technician_id: string | null;
+  technician_name: string | null;
+  total_cost_bgn: string | null;
+  transport_cost_bgn: string | null;
+  work_order_id: string | null;
+  work_order_number: string | null;
+};
 const traceMovementSelect = `SELECT movement.id AS movement_id,
-  CASE WHEN movement.movement_type = 'receipt' THEN 'receipt'
+  CASE WHEN shipment_line.id IS NOT NULL THEN 'sale'
+       WHEN movement.movement_type = 'receipt' THEN 'receipt'
        WHEN movement.movement_type = 'issue' THEN 'issue'
-       WHEN movement.movement_type = 'return_in' THEN 'return'
+       WHEN movement.movement_type = 'return_in' THEN 'return_received'
        ELSE 'stocktake' END AS event_type,
   movement.occurred_at::text, movement.reference_type, movement.reference_id,
   movement.unit_cost_bgn::text, warehouse.id AS warehouse_id,
@@ -100,6 +164,18 @@ const traceMovementSelect = `SELECT movement.id AS movement_id,
   supplier.display_name AS supplier_name, customer.id AS customer_id,
   customer.display_name AS customer_name, technician.id AS technician_id,
   technician_employee.display_name AS technician_name
+  , COALESCE(goods_receipt.supplier_delivery_reference,
+      'Receipt ' || left(goods_receipt.id::text, 8)) AS goods_receipt_number
+  , CASE WHEN purchase_order.id IS NOT NULL
+      THEN 'Order ' || left(purchase_order.id::text, 8) ELSE NULL END AS purchase_order_number
+  , shipment.shipment_number AS shipment_number
+  , sales_order.order_number AS order_number
+  , quotation.quotation_number AS quotation_number
+  , handover.certificate_number AS handover_number
+  , handover.status AS handover_status
+  , reverse_return.return_number AS return_number
+  , reverse_return.reason AS return_reason
+  , reverse_return_line.disposition AS return_disposition
 FROM inventory.stock_movements movement
 JOIN master_data.warehouses warehouse ON warehouse.id = movement.warehouse_id
 JOIN identity.user_accounts actor ON actor.id = movement.actor_account_id
@@ -107,7 +183,22 @@ JOIN identity.employees employee ON employee.id = actor.employee_id
 LEFT JOIN master_data.partners supplier ON supplier.id = movement.supplier_partner_id
 LEFT JOIN master_data.partners customer ON customer.id = movement.customer_partner_id
 LEFT JOIN identity.user_accounts technician ON technician.id = movement.technician_account_id
-LEFT JOIN identity.employees technician_employee ON technician_employee.id = technician.employee_id`;
+LEFT JOIN identity.employees technician_employee ON technician_employee.id = technician.employee_id
+LEFT JOIN procurement.goods_receipt_lines goods_receipt_line
+  ON goods_receipt_line.stock_movement_id = movement.id
+LEFT JOIN procurement.goods_receipts goods_receipt
+  ON goods_receipt.id = goods_receipt_line.goods_receipt_id
+LEFT JOIN procurement.purchase_orders purchase_order
+  ON purchase_order.id = goods_receipt.purchase_order_id
+LEFT JOIN sales.shipment_lines shipment_line ON shipment_line.stock_movement_id = movement.id
+LEFT JOIN sales.shipments shipment ON shipment.id = shipment_line.shipment_id
+LEFT JOIN sales.orders sales_order ON sales_order.id = shipment.order_id
+LEFT JOIN sales.quotations quotation ON quotation.id = sales_order.quotation_id
+LEFT JOIN sales.handover_certificates handover ON handover.shipment_id = shipment.id
+LEFT JOIN logistics.reverse_return_lines reverse_return_line
+  ON reverse_return_line.inventory_return_movement_id = movement.id
+LEFT JOIN logistics.reverse_returns reverse_return
+  ON reverse_return.id = reverse_return_line.reverse_return_id`;
 
 @Injectable()
 export class InventoryService {
@@ -191,6 +282,12 @@ export class InventoryService {
     const item = await this.database.getPool().query<{
       current_warehouse_id: string;
       current_warehouse_name: string;
+      customer_equipment_id: string | null;
+      customer_equipment_status: 'active' | 'retired' | 'under_repair' | null;
+      customer_id: string | null;
+      customer_location_id: string | null;
+      customer_location_name: string | null;
+      customer_name: string | null;
       issued_movement_id: string | null;
       product_id: string;
       product_name: string;
@@ -203,10 +300,20 @@ export class InventoryService {
       `SELECT item.id AS serial_item_id, item.serial_number, item.status,
          item.received_movement_id, item.issued_movement_id, item.stocktake_movement_id,
          product.id AS product_id, product.name AS product_name,
-         warehouse.id AS current_warehouse_id, warehouse.name AS current_warehouse_name
+         warehouse.id AS current_warehouse_id, warehouse.name AS current_warehouse_name,
+         equipment.id AS customer_equipment_id, equipment.status AS customer_equipment_status,
+         location.id AS customer_location_id, location.name AS customer_location_name,
+         customer.id AS customer_id, customer.display_name AS customer_name
        FROM inventory.serialized_items item
        JOIN master_data.products product ON product.id = item.product_id
        JOIN master_data.warehouses warehouse ON warehouse.id = item.warehouse_id
+       LEFT JOIN master_data.customer_equipment equipment
+         ON equipment.serialized_item_id = item.id
+          OR (equipment.product_id = item.product_id
+            AND upper(equipment.serial_number) = upper(item.serial_number))
+       LEFT JOIN master_data.customer_locations location
+         ON location.id = equipment.customer_location_id
+       LEFT JOIN master_data.partners customer ON customer.id = location.partner_id
        WHERE upper(item.serial_number) = $1`,
       [normalized],
     );
@@ -235,7 +342,7 @@ export class InventoryService {
         event.return_movement_id,
       ]),
     ].filter((id): id is string => Boolean(id));
-    const [movements, transfers] = await Promise.all([
+    const [movements, transfers, handovers, returns, serviceHistory] = await Promise.all([
       this.database.getPool().query<TraceMovementRow>(
         `${traceMovementSelect}
          WHERE movement.id = ANY($1::uuid[])`,
@@ -258,13 +365,132 @@ export class InventoryService {
          WHERE event.serialized_item_id = $1`,
         [row.serial_item_id],
       ),
+      this.database.getPool().query<TraceHandoverRow>(
+        `SELECT certificate.id AS certificate_id,
+                certificate.certificate_number, certificate.accepted_at::text,
+                certificate.accepted_by_name, customer.id AS customer_id,
+                customer.display_name AS customer_name,
+                location.id AS customer_location_id, location.name AS customer_location_name
+         FROM sales.handover_certificate_lines line
+         CROSS JOIN LATERAL unnest(line.serial_numbers) selected(serial_number)
+         JOIN sales.handover_certificates certificate ON certificate.id = line.certificate_id
+         JOIN master_data.partners customer ON customer.id = certificate.customer_partner_id
+         LEFT JOIN master_data.customer_locations location
+           ON location.id = certificate.customer_location_id
+         WHERE upper(selected.serial_number) = $1 AND certificate.status = 'accepted'
+         ORDER BY certificate.accepted_at, certificate.id`,
+        [normalized],
+      ),
+      this.database.getPool().query<TraceReturnRow>(
+        `SELECT reverse_return.id AS return_id, reverse_return.return_number,
+                reverse_return.reason, reverse_return.created_at::text,
+                line.disposition, warehouse.id AS destination_warehouse_id,
+                warehouse.name AS destination_warehouse_name,
+                customer.id AS customer_id, customer.display_name AS customer_name,
+                location.id AS customer_location_id, location.name AS customer_location_name,
+                actor.id AS actor_id, employee.display_name AS actor_name
+         FROM logistics.reverse_return_lines line
+         CROSS JOIN LATERAL unnest(line.serial_numbers) selected(serial_number)
+         JOIN logistics.reverse_returns reverse_return ON reverse_return.id = line.reverse_return_id
+         JOIN master_data.warehouses warehouse ON warehouse.id = line.destination_warehouse_id
+         JOIN master_data.partners customer ON customer.id = reverse_return.customer_partner_id
+         JOIN master_data.customer_locations location
+           ON location.id = reverse_return.customer_location_id
+         JOIN identity.user_accounts actor ON actor.id = reverse_return.created_by
+         JOIN identity.employees employee ON employee.id = actor.employee_id
+         WHERE upper(selected.serial_number) = $1
+         ORDER BY reverse_return.created_at, reverse_return.id`,
+        [normalized],
+      ),
+      this.database.getPool().query<TraceServiceRow>(
+        `SELECT request.id AS request_id, request.request_number,
+                request.created_at::text AS request_created_at, request.problem_description,
+                request.service_type, request.created_by AS actor_id,
+                actor_employee.display_name AS actor_name,
+                customer.id AS customer_id, customer.display_name AS customer_name,
+                location.id AS customer_location_id, location.name AS customer_location_name,
+                work_order.id AS work_order_id, work_order.work_order_number,
+                work_order.scheduled_start::text, work_order.started_at::text,
+                work_order.completed_at::text, work_order.completion_notes,
+                work_order.labor_minutes, work_order.labor_cost_bgn::text,
+                work_order.parts_cost_bgn::text, work_order.transport_cost_bgn::text,
+                work_order.total_cost_bgn::text,
+                technician.id AS technician_id,
+                technician_employee.display_name AS technician_name,
+                scheduled.changed_at::text AS scheduled_at, parts.part_summary
+         FROM service.requests request
+         JOIN master_data.customer_equipment equipment
+           ON equipment.id = request.customer_equipment_id
+         JOIN master_data.customer_locations location ON location.id = request.customer_location_id
+         JOIN master_data.partners customer ON customer.id = request.customer_partner_id
+         JOIN identity.user_accounts actor ON actor.id = request.created_by
+         JOIN identity.employees actor_employee ON actor_employee.id = actor.employee_id
+         LEFT JOIN service.work_orders work_order ON work_order.service_request_id = request.id
+         LEFT JOIN identity.user_accounts technician
+           ON technician.id = work_order.assigned_technician_account_id
+         LEFT JOIN identity.employees technician_employee
+           ON technician_employee.id = technician.employee_id
+         LEFT JOIN LATERAL (
+           SELECT min(history.changed_at) AS changed_at
+           FROM service.work_order_status_history history
+           WHERE history.work_order_id = work_order.id AND history.next_status = 'scheduled'
+         ) scheduled ON true
+         LEFT JOIN LATERAL (
+           SELECT string_agg(product.name || ' × ' || usage.quantity::text, ', '
+                     ORDER BY usage.recorded_at, usage.id) AS part_summary
+           FROM service.work_order_part_usages usage
+           JOIN master_data.products product ON product.id = usage.product_id
+           WHERE usage.work_order_id = work_order.id
+         ) parts ON true
+         WHERE equipment.serialized_item_id = $2
+            OR (equipment.product_id = $3 AND upper(equipment.serial_number) = $1)
+         ORDER BY request.created_at, request.id`,
+        [normalized, row.serial_item_id, row.product_id],
+      ),
     ]);
     const events: SerialTraceEvent[] = [
       ...movements.rows.map(traceMovement),
       ...transfers.rows.map(traceTransfer),
+      ...handovers.rows.map(traceHandover),
+      ...returns.rows.map(traceReturnRegistered),
+      ...serviceHistory.rows.flatMap(traceServiceEvents),
     ].sort((left, right) => left.occurredAt.localeCompare(right.occurredAt));
+    const recordedCustomer =
+      row.customer_id && row.customer_name
+        ? { id: row.customer_id, displayName: row.customer_name }
+        : [...events].reverse().find((event) => event.customer)?.customer;
+    const currentCustody: SerialTraceability['currentCustody'] =
+      row.customer_equipment_status === 'under_repair'
+        ? {
+            displayName: `Service · ${row.current_warehouse_name}`,
+            type: 'service',
+          }
+        : row.status === 'issued'
+          ? {
+              displayName:
+                row.customer_location_name ?? recordedCustomer?.displayName ?? 'Customer',
+              type: 'customer',
+            }
+          : { displayName: row.current_warehouse_name, type: 'warehouse' };
     return {
       currentWarehouse: { id: row.current_warehouse_id, displayName: row.current_warehouse_name },
+      currentCustody,
+      ...(recordedCustomer ? { customer: recordedCustomer } : {}),
+      ...(row.customer_equipment_id &&
+      row.customer_equipment_status &&
+      row.customer_location_id &&
+      row.customer_location_name
+        ? {
+            customerEquipment: {
+              id: row.customer_equipment_id,
+              location: {
+                id: row.customer_location_id,
+                displayName: row.customer_location_name,
+              },
+              status: row.customer_equipment_status,
+            },
+          }
+        : {}),
       events,
       product: { id: row.product_id, displayName: row.product_name },
       serialItemId: row.serial_item_id,
@@ -1679,13 +1905,40 @@ function reservation(row: ReservationRow, serialItemIds: string[]): StockReserva
   };
 }
 function traceMovement(row: TraceMovementRow): SerialTraceEvent {
+  const details: SerialTraceEvent['details'] = [];
+  if (row.goods_receipt_number)
+    details.push({ label: 'Goods receipt', value: row.goods_receipt_number });
+  if (row.purchase_order_number)
+    details.push({ label: 'Purchase order', value: row.purchase_order_number });
+  if (row.quotation_number) details.push({ label: 'Quotation', value: row.quotation_number });
+  if (row.order_number) details.push({ label: 'Sales order', value: row.order_number });
+  if (row.handover_number) details.push({ label: 'Handover', value: row.handover_number });
+  if (row.return_reason) details.push({ label: 'Return reason', value: row.return_reason });
+  if (row.return_disposition)
+    details.push({ label: 'Next step', value: humanToken(row.return_disposition) });
+  const reference =
+    row.shipment_number ?? row.return_number ?? row.goods_receipt_number ?? row.reference_id;
   return {
     actor: { id: row.actor_id, displayName: row.actor_name },
+    ...(row.event_type === 'sale'
+      ? { description: 'The item left inventory for the customer.' }
+      : row.event_type === 'return_received'
+        ? { description: 'The returned item was received into the destination warehouse.' }
+        : {}),
+    ...(details.length ? { details } : {}),
+    eventId: `movement:${row.movement_id}`,
     eventType: row.event_type,
     movementId: row.movement_id,
     occurredAt: row.occurred_at,
-    referenceId: row.reference_id,
-    referenceType: row.reference_type,
+    referenceId: reference,
+    referenceType:
+      row.event_type === 'sale'
+        ? 'Sales shipment'
+        : row.event_type === 'return_received'
+          ? 'Customer return'
+          : row.goods_receipt_number
+            ? 'Supplier delivery'
+            : humanToken(row.reference_type),
     unitCostBgn: row.unit_cost_bgn,
     warehouse: { id: row.warehouse_id, displayName: row.warehouse_name },
     ...(row.supplier_id && row.supplier_name
@@ -1702,6 +1955,7 @@ function traceMovement(row: TraceMovementRow): SerialTraceEvent {
 function traceTransfer(row: TraceTransferRow): SerialTraceEvent {
   return {
     actor: { id: row.actor_id, displayName: row.actor_name },
+    eventId: `transfer:${row.movement_id}`,
     eventType: 'transfer',
     fromWarehouse: { id: row.from_warehouse_id, displayName: row.from_warehouse_name },
     movementId: row.movement_id,
@@ -1712,6 +1966,123 @@ function traceTransfer(row: TraceTransferRow): SerialTraceEvent {
     unitCostBgn: row.unit_cost_bgn,
     warehouse: { id: row.warehouse_id, displayName: row.warehouse_name },
   };
+}
+
+function traceHandover(row: TraceHandoverRow): SerialTraceEvent {
+  return {
+    customer: { id: row.customer_id, displayName: row.customer_name },
+    ...(row.customer_location_id && row.customer_location_name
+      ? {
+          customerLocation: {
+            id: row.customer_location_id,
+            displayName: row.customer_location_name,
+          },
+        }
+      : {}),
+    details: [{ label: 'Accepted by', value: row.accepted_by_name }],
+    eventId: `handover:${row.certificate_id}`,
+    eventType: 'handover',
+    occurredAt: row.accepted_at,
+    referenceId: row.certificate_number,
+    referenceType: 'Equipment handover',
+  };
+}
+
+function traceReturnRegistered(row: TraceReturnRow): SerialTraceEvent {
+  return {
+    actor: { id: row.actor_id, displayName: row.actor_name },
+    customer: { id: row.customer_id, displayName: row.customer_name },
+    customerLocation: {
+      id: row.customer_location_id,
+      displayName: row.customer_location_name,
+    },
+    description: row.reason,
+    details: [{ label: 'Next step', value: humanToken(row.disposition) }],
+    eventId: `return-registered:${row.return_id}`,
+    eventType: 'return_registered',
+    occurredAt: row.created_at,
+    referenceId: row.return_number,
+    referenceType: 'Customer return',
+    toWarehouse: {
+      id: row.destination_warehouse_id,
+      displayName: row.destination_warehouse_name,
+    },
+  };
+}
+
+function traceServiceEvents(row: TraceServiceRow): SerialTraceEvent[] {
+  const customer = { id: row.customer_id, displayName: row.customer_name };
+  const customerLocation = {
+    id: row.customer_location_id,
+    displayName: row.customer_location_name,
+  };
+  const technician =
+    row.technician_id && row.technician_name
+      ? { id: row.technician_id, displayName: row.technician_name }
+      : undefined;
+  const events: SerialTraceEvent[] = [
+    {
+      actor: { id: row.actor_id, displayName: row.actor_name },
+      customer,
+      customerLocation,
+      description: row.problem_description,
+      details: [{ label: 'Service type', value: humanToken(row.service_type) }],
+      eventId: `service-request:${row.request_id}`,
+      eventType: 'service_requested',
+      occurredAt: row.request_created_at,
+      referenceId: row.request_number,
+      referenceType: 'Service request',
+    },
+  ];
+  if (row.work_order_id && row.work_order_number && row.scheduled_start)
+    events.push({
+      customer,
+      customerLocation,
+      ...(technician ? { technician } : {}),
+      details: [{ label: 'Appointment', value: row.scheduled_start }],
+      eventId: `service-scheduled:${row.work_order_id}`,
+      eventType: 'service_scheduled',
+      occurredAt: row.scheduled_at ?? row.request_created_at,
+      referenceId: row.work_order_number,
+      referenceType: 'Service work order',
+    });
+  if (row.work_order_id && row.work_order_number && row.started_at)
+    events.push({
+      customer,
+      customerLocation,
+      ...(technician ? { technician } : {}),
+      eventId: `service-started:${row.work_order_id}`,
+      eventType: 'service_started',
+      occurredAt: row.started_at,
+      referenceId: row.work_order_number,
+      referenceType: 'Service work order',
+    });
+  if (row.work_order_id && row.work_order_number && row.completed_at) {
+    const details: NonNullable<SerialTraceEvent['details']> = [];
+    if (row.labor_minutes !== null)
+      details.push({ label: 'Working time', value: `${row.labor_minutes} minutes` });
+    if (row.part_summary) details.push({ label: 'Parts used', value: row.part_summary });
+    if (row.total_cost_bgn)
+      details.push({ label: 'Repair cost', value: `BGN ${row.total_cost_bgn}` });
+    events.push({
+      customer,
+      customerLocation,
+      ...(row.completion_notes ? { description: row.completion_notes } : {}),
+      ...(technician ? { technician } : {}),
+      ...(details.length ? { details } : {}),
+      eventId: `repair-completed:${row.work_order_id}`,
+      eventType: 'repair_completed',
+      occurredAt: row.completed_at,
+      referenceId: row.work_order_number,
+      referenceType: 'Service work order',
+    });
+  }
+  return events;
+}
+
+function humanToken(value: string): string {
+  const text = value.replaceAll('_', ' ');
+  return `${text.charAt(0).toUpperCase()}${text.slice(1)}`;
 }
 function clean(value: string, code: string) {
   const result = value.trim().replace(/\s+/gu, ' ');

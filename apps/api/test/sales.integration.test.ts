@@ -14,6 +14,7 @@ import type {
   SalesReferenceData,
   SalesResolvedPrice,
   SalesWorkflow,
+  SerialTraceability,
   ServiceSubscriptionContract,
   FinanceBankStatement,
   FinanceAgingReport,
@@ -121,10 +122,10 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
     );
     await migrateUp(database, migrationDirectory);
     expect(await migrateDown(database, migrationDirectory)).toBe(
-      '0045_service_operational_reports',
+      '0046_serial_lifecycle_traceability',
     );
     expect(await migrateUp(database, migrationDirectory)).toContain(
-      '0045_service_operational_reports',
+      '0046_serial_lifecycle_traceability',
     );
 
     Object.assign(process.env, {
@@ -182,6 +183,7 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
     await grantFinancePermissions(database, creatorId, ['create', 'edit', 'view']);
     await grantFinancePermissions(database, viewerId, ['view']);
     await grantServicePermissions(database, creatorId, ['approve', 'create', 'edit', 'view']);
+    await grantWarehouseViewPermission(database, creatorId);
     await grantCrmPermissions(database, creatorId, ['create', 'edit', 'view']);
     await grantLogisticsPermissions(database, creatorId, ['create', 'edit', 'view']);
     await grantLogisticsPermissions(database, viewerId, ['view']);
@@ -309,6 +311,7 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
       .send({
         acceptanceNotes: 'Equipment received in good condition.',
         acceptedByName: 'Customer Representative',
+        customerLocationId,
         expectedVersion: shipped.handover?.version,
       })
       .expect(200);
@@ -316,6 +319,7 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
     expect(accepted.handover).toMatchObject({
       acceptanceNotes: 'Equipment received in good condition.',
       acceptedByName: 'Customer Representative',
+      customerLocationId,
       status: 'accepted',
       version: 2,
     });
@@ -2937,6 +2941,36 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
       financialDocumentNumber: financeDraft.number,
     });
 
+    const serialTraceResponse = await request(application.getHttpServer())
+      .get(`/api/v1/warehouse/serial-traceability/${encodeURIComponent(serialNumber)}`)
+      .set('authorization', `Bearer ${token}`)
+      .expect(200);
+    const serialTrace = serialTraceResponse.body as SerialTraceability;
+    expect(serialTrace).toMatchObject({
+      currentCustody: { type: 'customer' },
+      customer: { id: customerId },
+      customerEquipment: {
+        id: equipmentId,
+        location: { id: customerLocationId },
+        status: 'active',
+      },
+    });
+    expect(serialTrace.events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ eventType: 'receipt' }),
+        expect.objectContaining({ eventType: 'sale' }),
+        expect.objectContaining({ eventType: 'handover' }),
+        expect.objectContaining({ eventType: 'return_registered' }),
+        expect.objectContaining({ eventType: 'service_requested' }),
+        expect.objectContaining({ eventType: 'service_scheduled' }),
+        expect.objectContaining({ eventType: 'service_started' }),
+        expect.objectContaining({ eventType: 'repair_completed' }),
+      ]),
+    );
+    expect(
+      serialTrace.events.find((event) => event.eventType === 'repair_completed')?.technician,
+    ).toMatchObject({ id: creatorAccountId });
+
     await database.query(
       "UPDATE master_data.customer_equipment SET status = 'retired' WHERE id = $1",
       [equipmentId],
@@ -3333,6 +3367,25 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
     expect(received.lines[0]?.inventoryReturnMovementId).toBeTruthy();
     expect(received.lines[0]?.serviceRequestNumber).toMatch(/^SRV-/u);
 
+    const returnedTraceResponse = await request(application.getHttpServer())
+      .get(`/api/v1/warehouse/serial-traceability/${encodeURIComponent(serialNumber)}`)
+      .set('authorization', `Bearer ${token}`)
+      .expect(200);
+    const returnedTrace = returnedTraceResponse.body as SerialTraceability;
+    expect(returnedTrace.currentCustody.type).toBe('warehouse');
+    expect(returnedTrace.events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          eventType: 'return_received',
+          referenceId: received.number,
+        }),
+        expect.objectContaining({
+          eventType: 'service_requested',
+          referenceId: received.lines[0]?.serviceRequestNumber,
+        }),
+      ]),
+    );
+
     const receiveReplay = await request(application.getHttpServer())
       .post(`/api/v1/logistics/returns/${registeredLogisticsReturnId}/receive`)
       .set('authorization', `Bearer ${token}`)
@@ -3503,6 +3556,28 @@ async function grantServicePermissions(
       permission.rows[0]?.id,
     ]);
   }
+  await pool.query('INSERT INTO iam.account_roles (account_id, role_id) VALUES ($1, $2)', [
+    accountId,
+    roleId,
+  ]);
+}
+
+async function grantWarehouseViewPermission(pool: Pool, accountId: string) {
+  const roleId = randomUUID();
+  await pool.query('INSERT INTO iam.roles (id, code, name) VALUES ($1, $2, $3)', [
+    roleId,
+    `warehouse-${randomUUID()}`,
+    'Warehouse trace test role',
+  ]);
+  const permission = await pool.query<{ id: string }>(
+    `INSERT INTO iam.permissions (id, module, action) VALUES ($1, 'erp.warehouse', 'view')
+     ON CONFLICT (module, action) DO UPDATE SET module = EXCLUDED.module RETURNING id`,
+    [randomUUID()],
+  );
+  await pool.query('INSERT INTO iam.role_permissions (role_id, permission_id) VALUES ($1, $2)', [
+    roleId,
+    permission.rows[0]?.id,
+  ]);
   await pool.query('INSERT INTO iam.account_roles (account_id, role_id) VALUES ($1, $2)', [
     accountId,
     roleId,
@@ -3724,7 +3799,7 @@ async function seedSalesData(pool: Pool, actorId: string, runId: string) {
        purchase_date, warranty_start_date, warranty_end_date, created_by, updated_by
      ) VALUES ($1, $2, $3, 'Installed fiscal register', $4, '2026-01-01',
        '2026-01-01', '2027-01-01', $5, $5)`,
-    [equipmentId, customerLocationId, serialProductId, `INSTALLED-${runId}`, actorId],
+    [equipmentId, customerLocationId, serialProductId, serialNumber, actorId],
   );
   return {
     customerId,

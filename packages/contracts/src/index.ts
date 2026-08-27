@@ -1051,6 +1051,11 @@ export interface SalesReferenceData {
     warehouseId: string;
   }>;
   customers: Array<{ id: string; name: string }>;
+  customerLocations: Array<{
+    customerPartnerId: string;
+    id: string;
+    name: string;
+  }>;
   products: Array<{
     id: string;
     name: string;
@@ -1155,6 +1160,8 @@ export interface SalesHandoverCertificate {
   acceptanceNotes?: string;
   acceptedAt?: string;
   acceptedByName?: string;
+  customerLocationId?: string;
+  customerLocationName?: string;
   id: string;
   lines: SalesHandoverCertificateLine[];
   number: string;
@@ -1166,6 +1173,7 @@ export interface SalesHandoverCertificate {
 export interface AcceptSalesHandoverRequest {
   acceptedByName: string;
   acceptanceNotes?: string;
+  customerLocationId: string;
   expectedVersion: number;
 }
 
@@ -3551,28 +3559,58 @@ export interface ReplenishmentStatus {
   warehouseId: string;
 }
 
-export type SerialTraceEventType = 'receipt' | 'transfer' | 'issue' | 'return' | 'stocktake';
+export type SerialTraceEventType =
+  | 'receipt'
+  | 'transfer'
+  | 'sale'
+  | 'handover'
+  | 'issue'
+  | 'return_registered'
+  | 'return_received'
+  | 'service_requested'
+  | 'service_scheduled'
+  | 'service_started'
+  | 'repair_completed'
+  | 'stocktake';
 export interface SerialTraceParty {
   displayName: string;
   id: string;
 }
+export interface SerialTraceDetail {
+  label: string;
+  value: string;
+}
 export interface SerialTraceEvent {
-  actor: SerialTraceParty;
+  actor?: SerialTraceParty;
   customer?: SerialTraceParty;
+  customerLocation?: SerialTraceParty;
+  description?: string;
+  details?: SerialTraceDetail[];
+  eventId: string;
   eventType: SerialTraceEventType;
   fromWarehouse?: SerialTraceParty;
-  movementId: string;
+  movementId?: string;
   occurredAt: string;
   referenceId: string;
   referenceType: string;
   supplier?: SerialTraceParty;
   technician?: SerialTraceParty;
   toWarehouse?: SerialTraceParty;
-  unitCostBgn: string;
-  warehouse: SerialTraceParty;
+  unitCostBgn?: string;
+  warehouse?: SerialTraceParty;
 }
 export interface SerialTraceability {
-  currentWarehouse: SerialTraceParty;
+  currentCustody: {
+    displayName: string;
+    type: 'customer' | 'service' | 'warehouse';
+  };
+  currentWarehouse?: SerialTraceParty;
+  customer?: SerialTraceParty;
+  customerEquipment?: {
+    id: string;
+    location: SerialTraceParty;
+    status: CustomerEquipmentStatus;
+  };
   events: SerialTraceEvent[];
   product: SerialTraceParty;
   serialItemId: string;

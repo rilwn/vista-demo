@@ -22,6 +22,7 @@ import { AppModule } from '../src/app.module.js';
 import { PasswordService } from '../src/auth/password.service.js';
 import { configureHttpApplication } from '../src/common/http-application.js';
 import { APP_ENVIRONMENT } from '../src/config/config.module.js';
+import { fixtureId } from '../src/database/development-fixtures.js';
 import { migrateDown, migrateUp } from '../src/database/migration-runner.js';
 
 const runInfrastructureTests = process.env['RUN_INFRASTRUCTURE_TESTS'] === 'true';
@@ -59,16 +60,24 @@ describe.skipIf(!runInfrastructureTests)('purchase order to warehouse receipt', 
       new URL('../src/database/migrations', import.meta.url),
     );
     await migrateUp(database, migrationDirectory);
-    const salesRolledBack = await migrateDown(database, migrationDirectory);
+    const laterMigrationsRolledBack: string[] = [];
+    let salesRolledBack = await migrateDown(database, migrationDirectory);
+    while (salesRolledBack && salesRolledBack !== '0026_sales_workflow_foundation') {
+      laterMigrationsRolledBack.push(salesRolledBack);
+      salesRolledBack = await migrateDown(database, migrationDirectory);
+    }
     if (salesRolledBack !== '0026_sales_workflow_foundation')
       throw new Error(`Expected migration 0026 rollback, received ${salesRolledBack ?? 'none'}`);
+    if (!laterMigrationsRolledBack.includes('0046_serial_lifecycle_traceability'))
+      throw new Error('The serial lifecycle migration was not exercised during rollback');
     const rolledBack = await migrateDown(database, migrationDirectory);
     if (rolledBack !== '0025_procurement_supplier_controls')
       throw new Error(`Expected migration 0025 rollback, received ${rolledBack ?? 'none'}`);
     const reapplied = await migrateUp(database, migrationDirectory);
     if (
       !reapplied.includes('0025_procurement_supplier_controls') ||
-      !reapplied.includes('0026_sales_workflow_foundation')
+      !reapplied.includes('0026_sales_workflow_foundation') ||
+      !reapplied.includes('0046_serial_lifecycle_traceability')
     )
       throw new Error('Migrations 0025 and 0026 could not be reapplied');
 
@@ -387,7 +396,14 @@ describe.skipIf(!runInfrastructureTests)('purchase order to warehouse receipt', 
     const invoiceInput = {
       invoiceDate: '2099-09-02',
       invoiceNumber: `SUP-${runId.slice(0, 12)}`,
-      lines: [{ orderLineId: orderLine.id, quantity: '2', unitPrice: '12' }],
+      lines: [
+        {
+          orderLineId: orderLine.id,
+          quantity: '2',
+          unitPrice: '12',
+          vatTreatment: 'zero',
+        },
+      ],
       purchaseOrderId: order.id,
     };
     const invoiceKey = `supplier-invoice-${runId}`;
@@ -549,13 +565,15 @@ async function grantPermissions(
 }
 
 async function seedMasterData(pool: Pool, actorId: string, runId: string) {
-  const supplierId = randomUUID();
-  const warehouseId = randomUUID();
+  // Exercise the same stable PostgreSQL UUIDs exposed by the development UI,
+  // not only random version-4 identifiers generated inside the test.
+  const supplierId = fixtureId('partner:supplier');
+  const warehouseId = fixtureId('warehouse:central');
   const ordinaryCategoryId = randomUUID();
   const serialCategoryId = randomUUID();
   const unitId = randomUUID();
-  const ordinaryProductId = randomUUID();
-  const serialProductId = randomUUID();
+  const ordinaryProductId = fixtureId('catalog:product:adapter');
+  const serialProductId = fixtureId('catalog:product:fiscal-register');
   await pool.query(
     `INSERT INTO master_data.partners (id, kind, display_name, created_by, updated_by)
      VALUES ($1, 'legal_entity', $2, $3, $3)`,

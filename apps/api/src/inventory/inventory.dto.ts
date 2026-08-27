@@ -25,6 +25,7 @@ import {
   type ReturnStockRequest,
   type ReplenishmentStatus,
   type SerialTraceability,
+  type SerialTraceDetail,
   type SerialTraceEvent,
   type SerialTraceParty,
   type StockBalance,
@@ -412,24 +413,63 @@ export class SerialTracePartyDto implements SerialTraceParty {
   @ApiProperty({ type: String }) displayName!: string;
   @ApiProperty({ type: String, format: 'uuid' }) id!: string;
 }
+export class SerialTraceDetailDto implements SerialTraceDetail {
+  @ApiProperty({ type: String }) label!: string;
+  @ApiProperty({ type: String }) value!: string;
+}
 export class SerialTraceEventDto implements SerialTraceEvent {
-  @ApiProperty({ type: SerialTracePartyDto }) actor!: SerialTraceParty;
+  @ApiPropertyOptional({ type: SerialTracePartyDto }) actor?: SerialTraceParty;
   @ApiPropertyOptional({ type: SerialTracePartyDto }) customer?: SerialTraceParty;
-  @ApiProperty({ enum: ['receipt', 'transfer', 'issue', 'return', 'stocktake'] })
+  @ApiPropertyOptional({ type: SerialTracePartyDto }) customerLocation?: SerialTraceParty;
+  @ApiPropertyOptional({ type: String }) description?: string;
+  @ApiPropertyOptional({ type: [SerialTraceDetailDto] }) details?: SerialTraceDetail[];
+  @ApiProperty({ type: String }) eventId!: string;
+  @ApiProperty({
+    enum: [
+      'receipt',
+      'transfer',
+      'sale',
+      'handover',
+      'issue',
+      'return_registered',
+      'return_received',
+      'service_requested',
+      'service_scheduled',
+      'service_started',
+      'repair_completed',
+      'stocktake',
+    ],
+  })
   eventType!: SerialTraceEvent['eventType'];
   @ApiPropertyOptional({ type: SerialTracePartyDto }) fromWarehouse?: SerialTraceParty;
-  @ApiProperty({ type: String, format: 'uuid' }) movementId!: string;
+  @ApiPropertyOptional({ type: String, format: 'uuid' }) movementId?: string;
   @ApiProperty({ type: String, format: 'date-time' }) occurredAt!: string;
   @ApiProperty({ type: String }) referenceId!: string;
   @ApiProperty({ type: String }) referenceType!: string;
   @ApiPropertyOptional({ type: SerialTracePartyDto }) supplier?: SerialTraceParty;
   @ApiPropertyOptional({ type: SerialTracePartyDto }) technician?: SerialTraceParty;
   @ApiPropertyOptional({ type: SerialTracePartyDto }) toWarehouse?: SerialTraceParty;
-  @ApiProperty({ type: String }) unitCostBgn!: string;
-  @ApiProperty({ type: SerialTracePartyDto }) warehouse!: SerialTraceParty;
+  @ApiPropertyOptional({ type: String }) unitCostBgn?: string;
+  @ApiPropertyOptional({ type: SerialTracePartyDto }) warehouse?: SerialTraceParty;
+}
+class SerialTraceCustomerEquipmentDto {
+  @ApiProperty({ format: 'uuid', type: String }) id!: string;
+  @ApiProperty({ type: SerialTracePartyDto }) location!: SerialTraceParty;
+  @ApiProperty({ enum: ['active', 'under_repair', 'retired'] })
+  status!: 'active' | 'under_repair' | 'retired';
+}
+class SerialTraceCustodyDto {
+  @ApiProperty({ type: String }) displayName!: string;
+  @ApiProperty({ enum: ['customer', 'service', 'warehouse'] })
+  type!: 'customer' | 'service' | 'warehouse';
 }
 export class SerialTraceabilityDto implements SerialTraceability {
-  @ApiProperty({ type: SerialTracePartyDto }) currentWarehouse!: SerialTraceParty;
+  @ApiProperty({ type: SerialTraceCustodyDto })
+  currentCustody!: SerialTraceability['currentCustody'];
+  @ApiPropertyOptional({ type: SerialTracePartyDto }) currentWarehouse?: SerialTraceParty;
+  @ApiPropertyOptional({ type: SerialTracePartyDto }) customer?: SerialTraceParty;
+  @ApiPropertyOptional({ type: SerialTraceCustomerEquipmentDto })
+  customerEquipment?: NonNullable<SerialTraceability['customerEquipment']>;
   @ApiProperty({ type: [SerialTraceEventDto] }) events!: SerialTraceEvent[];
   @ApiProperty({ type: SerialTracePartyDto }) product!: SerialTraceParty;
   @ApiProperty({ type: String, format: 'uuid' }) serialItemId!: string;

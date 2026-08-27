@@ -62,56 +62,68 @@ export class SalesService {
   ) {}
 
   async referenceData(): Promise<SalesReferenceData> {
-    const [customers, products, warehouses, serials, batches] = await Promise.all([
-      this.database.getPool().query<{ id: string; name: string }>(
-        `SELECT partner.id, partner.display_name AS name
+    const [customers, customerLocations, products, warehouses, serials, batches] =
+      await Promise.all([
+        this.database.getPool().query<{ id: string; name: string }>(
+          `SELECT partner.id, partner.display_name AS name
          FROM master_data.partners partner
          JOIN master_data.partner_roles role ON role.partner_id = partner.id
          WHERE partner.active AND role.role = 'customer'
          ORDER BY partner.display_name, partner.id`,
-      ),
-      this.database.getPool().query<{
-        id: string;
-        name: string;
-        product_code: string;
-        tracking_mode: SalesReferenceData['products'][number]['trackingMode'];
-      }>(
-        `SELECT product.id, product.name, product.product_code, category.tracking_mode
+        ),
+        this.database.getPool().query<{
+          customer_partner_id: string;
+          id: string;
+          name: string;
+        }>(
+          `SELECT location.id, location.partner_id AS customer_partner_id, location.name
+         FROM master_data.customer_locations location
+         JOIN master_data.partners partner ON partner.id = location.partner_id
+         WHERE location.active AND partner.active
+         ORDER BY partner.display_name, location.name, location.id`,
+        ),
+        this.database.getPool().query<{
+          id: string;
+          name: string;
+          product_code: string;
+          tracking_mode: SalesReferenceData['products'][number]['trackingMode'];
+        }>(
+          `SELECT product.id, product.name, product.product_code, category.tracking_mode
          FROM master_data.products product
          JOIN master_data.product_categories category ON category.id = product.category_id
          WHERE product.active AND category.active
          ORDER BY product.name, product.id`,
-      ),
-      this.database
-        .getPool()
-        .query<{ id: string; name: string }>(
-          `SELECT id, name FROM master_data.warehouses WHERE active ORDER BY name, id`,
         ),
-      this.database.getPool().query<{
-        product_id: string;
-        serial_number: string;
-        warehouse_id: string;
-      }>(
-        `SELECT item.product_id, item.serial_number, item.warehouse_id
+        this.database
+          .getPool()
+          .query<{ id: string; name: string }>(
+            `SELECT id, name FROM master_data.warehouses WHERE active ORDER BY name, id`,
+          ),
+        this.database.getPool().query<{
+          product_id: string;
+          serial_number: string;
+          warehouse_id: string;
+        }>(
+          `SELECT item.product_id, item.serial_number, item.warehouse_id
          FROM inventory.serialized_items item
          WHERE item.status = 'available' AND NOT EXISTS (
            SELECT 1 FROM inventory.stock_reservation_serials reserved
            WHERE reserved.serialized_item_id = item.id AND reserved.active
          ) ORDER BY item.serial_number`,
-      ),
-      this.database.getPool().query<{
-        batch_number: string;
-        product_id: string;
-        quantity: string;
-        warehouse_id: string;
-      }>(
-        `SELECT batch.product_id, batch.batch_number, balance.warehouse_id,
+        ),
+        this.database.getPool().query<{
+          batch_number: string;
+          product_id: string;
+          quantity: string;
+          warehouse_id: string;
+        }>(
+          `SELECT batch.product_id, batch.batch_number, balance.warehouse_id,
                 balance.quantity::text
          FROM inventory.batch_stock_balances balance
          JOIN inventory.batches batch ON batch.id = balance.batch_id
          WHERE balance.quantity > 0 ORDER BY batch.batch_number`,
-      ),
-    ]);
+        ),
+      ]);
     return {
       batches: batches.rows.map((row) => ({
         batchNumber: row.batch_number,
@@ -120,6 +132,11 @@ export class SalesService {
         warehouseId: row.warehouse_id,
       })),
       customers: customers.rows,
+      customerLocations: customerLocations.rows.map((row) => ({
+        customerPartnerId: row.customer_partner_id,
+        id: row.id,
+        name: row.name,
+      })),
       products: products.rows.map((row) => ({
         id: row.id,
         name: row.name,
@@ -709,13 +726,18 @@ export class SalesService {
       normalized,
       async (client, commandKey) => {
         const current = await client.query<{
+          customer_partner_id: string;
           quotation_id: string;
+          shipped_on: string;
           status: SalesHandoverCertificate['status'];
           version: number;
         }>(
-          `SELECT orders.quotation_id, certificate.status, certificate.version
+          `SELECT orders.quotation_id, certificate.customer_partner_id,
+                  shipment.shipped_at::date::text AS shipped_on,
+                  certificate.status, certificate.version
            FROM sales.handover_certificates certificate
            JOIN sales.orders orders ON orders.id = certificate.order_id
+           JOIN sales.shipments shipment ON shipment.id = certificate.shipment_id
            WHERE certificate.id = $1 FOR UPDATE OF certificate`,
           [certificateId],
         );
@@ -738,14 +760,55 @@ export class SalesService {
             'The handover certificate changed after it was opened. Refresh and try again.',
             HttpStatus.CONFLICT,
           );
+        const location = await client.query<{ id: string; name: string }>(
+          `SELECT location.id, location.name
+           FROM master_data.customer_locations location
+           WHERE location.id = $1 AND location.partner_id = $2 AND location.active
+           FOR KEY SHARE`,
+          [normalized.customerLocationId, row.customer_partner_id],
+        );
+        if (!location.rowCount)
+          throw new ApiErrorException(
+            'SALES_HANDOVER_LOCATION_NOT_FOUND',
+            'Choose an active location belonging to this customer.',
+            HttpStatus.BAD_REQUEST,
+          );
+        const equipmentChanges = await this.registerHandoverEquipment(
+          client,
+          certificateId,
+          normalized.customerLocationId,
+          row.shipped_on,
+          auth.accountId,
+        );
         await client.query(
           `UPDATE sales.handover_certificates
            SET status = 'accepted', accepted_by_name = $2, acceptance_notes = $3,
-               accepted_at = now(), version = version + 1, updated_at = now()
+               customer_location_id = $4, accepted_at = now(), version = version + 1,
+               updated_at = now()
            WHERE id = $1`,
-          [certificateId, normalized.acceptedByName, normalized.acceptanceNotes ?? null],
+          [
+            certificateId,
+            normalized.acceptedByName,
+            normalized.acceptanceNotes ?? null,
+            normalized.customerLocationId,
+          ],
         );
         const workflow = await this.loadWorkflow(client, row.quotation_id);
+        for (const equipment of equipmentChanges)
+          await this.sideEffects(
+            client,
+            'customer_equipment',
+            equipment.id,
+            equipment.eventType,
+            {
+              customerLocationId: normalized.customerLocationId,
+              handoverCertificateId: certificateId,
+              serialNumber: equipment.serialNumber,
+            },
+            auth,
+            metadata,
+            `${commandKey}:${equipment.id}`,
+          );
         await this.sideEffects(
           client,
           'sales_handover_certificate',
@@ -759,6 +822,117 @@ export class SalesService {
         return workflow;
       },
     );
+  }
+
+  private async registerHandoverEquipment(
+    client: PoolClient,
+    certificateId: string,
+    customerLocationId: string,
+    purchaseDate: string,
+    actorAccountId: string,
+  ): Promise<
+    Array<{
+      eventType:
+        | 'master_data.customer_equipment.linked-to-stock-item'
+        | 'master_data.customer_equipment.registered-from-sale';
+      id: string;
+      serialNumber: string;
+    }>
+  > {
+    const changes: Array<{
+      eventType:
+        | 'master_data.customer_equipment.linked-to-stock-item'
+        | 'master_data.customer_equipment.registered-from-sale';
+      id: string;
+      serialNumber: string;
+    }> = [];
+    const soldItems = await client.query<{
+      product_id: string;
+      product_name: string;
+      serial_item_id: string | null;
+      serial_number: string;
+    }>(
+      `SELECT line.product_id, line.product_name, item.id AS serial_item_id,
+              selected.serial_number
+       FROM sales.handover_certificate_lines line
+       CROSS JOIN LATERAL unnest(line.serial_numbers) selected(serial_number)
+       LEFT JOIN inventory.serialized_items item
+         ON item.product_id = line.product_id
+        AND upper(item.serial_number) = upper(selected.serial_number)
+       WHERE line.certificate_id = $1
+       ORDER BY line.id, selected.serial_number`,
+      [certificateId],
+    );
+    for (const item of soldItems.rows) {
+      if (!item.serial_item_id)
+        throw new ApiErrorException(
+          'SALES_HANDOVER_SERIAL_NOT_FOUND',
+          `Serial ${item.serial_number} is no longer linked to its shipped inventory item. Review the shipment before accepting this handover.`,
+          HttpStatus.CONFLICT,
+        );
+      const existing = await client.query<{
+        customer_location_id: string;
+        id: string;
+        product_id: string | null;
+        serialized_item_id: string | null;
+      }>(
+        `SELECT id, customer_location_id, product_id, serialized_item_id
+         FROM master_data.customer_equipment
+         WHERE serialized_item_id = $1 OR upper(serial_number) = upper($2)
+         FOR UPDATE`,
+        [item.serial_item_id, item.serial_number],
+      );
+      const equipment = existing.rows[0];
+      if (equipment) {
+        if (
+          equipment.customer_location_id !== customerLocationId ||
+          (equipment.product_id !== null && equipment.product_id !== item.product_id)
+        )
+          throw new ApiErrorException(
+            'SALES_HANDOVER_SERIAL_ALREADY_REGISTERED',
+            `Serial ${item.serial_number} is already registered to another customer location. Review the equipment record before accepting this handover.`,
+            HttpStatus.CONFLICT,
+          );
+        if (!equipment.serialized_item_id)
+          await client.query(
+            `UPDATE master_data.customer_equipment
+             SET serialized_item_id = $2, updated_by = $3, version = version + 1,
+                 updated_at = now()
+             WHERE id = $1`,
+            [equipment.id, item.serial_item_id, actorAccountId],
+          );
+        if (!equipment.serialized_item_id)
+          changes.push({
+            eventType: 'master_data.customer_equipment.linked-to-stock-item',
+            id: equipment.id,
+            serialNumber: item.serial_number,
+          });
+        continue;
+      }
+      const equipmentId = randomUUID();
+      await client.query(
+        `INSERT INTO master_data.customer_equipment (
+           id, customer_location_id, product_id, serialized_item_id, device_name,
+           serial_number, purchase_date, warranty_start_date, created_by, updated_by
+         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$7,$8,$8)`,
+        [
+          equipmentId,
+          customerLocationId,
+          item.product_id,
+          item.serial_item_id,
+          item.product_name,
+          item.serial_number,
+          purchaseDate,
+          actorAccountId,
+        ],
+      );
+      changes.push({
+        eventType: 'master_data.customer_equipment.registered-from-sale',
+        id: equipmentId,
+        serialNumber: item.serial_number,
+      });
+    }
+    return changes;
   }
 
   async createDraftInvoice(
@@ -931,14 +1105,21 @@ export class SalesService {
       accepted_at: string | null;
       accepted_by_name: string | null;
       certificate_number: string;
+      customer_location_id: string | null;
+      customer_location_name: string | null;
       id: string;
       prepared_at: string;
       status: SalesHandoverCertificate['status'];
       version: number;
     }>(
-      `SELECT id, certificate_number, status, accepted_by_name, accepted_at::text,
-              acceptance_notes, version, prepared_at::text
-       FROM sales.handover_certificates WHERE order_id = $1`,
+      `SELECT certificate.id, certificate.certificate_number, certificate.status,
+              certificate.accepted_by_name, certificate.accepted_at::text,
+              certificate.acceptance_notes, certificate.version, certificate.prepared_at::text,
+              certificate.customer_location_id, location.name AS customer_location_name
+       FROM sales.handover_certificates certificate
+       LEFT JOIN master_data.customer_locations location
+         ON location.id = certificate.customer_location_id
+       WHERE certificate.order_id = $1`,
       [orderId],
     );
     const row = result.rows[0];
@@ -958,6 +1139,12 @@ export class SalesService {
       ...(row.acceptance_notes ? { acceptanceNotes: row.acceptance_notes } : {}),
       ...(row.accepted_at ? { acceptedAt: asIso(row.accepted_at) } : {}),
       ...(row.accepted_by_name ? { acceptedByName: row.accepted_by_name } : {}),
+      ...(row.customer_location_id && row.customer_location_name
+        ? {
+            customerLocationId: row.customer_location_id,
+            customerLocationName: row.customer_location_name,
+          }
+        : {}),
       id: row.id,
       lines: lines.rows.map((line) => ({
         id: line.id,
@@ -1385,6 +1572,7 @@ function normalizeHandoverAcceptance(input: AcceptSalesHandoverRequest) {
   return {
     acceptedByName,
     ...(acceptanceNotes ? { acceptanceNotes } : {}),
+    customerLocationId: input.customerLocationId,
     expectedVersion: input.expectedVersion,
   };
 }

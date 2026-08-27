@@ -492,12 +492,13 @@ export class LogisticsService {
     const normalized = normalizeDeliveryCompletion(input);
     const commandKey = validKey(key);
     const context = await this.database.getPool().query<{
+      customer_location_id: string;
       handover_certificate_id: string;
       handover_status: 'prepared' | 'accepted';
       handover_version: number;
       status: LogisticsDelivery['status'];
     }>(
-      `SELECT delivery.handover_certificate_id, delivery.status,
+      `SELECT delivery.customer_location_id, delivery.handover_certificate_id, delivery.status,
               handover.status AS handover_status, handover.version AS handover_version
        FROM logistics.deliveries delivery
        JOIN sales.handover_certificates handover ON handover.id = delivery.handover_certificate_id
@@ -513,6 +514,7 @@ export class LogisticsService {
         {
           acceptedByName: normalized.recipientName,
           ...(normalized.proofNotes ? { acceptanceNotes: normalized.proofNotes } : {}),
+          customerLocationId: currentRow.customer_location_id,
           expectedVersion: currentRow.handover_version,
         },
         `${commandKey}:handover`,
@@ -1082,6 +1084,11 @@ export class LogisticsService {
       );
     }
     if (line.disposition === 'service') {
+      if (source.tracking_mode === 'serial' && line.serialNumbers.length !== 1)
+        conflict(
+          'LOGISTICS_RETURN_SERVICE_SERIAL_SINGLE_REQUIRED',
+          'Create one Service return per serialised device so each repair keeps its own history.',
+        );
       const equipment = await client.query(
         `SELECT equipment.id
          FROM master_data.customer_equipment equipment
@@ -1090,13 +1097,28 @@ export class LogisticsService {
          WHERE equipment.id = $1 AND equipment.customer_location_id = $2
            AND location.partner_id = $3 AND equipment.active
            AND (equipment.product_id IS NULL OR equipment.product_id = $4)
+           AND (
+             $5::boolean = false
+             OR equipment.serialized_item_id IN (
+               SELECT item.id FROM inventory.serialized_items item
+               WHERE item.product_id = $4 AND item.serial_number = $6
+             )
+             OR upper(equipment.serial_number) = upper($6)
+           )
          FOR KEY SHARE OF equipment`,
-        [line.customerEquipmentId, customerLocationId, customerId, source.product_id],
+        [
+          line.customerEquipmentId,
+          customerLocationId,
+          customerId,
+          source.product_id,
+          source.tracking_mode === 'serial',
+          line.serialNumbers[0] ?? '',
+        ],
       );
       if (!equipment.rowCount)
         notFound(
           'LOGISTICS_RETURN_EQUIPMENT_NOT_FOUND',
-          'Choose active customer equipment matching this returned item.',
+          'Choose the customer equipment record carrying this exact returned serial number.',
         );
     }
     return source;

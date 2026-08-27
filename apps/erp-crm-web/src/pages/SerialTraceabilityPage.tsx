@@ -40,17 +40,19 @@ export function SerialTraceabilityPage({ compact = false }: { compact?: boolean 
       {compact ? (
         <div className="command-card-heading">
           <div>
-            <span>Movement history</span>
+            <span>Device lifecycle</span>
             <h2>Trace a serial</h2>
           </div>
-          <small>Recorded stock movements</small>
+          <small>Supplier to customer and Service</small>
         </div>
       ) : (
         <header className="page-header workflow-header">
           <div>
             <p className="page-eyebrow">ERP · Warehouse</p>
             <h1>Serial traceability</h1>
-            <p>Follow one device from supplier receipt through every warehouse and final issue.</p>
+            <p>
+              Follow one device from supplier receipt through sale, Service, repair, and return.
+            </p>
           </div>
         </header>
       )}
@@ -77,9 +79,7 @@ export function SerialTraceabilityPage({ compact = false }: { compact?: boolean 
             </span>
             <div>
               <strong>Ready for a serial scan</strong>
-              <p>
-                Supplier, warehouse, customer, and technician history will appear when recorded.
-              </p>
+              <p>Supplier, sale, customer, Service, and return history will appear here.</p>
             </div>
           </div>
         </section>
@@ -98,16 +98,32 @@ export function SerialTraceabilityPage({ compact = false }: { compact?: boolean 
             </div>
             <div>
               <span>Current custody</span>
-              <strong>{trace.currentWarehouse.displayName}</strong>
+              <strong>{trace.currentCustody.displayName}</strong>
             </div>
             <div>
-              <span>Status</span>
-              <strong className={`trace-status is-${trace.status}`}>{trace.status}</strong>
+              <span>{trace.customerEquipment ? 'Equipment status' : 'Stock status'}</span>
+              <strong
+                className={`trace-status is-${trace.customerEquipment?.status ?? trace.status}`}
+              >
+                {statusLabel(trace.customerEquipment?.status ?? trace.status)}
+              </strong>
             </div>
           </section>
-          <section className="trace-timeline" aria-label="Serial movement history">
+          {trace.customer && trace.customerEquipment ? (
+            <section className="trace-owner" aria-label="Registered customer equipment">
+              <span className="trace-owner-icon">
+                <Icon name="customers" size={18} />
+              </span>
+              <div>
+                <span>Registered equipment</span>
+                <strong>{trace.customer.displayName}</strong>
+                <p>{trace.customerEquipment.location.displayName}</p>
+              </div>
+            </section>
+          ) : null}
+          <section className="trace-timeline" aria-label="Serial lifecycle history">
             {trace.events.map((event) => (
-              <TraceEventCard event={event} key={`${event.eventType}-${event.movementId}`} />
+              <TraceEventCard event={event} key={event.eventId} />
             ))}
           </section>
         </>
@@ -117,11 +133,14 @@ export function SerialTraceabilityPage({ compact = false }: { compact?: boolean 
 }
 
 function TraceEventCard({ event }: { event: SerialTraceEvent }) {
-  const custody = event.toWarehouse?.displayName ?? event.warehouse.displayName;
+  const custody =
+    event.toWarehouse?.displayName ??
+    event.customerLocation?.displayName ??
+    event.warehouse?.displayName;
   return (
-    <article className="trace-event">
+    <article className={`trace-event is-${event.eventType}`}>
       <span className="trace-event-mark">
-        <Icon name={event.eventType === 'transfer' ? 'arrow' : 'warehouse'} size={16} />
+        <Icon name={eventIcon(event)} size={16} />
       </span>
       <div>
         <div className="trace-event-heading">
@@ -131,15 +150,20 @@ function TraceEventCard({ event }: { event: SerialTraceEvent }) {
         <p>
           {event.referenceType} · {event.referenceId}
         </p>
+        {event.description ? <p className="trace-event-description">{event.description}</p> : null}
         <dl>
-          <div>
-            <dt>Custody</dt>
-            <dd>{custody}</dd>
-          </div>
-          <div>
-            <dt>Recorded by</dt>
-            <dd>{event.actor.displayName}</dd>
-          </div>
+          {custody ? (
+            <div>
+              <dt>{event.eventType === 'transfer' ? 'Destination' : 'Location'}</dt>
+              <dd>{custody}</dd>
+            </div>
+          ) : null}
+          {event.actor ? (
+            <div>
+              <dt>Recorded by</dt>
+              <dd>{event.actor.displayName}</dd>
+            </div>
+          ) : null}
           {event.supplier ? (
             <div>
               <dt>Supplier</dt>
@@ -158,6 +182,12 @@ function TraceEventCard({ event }: { event: SerialTraceEvent }) {
               <dd>{event.technician.displayName}</dd>
             </div>
           ) : null}
+          {event.details?.map((detail) => (
+            <div key={`${detail.label}-${detail.value}`}>
+              <dt>{detail.label}</dt>
+              <dd>{detailValue(detail.label, detail.value)}</dd>
+            </div>
+          ))}
         </dl>
       </div>
     </article>
@@ -165,9 +195,39 @@ function TraceEventCard({ event }: { event: SerialTraceEvent }) {
 }
 
 function eventLabel(event: SerialTraceEvent) {
-  if (event.eventType === 'receipt') return 'Received into inventory';
+  if (event.eventType === 'receipt')
+    return event.supplier ? 'Received from supplier' : 'Received into inventory';
   if (event.eventType === 'transfer')
     return `Transferred from ${event.fromWarehouse?.displayName ?? 'warehouse'}`;
+  if (event.eventType === 'sale') return 'Sold and shipped';
+  if (event.eventType === 'handover') return 'Accepted by customer';
+  if (event.eventType === 'return_registered') return 'Return registered';
+  if (event.eventType === 'return_received') return 'Return received';
+  if (event.eventType === 'service_requested') return 'Service requested';
+  if (event.eventType === 'service_scheduled') return 'Service visit scheduled';
+  if (event.eventType === 'service_started') return 'Repair started';
+  if (event.eventType === 'repair_completed') return 'Repair completed';
   if (event.eventType === 'stocktake') return 'Stocktake adjustment';
   return 'Issued from inventory';
+}
+
+function eventIcon(
+  event: SerialTraceEvent,
+): 'arrow' | 'check' | 'logistics' | 'sales' | 'service' | 'warehouse' {
+  if (event.eventType === 'transfer') return 'arrow';
+  if (event.eventType === 'sale') return 'sales';
+  if (event.eventType === 'handover' || event.eventType === 'repair_completed') return 'check';
+  if (event.eventType === 'return_registered' || event.eventType === 'return_received')
+    return 'logistics';
+  if (event.eventType.startsWith('service_')) return 'service';
+  return 'warehouse';
+}
+
+function detailValue(label: string, value: string) {
+  return label === 'Appointment' ? new Date(value).toLocaleString() : value;
+}
+
+function statusLabel(value: string) {
+  const label = value.replaceAll('_', ' ');
+  return `${label.charAt(0).toUpperCase()}${label.slice(1)}`;
 }

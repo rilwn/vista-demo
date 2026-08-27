@@ -433,3 +433,14 @@ private, non-cacheable content. File metadata, audit, outbox, and idempotency
 records never contain the uploaded bytes. No delete/retention command is exposed
 before `FILE-001`, and structural signature inspection is not represented as a
 production malware scan.
+
+Migration `0046_serial_lifecycle_traceability` links each accepted Sales handover
+to one active location belonging to its customer. During acceptance, sold
+serialised items are transactionally linked to an existing compatible customer
+equipment record or registered as new equipment at that location. Restrictive
+foreign keys and conflict checks prevent a serial from being reassigned to a
+different customer location or product. The nullable database column preserves
+earlier handovers, while all new API acceptances require the location. The
+combined trace query reads the existing Procurement, inventory, Sales,
+Logistics, and Service records; it does not duplicate or rewrite lifecycle
+events.

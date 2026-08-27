@@ -50,6 +50,10 @@ import {
 } from '@vista/contracts';
 
 const decimalPattern = /^\d+(\.\d{1,4})?$/u;
+// Development fixtures and imported records use stable PostgreSQL UUIDs that
+// are not limited to version 4. Entity references must accept the complete
+// UUID representation while still rejecting malformed identifiers.
+const postgresUuid = 'loose' as const;
 
 export class CreatePurchaseOrderLineDto implements CreatePurchaseOrderLineRequest {
   @ApiProperty({ format: 'date', type: String })
@@ -57,7 +61,7 @@ export class CreatePurchaseOrderLineDto implements CreatePurchaseOrderLineReques
   expectedDeliveryDate!: string;
 
   @ApiProperty({ format: 'uuid', type: String })
-  @IsUUID('4')
+  @IsUUID(postgresUuid)
   productId!: string;
 
   @ApiProperty({ example: '1.0000', type: String })
@@ -86,11 +90,11 @@ export class CreatePurchaseOrderDto implements CreatePurchaseOrderRequest {
   lines!: CreatePurchaseOrderLineDto[];
 
   @ApiProperty({ format: 'uuid', type: String })
-  @IsUUID('4')
+  @IsUUID(postgresUuid)
   supplierPartnerId!: string;
 
   @ApiProperty({ format: 'uuid', type: String })
-  @IsUUID('4')
+  @IsUUID(postgresUuid)
   warehouseId!: string;
 }
 
@@ -107,7 +111,7 @@ export class ReceivePurchaseOrderLineDto implements ReceivePurchaseOrderLineRequ
   expiresAt?: string;
 
   @ApiProperty({ format: 'uuid', type: String })
-  @IsUUID('4')
+  @IsUUID(postgresUuid)
   orderLineId!: string;
 
   @ApiProperty({ example: '1.0000', type: String })
@@ -168,7 +172,7 @@ export class ListPurchaseOrdersQueryDto {
 
   @ApiPropertyOptional({ format: 'uuid', type: String })
   @IsOptional()
-  @IsUUID('4')
+  @IsUUID(postgresUuid)
   supplierPartnerId?: string;
 }
 
@@ -327,7 +331,7 @@ export class ProcurementSupplierRecordDto implements ProcurementSupplierRecord {
 
 export class CreateSupplierInvoiceLineDto implements CreateSupplierInvoiceLineRequest {
   @ApiProperty({ format: 'uuid', type: String })
-  @IsUUID('loose')
+  @IsUUID(postgresUuid)
   orderLineId!: string;
 
   @ApiProperty({ type: String })
@@ -374,7 +378,7 @@ export class CreateSupplierInvoiceDto implements CreateSupplierInvoiceRequest {
   lines!: CreateSupplierInvoiceLineDto[];
 
   @ApiProperty({ format: 'uuid', type: String })
-  @IsUUID('loose')
+  @IsUUID(postgresUuid)
   purchaseOrderId!: string;
 }
 
@@ -417,7 +421,7 @@ export class CreateSupplierClaimDto implements CreateSupplierClaimRequest {
   description!: string;
 
   @ApiProperty({ format: 'uuid', type: String })
-  @IsUUID('4')
+  @IsUUID(postgresUuid)
   goodsReceiptLineId!: string;
 
   @ApiProperty({ type: String })

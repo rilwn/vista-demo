@@ -2571,9 +2571,53 @@ body {
   color: var(--vista-success);
   background: var(--vista-success-soft);
 }
+.trace-status.is-active {
+  color: var(--vista-success);
+  background: var(--vista-success-soft);
+}
+.trace-status.is-under_repair {
+  color: #8a5512;
+  background: #fff4d8;
+}
+.trace-status.is-issued {
+  color: var(--vista-accent-strong);
+  background: var(--vista-accent-soft);
+}
 .trace-status.is-missing {
   color: var(--vista-danger);
   background: #fff1f0;
+}
+.trace-owner {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid color-mix(in srgb, var(--vista-accent) 25%, var(--vista-line));
+  border-radius: 1rem;
+  background: color-mix(in srgb, var(--vista-accent-soft) 55%, var(--vista-surface));
+}
+.trace-owner-icon {
+  display: grid;
+  width: 2.25rem;
+  height: 2.25rem;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 0.7rem;
+  color: var(--vista-accent-strong);
+  background: var(--vista-surface);
+}
+.trace-owner > div {
+  display: grid;
+  gap: 0.08rem;
+}
+.trace-owner span,
+.trace-owner p {
+  margin: 0;
+  color: var(--vista-muted);
+  font-size: 0.78rem;
+}
+.trace-owner strong {
+  font-size: 0.94rem;
 }
 
 /* Connected warehouse operations */
@@ -4939,6 +4983,23 @@ select.vista-field-input {
   color: var(--vista-accent-strong);
   background: var(--vista-accent-soft);
 }
+.trace-event.is-sale .trace-event-mark,
+.trace-event.is-handover .trace-event-mark {
+  color: var(--vista-success);
+  background: var(--vista-success-soft);
+}
+.trace-event.is-return_registered .trace-event-mark,
+.trace-event.is-return_received .trace-event-mark {
+  color: #8a5512;
+  background: #fff4d8;
+}
+.trace-event.is-service_requested .trace-event-mark,
+.trace-event.is-service_scheduled .trace-event-mark,
+.trace-event.is-service_started .trace-event-mark,
+.trace-event.is-repair_completed .trace-event-mark {
+  color: #7451a7;
+  background: #f3edff;
+}
 .trace-event-heading {
   display: flex;
   justify-content: space-between;
@@ -4952,6 +5013,13 @@ select.vista-field-input {
 .trace-event p {
   margin: 0.3rem 0 0.8rem;
 }
+.trace-event .trace-event-description {
+  max-width: 68ch;
+  margin: -0.15rem 0 0.85rem;
+  color: var(--vista-text);
+  font-size: 0.86rem;
+  line-height: 1.5;
+}
 .trace-event dl {
   display: flex;
   flex-wrap: wrap;
@@ -4961,6 +5029,7 @@ select.vista-field-input {
 .trace-event dd {
   margin: 0.15rem 0 0;
   font-size: 0.86rem;
+  overflow-wrap: anywhere;
 }
 
 @media (max-width: 760px) {
@@ -4973,6 +5042,17 @@ select.vista-field-input {
   .trace-event-heading {
     display: grid;
     gap: 0.2rem;
+  }
+  .trace-event {
+    grid-template-columns: 2.1rem minmax(0, 1fr);
+    gap: 0.55rem;
+    padding: 0.85rem;
+  }
+  .trace-timeline {
+    padding-left: 0;
+  }
+  .trace-timeline::before {
+    left: 1.6rem;
   }
 }
 
@@ -12137,7 +12217,21 @@ select.vista-field-input {
 }
 
 .procurement-drawer .security-drawer-body {
+  flex: 1 1 auto;
+  min-height: 0;
   padding: 1.1rem 1.25rem 1.5rem;
+}
+
+.procurement-drawer-actions {
+  align-items: center;
+  background: var(--surface-raised, var(--surface));
+  border-top: 1px solid var(--border-subtle);
+  box-shadow: 0 -0.45rem 1.2rem rgb(15 37 31 / 5%);
+  display: flex;
+  flex: 0 0 auto;
+  gap: 0.65rem;
+  justify-content: flex-end;
+  padding: 0.9rem 1.25rem;
 }
 
 .procurement-form,
@@ -12153,15 +12247,86 @@ select.vista-field-input {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-.procurement-lines-editor {
-  border-top: 1px solid var(--border-subtle);
-  padding-top: 1rem;
+.procurement-order-form {
+  align-content: start;
+  gap: 1.15rem;
 }
 
+.purchase-order-drawer.procurement-drawer .security-drawer-body {
+  display: block;
+  padding: 1.1rem 1.4rem 1.5rem;
+}
+
+.purchase-order-drawer .procurement-form label {
+  align-content: start;
+}
+
+.purchase-order-drawer .procurement-back-button {
+  justify-self: start;
+}
+
+.procurement-order-details {
+  align-content: start;
+  background: color-mix(in srgb, var(--surface-subtle) 78%, var(--surface));
+  border: 1px solid var(--border-subtle);
+  border-radius: 0.9rem;
+  display: grid;
+  gap: 1rem;
+  padding: 1rem;
+}
+
+.procurement-order-section-heading,
 .procurement-lines-editor > header {
-  align-items: center;
+  align-items: start;
   display: flex;
+  gap: 1rem;
   justify-content: space-between;
+}
+
+.procurement-order-section-heading h3,
+.procurement-order-section-heading p,
+.procurement-lines-editor > header h3,
+.procurement-lines-editor > header p {
+  margin: 0;
+}
+
+.procurement-order-section-heading h3,
+.procurement-lines-editor > header h3 {
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  letter-spacing: -0.01em;
+}
+
+.procurement-order-section-heading p,
+.procurement-lines-editor > header p {
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+  line-height: 1.5;
+  margin-top: 0.2rem;
+}
+
+.procurement-order-details-grid {
+  align-items: start;
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(7.5rem, 0.46fr);
+}
+
+.procurement-order-details-grid > label,
+.procurement-order-line-fields > label {
+  min-width: 0;
+}
+
+.procurement-currency-field small {
+  color: var(--text-secondary);
+  font-size: 0.65rem;
+  font-weight: 500;
+}
+
+.procurement-lines-editor {
+  align-content: start;
+  border-top: 1px solid var(--border-subtle);
+  padding-top: 1rem;
 }
 
 .procurement-lines-editor > header > div {
@@ -12177,16 +12342,55 @@ select.vista-field-input {
 }
 
 .procurement-order-line-editor {
-  align-items: end;
-  background: var(--surface-subtle);
+  align-content: start;
+  background: color-mix(in srgb, var(--surface-subtle) 72%, var(--surface));
   border: 1px solid var(--border-subtle);
-  border-radius: 0.8rem;
+  border-radius: 0.9rem;
   display: grid;
-  gap: 0.65rem;
-  grid-template-columns:
-    minmax(11rem, 1.7fr) minmax(6rem, 0.65fr) minmax(7rem, 0.75fr) minmax(9rem, 0.9fr)
-    auto;
-  padding: 0.8rem;
+  gap: 0.8rem;
+  padding: 0.9rem;
+}
+
+.procurement-order-line-editor > header {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+
+.procurement-order-line-editor > header > div {
+  align-items: center;
+  display: flex;
+  gap: 0.45rem;
+}
+
+.procurement-order-line-editor > header span {
+  color: var(--text-secondary);
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.procurement-order-line-editor > header strong {
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 50%;
+  color: var(--text-primary);
+  display: inline-flex;
+  font-size: 0.7rem;
+  height: 1.55rem;
+  justify-content: center;
+  width: 1.55rem;
+}
+
+.procurement-order-line-fields {
+  align-items: start;
+  display: grid;
+  gap: 0.7rem;
+  grid-template-columns: minmax(6rem, 0.65fr) minmax(7rem, 0.8fr) minmax(10rem, 1fr);
+}
+
+.procurement-order-line-fields > label:first-child {
+  grid-column: 1 / -1;
 }
 
 .procurement-remove-line {
@@ -12197,9 +12401,9 @@ select.vista-field-input {
   color: var(--text-secondary);
   cursor: pointer;
   display: flex;
-  height: 2.55rem;
+  height: 2rem;
   justify-content: center;
-  width: 2.2rem;
+  width: 2rem;
 }
 
 .procurement-remove-line:hover {
@@ -12262,12 +12466,12 @@ select.vista-field-input {
     min-width: 42rem;
   }
 
-  .procurement-order-line-editor {
+  .procurement-order-details-grid {
     grid-template-columns: 1fr 1fr;
   }
 
-  .procurement-order-line-editor > label:first-child {
-    grid-column: 1 / -1;
+  .procurement-currency-field {
+    max-width: 10rem;
   }
 }
 
@@ -12282,6 +12486,8 @@ select.vista-field-input {
 
   .procurement-order-metrics,
   .procurement-form-grid,
+  .procurement-order-details-grid,
+  .procurement-order-line-fields,
   .procurement-receipt-summary {
     grid-template-columns: 1fr;
   }
@@ -12300,12 +12506,20 @@ select.vista-field-input {
     grid-column: 2;
   }
 
-  .procurement-order-line-editor {
-    grid-template-columns: 1fr;
+  .procurement-currency-field {
+    max-width: none;
   }
 
-  .procurement-order-line-editor > label:first-child {
-    grid-column: auto;
+  .procurement-order-line-fields > label:first-child {
+    grid-column: 1;
+  }
+
+  .procurement-drawer-actions {
+    padding: 0.8rem 1rem;
+  }
+
+  .procurement-drawer-actions .vista-button {
+    flex: 1;
   }
 }
 
@@ -19658,7 +19872,6 @@ select.vista-field-input {
   .finance-drawer-actions,
   .financial-document-form-actions,
   .service-drawer-actions,
-  .crm-ticket-drawer-actions,
   .bank-drawer-actions,
   .cash-drawer-actions
 ) {
@@ -19753,6 +19966,10 @@ select.vista-field-input {
 }
 
 @media (max-width: 560px) {
+  .logistics-drawer > .logistics-drawer-actions {
+    flex-direction: column;
+  }
+
   :is(
     .security-drawer-actions,
     .drawer-actions,
@@ -20651,18 +20868,46 @@ select.vista-field-input {
 }
 
 .crm-ticket-drawer .security-drawer-body {
-  --drawer-body-inline: 1rem;
-  --drawer-body-bottom: 1rem;
-
-  padding: 0;
+  overflow: hidden;
+  padding: 0 !important;
   background: #f5f7f9;
+  scrollbar-gutter: auto;
 }
 
-.crm-ticket-form,
+.crm-ticket-form {
+  display: grid;
+  height: 100%;
+  min-height: 0;
+  grid-template-rows: minmax(0, 1fr) auto;
+}
+
+.crm-ticket-form-scroll,
 .crm-ticket-preview {
   display: grid;
+  min-height: 0;
   gap: 0.9rem;
   padding: 1rem;
+}
+
+.crm-ticket-form-scroll {
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  -webkit-overflow-scrolling: touch;
+}
+
+.crm-ticket-drawer-actions {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.55rem;
+  margin: 0;
+  padding: 0.85rem 1rem calc(0.85rem + env(safe-area-inset-bottom));
+  border-top: 1px solid var(--vista-line);
+  background: #fff;
+  box-shadow: 0 -0.55rem 1.25rem rgb(16 52 42 / 6%);
 }
 
 .crm-ticket-form-section,
@@ -21115,18 +21360,394 @@ select.vista-field-input {
     flex-direction: column;
   }
 
-  .crm-ticket-form,
+  .crm-ticket-form-scroll,
   .crm-ticket-preview {
     padding: 0.75rem;
   }
 
-  .crm-ticket-drawer .security-drawer-body {
-    --drawer-body-inline: 0.75rem;
-    --drawer-body-bottom: 0.75rem;
+  .crm-ticket-drawer-actions {
+    align-items: stretch;
+    flex-direction: column;
+    padding: 0.75rem 0.75rem calc(0.75rem + env(safe-area-inset-bottom));
   }
 
   .crm-ticket-drawer-actions .vista-button,
   .crm-ticket-action-form > div:last-child .vista-button {
     width: 100%;
+  }
+}
+
+/* Right-panel form integrity
+ * Keep native choice controls compact, prevent long content from forcing a
+ * drawer wider than the viewport, and keep dedicated footers flush to the
+ * panel edge. These are structural safeguards shared by every workspace. */
+.security-drawer :is(form, fieldset, label, input, select, textarea, .vista-search-select-shell) {
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.security-drawer input:is([type='checkbox'], [type='radio']) {
+  flex: 0 0 1.2rem;
+  width: 1.2rem;
+  height: 1.2rem;
+  min-width: 1.2rem;
+  min-height: 1.2rem;
+  padding: 0;
+}
+
+.security-drawer > footer {
+  position: relative;
+  bottom: auto;
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  width: 100%;
+  margin: 0;
+}
+
+.security-drawer > footer.security-drawer-actions {
+  padding: 0.9rem clamp(1rem, 2.5vw, 1.5rem) calc(0.9rem + env(safe-area-inset-bottom)) !important;
+}
+
+/* Goods receipt panel
+ * This panel deliberately finishes the cascade so general Procurement input
+ * sizing cannot turn its checkbox into a full-width text control. */
+.goods-receipt-drawer.procurement-drawer .security-drawer-body {
+  display: block;
+}
+
+.goods-receipt-drawer .procurement-form {
+  align-content: start;
+  gap: 1.2rem;
+}
+
+.goods-receipt-drawer .procurement-form > label,
+.goods-receipt-drawer .procurement-receive-line label {
+  align-content: start;
+  margin: 0;
+}
+
+.goods-receipt-drawer .procurement-receipt-summary {
+  align-items: start;
+  gap: 0;
+  overflow: hidden;
+  padding: 0;
+  border-color: var(--vista-line);
+  border-radius: 0.85rem;
+  background: var(--vista-surface-muted);
+}
+
+.goods-receipt-drawer .procurement-receipt-summary > div {
+  align-content: start;
+  gap: 0.35rem;
+  min-width: 0;
+  min-height: 5.2rem;
+  padding: 0.9rem 1rem;
+}
+
+.goods-receipt-drawer .procurement-receipt-summary > div + div {
+  border-left: 1px solid var(--vista-line);
+}
+
+.goods-receipt-drawer .procurement-receipt-summary span {
+  font-size: 0.68rem;
+  font-weight: 650;
+}
+
+.goods-receipt-drawer .procurement-receipt-summary strong {
+  align-self: end;
+  overflow-wrap: anywhere;
+  color: var(--vista-ink);
+  font-size: 0.92rem;
+  line-height: 1.35;
+}
+
+.goods-receipt-drawer .procurement-delivery-reference-field {
+  display: grid;
+  gap: 0.42rem;
+}
+
+.goods-receipt-drawer .procurement-delivery-reference-field input {
+  min-height: 2.8rem;
+}
+
+.goods-receipt-drawer .procurement-receive-lines {
+  gap: 0.8rem;
+  padding-top: 0.1rem;
+}
+
+.goods-receipt-drawer .procurement-receive-lines-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-bottom: 0.1rem;
+}
+
+.goods-receipt-drawer .procurement-receive-lines-heading > div {
+  display: grid;
+  gap: 0.22rem;
+  min-width: 0;
+}
+
+.goods-receipt-drawer .procurement-receive-lines-heading h3,
+.goods-receipt-drawer .procurement-receive-lines-heading p {
+  margin: 0;
+}
+
+.goods-receipt-drawer .procurement-receive-lines-heading h3 {
+  color: var(--vista-ink);
+  font-size: 0.92rem;
+  letter-spacing: -0.01em;
+}
+
+.goods-receipt-drawer .procurement-receive-lines-heading p {
+  max-width: 31rem;
+  color: var(--vista-muted);
+  font-size: 0.72rem;
+  line-height: 1.45;
+}
+
+.goods-receipt-drawer .procurement-receive-lines-heading > span {
+  flex: 0 0 auto;
+  border: 1px solid var(--vista-line);
+  border-radius: 999px;
+  padding: 0.34rem 0.55rem;
+  background: var(--vista-surface-muted);
+  color: var(--vista-muted);
+  font-size: 0.66rem;
+  font-weight: 720;
+  white-space: nowrap;
+}
+
+.goods-receipt-drawer .procurement-receive-line {
+  align-content: start;
+  gap: 0.95rem;
+  padding: 1rem;
+  border-color: var(--vista-line);
+  border-radius: 0.85rem;
+  background: var(--vista-surface);
+  transition:
+    border-color 120ms ease,
+    background 120ms ease,
+    opacity 120ms ease;
+}
+
+.goods-receipt-drawer .procurement-receive-line > header {
+  display: block;
+  padding-bottom: 0.85rem;
+  border-bottom: 1px solid var(--vista-line);
+}
+
+.goods-receipt-drawer .procurement-receive-toggle {
+  display: grid;
+  grid-template-columns: 1.2rem minmax(0, 1fr);
+  align-items: center;
+  gap: 0.65rem;
+  color: var(--vista-ink);
+  cursor: pointer;
+}
+
+.goods-receipt-drawer .procurement-receive-toggle > span {
+  display: grid;
+  gap: 0.16rem;
+  min-width: 0;
+}
+
+.goods-receipt-drawer .procurement-receive-toggle strong {
+  overflow-wrap: anywhere;
+  color: var(--vista-ink);
+  font-size: 0.84rem;
+  line-height: 1.35;
+}
+
+.goods-receipt-drawer .procurement-receive-toggle small {
+  color: var(--vista-muted);
+  font-size: 0.68rem;
+  font-weight: 540;
+  line-height: 1.35;
+}
+
+.goods-receipt-drawer .procurement-form .procurement-receive-checkbox[type='checkbox'] {
+  appearance: none;
+  display: grid;
+  place-content: center;
+  flex: 0 0 1.2rem;
+  width: 1.2rem !important;
+  height: 1.2rem !important;
+  min-width: 1.2rem !important;
+  min-height: 1.2rem !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 1px solid var(--vista-line-strong) !important;
+  border-radius: 0.3rem !important;
+  background: var(--vista-surface) !important;
+  box-shadow: none !important;
+  cursor: pointer;
+}
+
+.goods-receipt-drawer .procurement-form .procurement-receive-checkbox[type='checkbox']::before {
+  width: 0.58rem;
+  height: 0.58rem;
+  content: '';
+  clip-path: polygon(14% 44%, 0 59%, 40% 100%, 100% 20%, 84% 5%, 39% 67%);
+  background: #fff;
+  transform: scale(0);
+  transition: transform 100ms ease;
+}
+
+.goods-receipt-drawer .procurement-form .procurement-receive-checkbox[type='checkbox']:checked {
+  border-color: var(--vista-accent) !important;
+  background: var(--vista-accent) !important;
+}
+
+.goods-receipt-drawer
+  .procurement-form
+  .procurement-receive-checkbox[type='checkbox']:checked::before {
+  transform: scale(1);
+}
+
+.goods-receipt-drawer
+  .procurement-form
+  .procurement-receive-checkbox[type='checkbox']:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--vista-accent) 24%, transparent);
+  outline-offset: 2px;
+}
+
+.goods-receipt-drawer .procurement-receive-line-fields {
+  align-items: start;
+}
+
+.goods-receipt-drawer .procurement-receive-line.is-excluded {
+  border-color: var(--vista-line);
+  background: var(--vista-surface-muted);
+}
+
+.goods-receipt-drawer .procurement-receive-line.is-excluded > :not(header) {
+  opacity: 0.56;
+}
+
+.goods-receipt-drawer .procurement-receive-line :is(input, textarea):disabled {
+  cursor: not-allowed;
+  background: var(--vista-surface-muted);
+  color: var(--vista-muted);
+}
+
+@media (max-width: 620px) {
+  .goods-receipt-drawer .procurement-receipt-summary > div {
+    min-height: 0;
+  }
+
+  .goods-receipt-drawer .procurement-receipt-summary > div + div {
+    border-top: 1px solid var(--vista-line);
+    border-left: 0;
+  }
+
+  .goods-receipt-drawer .procurement-receive-lines-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .goods-receipt-drawer .procurement-receive-lines-heading > span {
+    align-self: flex-start;
+  }
+}
+
+/* Empty and short Finance forms should remain compact while their actions
+ * still settle at the bottom of the available panel. */
+.finance-drawer .security-drawer-body {
+  display: block;
+}
+
+.finance-drawer .finance-form {
+  display: flex;
+  min-height: 100%;
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.finance-drawer .finance-form > .vista-alert {
+  flex: 0 0 auto;
+}
+
+.finance-drawer .finance-form > .finance-drawer-actions:last-child {
+  margin-top: auto;
+}
+
+:is(
+    .security-drawer-actions,
+    .drawer-actions,
+    .sales-drawer-actions,
+    .finance-drawer-actions,
+    .financial-document-form-actions,
+    .service-drawer-actions,
+    .bank-drawer-actions,
+    .cash-drawer-actions,
+    .crm-ticket-drawer-actions
+  )
+  :is(.vista-button--secondary, .vista-button--quiet) {
+  order: 1;
+}
+
+:is(
+    .security-drawer-actions,
+    .drawer-actions,
+    .sales-drawer-actions,
+    .finance-drawer-actions,
+    .financial-document-form-actions,
+    .service-drawer-actions,
+    .bank-drawer-actions,
+    .cash-drawer-actions,
+    .crm-ticket-drawer-actions
+  )
+  :is(.vista-button--primary, .vista-button--danger) {
+  order: 2;
+}
+
+/* Mobile action order is consistent regardless of the source component's DOM
+ * order: secondary navigation sits above the primary completion action. */
+@media (max-width: 560px) {
+  :is(
+    .security-drawer-actions,
+    .drawer-actions,
+    .sales-drawer-actions,
+    .finance-drawer-actions,
+    .financial-document-form-actions,
+    .service-drawer-actions,
+    .bank-drawer-actions,
+    .cash-drawer-actions,
+    .crm-ticket-drawer-actions
+  ) {
+    flex-direction: column;
+  }
+
+  :is(
+      .security-drawer-actions,
+      .drawer-actions,
+      .sales-drawer-actions,
+      .finance-drawer-actions,
+      .financial-document-form-actions,
+      .service-drawer-actions,
+      .bank-drawer-actions,
+      .cash-drawer-actions,
+      .crm-ticket-drawer-actions
+    )
+    :is(.vista-button--secondary, .vista-button--quiet) {
+    order: 1;
+  }
+
+  :is(
+      .security-drawer-actions,
+      .drawer-actions,
+      .sales-drawer-actions,
+      .finance-drawer-actions,
+      .financial-document-form-actions,
+      .service-drawer-actions,
+      .bank-drawer-actions,
+      .cash-drawer-actions,
+      .crm-ticket-drawer-actions
+    )
+    :is(.vista-button--primary, .vista-button--danger) {
+    order: 2;
   }
 }

@@ -667,6 +667,22 @@ export const workflowPages: WorkflowPageDefinition[] = [
       },
     ],
   ),
+  service(
+    'reports',
+    'Service reports',
+    'Review request volume, completion, technician workload, recorded time, and Service value.',
+    'Review reports',
+    [
+      {
+        title: 'Operations',
+        items: ['Request status', 'Service type mix', 'Technician workload'],
+      },
+      {
+        title: 'Downloads',
+        items: ['Service request register', 'Technician performance', 'Service cost summary'],
+      },
+    ],
+  ),
   logistics(
     'deliveries',
     'Deliveries',
