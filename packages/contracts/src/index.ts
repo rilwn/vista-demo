@@ -104,7 +104,7 @@ export interface NotificationPage {
   unreadCount: number;
 }
 
-export const managedFileParentTypes = ['partner', 'warranty_claim'] as const;
+export const managedFileParentTypes = ['partner', 'warranty_claim', 'crm_interaction'] as const;
 export type ManagedFileParentType = (typeof managedFileParentTypes)[number];
 export type ManagedFileStatus = 'available' | 'deleted' | 'quarantined' | 'rejected';
 
@@ -2754,6 +2754,314 @@ export interface CreateCrmTicketFromServiceRequestRequest {
   categoryId: string;
   priority: CrmTicketPriority;
   slaPolicyId: string;
+}
+
+export const crmInteractionTypes = [
+  'incoming_call',
+  'outgoing_call',
+  'email',
+  'chat',
+  'on_site_visit',
+] as const;
+export type CrmInteractionType = (typeof crmInteractionTypes)[number];
+
+export const crmTaskPriorities = ['low', 'normal', 'high', 'urgent'] as const;
+export type CrmTaskPriority = (typeof crmTaskPriorities)[number];
+
+export const crmTaskStatuses = ['open', 'completed', 'cancelled'] as const;
+export type CrmTaskStatus = (typeof crmTaskStatuses)[number];
+
+export interface CrmTimelineContactReference {
+  customerPartnerId: string;
+  displayName: string;
+  id: string;
+}
+
+export interface CrmTimelineReferenceData {
+  assignees: CrmTicketAssigneeReference[];
+  businessTimezone: string;
+  contacts: CrmTimelineContactReference[];
+  customers: ServiceCustomerReference[];
+  locations: ServiceLocationReference[];
+}
+
+export interface CrmInteraction {
+  contactName?: string;
+  contactPersonId?: string;
+  createdAt: string;
+  createdByName: string;
+  customerLocationId?: string;
+  customerName: string;
+  customerPartnerId: string;
+  id: string;
+  interactionType: CrmInteractionType;
+  locationName?: string;
+  notes: string;
+  occurredAt: string;
+  subject: string;
+}
+
+export interface CrmTaskHistoryEntry {
+  changedAt: string;
+  changedByName: string;
+  id: string;
+  note?: string;
+  status: CrmTaskStatus;
+  type: 'created' | 'completed' | 'cancelled';
+}
+
+export interface CrmTask {
+  assignedTo: CrmTicketAssigneeReference;
+  cancelledAt?: string;
+  completedAt?: string;
+  createdAt: string;
+  customerLocationId?: string;
+  customerName: string;
+  customerPartnerId: string;
+  dueAt: string;
+  history: CrmTaskHistoryEntry[];
+  id: string;
+  locationName?: string;
+  notes?: string;
+  priority: CrmTaskPriority;
+  reminderAt?: string;
+  status: CrmTaskStatus;
+  title: string;
+  updatedAt: string;
+  version: number;
+}
+
+export type CrmTimelineItem =
+  | { interaction: CrmInteraction; kind: 'interaction'; occurredAt: string }
+  | {
+      kind: 'task_event';
+      occurredAt: string;
+      task: CrmTask;
+      taskEvent: CrmTaskHistoryEntry;
+    };
+
+export interface CrmTimelinePage {
+  items: CrmTimelineItem[];
+  openTasks: CrmTask[];
+  page: number;
+  pageSize: number;
+  summary: {
+    interactions: number;
+    openTasks: number;
+    overdueTasks: number;
+  };
+  total: number;
+  totalPages: number;
+}
+
+export interface CreateCrmInteractionRequest {
+  contactPersonId?: string;
+  customerLocationId?: string;
+  customerPartnerId: string;
+  interactionType: CrmInteractionType;
+  notes: string;
+  occurredAt: string;
+  subject: string;
+}
+
+export interface CreateCrmTaskRequest {
+  assignedToAccountId: string;
+  customerLocationId?: string;
+  customerPartnerId: string;
+  dueAt: string;
+  notes?: string;
+  priority: CrmTaskPriority;
+  reminderAt?: string;
+  title: string;
+}
+
+export interface TransitionCrmTaskRequest {
+  expectedVersion: number;
+  note?: string;
+  status: 'completed' | 'cancelled';
+}
+
+export const crmLeadSources = ['telephone', 'referral', 'website', 'trade_exhibition'] as const;
+export type CrmLeadSource = (typeof crmLeadSources)[number];
+
+export const crmLeadStatuses = ['new', 'qualified', 'converted'] as const;
+export type CrmLeadStatus = (typeof crmLeadStatuses)[number];
+
+export const crmOpportunityStages = [
+  'new',
+  'qualified',
+  'quotation_sent',
+  'negotiation',
+  'won',
+  'lost',
+] as const;
+export type CrmOpportunityStage = (typeof crmOpportunityStages)[number];
+
+export interface CrmLeadHistoryEntry {
+  changedAt: string;
+  changedByName: string;
+  id: string;
+  note?: string;
+  status: CrmLeadStatus;
+  type: 'created' | 'qualified' | 'converted';
+}
+
+export interface CrmLead {
+  contactName: string;
+  convertedAt?: string;
+  convertedCustomer?: ServiceCustomerReference;
+  createdAt: string;
+  email?: string;
+  history: CrmLeadHistoryEntry[];
+  id: string;
+  number: string;
+  notes?: string;
+  organizationName: string;
+  owner: CrmTicketAssigneeReference;
+  qualifiedAt?: string;
+  source: CrmLeadSource;
+  sourceDetails?: string;
+  status: CrmLeadStatus;
+  telephone?: string;
+  updatedAt: string;
+  version: number;
+}
+
+export interface CrmLeadPage {
+  items: CrmLead[];
+  page: number;
+  pageSize: number;
+  summary: { converted: number; new: number; qualified: number };
+  total: number;
+  totalPages: number;
+}
+
+export interface CreateCrmLeadRequest {
+  contactName: string;
+  email?: string;
+  notes?: string;
+  organizationName: string;
+  ownerAccountId: string;
+  source: CrmLeadSource;
+  sourceDetails?: string;
+  telephone?: string;
+}
+
+export interface QualifyCrmLeadRequest {
+  expectedVersion: number;
+  note?: string;
+}
+
+export interface CrmNewCustomerInput {
+  displayName: string;
+  kind: PartnerKind;
+  uic?: string;
+  vatNumber?: string;
+}
+
+export interface CrmOpportunityInput {
+  description?: string;
+  estimatedRevenueBgn: string;
+  expectedCloseOn?: string;
+  ownerAccountId: string;
+  probabilityPercent: number;
+  title: string;
+}
+
+export interface ConvertCrmLeadRequest {
+  createOpportunity: boolean;
+  existingCustomerPartnerId?: string;
+  expectedVersion: number;
+  newCustomer?: CrmNewCustomerInput;
+  note?: string;
+  opportunity?: CrmOpportunityInput;
+}
+
+export interface CreateCrmOpportunityRequest extends CrmOpportunityInput {
+  customerPartnerId: string;
+}
+
+export interface MoveCrmOpportunityRequest {
+  expectedVersion: number;
+  note?: string;
+  probabilityPercent: number;
+  stage: CrmOpportunityStage;
+}
+
+export interface LinkCrmOpportunityQuotationRequest {
+  expectedVersion: number;
+  quotationId: string;
+}
+
+export interface CrmOpportunityQuotation {
+  currencyCode: string;
+  id: string;
+  linkedAt: string;
+  number: string;
+  status: 'draft' | 'confirmed' | 'shipped' | 'invoiced';
+  total: string;
+}
+
+export interface CrmOpportunityHistoryEntry {
+  changedAt: string;
+  changedByName: string;
+  id: string;
+  nextStage: CrmOpportunityStage;
+  note?: string;
+  previousStage?: CrmOpportunityStage;
+  probabilityPercent: number;
+  type: 'created' | 'stage_changed' | 'quotation_linked';
+}
+
+export interface CrmOpportunity {
+  closedAt?: string;
+  createdAt: string;
+  customer: ServiceCustomerReference;
+  description?: string;
+  estimatedRevenueBgn: string;
+  expectedCloseOn?: string;
+  history: CrmOpportunityHistoryEntry[];
+  id: string;
+  number: string;
+  owner: CrmTicketAssigneeReference;
+  probabilityPercent: number;
+  quotations: CrmOpportunityQuotation[];
+  sourceLeadId?: string;
+  stage: CrmOpportunityStage;
+  title: string;
+  updatedAt: string;
+  version: number;
+  weightedRevenueBgn: string;
+}
+
+export interface CrmOpportunityPage {
+  items: CrmOpportunity[];
+  page: number;
+  pageSize: number;
+  summary: {
+    openCount: number;
+    openRevenueBgn: string;
+    weightedRevenueBgn: string;
+    wonRevenueBgn: string;
+  };
+  total: number;
+  totalPages: number;
+}
+
+export interface CrmPipelineQuotationReference {
+  currencyCode: string;
+  customerPartnerId: string;
+  id: string;
+  number: string;
+  status: 'draft' | 'confirmed' | 'shipped' | 'invoiced';
+  total: string;
+}
+
+export interface CrmPipelineReferenceData {
+  assignees: CrmTicketAssigneeReference[];
+  businessTimezone: string;
+  customers: ServiceCustomerReference[];
+  quotations: CrmPipelineQuotationReference[];
 }
 
 export interface AssignServiceWorkOrderRequest {

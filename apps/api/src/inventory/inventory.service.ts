@@ -742,6 +742,7 @@ export class InventoryService {
         HttpStatus.NOT_FOUND,
       );
     validateTracking(product, normalized);
+    await ensureReceiptSerialsAvailable(client, normalized.serialNumbers);
     if (normalized.supplierPartnerId)
       await requirePartnerRole(client, normalized.supplierPartnerId, 'supplier');
     const movementId = randomUUID();
@@ -1831,6 +1832,12 @@ export class InventoryService {
       return result;
     } catch (error) {
       await client.query('ROLLBACK');
+      if (uniqueConstraint(error) === 'serialized_items_serial_unique')
+        throw new ApiErrorException(
+          'SERIAL_NUMBER_ALREADY_REGISTERED',
+          'One or more serial numbers are already registered. Enter the serial number printed on each device being received.',
+          HttpStatus.CONFLICT,
+        );
       if (unique(error))
         throw new ApiErrorException(
           'INVENTORY_DUPLICATE',
@@ -2972,6 +2979,41 @@ function unique(error: unknown) {
     error !== null &&
     'code' in error &&
     (error as { code?: string }).code === '23505'
+  );
+}
+
+function uniqueConstraint(error: unknown): string | undefined {
+  return typeof error === 'object' && error !== null && 'constraint' in error
+    ? String(error.constraint)
+    : undefined;
+}
+
+async function ensureReceiptSerialsAvailable(
+  client: PoolClient,
+  serialNumbers: string[],
+): Promise<void> {
+  if (!serialNumbers.length) return;
+  const existing = await client.query<{ serial_number: string }>(
+    `SELECT serial_number
+     FROM inventory.serialized_items
+     WHERE upper(serial_number) = ANY($1::text[])
+     ORDER BY serial_number`,
+    [serialNumbers.map((serialNumber) => serialNumber.toUpperCase())],
+  );
+  if (!existing.rowCount) return;
+  const duplicates = existing.rows.map((row) => row.serial_number);
+  const message =
+    duplicates.length === 1
+      ? `Serial number ${duplicates[0]} is already registered. Enter the serial number printed on the device being received.`
+      : `These serial numbers are already registered: ${duplicates.join(', ')}. Enter the serial numbers printed on the devices being received.`;
+  throw new ApiErrorException(
+    'SERIAL_NUMBER_ALREADY_REGISTERED',
+    message,
+    HttpStatus.CONFLICT,
+    duplicates.map((serialNumber) => ({
+      field: 'serialNumbers',
+      message: `${serialNumber} is already registered`,
+    })),
   );
 }
 

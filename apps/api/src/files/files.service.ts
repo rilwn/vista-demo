@@ -414,7 +414,7 @@ export class FilesService {
     action: 'edit' | 'view',
     auth: AuthenticationContext,
   ): Promise<void> {
-    const module = parentType === 'partner' ? 'crm' : 'erp.service';
+    const module = parentType === 'warranty_claim' ? 'erp.service' : 'crm';
     if (!hasPermission(auth.permissions, { action, module })) {
       throw new ApiErrorException(
         'FILE_PARENT_ACCESS_DENIED',
@@ -422,25 +422,32 @@ export class FilesService {
         HttpStatus.FORBIDDEN,
       );
     }
-    const parent =
-      parentType === 'partner'
-        ? await queryable.query<{ id: string }>(
-            'SELECT id FROM master_data.partners WHERE id = $1',
-            [parentId],
-          )
-        : await queryable.query<{ id: string }>(
-            `SELECT claim.id
+    let parent;
+    if (parentType === 'partner') {
+      parent = await queryable.query<{ id: string }>(
+        'SELECT id FROM master_data.partners WHERE id = $1',
+        [parentId],
+      );
+    } else if (parentType === 'crm_interaction') {
+      parent = await queryable.query<{ id: string }>(
+        'SELECT id FROM crm.interactions WHERE id = $1',
+        [parentId],
+      );
+    } else {
+      parent = await queryable.query<{ id: string }>(
+        `SELECT claim.id
              FROM service.warranty_claims claim
              LEFT JOIN service.requests request ON request.id = claim.service_request_id
              LEFT JOIN service.work_orders work_order ON work_order.service_request_id = request.id
              WHERE claim.id = $1
                AND ($2::boolean OR work_order.assigned_technician_account_id = $3)`,
-            [
-              parentId,
-              hasPermission(auth.permissions, { action: 'approve', module: 'erp.service' }),
-              auth.accountId,
-            ],
-          );
+        [
+          parentId,
+          hasPermission(auth.permissions, { action: 'approve', module: 'erp.service' }),
+          auth.accountId,
+        ],
+      );
+    }
     if (!parent.rows[0]) {
       throw new ApiErrorException(
         'FILE_PARENT_NOT_FOUND',

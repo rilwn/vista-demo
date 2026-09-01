@@ -1,7 +1,7 @@
-import { VistaMark } from '@vista/ui';
-import { type PropsWithChildren, useEffect, useMemo, useState } from 'react';
+import { type PropsWithChildren, useEffect, useMemo, useRef, useState } from 'react';
 
 import { useAuth } from '../auth/AuthProvider';
+import { GlobalNavigationSearch } from '../components/GlobalNavigationSearch';
 import { Icon } from '../components/Icon';
 import { NotificationCenter } from '../components/NotificationCenter';
 import { allModuleItems, navigationGroups } from '../navigation';
@@ -30,16 +30,6 @@ export function WorkspaceLayout({ children }: PropsWithChildren) {
   if (!session) return null;
 
   const pageParent = nestedPageParent(location.pathname);
-  const currentTitle =
-    location.pathname === '/access'
-      ? messages.navigation.access
-      : (pageParent?.label ??
-        allModuleItems.find(
-          (item) =>
-            location.pathname === item.path ||
-            (item.path.startsWith('/modules/') && location.pathname.startsWith(`${item.path}/`)),
-        )?.label ??
-        messages.navigation.overview);
   const initials = getInitials(session.context.displayName);
 
   async function signOut() {
@@ -60,7 +50,19 @@ export function WorkspaceLayout({ children }: PropsWithChildren) {
       />
       <aside className={`workspace-sidebar${navigationOpen ? ' is-open' : ''}`}>
         <div className="sidebar-brand">
-          <VistaMark product={messages.product.name} />
+          <Link
+            aria-label={`${messages.product.name} overview`}
+            className="sidebar-brand-link"
+            to="/"
+          >
+            <span className="sidebar-brand-icon" aria-hidden="true">
+              <Icon name="brand" size={25} />
+            </span>
+            <span className="sidebar-brand-copy">
+              <strong>{messages.product.name}</strong>
+              <small>Business workspace</small>
+            </span>
+          </Link>
           <button
             aria-label={messages.navigation.close}
             className="sidebar-close"
@@ -73,12 +75,13 @@ export function WorkspaceLayout({ children }: PropsWithChildren) {
 
         <nav aria-label={messages.navigation.primaryLabel} className="sidebar-navigation">
           <NavigationSection label={messages.navigation.workspace}>
-            <SidebarLink icon="home" label={messages.navigation.overview} to="/" />
+            <SidebarLink end icon="home" label={messages.navigation.overview} to="/" />
           </NavigationSection>
           {visibleGroups.map((group) => (
             <NavigationSection key={group.label} label={group.label}>
               {group.modules.map((module) => (
                 <SidebarLink
+                  aliases={sidebarAliases(module.key)}
                   icon={module.icon}
                   key={`${module.key}:${module.path}`}
                   label={module.label}
@@ -89,29 +92,28 @@ export function WorkspaceLayout({ children }: PropsWithChildren) {
           ))}
         </nav>
 
-        <div className="sidebar-account">
-          <Link className="account-link" to="/access">
+        <div className="sidebar-footer">
+          <div className="sidebar-session-status">
+            <span aria-hidden="true">
+              <Icon name="shield" size={15} />
+            </span>
+            <div>
+              <strong>Protected session</strong>
+              <small>
+                {session.context.twoFactorVerified ? 'Two-factor verified' : 'Password verified'}
+              </small>
+            </div>
+          </div>
+          <Link className="sidebar-profile-card" to="/access">
             <span className="account-avatar" aria-hidden="true">
               {initials}
             </span>
             <span className="account-copy">
               <strong>{session.context.displayName}</strong>
-              <small>
-                {session.context.isAdministrative
-                  ? messages.home.adminAccess
-                  : messages.home.standardAccess}
-              </small>
+              <small>My access &amp; security</small>
             </span>
+            <Icon name="arrow" size={16} />
           </Link>
-          <button
-            aria-label={messages.navigation.signOut}
-            className="account-logout"
-            disabled={signingOut}
-            onClick={() => void signOut()}
-            type="button"
-          >
-            <Icon name="logout" />
-          </button>
         </div>
       </aside>
 
@@ -126,18 +128,18 @@ export function WorkspaceLayout({ children }: PropsWithChildren) {
           >
             <Icon name="menu" />
           </button>
-          <div className="topbar-context">
-            <span>{messages.product.suite}</span>
-            <strong>{currentTitle}</strong>
-          </div>
+          <GlobalNavigationSearch />
           <div className="topbar-actions">
             <NotificationCenter />
-            <Link aria-label="Open my access" className="topbar-account" to="/access">
-              <span className="account-avatar" aria-hidden="true">
-                {initials}
-              </span>
-              <span>{session.context.displayName}</span>
-            </Link>
+            <AccountMenu
+              administrative={session.context.isAdministrative}
+              displayName={session.context.displayName}
+              email={session.context.email}
+              hasPermission={hasPermission}
+              initials={initials}
+              onLogout={() => void signOut()}
+              signingOut={signingOut}
+            />
           </div>
         </header>
         <main className="workspace-content" id="workspace-content" tabIndex={-1}>
@@ -159,6 +161,135 @@ export function WorkspaceLayout({ children }: PropsWithChildren) {
         </main>
       </div>
     </div>
+  );
+}
+
+function AccountMenu({
+  administrative,
+  displayName,
+  email,
+  hasPermission,
+  initials,
+  onLogout,
+  signingOut,
+}: {
+  administrative: boolean;
+  displayName: string;
+  email: string;
+  hasPermission: (module: string, action?: string) => boolean;
+  initials: string;
+  onLogout: () => void;
+  signingOut: boolean;
+}) {
+  const { location } = useRouter();
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => setOpen(false), [location.pathname]);
+
+  useEffect(() => {
+    if (!open) return;
+    const pointer = (event: PointerEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
+    };
+    const keyboard = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      setOpen(false);
+      triggerRef.current?.focus();
+    };
+    document.addEventListener('pointerdown', pointer);
+    document.addEventListener('keydown', keyboard);
+    return () => {
+      document.removeEventListener('pointerdown', pointer);
+      document.removeEventListener('keydown', keyboard);
+    };
+  }, [open]);
+
+  return (
+    <div className="topbar-account-menu" ref={rootRef}>
+      <button
+        aria-expanded={open}
+        aria-haspopup="menu"
+        aria-label="Open account menu"
+        className="topbar-account-trigger"
+        onClick={() => setOpen((value) => !value)}
+        ref={triggerRef}
+        type="button"
+      >
+        <span className="account-avatar" aria-hidden="true">
+          {initials}
+        </span>
+        <span className="topbar-account-copy">
+          <strong>{displayName}</strong>
+          <small>{administrative ? messages.home.adminAccess : messages.home.standardAccess}</small>
+        </span>
+        <Icon name="chevron" size={16} />
+      </button>
+
+      {open ? (
+        <div aria-label="Account menu" className="account-menu-popover" role="menu">
+          <header>
+            <span className="account-avatar" aria-hidden="true">
+              {initials}
+            </span>
+            <div>
+              <strong>{displayName}</strong>
+              <small>{email}</small>
+            </div>
+          </header>
+          <nav aria-label="Account destinations">
+            <AccountMenuLink icon="profile" label="My access & security" to="/access" />
+            <AccountMenuLink icon="home" label="Overview" to="/" />
+            {hasPermission('platform') ? (
+              <AccountMenuLink icon="shield" label="Security administration" to="/security" />
+            ) : null}
+            {hasPermission('platform.organization') ? (
+              <AccountMenuLink
+                icon="organization"
+                label="Organization settings"
+                to="/organization"
+              />
+            ) : null}
+            {hasPermission('platform') ? (
+              <AccountMenuLink icon="activity" label="System activity" to="/operations" />
+            ) : null}
+          </nav>
+          <footer>
+            <button
+              disabled={signingOut}
+              onClick={() => {
+                setOpen(false);
+                onLogout();
+              }}
+              role="menuitem"
+              type="button"
+            >
+              <Icon name="logout" size={17} />
+              <span>{signingOut ? 'Signing out…' : messages.navigation.signOut}</span>
+            </button>
+          </footer>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function AccountMenuLink({
+  icon,
+  label,
+  to,
+}: {
+  icon: Parameters<typeof Icon>[0]['name'];
+  label: string;
+  to: string;
+}) {
+  return (
+    <Link role="menuitem" to={to}>
+      <Icon name={icon} size={17} />
+      <span>{label}</span>
+      <Icon name="arrow" size={15} />
+    </Link>
   );
 }
 
@@ -193,20 +324,38 @@ function NavigationSection({ children, label }: PropsWithChildren<{ label: strin
 }
 
 function SidebarLink({
+  aliases = [],
+  end = false,
   icon,
   label,
   to,
 }: {
+  aliases?: string[];
+  end?: boolean;
   icon: Parameters<typeof Icon>[0]['name'];
   label: string;
   to: string;
 }) {
+  const { location } = useRouter();
+  const aliasActive = aliases.some(
+    (path) => location.pathname === path || location.pathname.startsWith(`${path}/`),
+  );
   return (
-    <Link className={({ isActive }) => (isActive ? 'is-active' : undefined)} end to={to}>
+    <Link
+      className={({ isActive }) => (isActive || aliasActive ? 'is-active' : undefined)}
+      end={end}
+      to={to}
+    >
       <Icon name={icon} />
       <span>{label}</span>
     </Link>
   );
+}
+
+function sidebarAliases(module: string): string[] {
+  if (module === 'crm') return ['/partners'];
+  if (module === 'erp.warehouse') return ['/catalog'];
+  return [];
 }
 
 function getInitials(displayName: string): string {

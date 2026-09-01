@@ -1,6 +1,6 @@
 # Vista Integrated Information System — Remaining Implementation Plan
 
-Status date: 2026-08-27
+Status date: 2026-09-01
 Project: `BG16RFPR001-1.012-1324-C01`
 
 [`AGENTS.md`](AGENTS.md) is authoritative. This file contains only unfinished
@@ -61,8 +61,8 @@ enabled; every requirement remains traceable.
 - Deliver approved AD, LDAP, Entra ID, SAML, and OAuth/OIDC adapters and group
   mapping.
 - Complete the approved production storage, encryption, retention, malware-scan,
-  and quarantine policy, plus managed attachments for financial documents, CRM
-  interactions, and other remaining approved record types.
+  and quarantine policy, plus managed attachments for financial documents and
+  other remaining approved record types.
 - Deliver approved email and backup-SMS adapters, notification preferences,
   retry/reconciliation behavior, monitoring, alert hooks, and operational
   runbooks.
@@ -125,10 +125,6 @@ procurement-to-accounting and quotation-to-payment scenarios pass end to end.
 
 **Remaining**
 
-- Deliver chronological customer and location timelines for calls, emails,
-  chats, visits, tasks, reminders, and authorized attachments.
-- Deliver lead capture, qualification/conversion, opportunities, and
-  backend-validated, audited Kanban stage changes.
 - Deliver the customer portal only if selected.
 - Deliver warranty cards, the unified CRM warranty-claim experience, surveys,
   NPS, referrals, reproducible analytics/dashboards, exports, ERP/POS

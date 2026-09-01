@@ -698,8 +698,38 @@ evidence, linked Finance draft preparation, warranty care, inspection planning,
 subscription visits, CRM ticket links, and service-only history. Plan mixed
 delivery and Service routes under **ERP → Logistics → Routes**; route deliveries
 share the technician's Service capacity and overlap controls. Official payment
-documents, warranty cards, and the full sales/supplier serial history remain
-pending.
+documents and warranty cards remain pending.
+
+## CRM interactions and follow-up
+
+Open **Customers & CRM** from the sidebar and choose **Interactions, tasks &
+reminders**. Select a customer and, when needed, one of its locations to see a
+single chronological record of calls, email, chat, visits, and task changes.
+Date filters narrow the current customer view without changing the saved
+history.
+
+Choose **Log interaction** to record the communication type, time, subject, and
+notes. A report, quotation, or photograph can be attached when the account has
+permission to maintain CRM records; the file remains protected by the same
+customer interaction access. Choose **New task** to set the owner, priority, due
+time, and optional reminder. Open a task from **Open tasks** to complete or
+cancel it with an optional closing note. The task leaves the open list, but its
+creation and closing event remain in the timeline.
+
+## CRM leads and sales opportunities
+
+Open **Customers & CRM** from the sidebar and choose **Leads & opportunities**.
+The **Lead desk** records a prospect, contact route, source, owner, and useful
+enquiry notes. Open a new lead to qualify it once the need and next step are
+clear. A qualified lead can become either an existing customer or a new customer
+in the shared customer register, with an optional first sales opportunity.
+
+Choose **Sales pipeline** to review opportunities across New, Qualified,
+Quotation sent, Negotiation, Won, and Lost. Drag a card to another stage, or open
+it and use **Move through the pipeline** for a keyboard-accessible change. Each
+move keeps its employee, time, previous stage, probability, and note. Open an
+opportunity to link a Sales quotation issued to the same customer and review the
+complete progress history.
 
 ## CRM tickets and SLA
 

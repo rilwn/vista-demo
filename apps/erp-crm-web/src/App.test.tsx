@@ -1,5 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type {
+  CrmLead,
+  CrmOpportunity,
   FinanceAgingReport,
   FinanceJournalReport,
   FinanceReportDefinition,
@@ -248,6 +250,34 @@ describe('ERP and CRM authenticated workspace', () => {
     );
   });
 
+  it('searches permitted workspace pages and exposes a role-aware account menu', async () => {
+    storeAuthenticatedSession(authenticationContext);
+    const fetchMock = vi.fn((input: string) => {
+      if (input.endsWith('/auth/me')) return Promise.resolve(jsonResponse(authenticationContext));
+      return Promise.resolve(jsonResponse({}));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderApplication(['/']);
+    await screen.findByRole('heading', { name: `${messages.home.title}, Mila.` });
+
+    const search = screen.getByRole('combobox', { name: 'Search pages and work areas' });
+    fireEvent.keyDown(window, { key: '/' });
+    expect(document.activeElement).toBe(search);
+    fireEvent.change(search, { target: { value: 'Finance' } });
+    expect(screen.getByText('No matching page')).toBeTruthy();
+    fireEvent.change(search, { target: { value: 'Customers & CRM' } });
+    fireEvent.click(screen.getByRole('option', { name: /Customers & CRM/u }));
+    expect(await screen.findByRole('heading', { name: moduleMessages.crm.label })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open account menu' }));
+    const menu = screen.getByRole('menu', { name: 'Account menu' });
+    expect(within(menu).getByRole('menuitem', { name: /My access & security/u })).toBeTruthy();
+    expect(within(menu).getByRole('menuitem', { name: 'Overview' })).toBeTruthy();
+    expect(within(menu).getByRole('menuitem', { name: messages.navigation.signOut })).toBeTruthy();
+    expect(within(menu).queryByRole('menuitem', { name: 'Security administration' })).toBeNull();
+  });
+
   it('starts a newly signed-in employee at the overview instead of restoring a stale restricted page', async () => {
     const warehouseOnlyContext = {
       ...authenticationContext,
@@ -313,7 +343,7 @@ describe('ERP and CRM authenticated workspace', () => {
     fireEvent.submit(screen.getByRole('button', { name: messages.auth.verify }).closest('form')!);
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
-    expect(await screen.findByText(messages.home.twoFactor)).toBeTruthy();
+    expect((await screen.findAllByText(messages.home.twoFactor)).length).toBeGreaterThan(0);
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
       '/api/v1/auth/login',
@@ -682,6 +712,462 @@ describe('ERP and CRM authenticated workspace', () => {
     const footer = form?.children[1] as HTMLElement;
     expect(within(footer).getByRole('button', { name: 'Create ticket' })).toBeTruthy();
     expect(within(footer).getByRole('button', { name: 'Back' })).toBeTruthy();
+  });
+
+  it('records customer interactions and completes assigned follow-up tasks from the CRM timeline', async () => {
+    const crmContext = {
+      ...authenticationContext,
+      permissions: [
+        ...authenticationContext.permissions,
+        { action: 'create', module: 'crm' },
+        { action: 'edit', module: 'crm' },
+      ],
+    };
+    storeAuthenticatedSession(crmContext);
+    const customerId = '6d17e1cc-bfef-4d25-bd44-833894c14ed6';
+    const locationId = '08d7992e-504a-4b86-b10d-c06ba6ab30de';
+    const interactionId = 'b88a1b22-ad44-4ba2-b50f-21df3ae5e767';
+    const taskId = '72d20969-8d5b-45f3-9403-e842c380a2d2';
+    const references = {
+      assignees: [{ displayName: 'Mila Petrova', id: crmContext.accountId }],
+      businessTimezone: 'Europe/Sofia',
+      contacts: [{ customerPartnerId: customerId, displayName: 'Elena Petrova', id: 'contact-1' }],
+      customers: [{ id: customerId, name: 'Alfa Market Demo Ltd.' }],
+      locations: [{ customerPartnerId: customerId, id: locationId, name: 'Main retail store' }],
+    };
+    let interaction: Record<string, unknown> | null = null;
+    let task: Record<string, unknown> | null = null;
+    function page() {
+      const items = [
+        ...(interaction
+          ? [{ interaction, kind: 'interaction', occurredAt: interaction['occurredAt'] }]
+          : []),
+        ...(task
+          ? [
+              {
+                kind: 'task_event',
+                occurredAt: task['updatedAt'],
+                task,
+                taskEvent: (task['history'] as unknown[]).at(-1),
+              },
+            ]
+          : []),
+      ];
+      return {
+        items,
+        openTasks: task?.['status'] === 'open' ? [task] : [],
+        page: 1,
+        pageSize: 25,
+        summary: {
+          interactions: interaction ? 1 : 0,
+          openTasks: task?.['status'] === 'open' ? 1 : 0,
+          overdueTasks: 0,
+        },
+        total: items.length,
+        totalPages: items.length ? 1 : 0,
+      };
+    }
+    const fetchMock = vi.fn((input: string, options?: RequestInit) => {
+      if (input.endsWith('/auth/me')) return Promise.resolve(jsonResponse(crmContext));
+      if (input.endsWith('/crm/timeline/reference-data')) {
+        return Promise.resolve(jsonResponse(references));
+      }
+      if (input.includes('/crm/timeline?')) return Promise.resolve(jsonResponse(page()));
+      if (input.endsWith('/crm/interactions') && options?.method === 'POST') {
+        const body = JSON.parse(options.body as string) as Record<string, unknown>;
+        interaction = {
+          ...body,
+          contactName: 'Elena Petrova',
+          createdAt: '2026-09-01T09:01:00.000Z',
+          createdByName: 'Mila Petrova',
+          customerName: 'Alfa Market Demo Ltd.',
+          id: interactionId,
+          locationName: 'Main retail store',
+        };
+        return Promise.resolve(jsonResponse(interaction, 201));
+      }
+      if (input.endsWith('/crm/tasks') && options?.method === 'POST') {
+        const body = JSON.parse(options.body as string) as Record<string, unknown>;
+        task = {
+          assignedTo: { displayName: 'Mila Petrova', id: crmContext.accountId },
+          createdAt: '2026-09-01T09:02:00.000Z',
+          customerName: 'Alfa Market Demo Ltd.',
+          history: [
+            {
+              changedAt: '2026-09-01T09:02:00.000Z',
+              changedByName: 'Mila Petrova',
+              id: 'task-history-created',
+              status: 'open',
+              type: 'created',
+            },
+          ],
+          id: taskId,
+          locationName: 'Main retail store',
+          status: 'open',
+          updatedAt: '2026-09-01T09:02:00.000Z',
+          version: 1,
+          ...body,
+        };
+        return Promise.resolve(jsonResponse(task, 201));
+      }
+      if (input.endsWith(`/crm/tasks/${taskId}/transition`) && options?.method === 'POST') {
+        task = {
+          ...task,
+          completedAt: '2026-09-01T09:10:00.000Z',
+          history: [
+            ...((task?.['history'] as unknown[]) ?? []),
+            {
+              changedAt: '2026-09-01T09:10:00.000Z',
+              changedByName: 'Mila Petrova',
+              id: 'task-history-completed',
+              status: 'completed',
+              type: 'completed',
+            },
+          ],
+          status: 'completed',
+          updatedAt: '2026-09-01T09:10:00.000Z',
+          version: 2,
+        };
+        return Promise.resolve(jsonResponse(task));
+      }
+      if (input.includes('/files?')) {
+        return Promise.resolve(
+          jsonResponse({ items: [], page: 1, pageSize: 100, total: 0, totalPages: 0 }),
+        );
+      }
+      return Promise.resolve(jsonResponse({}));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderApplication(['/modules/crm/timeline']);
+    expect(await screen.findByRole('heading', { name: 'Interactions & tasks' })).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Back to Customers & CRM' })).toBeTruthy();
+    const interactionButton = screen.getByRole('button', { name: /Log interaction/u });
+    await waitFor(() => expect((interactionButton as HTMLButtonElement).disabled).toBe(false));
+    interactionButton.focus();
+    fireEvent.click(interactionButton);
+    let interactionDialog = screen.getByRole('dialog', { name: 'Log interaction' });
+    expect(document.activeElement).toBe(
+      within(interactionDialog).getByRole('button', { name: 'Back from Log interaction' }),
+    );
+    fireEvent.keyDown(interactionDialog, { key: 'Escape' });
+    expect(screen.queryByRole('dialog', { name: 'Log interaction' })).toBeNull();
+    expect(document.activeElement).toBe(interactionButton);
+    fireEvent.click(interactionButton);
+    interactionDialog = screen.getByRole('dialog', { name: 'Log interaction' });
+    expect(interactionDialog.querySelector('.crm-timeline-drawer-actions')).toBeTruthy();
+    fireEvent.change(within(interactionDialog).getByLabelText('Location (optional)'), {
+      target: { value: locationId },
+    });
+    fireEvent.change(within(interactionDialog).getByLabelText('Subject'), {
+      target: { value: 'Additional device quotation' },
+    });
+    fireEvent.change(within(interactionDialog).getByLabelText('Notes'), {
+      target: { value: 'The customer requested a quotation for an additional device.' },
+    });
+    fireEvent.click(within(interactionDialog).getByRole('button', { name: 'Save interaction' }));
+    expect(
+      await screen.findByText('The interaction was added to the customer timeline.'),
+    ).toBeTruthy();
+    expect(await screen.findByText('Additional device quotation')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'New task' }));
+    const taskDialog = screen.getByRole('dialog', { name: 'New task' });
+    fireEvent.change(within(taskDialog).getByLabelText('Location (optional)'), {
+      target: { value: locationId },
+    });
+    fireEvent.change(within(taskDialog).getByLabelText('Task'), {
+      target: { value: 'Send the requested quotation' },
+    });
+    fireEvent.click(within(taskDialog).getByRole('button', { name: 'Create task' }));
+    expect(await screen.findByText('The follow-up task was created.')).toBeTruthy();
+    expect((await screen.findAllByText('Send the requested quotation')).length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getAllByRole('button', { name: /Send the requested quotation/u })[0]!);
+    const taskPreview = await screen.findByRole('dialog', { name: 'Task details' });
+    fireEvent.click(within(taskPreview).getByRole('button', { name: /Complete task/u }));
+    expect(await screen.findByText('The task was completed.')).toBeTruthy();
+    expect(within(taskPreview).getByText('Completed')).toBeTruthy();
+
+    const interactionCommand = fetchMock.mock.calls.find(
+      ([url, options]) => url.endsWith('/crm/interactions') && options?.method === 'POST',
+    );
+    expect(JSON.parse((interactionCommand?.[1] as RequestInit).body as string)).toMatchObject({
+      customerLocationId: locationId,
+      customerPartnerId: customerId,
+      interactionType: 'incoming_call',
+      subject: 'Additional device quotation',
+    });
+  });
+
+  it('qualifies a lead, converts it once, and moves the opportunity through the CRM pipeline', async () => {
+    const crmContext = {
+      ...authenticationContext,
+      permissions: [
+        ...authenticationContext.permissions,
+        { action: 'create', module: 'crm' },
+        { action: 'edit', module: 'crm' },
+      ],
+    };
+    storeAuthenticatedSession(crmContext);
+    const owner = { displayName: 'Mila Petrova', id: crmContext.accountId };
+    const customerId = 'aa17e1cc-bfef-4d25-bd44-833894c14ed6';
+    const leadId = 'ab8a1b22-ad44-4ba2-b50f-21df3ae5e767';
+    const opportunityId = 'ac8a1b22-ad44-4ba2-b50f-21df3ae5e767';
+    let customers: Array<{ id: string; name: string }> = [];
+    let lead: CrmLead | null = null;
+    let opportunity: CrmOpportunity | null = null;
+    const references = () => ({
+      assignees: [owner],
+      businessTimezone: 'Europe/Sofia',
+      customers,
+      quotations: [],
+    });
+    const leadPage = () => ({
+      items: lead ? [lead] : [],
+      page: 1,
+      pageSize: 25,
+      summary: {
+        converted: lead?.status === 'converted' ? 1 : 0,
+        new: lead?.status === 'new' ? 1 : 0,
+        qualified: lead?.status === 'qualified' ? 1 : 0,
+      },
+      total: lead ? 1 : 0,
+      totalPages: lead ? 1 : 0,
+    });
+    const opportunityPage = () => ({
+      items: opportunity ? [opportunity] : [],
+      page: 1,
+      pageSize: 200,
+      summary: {
+        openCount: opportunity && !['won', 'lost'].includes(opportunity.stage) ? 1 : 0,
+        openRevenueBgn: opportunity ? opportunity.estimatedRevenueBgn : '0',
+        weightedRevenueBgn: opportunity ? opportunity.weightedRevenueBgn : '0',
+        wonRevenueBgn: opportunity?.stage === 'won' ? opportunity.estimatedRevenueBgn : '0',
+      },
+      total: opportunity ? 1 : 0,
+      totalPages: opportunity ? 1 : 0,
+    });
+    const fetchMock = vi.fn((input: string, options?: RequestInit) => {
+      if (input.endsWith('/auth/me')) return Promise.resolve(jsonResponse(crmContext));
+      if (input.endsWith('/crm/pipeline/reference-data'))
+        return Promise.resolve(jsonResponse(references()));
+      if (input.includes('/crm/leads?')) return Promise.resolve(jsonResponse(leadPage()));
+      if (input.includes('/crm/opportunities?'))
+        return Promise.resolve(jsonResponse(opportunityPage()));
+      if (input.endsWith('/crm/leads') && options?.method === 'POST') {
+        const body = JSON.parse(options.body as string) as Record<string, unknown>;
+        lead = {
+          contactName: body['contactName'] as string,
+          createdAt: '2026-09-01T10:00:00.000Z',
+          email: body['email'] as string,
+          history: [
+            {
+              changedAt: '2026-09-01T10:00:00.000Z',
+              changedByName: owner.displayName,
+              id: 'lead-created',
+              status: 'new',
+              type: 'created',
+            },
+          ],
+          id: leadId,
+          number: 'LEAD-2026-000001',
+          notes: body['notes'] as string,
+          organizationName: body['organizationName'] as string,
+          owner,
+          source: body['source'] as CrmLead['source'],
+          status: 'new',
+          telephone: body['telephone'] as string,
+          updatedAt: '2026-09-01T10:00:00.000Z',
+          version: 1,
+        };
+        return Promise.resolve(jsonResponse(lead, 201));
+      }
+      if (input.endsWith(`/crm/leads/${leadId}/qualify`) && options?.method === 'POST') {
+        lead = {
+          ...lead!,
+          history: [
+            ...lead!.history,
+            {
+              changedAt: '2026-09-01T10:05:00.000Z',
+              changedByName: owner.displayName,
+              id: 'lead-qualified',
+              status: 'qualified',
+              type: 'qualified',
+            },
+          ],
+          qualifiedAt: '2026-09-01T10:05:00.000Z',
+          status: 'qualified',
+          updatedAt: '2026-09-01T10:05:00.000Z',
+          version: 2,
+        };
+        return Promise.resolve(jsonResponse(lead));
+      }
+      if (input.endsWith(`/crm/leads/${leadId}/convert`) && options?.method === 'POST') {
+        const body = JSON.parse(options.body as string) as {
+          newCustomer: { displayName: string };
+          opportunity: {
+            description?: string;
+            estimatedRevenueBgn: string;
+            expectedCloseOn?: string;
+            ownerAccountId: string;
+            probabilityPercent: number;
+            title: string;
+          };
+        };
+        customers = [{ id: customerId, name: body.newCustomer.displayName }];
+        lead = {
+          ...lead!,
+          convertedAt: '2026-09-01T10:10:00.000Z',
+          convertedCustomer: customers[0]!,
+          history: [
+            ...lead!.history,
+            {
+              changedAt: '2026-09-01T10:10:00.000Z',
+              changedByName: owner.displayName,
+              id: 'lead-converted',
+              status: 'converted',
+              type: 'converted',
+            },
+          ],
+          status: 'converted',
+          updatedAt: '2026-09-01T10:10:00.000Z',
+          version: 3,
+        };
+        opportunity = {
+          createdAt: '2026-09-01T10:10:00.000Z',
+          customer: customers[0]!,
+          ...(body.opportunity.description ? { description: body.opportunity.description } : {}),
+          estimatedRevenueBgn: '1800.00',
+          ...(body.opportunity.expectedCloseOn
+            ? { expectedCloseOn: body.opportunity.expectedCloseOn }
+            : {}),
+          history: [
+            {
+              changedAt: '2026-09-01T10:10:00.000Z',
+              changedByName: owner.displayName,
+              id: 'opportunity-created',
+              nextStage: 'qualified',
+              probabilityPercent: 40,
+              type: 'created',
+            },
+          ],
+          id: opportunityId,
+          number: 'OPP-2026-000001',
+          owner,
+          probabilityPercent: 40,
+          quotations: [],
+          sourceLeadId: leadId,
+          stage: 'qualified',
+          title: body.opportunity.title,
+          updatedAt: '2026-09-01T10:10:00.000Z',
+          version: 1,
+          weightedRevenueBgn: '720.00',
+        };
+        return Promise.resolve(jsonResponse({ customer: customers[0], lead, opportunity }));
+      }
+      if (input.endsWith(`/crm/opportunities/${opportunityId}`) && !options?.method)
+        return Promise.resolve(jsonResponse(opportunity));
+      if (
+        input.endsWith(`/crm/opportunities/${opportunityId}/stage`) &&
+        options?.method === 'POST'
+      ) {
+        const body = JSON.parse(options.body as string) as {
+          probabilityPercent: number;
+          stage: CrmOpportunity['stage'];
+        };
+        opportunity = {
+          ...opportunity!,
+          history: [
+            ...opportunity!.history,
+            {
+              changedAt: '2026-09-01T10:15:00.000Z',
+              changedByName: owner.displayName,
+              id: 'opportunity-moved',
+              nextStage: body.stage,
+              previousStage: opportunity!.stage,
+              probabilityPercent: body.probabilityPercent,
+              type: 'stage_changed',
+            },
+          ],
+          probabilityPercent: body.probabilityPercent,
+          stage: body.stage,
+          updatedAt: '2026-09-01T10:15:00.000Z',
+          version: 2,
+          weightedRevenueBgn: '720.00',
+        };
+        return Promise.resolve(jsonResponse(opportunity));
+      }
+      return Promise.resolve(jsonResponse({}));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderApplication(['/modules/crm/leads']);
+    expect(await screen.findByRole('heading', { name: 'Leads & opportunities' })).toBeTruthy();
+    const newLead = screen.getByRole('button', { name: /New lead/u });
+    await waitFor(() => expect((newLead as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(newLead);
+    let dialog = screen.getByRole('dialog', { name: 'New lead' });
+    fireEvent.change(within(dialog).getByLabelText('Company or prospect name'), {
+      target: { value: 'North Shop Demo Ltd.' },
+    });
+    fireEvent.change(within(dialog).getByLabelText('Contact person'), {
+      target: { value: 'Petar Dimitrov' },
+    });
+    fireEvent.change(within(dialog).getByLabelText('Telephone'), {
+      target: { value: '+359 888 200 300' },
+    });
+    fireEvent.change(within(dialog).getByLabelText('Notes (optional)'), {
+      target: { value: 'Interested in a fiscal device and annual service.' },
+    });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save lead' }));
+    expect(await screen.findByText('LEAD-2026-000001 was added to the lead desk.')).toBeTruthy();
+
+    fireEvent.click(await screen.findByRole('button', { name: /North Shop Demo Ltd\./u }));
+    dialog = screen.getByRole('dialog', { name: 'North Shop Demo Ltd.' });
+    expect(dialog.querySelector('.security-drawer-body > .crm-pipeline-preview')).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole('button', { name: /Mark as qualified/u }));
+    expect(await screen.findByText('LEAD-2026-000001 is ready for conversion.')).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Convert lead' }));
+    dialog = screen.getByRole('dialog', { name: 'Convert lead' });
+    const conversionForm = dialog.querySelector('form.crm-timeline-drawer-form');
+    expect(conversionForm?.querySelector(':scope > .crm-timeline-drawer-scroll')).toBeTruthy();
+    expect(conversionForm?.querySelector(':scope > .crm-timeline-drawer-actions')).toBeTruthy();
+    fireEvent.change(within(dialog).getByLabelText('Opportunity name'), {
+      target: { value: 'Fiscal device and annual service' },
+    });
+    fireEvent.change(within(dialog).getByLabelText('Estimated value (BGN)'), {
+      target: { value: '1800' },
+    });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Convert lead' }));
+    expect(
+      await screen.findByText(
+        'LEAD-2026-000001 became North Shop Demo Ltd. with opportunity OPP-2026-000001.',
+      ),
+    ).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: /Sales pipeline/u }));
+    expect(await screen.findByText('Fiscal device and annual service')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /Fiscal device and annual service/u }));
+    dialog = await screen.findByRole('dialog', { name: 'Fiscal device and annual service' });
+    expect(dialog.querySelector('.security-drawer-body > .crm-pipeline-preview')).toBeTruthy();
+    fireEvent.change(within(dialog).getByLabelText('Next stage'), {
+      target: { value: 'quotation_sent' },
+    });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Update stage' }));
+    expect(await screen.findByText('OPP-2026-000001 moved to Quotation sent.')).toBeTruthy();
+    expect(within(dialog).getAllByText('Quotation sent').length).toBeGreaterThan(0);
+
+    const convertCall = fetchMock.mock.calls.find(
+      ([url, options]) =>
+        url.endsWith(`/crm/leads/${leadId}/convert`) && options?.method === 'POST',
+    );
+    expect(JSON.parse((convertCall?.[1] as RequestInit).body as string)).toMatchObject({
+      createOpportunity: true,
+      expectedVersion: 2,
+      newCustomer: { displayName: 'North Shop Demo Ltd.', kind: 'legal_entity' },
+      opportunity: { estimatedRevenueBgn: '1800', probabilityPercent: 40 },
+    });
   });
 
   it('uploads an immutable partner document from the nested partner view', async () => {
@@ -2882,12 +3368,16 @@ describe('ERP and CRM authenticated workspace', () => {
       products: [
         {
           id: productId,
-          name: 'Receipt paper roll',
-          productCode: 'ROLL-80',
-          trackingMode: 'none',
+          name: 'Demo Fiscal Register X1',
+          productCode: 'FISCAL-X1',
+          trackingMode: 'serial',
         },
       ],
-      serials: [],
+      serials: [
+        { productId, serialNumber: 'DEMO-FR-001', warehouseId },
+        { productId, serialNumber: 'DEMO-FR-002', warehouseId },
+        { productId, serialNumber: 'DEMO-FR-003', warehouseId },
+      ],
       warehouses: [{ id: warehouseId, name: 'Central warehouse' }],
     };
     const fetchMock = vi.fn((input: string, options?: RequestInit) => {
@@ -2924,7 +3414,7 @@ describe('ERP and CRM authenticated workspace', () => {
               productId,
               productName: references.products[0]!.name,
               quantity: '2.0000',
-              trackingMode: 'none',
+              trackingMode: 'serial',
               unitPrice: '40.0000',
               vatTreatment: 'standard_20',
             },
@@ -2954,8 +3444,8 @@ describe('ERP and CRM authenticated workspace', () => {
                 productName: references.products[0]!.name,
                 quantity: '2.0000',
                 reservationId: 'f25f1bc6-d076-4cd8-804d-b4470ec98858',
-                reservedSerialNumbers: [],
-                trackingMode: 'none',
+                reservedSerialNumbers: ['DEMO-FR-002', 'DEMO-FR-003'],
+                trackingMode: 'serial',
               },
             ],
             number: 'SO-2026-000001',
@@ -2976,7 +3466,7 @@ describe('ERP and CRM authenticated workspace', () => {
                 productId,
                 productName: references.products[0]!.name,
                 quantity: '2.0000',
-                serialNumbers: [],
+                serialNumbers: ['DEMO-FR-002', 'DEMO-FR-003'],
               },
             ],
             number: 'HO-2026-000001',
@@ -3062,6 +3552,26 @@ describe('ERP and CRM authenticated workspace', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: 'Preview' }));
     let preview = await screen.findByRole('dialog', { name: 'Q-2026-000001' });
+    const confirmButton = within(preview).getByRole<HTMLButtonElement>('button', {
+      name: 'Confirm order and reserve stock',
+    });
+    expect(confirmButton.disabled).toBe(true);
+    expect(within(preview).getByText('0 of 2 selected')).toBeTruthy();
+    const serialSearch = within(preview).getByPlaceholderText('Search by serial number');
+    fireEvent.change(serialSearch, { target: { value: '003' } });
+    expect(within(preview).queryByRole('button', { name: 'DEMO-FR-001' })).toBeNull();
+    expect(within(preview).getByRole('button', { name: 'DEMO-FR-003' })).toBeTruthy();
+    fireEvent.change(serialSearch, { target: { value: '' } });
+    fireEvent.click(within(preview).getByRole('button', { name: 'DEMO-FR-001' }));
+    expect(confirmButton.disabled).toBe(true);
+    fireEvent.click(within(preview).getByRole('button', { name: 'DEMO-FR-002' }));
+    expect(confirmButton.disabled).toBe(false);
+    expect(within(preview).getByText('2 of 2 selected')).toBeTruthy();
+    expect(
+      within(preview).getByRole<HTMLButtonElement>('button', { name: 'DEMO-FR-003' }).disabled,
+    ).toBe(true);
+    fireEvent.click(within(preview).getByRole('button', { name: 'DEMO-FR-001' }));
+    fireEvent.click(within(preview).getByRole('button', { name: 'DEMO-FR-003' }));
     fireEvent.click(
       within(preview).getByRole('button', { name: 'Confirm order and reserve stock' }),
     );
@@ -3073,7 +3583,7 @@ describe('ERP and CRM authenticated workspace', () => {
 
     preview = await screen.findByRole('dialog', { name: 'Q-2026-000001' });
     expect(within(preview).getAllByText('HO-2026-000001')).toHaveLength(2);
-    fireEvent.change(within(preview).getByRole('combobox', { name: /Receiving location/ }), {
+    fireEvent.change(within(preview).getByRole('combobox', { name: /^Receiving location/u }), {
       target: { value: customerLocationId },
     });
     fireEvent.change(within(preview).getByLabelText('Customer representative'), {
@@ -3098,6 +3608,12 @@ describe('ERP and CRM authenticated workspace', () => {
         ([url]) => url.includes('/sales/prices/resolve?asOf=') && url.includes('currencyCode=BGN'),
       ),
     ).toBe(true);
+    const confirmationCall = fetchMock.mock.calls.find(
+      ([url]) => url.includes('/sales/quotations/') && url.endsWith('/confirm'),
+    );
+    expect(JSON.parse((confirmationCall?.[1] as RequestInit).body as string)).toMatchObject({
+      lines: [{ serialNumbers: ['DEMO-FR-002', 'DEMO-FR-003'] }],
+    });
   });
 
   it('maintains customer groups, campaigns, and future prices through visible Sales navigation', async () => {
@@ -4742,7 +5258,12 @@ describe('ERP and CRM authenticated workspace', () => {
     expect(within(deliveryDialog).getByText('Vratsa retail outlet')).toBeTruthy();
     fireEvent.click(within(deliveryDialog).getByRole('button', { name: 'Dispatch' }));
     expect(await screen.findByText('DLV-2026-000014 is on the way.')).toBeTruthy();
-    expect(within(deliveryDialog).getAllByText('On the way').length).toBeGreaterThan(0);
+    await waitFor(() =>
+      expect(
+        within(screen.getByRole('dialog', { name: 'DLV-2026-000014' })).getAllByText('On the way')
+          .length,
+      ).toBeGreaterThan(0),
+    );
 
     const createCall = fetchMock.mock.calls.find(
       ([url, options]) => url.endsWith('/logistics/deliveries') && options?.method === 'POST',

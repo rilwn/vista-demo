@@ -313,6 +313,65 @@ describe.skipIf(!runInfrastructureTests)('purchase order to warehouse receipt', 
       receipt_count: '2',
       receipt_line_count: '3',
     });
+
+    const duplicateOrderResponse = await request(application.getHttpServer())
+      .post('/api/v1/procurement/purchase-orders')
+      .set('authorization', `Bearer ${creatorToken}`)
+      .set('idempotency-key', `duplicate-serial-order-${runId}`)
+      .send({
+        currencyCode: 'BGN',
+        lines: [
+          {
+            expectedDeliveryDate: '2099-08-29',
+            productId: serialProductId,
+            quantity: '1',
+            unitPrice: '250',
+          },
+        ],
+        supplierPartnerId: supplierId,
+        warehouseId,
+      })
+      .expect(201);
+    const duplicateOrder = duplicateOrderResponse.body as PurchaseOrder;
+    const duplicateOrderLine = required(
+      duplicateOrder.lines[0],
+      'Duplicate-serial order line was not returned',
+    );
+    const duplicateSerial = `VISTA-PROC-${runId}`;
+    const duplicateReceipt = await request(application.getHttpServer())
+      .post(`/api/v1/procurement/purchase-orders/${duplicateOrder.id}/receipts`)
+      .set('authorization', `Bearer ${creatorToken}`)
+      .set('idempotency-key', `duplicate-serial-receipt-${runId}`)
+      .send({
+        lines: [
+          {
+            orderLineId: duplicateOrderLine.id,
+            quantity: '1',
+            serialNumbers: [duplicateSerial],
+          },
+        ],
+      })
+      .expect(409);
+    expect(duplicateReceipt.body).toMatchObject({
+      error: {
+        code: 'SERIAL_NUMBER_ALREADY_REGISTERED',
+        details: [
+          {
+            field: 'serialNumbers',
+            message: `${duplicateSerial.toUpperCase()} is already registered`,
+          },
+        ],
+      },
+    });
+    expect(duplicateReceipt.body.error.message).toContain(duplicateSerial.toUpperCase());
+    const unchangedOrder = await request(application.getHttpServer())
+      .get(`/api/v1/procurement/purchase-orders/${duplicateOrder.id}`)
+      .set('authorization', `Bearer ${creatorToken}`)
+      .expect(200);
+    expect(unchangedOrder.body).toMatchObject({ status: 'open' });
+    expect((unchangedOrder.body as PurchaseOrder).lines[0]).toMatchObject({
+      deliveredQuantity: '0.0000',
+    });
   });
 
   it('maintains supplier terms and evaluations, matches invoices, and tracks claims', async () => {

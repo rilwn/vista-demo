@@ -228,6 +228,182 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/crm/interactions': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['CrmTimelineController_createInteraction'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/crm/leads': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['CrmPipelineController_leads'];
+    put?: never;
+    post: operations['CrmPipelineController_createLead'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/crm/leads/{id}/convert': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['CrmPipelineController_convertLead'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/crm/leads/{id}/qualify': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['CrmPipelineController_qualifyLead'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/crm/opportunities': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['CrmPipelineController_opportunities'];
+    put?: never;
+    post: operations['CrmPipelineController_createOpportunity'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/crm/opportunities/{id}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['CrmPipelineController_opportunity'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/crm/opportunities/{id}/quotations': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['CrmPipelineController_linkQuotation'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/crm/opportunities/{id}/stage': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['CrmPipelineController_moveOpportunity'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/crm/pipeline/reference-data': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['CrmPipelineController_referenceData'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/crm/tasks': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['CrmTimelineController_createTask'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/crm/tasks/{id}/transition': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['CrmTimelineController_transitionTask'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/crm/tickets': {
     parameters: {
       query?: never;
@@ -332,6 +508,38 @@ export interface paths {
       cookie?: never;
     };
     get: operations['CrmTicketsController_referenceData'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/crm/timeline': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['CrmTimelineController_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/crm/timeline/reference-data': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['CrmTimelineController_referenceData'];
     put?: never;
     post?: never;
     delete?: never;
@@ -3316,6 +3524,20 @@ export interface components {
       quotationLineId: string;
       serialNumbers?: string[];
     };
+    ConvertCrmLeadDto: {
+      createOpportunity: boolean;
+      /** Format: uuid */
+      existingCustomerPartnerId?: string;
+      expectedVersion: number;
+      newCustomer?: components['schemas']['CrmNewCustomerInputDto'];
+      note?: string;
+      opportunity?: components['schemas']['CrmOpportunityInputDto'];
+    };
+    ConvertCrmLeadResultDto: {
+      customer: components['schemas']['CrmCustomerReferenceDto'];
+      lead: components['schemas']['CrmLeadDto'];
+      opportunity?: components['schemas']['CrmOpportunityDto'];
+    };
     CreateBusinessBranchDto: {
       code: string;
       name: string;
@@ -3341,6 +3563,62 @@ export interface components {
       code: string;
       name: string;
       operatorIds?: string[];
+    };
+    CreateCrmInteractionDto: {
+      /** Format: uuid */
+      contactPersonId?: string;
+      /** Format: uuid */
+      customerLocationId?: string;
+      /** Format: uuid */
+      customerPartnerId: string;
+      /** @enum {string} */
+      interactionType: 'incoming_call' | 'outgoing_call' | 'email' | 'chat' | 'on_site_visit';
+      notes: string;
+      /** Format: date-time */
+      occurredAt: string;
+      subject: string;
+    };
+    CreateCrmLeadDto: {
+      contactName: string;
+      /** Format: email */
+      email?: string;
+      notes?: string;
+      organizationName: string;
+      /** Format: uuid */
+      ownerAccountId: string;
+      /** @enum {string} */
+      source: 'telephone' | 'referral' | 'website' | 'trade_exhibition';
+      sourceDetails?: string;
+      telephone?: string;
+    };
+    CreateCrmOpportunityDto: {
+      /** Format: uuid */
+      customerPartnerId: string;
+      description?: string;
+      /** @example 1500.00 */
+      estimatedRevenueBgn: string;
+      /** @example 2026-10-31 */
+      expectedCloseOn?: string;
+      /** Format: uuid */
+      ownerAccountId: string;
+      probabilityPercent: number;
+      title: string;
+    };
+    CreateCrmTaskDto: {
+      /** Format: uuid */
+      assignedToAccountId: string;
+      /** Format: uuid */
+      customerLocationId?: string;
+      /** Format: uuid */
+      customerPartnerId: string;
+      /** Format: date-time */
+      dueAt: string;
+      notes?: string;
+      /** @enum {string} */
+      priority: 'low' | 'normal' | 'high' | 'urgent';
+      /** Format: date-time */
+      reminderAt?: string;
+      title: string;
     };
     CreateCrmTicketDto: {
       /** Format: uuid */
@@ -3936,6 +4214,225 @@ export interface components {
       /** Format: uuid */
       serviceRequestId?: string;
     };
+    CrmAssigneeReferenceDto: {
+      displayName: string;
+      /** Format: uuid */
+      id: string;
+    };
+    CrmContactReferenceDto: {
+      /** Format: uuid */
+      customerPartnerId: string;
+      displayName: string;
+      /** Format: uuid */
+      id: string;
+    };
+    CrmCustomerReferenceDto: {
+      /** Format: uuid */
+      id: string;
+      name: string;
+    };
+    CrmInteractionDto: {
+      contactName?: string;
+      /** Format: uuid */
+      contactPersonId?: string;
+      /** Format: date-time */
+      createdAt: string;
+      createdByName: string;
+      /** Format: uuid */
+      customerLocationId?: string;
+      customerName: string;
+      /** Format: uuid */
+      customerPartnerId: string;
+      /** Format: uuid */
+      id: string;
+      /** @enum {string} */
+      interactionType: 'incoming_call' | 'outgoing_call' | 'email' | 'chat' | 'on_site_visit';
+      locationName?: string;
+      notes: string;
+      /** Format: date-time */
+      occurredAt: string;
+      subject: string;
+    };
+    CrmInteractionResponseDto: {
+      contactName?: string;
+      /** Format: uuid */
+      contactPersonId?: string;
+      /** Format: date-time */
+      createdAt: string;
+      createdByName: string;
+      /** Format: uuid */
+      customerLocationId?: string;
+      customerName: string;
+      /** Format: uuid */
+      customerPartnerId: string;
+      /** Format: uuid */
+      id: string;
+      /** @enum {string} */
+      interactionType: 'incoming_call' | 'outgoing_call' | 'email' | 'chat' | 'on_site_visit';
+      locationName?: string;
+      notes: string;
+      /** Format: date-time */
+      occurredAt: string;
+      subject: string;
+    };
+    CrmLeadDto: {
+      contactName: string;
+      /** Format: date-time */
+      convertedAt?: string;
+      convertedCustomer?: components['schemas']['CrmCustomerReferenceDto'];
+      /** Format: date-time */
+      createdAt: string;
+      email?: string;
+      history: components['schemas']['CrmLeadHistoryEntryDto'][];
+      /** Format: uuid */
+      id: string;
+      notes?: string;
+      number: string;
+      organizationName: string;
+      owner: components['schemas']['CrmPersonReferenceDto'];
+      /** Format: date-time */
+      qualifiedAt?: string;
+      /** @enum {string} */
+      source: 'telephone' | 'referral' | 'website' | 'trade_exhibition';
+      sourceDetails?: string;
+      /** @enum {string} */
+      status: 'new' | 'qualified' | 'converted';
+      telephone?: string;
+      /** Format: date-time */
+      updatedAt: string;
+      version: number;
+    };
+    CrmLeadHistoryEntryDto: {
+      /** Format: date-time */
+      changedAt: string;
+      changedByName: string;
+      /** Format: uuid */
+      id: string;
+      note?: string;
+      /** @enum {string} */
+      status: 'new' | 'qualified' | 'converted';
+      /** @enum {string} */
+      type: 'created' | 'qualified' | 'converted';
+    };
+    CrmLeadPageDto: {
+      items: components['schemas']['CrmLeadDto'][];
+      page: number;
+      pageSize: number;
+      summary: Record<string, never>;
+      total: number;
+      totalPages: number;
+    };
+    CrmLocationReferenceDto: {
+      /** Format: uuid */
+      customerPartnerId: string;
+      id: string;
+      name: string;
+    };
+    CrmNewCustomerInputDto: {
+      displayName: string;
+      /** @enum {string} */
+      kind: 'legal_entity' | 'individual';
+      uic?: string;
+      vatNumber?: string;
+    };
+    CrmOpportunityDto: {
+      /** Format: date-time */
+      closedAt?: string;
+      /** Format: date-time */
+      createdAt: string;
+      customer: components['schemas']['CrmCustomerReferenceDto'];
+      description?: string;
+      estimatedRevenueBgn: string;
+      /** Format: date */
+      expectedCloseOn?: string;
+      history: components['schemas']['CrmOpportunityHistoryEntryDto'][];
+      /** Format: uuid */
+      id: string;
+      number: string;
+      owner: components['schemas']['CrmPersonReferenceDto'];
+      probabilityPercent: number;
+      quotations: components['schemas']['CrmOpportunityQuotationDto'][];
+      /** Format: uuid */
+      sourceLeadId?: string;
+      /** @enum {string} */
+      stage: 'new' | 'qualified' | 'quotation_sent' | 'negotiation' | 'won' | 'lost';
+      title: string;
+      /** Format: date-time */
+      updatedAt: string;
+      version: number;
+      weightedRevenueBgn: string;
+    };
+    CrmOpportunityHistoryEntryDto: {
+      /** Format: date-time */
+      changedAt: string;
+      changedByName: string;
+      /** Format: uuid */
+      id: string;
+      /** @enum {string} */
+      nextStage: 'new' | 'qualified' | 'quotation_sent' | 'negotiation' | 'won' | 'lost';
+      note?: string;
+      /** @enum {string} */
+      previousStage?: 'new' | 'qualified' | 'quotation_sent' | 'negotiation' | 'won' | 'lost';
+      probabilityPercent: number;
+      /** @enum {string} */
+      type: 'created' | 'stage_changed' | 'quotation_linked';
+    };
+    CrmOpportunityInputDto: {
+      description?: string;
+      /** @example 1500.00 */
+      estimatedRevenueBgn: string;
+      /** @example 2026-10-31 */
+      expectedCloseOn?: string;
+      /** Format: uuid */
+      ownerAccountId: string;
+      probabilityPercent: number;
+      title: string;
+    };
+    CrmOpportunityPageDto: {
+      items: components['schemas']['CrmOpportunityDto'][];
+      page: number;
+      pageSize: number;
+      summary: Record<string, never>;
+      total: number;
+      totalPages: number;
+    };
+    CrmOpportunityQuotationDto: {
+      currencyCode: string;
+      /** Format: uuid */
+      id: string;
+      /** Format: date-time */
+      linkedAt: string;
+      number: string;
+      /** @enum {string} */
+      status: 'draft' | 'confirmed' | 'shipped' | 'invoiced';
+      total: string;
+    };
+    CrmPersonReferenceDto: {
+      displayName: string;
+      /** Format: uuid */
+      id: string;
+    };
+    CrmPipelineReferenceDataDto: {
+      assignees: components['schemas']['CrmPersonReferenceDto'][];
+      businessTimezone: string;
+      customers: components['schemas']['CrmCustomerReferenceDto'][];
+      quotations: components['schemas']['CrmQuotationReferenceDto'][];
+    };
+    CrmQuotationReferenceDto: {
+      currencyCode: string;
+      /** Format: uuid */
+      customerPartnerId: string;
+      /** Format: uuid */
+      id: string;
+      number: string;
+      /** @enum {string} */
+      status: 'draft' | 'confirmed' | 'shipped' | 'invoiced';
+      total: string;
+    };
+    CrmReferenceDto: {
+      id: string;
+      name: string;
+    };
     CrmSlaPolicyReferenceDto: {
       /** Format: uuid */
       customerPartnerId?: string;
@@ -3948,6 +4445,49 @@ export interface components {
       responseMinutes: number;
       /** Format: uuid */
       serviceSubscriptionContractId?: string;
+    };
+    CrmTaskDto: {
+      assignedTo: components['schemas']['CrmAssigneeReferenceDto'];
+      /** Format: date-time */
+      cancelledAt?: string;
+      /** Format: date-time */
+      completedAt?: string;
+      /** Format: date-time */
+      createdAt: string;
+      /** Format: uuid */
+      customerLocationId?: string;
+      customerName: string;
+      /** Format: uuid */
+      customerPartnerId: string;
+      /** Format: date-time */
+      dueAt: string;
+      history: components['schemas']['CrmTaskHistoryEntryDto'][];
+      /** Format: uuid */
+      id: string;
+      locationName?: string;
+      notes?: string;
+      /** @enum {string} */
+      priority: 'low' | 'normal' | 'high' | 'urgent';
+      /** Format: date-time */
+      reminderAt?: string;
+      /** @enum {string} */
+      status: 'open' | 'completed' | 'cancelled';
+      title: string;
+      /** Format: date-time */
+      updatedAt: string;
+      version: number;
+    };
+    CrmTaskHistoryEntryDto: {
+      /** Format: date-time */
+      changedAt: string;
+      changedByName: string;
+      /** Format: uuid */
+      id: string;
+      note?: string;
+      /** @enum {string} */
+      status: 'open' | 'completed' | 'cancelled';
+      /** @enum {string} */
+      type: 'created' | 'completed' | 'cancelled';
     };
     CrmTicketAssigneeDto: {
       displayName: string;
@@ -4048,6 +4588,36 @@ export interface components {
       breached: number;
       open: number;
       unassigned: number;
+    };
+    CrmTimelineItemDto: {
+      interaction?: components['schemas']['CrmInteractionDto'];
+      /** @enum {string} */
+      kind: 'interaction' | 'task_event';
+      /** Format: date-time */
+      occurredAt: string;
+      task?: components['schemas']['CrmTaskDto'];
+      taskEvent?: components['schemas']['CrmTaskHistoryEntryDto'];
+    };
+    CrmTimelinePageDto: {
+      items: components['schemas']['CrmTimelineItemDto'][];
+      openTasks: components['schemas']['CrmTaskDto'][];
+      page: number;
+      pageSize: number;
+      summary: components['schemas']['CrmTimelineSummaryDto'];
+      total: number;
+      totalPages: number;
+    };
+    CrmTimelineReferenceDataDto: {
+      assignees: components['schemas']['CrmAssigneeReferenceDto'][];
+      businessTimezone: string;
+      contacts: components['schemas']['CrmContactReferenceDto'][];
+      customers: components['schemas']['CrmReferenceDto'][];
+      locations: components['schemas']['CrmLocationReferenceDto'][];
+    };
+    CrmTimelineSummaryDto: {
+      interactions: number;
+      openTasks: number;
+      overdueTasks: number;
     };
     CustomerAssetVersionDto: {
       expectedVersion: number;
@@ -5125,6 +5695,11 @@ export interface components {
       vatNumber?: string;
       version: number;
     };
+    LinkCrmOpportunityQuotationDto: {
+      expectedVersion: number;
+      /** Format: uuid */
+      quotationId: string;
+    };
     LoginAccountDto: {
       displayName: string;
       email: string;
@@ -5418,7 +5993,7 @@ export interface components {
       /** Format: uuid */
       parentId: string;
       /** @enum {string} */
-      parentType: 'partner' | 'warranty_claim';
+      parentType: 'partner' | 'warranty_claim' | 'crm_interaction';
       /** Format: date-time */
       scannedAt?: string;
       /** @enum {string} */
@@ -5448,6 +6023,13 @@ export interface components {
       supplierPartnerId?: string;
       /** Format: uuid */
       supplierPayableId?: string;
+    };
+    MoveCrmOpportunityDto: {
+      expectedVersion: number;
+      note?: string;
+      probabilityPercent: number;
+      /** @enum {string} */
+      stage: 'new' | 'qualified' | 'quotation_sent' | 'negotiation' | 'won' | 'lost';
     };
     NotificationMessageDto: {
       /** @enum {string} */
@@ -5750,6 +6332,10 @@ export interface components {
       pageSize: number;
       total: number;
       totalPages: number;
+    };
+    QualifyCrmLeadDto: {
+      expectedVersion: number;
+      note?: string;
     };
     ReceiveLogisticsReturnDto: {
       expectedVersion: number;
@@ -7028,6 +7614,12 @@ export interface components {
       /** Format: uuid */
       toWarehouseId: string;
     };
+    TransitionCrmTaskDto: {
+      expectedVersion: number;
+      note?: string;
+      /** @enum {string} */
+      status: 'completed' | 'cancelled';
+    };
     TransitionCrmTicketDto: {
       expectedVersion: number;
       note: string;
@@ -7836,6 +8428,501 @@ export interface operations {
       };
     };
   };
+  CrmTimelineController_createInteraction: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['CreateCrmInteractionDto'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CrmInteractionResponseDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  CrmPipelineController_leads: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CrmLeadPageDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  CrmPipelineController_createLead: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['CreateCrmLeadDto'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CrmLeadDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  CrmPipelineController_convertLead: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path: {
+        id: unknown;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ConvertCrmLeadDto'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ConvertCrmLeadResultDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  CrmPipelineController_qualifyLead: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path: {
+        id: unknown;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['QualifyCrmLeadDto'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CrmLeadDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  CrmPipelineController_opportunities: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CrmOpportunityPageDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  CrmPipelineController_createOpportunity: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['CreateCrmOpportunityDto'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CrmOpportunityDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  CrmPipelineController_opportunity: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: unknown;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CrmOpportunityDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  CrmPipelineController_linkQuotation: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path: {
+        id: unknown;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['LinkCrmOpportunityQuotationDto'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CrmOpportunityDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  CrmPipelineController_moveOpportunity: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path: {
+        id: unknown;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['MoveCrmOpportunityDto'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CrmOpportunityDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  CrmPipelineController_referenceData: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CrmPipelineReferenceDataDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  CrmTimelineController_createTask: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['CreateCrmTaskDto'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CrmTaskDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  CrmTimelineController_transitionTask: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path: {
+        id: unknown;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['TransitionCrmTaskDto'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CrmTaskDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
   CrmTicketsController_list: {
     parameters: {
       query?: {
@@ -8146,13 +9233,79 @@ export interface operations {
       };
     };
   };
+  CrmTimelineController_list: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CrmTimelinePageDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  CrmTimelineController_referenceData: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CrmTimelineReferenceDataDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
   FilesController_list: {
     parameters: {
       query: {
         page?: number;
         pageSize?: number;
         parentId: string;
-        parentType: 'partner' | 'warranty_claim';
+        parentType: 'partner' | 'warranty_claim' | 'crm_interaction';
       };
       header?: never;
       path?: never;
@@ -8201,7 +9354,7 @@ export interface operations {
           /** Format: uuid */
           parentId: string;
           /** @enum {string} */
-          parentType: 'partner' | 'warranty_claim';
+          parentType: 'partner' | 'warranty_claim' | 'crm_interaction';
         };
       };
     };

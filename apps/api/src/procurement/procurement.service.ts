@@ -515,6 +515,12 @@ export class ProcurementService {
       return result;
     } catch (error) {
       await client.query('ROLLBACK');
+      if (uniqueConstraint(error) === 'serialized_items_serial_unique')
+        throw new ApiErrorException(
+          'SERIAL_NUMBER_ALREADY_REGISTERED',
+          'One or more serial numbers are already registered. Enter the serial number printed on each device being received.',
+          HttpStatus.CONFLICT,
+        );
       if (isUniqueViolation(error))
         throw new ApiErrorException(
           'PROCUREMENT_CONFLICT',
@@ -794,4 +800,10 @@ function isUniqueViolation(error: unknown): boolean {
     'code' in error &&
     (error as { code?: unknown }).code === '23505'
   );
+}
+
+function uniqueConstraint(error: unknown): string | undefined {
+  return typeof error === 'object' && error !== null && 'constraint' in error
+    ? String(error.constraint)
+    : undefined;
 }

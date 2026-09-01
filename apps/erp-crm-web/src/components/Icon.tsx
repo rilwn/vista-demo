@@ -2,8 +2,10 @@ export type IconName =
   | 'activity'
   | 'arrow'
   | 'bell'
+  | 'brand'
   | 'chart'
   | 'check'
+  | 'chevron'
   | 'close'
   | 'customers'
   | 'finance'
@@ -15,6 +17,7 @@ export type IconName =
   | 'organization'
   | 'plus'
   | 'procurement'
+  | 'profile'
   | 'sales'
   | 'search'
   | 'service'
@@ -45,8 +48,16 @@ const paths: Record<IconName, React.ReactNode> = {
   activity: <path d="M3 12h4l2.3-6 4.2 12 2.2-6H21" />,
   arrow: <path d="m9 18 6-6-6-6M4 12h11" />,
   bell: <path d="M18 10a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 22h4" />,
+  brand: (
+    <>
+      <path d="M3.8 5.2 10.3 19 20.2 5.2" />
+      <path d="M8 5.2 12 13.8l4.2-8.6" />
+      <circle cx="20.2" cy="5.2" fill="currentColor" r="1.35" stroke="none" />
+    </>
+  ),
   chart: <path d="M4 19V9m5 10V5m6 14v-7m5 7V8M3 19h18" />,
   check: <path d="m5 12 4 4L19 6" />,
+  chevron: <path d="m8 10 4 4 4-4" />,
   close: <path d="m6 6 12 12M18 6 6 18" />,
   customers: (
     <>
@@ -87,6 +98,12 @@ const paths: Record<IconName, React.ReactNode> = {
     <>
       <path d="M5 7h14l-1 13H6L5 7Z" />
       <path d="M9 7V5a3 3 0 0 1 6 0v2" />
+    </>
+  ),
+  profile: (
+    <>
+      <circle cx="12" cy="8" r="3.5" />
+      <path d="M5 21a7 7 0 0 1 14 0" />
     </>
   ),
   plus: <path d="M12 5v14M5 12h14" />,

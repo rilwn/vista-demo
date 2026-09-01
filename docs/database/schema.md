@@ -423,9 +423,9 @@ metadata into immutable logical-file histories. Every replacement keeps its own
 object key, checksum, issuer, timestamp, and monotonically increasing version
 under one `version_group_id`; the previous object is retained through
 `replaces_object_id`. Authorized parents currently include canonical partner
-records and warranty claims. Each parent keeps its own module permissions; a
-Service technician can only access a claim in their assigned work scope unless
-they hold Service approval authority.
+records, warranty claims, and CRM interactions. Each parent keeps its own module
+permissions; a Service technician can only access a claim in their assigned work
+scope unless they hold Service approval authority.
 Current uploads accept configured PDF/JPEG/PNG/WebP types, enforce a configured
 size ceiling, inspect the file signature, and store content in the private
 S3-compatible bucket. Downloads re-check byte length and SHA-256 before returning
@@ -444,3 +444,31 @@ earlier handovers, while all new API acceptances require the location. The
 combined trace query reads the existing Procurement, inventory, Sales,
 Logistics, and Service records; it does not duplicate or rewrite lifecycle
 events.
+
+Migration `0047_crm_customer_timeline` adds customer communication and follow-up
+work to the shared CRM schema. `crm.interactions` records incoming and outgoing
+calls, email, chat, and on-site visits against the canonical customer and an
+optional same-customer location or contact. `crm.tasks` keeps assignment, due
+time, priority, optional reminder, optimistic version, and terminal state, while
+`crm.task_history` preserves every created, completed, or cancelled lifecycle
+event. `crm.task_reminders` links one task reminder to the existing retryable,
+idempotent notification queue; completing or cancelling a task cancels an
+undelivered reminder without deleting its evidence. Composite foreign keys
+prevent cross-customer references, and customer/location/date indexes support
+stable reverse-chronological paging. Interaction files use the existing immutable
+managed-file service and inherit CRM authorization from their parent record.
+
+Migration `0048_crm_lead_opportunity_pipeline` adds the lead and opportunity
+lifecycle to the shared CRM schema. Leads retain their source, contact details,
+owner, qualification and conversion timestamps, optimistic version, and an
+append-only history. A converted lead points to one active customer in the
+shared partner register; database constraints and the conversion command prevent
+the workflow from creating an unlinked CRM-only customer.
+
+Opportunities retain one customer, optional source lead, fixed-precision BGN
+value, probability, expected close date, owner, stage, and append-only stage
+history. Quotation links point to existing Sales quotations for the same
+customer. Separate lead and opportunity sequences allocate stable operational
+references under a row lock. Command idempotency, optimistic versions, audit
+events, and transactional outbox records protect conversion, stage movement,
+and quotation linking from duplicate or stale updates.

@@ -299,11 +299,11 @@ export function CrmTicketsPage() {
   );
 }
 
-function CrmTabs() {
+export function CrmTabs() {
   const items = [
     ['/modules/crm/locations-equipment', 'Locations & equipment'],
     ['/modules/crm/timeline', 'Timeline'],
-    ['/modules/crm/leads', 'Leads'],
+    ['/modules/crm/leads', 'Leads & pipeline'],
     ['/modules/crm/tickets', 'Tickets'],
     ['/modules/crm/customer-care', 'Customer care'],
     ['/modules/crm/analytics', 'Analytics'],

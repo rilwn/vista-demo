@@ -8,6 +8,8 @@ import { messages } from './messages';
 import { AccessPage } from './pages/AccessPage';
 import { CatalogPage } from './pages/CatalogPage';
 import { CrmTicketsPage } from './pages/CrmTicketsPage';
+import { CrmPipelinePage } from './pages/CrmPipelinePage';
+import { CrmTimelinePage } from './pages/CrmTimelinePage';
 import { type FinanceView, FinancePage } from './pages/FinancePage';
 import { FinanceBankPage } from './pages/FinanceBankPage';
 import { FinanceCashPage } from './pages/FinanceCashPage';
@@ -149,6 +151,12 @@ function pageForPath(
   }
   if (pathname === '/modules/crm/tickets') {
     return hasPermission('crm') ? <CrmTicketsPage /> : <NotFoundPage />;
+  }
+  if (pathname === '/modules/crm/timeline') {
+    return hasPermission('crm') ? <CrmTimelinePage /> : <NotFoundPage />;
+  }
+  if (pathname === '/modules/crm/leads') {
+    return hasPermission('crm') ? <CrmPipelinePage /> : <NotFoundPage />;
   }
   const workflow = findWorkflowPage(pathname);
   if (workflow) {

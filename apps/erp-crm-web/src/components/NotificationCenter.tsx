@@ -136,6 +136,7 @@ function notificationTitle(notification: NotificationMessage): string {
   if (notification.templateKey === 'crm.ticket.sla.at_risk')
     return 'Ticket deadline is approaching';
   if (notification.templateKey === 'crm.ticket.sla.breached') return 'Ticket deadline has passed';
+  if (notification.templateKey === 'crm.task.reminder') return 'Customer follow-up is due';
   return 'New notification';
 }
 
@@ -166,6 +167,12 @@ function notificationDetail(notification: NotificationMessage): string {
       value(notification.payload, 'timerType') === 'response' ? 'response' : 'resolution';
     return `${number} · ${customer} · ${timer} · ${subject}.`;
   }
+  if (notification.templateKey === 'crm.task.reminder') {
+    const title = value(notification.payload, 'title');
+    const customer = value(notification.payload, 'customerName');
+    const dueAt = dateTimeValue(notification.payload, 'dueAt');
+    return `${title} · ${customer} · due ${dueAt}.`;
+  }
   if (
     notification.templateKey === 'service.inspection.due' ||
     notification.templateKey === 'service.warranty.due'
@@ -177,6 +184,19 @@ function notificationDetail(notification: NotificationMessage): string {
     return `${device} · ${serial} · ${customer} · ${dueDate}.`;
   }
   return 'Open this notification for more details.';
+}
+
+function dateTimeValue(payload: Record<string, unknown>, key: string): string {
+  const candidate = payload[key];
+  if (typeof candidate !== 'string') return '—';
+  const date = new Date(candidate);
+  return Number.isNaN(date.getTime())
+    ? candidate
+    : new Intl.DateTimeFormat(undefined, {
+        dateStyle: 'medium',
+        timeStyle: 'short',
+        timeZone: 'Europe/Sofia',
+      }).format(date);
 }
 
 function dateValue(payload: Record<string, unknown>, key: string): string {

@@ -951,6 +951,7 @@ function procurementError(caught: unknown, fallback: string) {
     PURCHASE_ORDER_PRODUCT_DUPLICATE: 'Add each product only once to this purchase order.',
     PURCHASE_ORDER_OVER_RECEIPT: 'A quantity is greater than the amount still due.',
     RECEIPT_BGN_COST_REQUIRED: 'Enter the BGN valuation cost for this foreign-currency order.',
+    SERIAL_NUMBER_DUPLICATE: 'Enter each serial number only once in this delivery.',
     SERIAL_TRACKING_REQUIRED: 'Enter one serial number for every received serialised item.',
     SUPPLIER_NOT_FOUND: 'Choose an active supplier.',
     WAREHOUSE_NOT_FOUND: 'Choose an active receiving warehouse.',

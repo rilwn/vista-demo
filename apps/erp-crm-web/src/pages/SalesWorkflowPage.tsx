@@ -527,12 +527,30 @@ function WorkflowDrawer({
   workflow: SalesWorkflow;
 }) {
   const [serials, setSerials] = useState<Record<string, string[]>>({});
+  const [serialSearches, setSerialSearches] = useState<Record<string, string>>({});
   const [batches, setBatches] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [acceptedByName, setAcceptedByName] = useState('');
   const [acceptanceNotes, setAcceptanceNotes] = useState('');
   const [customerLocationId, setCustomerLocationId] = useState('');
+  const serialLines = workflow.lines.filter((line) => line.trackingMode === 'serial');
+  const serialSelectionComplete = serialLines.every(
+    (line) => (serials[line.id]?.length ?? 0) === Number(line.quantity),
+  );
+
+  function toggleSerial(lineId: string, serialNumber: string, requiredCount: number) {
+    setSerials((current) => {
+      const selected = current[lineId] ?? [];
+      if (selected.includes(serialNumber))
+        return {
+          ...current,
+          [lineId]: selected.filter((item) => item !== serialNumber),
+        };
+      if (selected.length >= requiredCount) return current;
+      return { ...current, [lineId]: [...selected, serialNumber] };
+    });
+  }
 
   async function act(action: () => Promise<SalesWorkflow>, message: string) {
     setBusy(true);
@@ -635,7 +653,7 @@ function WorkflowDrawer({
         </dl>
       </section>
       {workflow.status === 'draft' && canCreate ? (
-        <section className="sales-next-action">
+        <section className="sales-next-action sales-confirm-order">
           <header>
             <div>
               <h3>Confirm order</h3>
@@ -646,35 +664,34 @@ function WorkflowDrawer({
           </header>
           {workflow.lines
             .filter((line) => line.trackingMode === 'serial')
-            .map((line) => (
-              <SalesField key={line.id} label={`${line.productName} serial numbers`}>
-                <select
-                  multiple
-                  size={Math.min(5, Math.max(2, Number(line.quantity)))}
-                  value={serials[line.id] ?? []}
-                  onChange={(event) =>
-                    setSerials((current) => ({
-                      ...current,
-                      [line.id]: Array.from(event.target.selectedOptions, (option) => option.value),
-                    }))
+            .map((line) => {
+              const availableSerials = references.serials
+                .filter(
+                  (item) =>
+                    item.productId === line.productId && item.warehouseId === workflow.warehouseId,
+                )
+                .map((item) => item.serialNumber);
+              return (
+                <SerialNumberPicker
+                  availableSerials={availableSerials}
+                  busy={busy}
+                  key={line.id}
+                  lineId={line.id}
+                  onSearchChange={(value) =>
+                    setSerialSearches((current) => ({ ...current, [line.id]: value }))
                   }
-                >
-                  {references.serials
-                    .filter(
-                      (item) =>
-                        item.productId === line.productId &&
-                        item.warehouseId === workflow.warehouseId,
-                    )
-                    .map((item) => (
-                      <option key={item.serialNumber} value={item.serialNumber}>
-                        {item.serialNumber}
-                      </option>
-                    ))}
-                </select>
-                <small>Select {Number(line.quantity)} serial number(s).</small>
-              </SalesField>
-            ))}
-          <Button disabled={busy} onClick={() => void confirm()}>
+                  onToggle={(serialNumber) =>
+                    toggleSerial(line.id, serialNumber, Number(line.quantity))
+                  }
+                  productName={line.productName}
+                  requiredCount={Number(line.quantity)}
+                  searchQuery={serialSearches[line.id] ?? ''}
+                  selected={serials[line.id] ?? []}
+                  warehouseName={workflow.warehouseName}
+                />
+              );
+            })}
+          <Button disabled={busy || !serialSelectionComplete} onClick={() => void confirm()}>
             Confirm order and reserve stock
           </Button>
         </section>
@@ -941,6 +958,122 @@ function SalesField({ children, label }: { children: React.ReactNode; label: str
       <span>{label}</span>
       {children}
     </label>
+  );
+}
+
+function SerialNumberPicker({
+  availableSerials,
+  busy,
+  lineId,
+  onSearchChange,
+  onToggle,
+  productName,
+  requiredCount,
+  searchQuery,
+  selected,
+  warehouseName,
+}: {
+  availableSerials: string[];
+  busy: boolean;
+  lineId: string;
+  onSearchChange: (value: string) => void;
+  onToggle: (serialNumber: string) => void;
+  productName: string;
+  requiredCount: number;
+  searchQuery: string;
+  selected: string[];
+  warehouseName: string;
+}) {
+  const query = searchQuery.trim().toLocaleLowerCase();
+  const visibleSerials = availableSerials.filter((serialNumber) =>
+    serialNumber.toLocaleLowerCase().includes(query),
+  );
+  const selectionComplete = selected.length === requiredCount;
+  const remaining = Math.max(0, requiredCount - selected.length);
+  const statusId = `sales-serial-status-${lineId}`;
+
+  return (
+    <fieldset aria-describedby={statusId} className="sales-serial-picker">
+      <legend className="sr-only">{productName} serial numbers</legend>
+      <header className="sales-serial-picker-header">
+        <div>
+          <strong>{productName}</strong>
+          <span>
+            Choose {requiredCount} {requiredCount === 1 ? 'device' : 'devices'} from {warehouseName}
+            .
+          </span>
+        </div>
+        <span className={`sales-serial-count ${selectionComplete ? 'is-complete' : ''}`}>
+          {selectionComplete ? <Icon name="check" size={13} /> : null}
+          {selected.length} of {requiredCount} selected
+        </span>
+      </header>
+
+      <label className="sales-serial-search">
+        <span className="sr-only">Search {productName} serial numbers</span>
+        <Icon name="search" size={16} />
+        <input
+          autoComplete="off"
+          disabled={busy || availableSerials.length === 0}
+          onChange={(event) => onSearchChange(event.target.value)}
+          placeholder="Search by serial number"
+          type="search"
+          value={searchQuery}
+        />
+      </label>
+
+      {visibleSerials.length ? (
+        <div
+          aria-label={`Available ${productName} serial numbers`}
+          className="sales-serial-options"
+        >
+          {visibleSerials.map((serialNumber) => {
+            const isSelected = selected.includes(serialNumber);
+            const unavailableUntilChanged = selectionComplete && !isSelected;
+            return (
+              <button
+                aria-label={serialNumber}
+                aria-pressed={isSelected}
+                className={isSelected ? 'is-selected' : undefined}
+                disabled={busy || unavailableUntilChanged}
+                key={serialNumber}
+                onClick={() => onToggle(serialNumber)}
+                type="button"
+              >
+                <span className="sales-serial-check" aria-hidden="true">
+                  {isSelected ? <Icon name="check" size={13} /> : null}
+                </span>
+                <span className="sales-serial-number">{serialNumber}</span>
+                <small>{isSelected ? 'Selected' : 'Available'}</small>
+              </button>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="sales-serial-empty">
+          <Icon name="search" size={18} />
+          <p>
+            {availableSerials.length
+              ? `No serial numbers match “${searchQuery.trim()}”.`
+              : `No serialised stock is available in ${warehouseName}.`}
+          </p>
+        </div>
+      )}
+
+      <p
+        className={`sales-serial-status ${selectionComplete ? 'is-complete' : ''}`}
+        id={statusId}
+        aria-live="polite"
+      >
+        {selectionComplete ? (
+          <>
+            <Icon name="check" size={14} /> Selection complete. Deselect a device to choose another.
+          </>
+        ) : (
+          `Choose ${remaining} more ${remaining === 1 ? 'serial number' : 'serial numbers'} to continue.`
+        )}
+      </p>
+    </fieldset>
   );
 }
 function SalesState({ children, title }: { children?: React.ReactNode; title: string }) {

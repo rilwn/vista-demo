@@ -1,5 +1,5 @@
 import { Button, InlineAlert } from '@vista/ui';
-import type { ManagedFile } from '@vista/contracts';
+import type { ManagedFile, ManagedFileParentType } from '@vista/contracts';
 import { type ChangeEvent, useEffect, useRef, useState } from 'react';
 
 import {
@@ -13,8 +13,6 @@ import { ApiClientError } from '../api/client';
 import { Icon } from '../components/Icon';
 import { messages } from '../messages';
 
-const copy = messages.partners.documents;
-
 export function PartnerDocumentsPanel({
   canEdit,
   partnerId,
@@ -22,6 +20,59 @@ export function PartnerDocumentsPanel({
 }: {
   canEdit: boolean;
   partnerId: string;
+  token: string;
+}) {
+  return (
+    <ManagedFilesPanel
+      canEdit={canEdit}
+      copy={messages.partners.documents}
+      parentId={partnerId}
+      parentType="partner"
+      token={token}
+    />
+  );
+}
+
+interface ManagedFileCopy {
+  add: string;
+  back: string;
+  cancel: string;
+  chooseFile: string;
+  controlledFiles: string;
+  download: string;
+  downloadError: string;
+  emptyDescription: string;
+  emptyTitle: string;
+  fileRequirements: string;
+  hideVersions: string;
+  integrity: string;
+  loadError: string;
+  loading: string;
+  open: string;
+  replace: string;
+  replaceTitle: string;
+  selection: (name: string) => string;
+  subtitle: string;
+  title: string;
+  upload: string;
+  uploadError: string;
+  uploadTitle: string;
+  version: (value: number) => string;
+  versionCount: (count: number) => string;
+  versionsError: string;
+}
+
+export function ManagedFilesPanel({
+  canEdit,
+  copy,
+  parentId,
+  parentType,
+  token,
+}: {
+  canEdit: boolean;
+  copy: ManagedFileCopy;
+  parentId: string;
+  parentType: ManagedFileParentType;
   token: string;
 }) {
   const [files, setFiles] = useState<ManagedFile[]>([]);
@@ -40,7 +91,7 @@ export function PartnerDocumentsPanel({
     setLoading(true);
     setError(null);
     try {
-      const result = await listManagedFiles(token, 'partner', partnerId);
+      const result = await listManagedFiles(token, parentType, parentId);
       setFiles(result.items);
     } catch (caught) {
       setError(errorText(caught, copy.loadError));
@@ -51,7 +102,7 @@ export function PartnerDocumentsPanel({
 
   useEffect(() => {
     void refresh();
-  }, [partnerId, token]);
+  }, [parentId, parentType, token]);
 
   async function upload() {
     if (!file) return;
@@ -65,7 +116,7 @@ export function PartnerDocumentsPanel({
       if (replacing) {
         await uploadManagedFileVersion(token, replacing, uploadAttempt.current.key, file);
       } else {
-        await uploadManagedFile(token, 'partner', partnerId, uploadAttempt.current.key, file);
+        await uploadManagedFile(token, parentType, parentId, uploadAttempt.current.key, file);
       }
       setFile(null);
       setReplacing(null);
