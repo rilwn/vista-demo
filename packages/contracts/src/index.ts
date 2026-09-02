@@ -790,6 +790,7 @@ export interface ProductSummary {
   updatedAt: string;
   version: number;
   trackingMode: ProductTrackingMode;
+  warrantyMonths?: number;
 }
 
 export interface Unit {
@@ -811,6 +812,7 @@ export interface CreateProductRequest {
   name: string;
   productCode: string;
   unitId: string;
+  warrantyMonths?: number;
 }
 
 export const purchaseOrderStatuses = ['open', 'partially_received', 'received'] as const;
@@ -3062,6 +3064,120 @@ export interface CrmPipelineReferenceData {
   businessTimezone: string;
   customers: ServiceCustomerReference[];
   quotations: CrmPipelineQuotationReference[];
+}
+
+export const crmWarrantyOfferStatuses = [
+  'not_offered',
+  'offered',
+  'interested',
+  'declined',
+] as const;
+export type CrmWarrantyOfferStatus = (typeof crmWarrantyOfferStatuses)[number];
+
+export interface CrmWarrantyCard {
+  claimCount: number;
+  customerEquipmentId: string;
+  customerLocationId: string;
+  customerLocationName: string;
+  customerName: string;
+  customerPartnerId: string;
+  deviceName: string;
+  handoverNumber?: string;
+  id: string;
+  issuedAt: string;
+  number: string;
+  offerStatus: CrmWarrantyOfferStatus;
+  remainingDays: number;
+  serialNumber: string;
+  status: 'active' | 'expired';
+  warrantyEndsOn: string;
+  warrantyStartsOn: string;
+}
+
+export interface UpdateCrmWarrantyOfferRequest {
+  offerStatus: CrmWarrantyOfferStatus;
+}
+
+export const crmSurveySourceKinds = ['delivery', 'service'] as const;
+export type CrmSurveySourceKind = (typeof crmSurveySourceKinds)[number];
+
+export interface CrmSurveySourceReference {
+  customerLocationId: string;
+  customerName: string;
+  customerPartnerId: string;
+  id: string;
+  label: string;
+  sourceKind: CrmSurveySourceKind;
+}
+
+export interface CrmCustomerSurvey {
+  comment?: string;
+  customerName: string;
+  customerPartnerId: string;
+  id: string;
+  number: string;
+  respondedAt?: string;
+  score?: number;
+  sentAt: string;
+  sourceKind: CrmSurveySourceKind;
+  sourceLabel: string;
+  status: 'awaiting_response' | 'responded';
+}
+
+export interface SendCrmCustomerSurveyRequest {
+  sourceId: string;
+  sourceKind: CrmSurveySourceKind;
+}
+
+export interface RecordCrmSurveyResponseRequest {
+  comment?: string;
+  score: number;
+}
+
+export interface CrmNpsSummary {
+  detractors: number;
+  passives: number;
+  promoters: number;
+  responses: number;
+  score?: number;
+  trend: Array<{ label: string; responses: number; score: number }>;
+}
+
+export interface CrmReferral {
+  contactName: string;
+  createdAt: string;
+  email?: string;
+  id: string;
+  leadId: string;
+  leadNumber: string;
+  notes?: string;
+  number: string;
+  organizationName: string;
+  referringCustomerName: string;
+  referringCustomerPartnerId: string;
+  telephone?: string;
+}
+
+export interface CreateCrmReferralRequest {
+  contactName: string;
+  email?: string;
+  notes?: string;
+  organizationName: string;
+  ownerAccountId: string;
+  referringCustomerPartnerId: string;
+  telephone?: string;
+}
+
+export interface CrmAfterSalesOverview {
+  assignees: CrmTicketAssigneeReference[];
+  businessTimezone: string;
+  claims: WarrantyClaim[];
+  customers: ServiceCustomerReference[];
+  nps: CrmNpsSummary;
+  referrals: CrmReferral[];
+  surveySources: CrmSurveySourceReference[];
+  surveys: CrmCustomerSurvey[];
+  warrantyCards: CrmWarrantyCard[];
 }
 
 export interface AssignServiceWorkOrderRequest {

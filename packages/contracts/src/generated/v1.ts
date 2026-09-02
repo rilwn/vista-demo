@@ -228,6 +228,118 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/crm/after-sales': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['CrmAfterSalesController_overview'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/crm/after-sales/referrals': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['CrmAfterSalesController_createReferral'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/crm/after-sales/surveys': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['CrmAfterSalesController_sendSurvey'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/crm/after-sales/surveys/{id}/response': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['CrmAfterSalesController_recordSurveyResponse'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/crm/after-sales/warranty-cards/{id}/offer': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['CrmAfterSalesController_updateWarrantyOffer'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/crm/after-sales/warranty-claims': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['CrmAfterSalesController_createWarrantyClaim'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/crm/after-sales/warranty-claims/{id}/transition': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['CrmAfterSalesController_transitionWarrantyClaim'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/crm/interactions': {
     parameters: {
       query?: never;
@@ -3604,6 +3716,18 @@ export interface components {
       probabilityPercent: number;
       title: string;
     };
+    CreateCrmReferralDto: {
+      contactName: string;
+      /** Format: email */
+      email?: string;
+      notes?: string;
+      organizationName: string;
+      /** Format: uuid */
+      ownerAccountId: string;
+      /** Format: uuid */
+      referringCustomerPartnerId: string;
+      telephone?: string;
+    };
     CreateCrmTaskDto: {
       /** Format: uuid */
       assignedToAccountId: string;
@@ -4006,6 +4130,7 @@ export interface components {
       productCode: string;
       /** Format: uuid */
       unitId: string;
+      warrantyMonths?: number;
     };
     CreatePromotionalCampaignDto: {
       code: string;
@@ -4214,6 +4339,27 @@ export interface components {
       /** Format: uuid */
       serviceRequestId?: string;
     };
+    CrmAfterSalesAssigneeDto: {
+      displayName: string;
+      /** Format: uuid */
+      id: string;
+    };
+    CrmAfterSalesCustomerDto: {
+      /** Format: uuid */
+      id: string;
+      name: string;
+    };
+    CrmAfterSalesOverviewDto: {
+      assignees: components['schemas']['CrmAfterSalesAssigneeDto'][];
+      businessTimezone: string;
+      claims: components['schemas']['WarrantyClaimDto'][];
+      customers: components['schemas']['CrmAfterSalesCustomerDto'][];
+      nps: components['schemas']['CrmNpsSummaryDto'];
+      referrals: components['schemas']['CrmReferralDto'][];
+      surveys: components['schemas']['CrmCustomerSurveyDto'][];
+      surveySources: components['schemas']['CrmSurveySourceReferenceDto'][];
+      warrantyCards: components['schemas']['CrmWarrantyCardDto'][];
+    };
     CrmAssigneeReferenceDto: {
       displayName: string;
       /** Format: uuid */
@@ -4230,6 +4376,25 @@ export interface components {
       /** Format: uuid */
       id: string;
       name: string;
+    };
+    CrmCustomerSurveyDto: {
+      comment?: string;
+      customerName: string;
+      /** Format: uuid */
+      customerPartnerId: string;
+      /** Format: uuid */
+      id: string;
+      number: string;
+      /** Format: date-time */
+      respondedAt?: string;
+      score?: number;
+      /** Format: date-time */
+      sentAt: string;
+      /** @enum {string} */
+      sourceKind: 'delivery' | 'service';
+      sourceLabel: string;
+      /** @enum {string} */
+      status: 'awaiting_response' | 'responded';
     };
     CrmInteractionDto: {
       contactName?: string;
@@ -4335,6 +4500,19 @@ export interface components {
       uic?: string;
       vatNumber?: string;
     };
+    CrmNpsSummaryDto: {
+      detractors: number;
+      passives: number;
+      promoters: number;
+      responses: number;
+      score?: number;
+      trend: components['schemas']['CrmNpsTrendPointDto'][];
+    };
+    CrmNpsTrendPointDto: {
+      label: string;
+      responses: number;
+      score: number;
+    };
     CrmOpportunityDto: {
       /** Format: date-time */
       closedAt?: string;
@@ -4433,6 +4611,24 @@ export interface components {
       id: string;
       name: string;
     };
+    CrmReferralDto: {
+      contactName: string;
+      /** Format: date-time */
+      createdAt: string;
+      email?: string;
+      /** Format: uuid */
+      id: string;
+      /** Format: uuid */
+      leadId: string;
+      leadNumber: string;
+      notes?: string;
+      number: string;
+      organizationName: string;
+      referringCustomerName: string;
+      /** Format: uuid */
+      referringCustomerPartnerId: string;
+      telephone?: string;
+    };
     CrmSlaPolicyReferenceDto: {
       /** Format: uuid */
       customerPartnerId?: string;
@@ -4445,6 +4641,18 @@ export interface components {
       responseMinutes: number;
       /** Format: uuid */
       serviceSubscriptionContractId?: string;
+    };
+    CrmSurveySourceReferenceDto: {
+      /** Format: uuid */
+      customerLocationId: string;
+      customerName: string;
+      /** Format: uuid */
+      customerPartnerId: string;
+      /** Format: uuid */
+      id: string;
+      label: string;
+      /** @enum {string} */
+      sourceKind: 'delivery' | 'service';
     };
     CrmTaskDto: {
       assignedTo: components['schemas']['CrmAssigneeReferenceDto'];
@@ -4618,6 +4826,34 @@ export interface components {
       interactions: number;
       openTasks: number;
       overdueTasks: number;
+    };
+    CrmWarrantyCardDto: {
+      claimCount: number;
+      /** Format: uuid */
+      customerEquipmentId: string;
+      /** Format: uuid */
+      customerLocationId: string;
+      customerLocationName: string;
+      customerName: string;
+      /** Format: uuid */
+      customerPartnerId: string;
+      deviceName: string;
+      handoverNumber?: string;
+      /** Format: uuid */
+      id: string;
+      /** Format: date-time */
+      issuedAt: string;
+      number: string;
+      /** @enum {string} */
+      offerStatus: 'not_offered' | 'offered' | 'interested' | 'declined';
+      remainingDays: number;
+      serialNumber: string;
+      /** @enum {string} */
+      status: 'active' | 'expired';
+      /** Format: date */
+      warrantyEndsOn: string;
+      /** Format: date */
+      warrantyStartsOn: string;
     };
     CustomerAssetVersionDto: {
       expectedVersion: number;
@@ -6275,6 +6511,7 @@ export interface components {
       /** Format: date-time */
       updatedAt: string;
       version: number;
+      warrantyMonths?: number;
     };
     PromotionalCampaignDto: {
       active: boolean;
@@ -6372,6 +6609,10 @@ export interface components {
       unitCostBgn?: string;
       /** Format: uuid */
       warehouseId: string;
+    };
+    RecordCrmSurveyResponseDto: {
+      comment?: string;
+      score: number;
     };
     RecordCrmTicketResponseDto: {
       expectedVersion: number;
@@ -6712,6 +6953,12 @@ export interface components {
       revokedAt?: string;
       twoFactorVerified: boolean;
       userAgent?: string;
+    };
+    SendCrmCustomerSurveyDto: {
+      /** Format: uuid */
+      sourceId: string;
+      /** @enum {string} */
+      sourceKind: 'delivery' | 'service';
     };
     SerialTraceabilityDto: {
       currentCustody: components['schemas']['SerialTraceCustodyDto'];
@@ -7640,6 +7887,10 @@ export interface components {
       name: string;
       version: number;
     };
+    UpdateCrmWarrantyOfferDto: {
+      /** @enum {string} */
+      offerStatus: 'not_offered' | 'offered' | 'interested' | 'declined';
+    };
     UpdateCustomerEquipmentDto: {
       deviceName: string;
       expectedVersion: number;
@@ -8411,6 +8662,279 @@ export interface operations {
           [name: string]: unknown;
         };
         content?: never;
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  CrmAfterSalesController_overview: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CrmAfterSalesOverviewDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  CrmAfterSalesController_createReferral: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['CreateCrmReferralDto'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CrmReferralDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  CrmAfterSalesController_sendSurvey: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['SendCrmCustomerSurveyDto'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CrmCustomerSurveyDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  CrmAfterSalesController_recordSurveyResponse: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path: {
+        id: unknown;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['RecordCrmSurveyResponseDto'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CrmCustomerSurveyDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  CrmAfterSalesController_updateWarrantyOffer: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path: {
+        id: unknown;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['UpdateCrmWarrantyOfferDto'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CrmWarrantyCardDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  CrmAfterSalesController_createWarrantyClaim: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['CreateWarrantyClaimDto'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['WarrantyClaimDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  CrmAfterSalesController_transitionWarrantyClaim: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path: {
+        id: unknown;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['TransitionWarrantyClaimDto'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['WarrantyClaimDto'];
+        };
       };
       /** @description The endpoint request limit was exceeded. */
       429: {

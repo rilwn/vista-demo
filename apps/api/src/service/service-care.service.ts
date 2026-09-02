@@ -102,8 +102,18 @@ export class ServiceCareService {
   ) {}
 
   async overview(auth: AuthenticationContext): Promise<ServiceCareOverview> {
+    return this.overviewWithVisibility(auth, serviceVisibilityAccountId(auth));
+  }
+
+  async overviewForCrm(auth: AuthenticationContext): Promise<ServiceCareOverview> {
+    return this.overviewWithVisibility(auth);
+  }
+
+  private async overviewWithVisibility(
+    auth: AuthenticationContext,
+    visibilityAccountId?: string,
+  ): Promise<ServiceCareOverview> {
     const pool = this.database.getPool();
-    const visibilityAccountId = serviceVisibilityAccountId(auth);
     const [warranties, claims, inspections] = await Promise.all([
       pool.query<WarrantyRow>(
         `SELECT equipment.id AS equipment_id, equipment.device_name, equipment.serial_number,

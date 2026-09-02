@@ -1,79 +1,60 @@
-# Test CRM leads and sales opportunities
+# Test CRM customer care
 
 Start the system with `npm run dev`, then sign in to the ERP/CRM app as
-`crm@vista.local` with your local fixture password.
+`crm@vista.local` using your local fixture password.
 
-Use a unique suffix such as `0901` anywhere this guide says `<suffix>`.
+From the sidebar choose **Customers & CRM**, then under **Choose an area** open
+**Warranty, feedback & referrals**.
 
-## Workspace navigation check
+## 1. Review a warranty and complete a claim
 
-1. Confirm the sidebar starts with the Vista icon and ends with the protected
-   session and **My access & security** cards.
-2. Select the search field in the top bar, enter `Leads & opportunities`, and
-   open the matching result. You can also press `/` to focus the search, use the
-   arrow keys, and press `Enter`.
-3. Open the account menu at the top right. Confirm it shows your name, email,
-   **My access & security**, **Overview**, the pages allowed for your role, and
-   **Sign out**.
-4. At phone width, confirm the menu button, search, notifications, and account
-   button remain on one row. Search results must fit without horizontal
-   scrolling.
+1. Under **Warranties**, open `DEV-WCR-0001`.
+2. Set **Follow-up status** to **Offer presented** and select **Save status**.
+3. Select **New claim** and enter:
+   - Device: keep the selected fiscal device
+   - Description: `Fiscal memory test fails after startup. Customer restarted the device twice.`
+4. Select **Create claim**, then open the new claim in **Warranty claims**.
+5. Under **Supporting files**, choose a small PDF or PNG and select **Upload file**.
+6. Select **Start review**.
+7. Enter the decision note `Fault confirmed under warranty.` and select
+   **Approve claim**.
+8. Select **Close claim**.
 
-## 1. Add and qualify a lead
+Expected: the same claim moves through **Received → Under review → Approved →
+Closed**, and its history records each step. The warranty card remains linked to
+the device and serial number, and the uploaded file remains available.
 
-1. From the sidebar choose **Customers & CRM**.
-2. Under **Choose an area**, select **Leads & opportunities**.
-3. Select **New lead** and enter:
-   - Company or prospect name: `North Star Retail <suffix> Ltd.`
-   - Contact person: `Petar Dimitrov`
-   - Telephone: `+359 888 200 300`
-   - Lead source: **Trade exhibition**
-   - Owner: **Vista Demo CRM Coordinator**
-   - Source details: `Vratsa retail technology exhibition`
-   - Notes: `Interested in a fiscal device and annual service.`
-4. Select **Save lead**, open the new row, and select **Mark as qualified**.
+## 2. Send a survey and record its response
 
-Expected: the lead shows **Qualified** and its history contains **Lead
-registered** and **Lead qualified**.
+1. Select **Feedback & NPS**, then **Send survey**.
+2. Choose any available completed Service job and select **Send survey**.
+3. Open the new survey, choose score `10`, and enter
+   `Fast visit and a clear explanation from the technician.`
+4. Select **Save response**.
 
-## 2. Convert it to a customer and opportunity
+Expected: the survey shows **Responded**, score `10`, and **Promoters** increases
+by one. The completed job can no longer receive a duplicate survey.
 
-1. In the same lead panel select **Convert lead**.
-2. Keep **Create customer** and **Create a sales opportunity** selected.
-3. Enter:
-   - Customer name: keep the lead company name
-   - Customer type: **Company**
-   - Company registration number: `CRM<suffix>`
-   - Opportunity name: `Fiscal device and annual service package`
-   - Estimated value: `1800.00`
-   - Probability: `40`
-   - Expected close date: choose a date about 30 days from today
-   - Owner: **Vista Demo CRM Coordinator**
-4. Select **Convert lead**.
+## 3. Record a referral
 
-Expected: one customer and one opportunity are created. The lead changes to
-**Converted**; selecting the same action again is not offered.
+1. Select **Referrals**, then **Record referral**.
+2. Enter:
+   - Referring customer: **Alfa Market Demo Ltd.**
+   - Lead owner: **Vista Demo CRM Coordinator**
+   - Organization: `TEST Referral Shop 0902`
+   - Contact person: `Mila Petrova`
+   - Telephone: `+359 888 555 902`
+   - Context: `Interested in a fiscal device and annual Service plan.`
+3. Select **Record referral**.
 
-## 3. Move the sales opportunity
-
-1. Select **Sales pipeline** near the top of the page.
-2. Find `Fiscal device and annual service package` under **Qualified**.
-3. Drag it to **Quotation sent**. If you prefer keyboard controls, open the card,
-   choose **Quotation sent**, set probability to `60`, and select **Update stage**.
-4. Open the card and review **Opportunity history**, then select **Back**.
-
-Expected: the card remains under **Quotation sent** after refresh, and the
-history shows the employee, time, previous stage, new stage, and probability.
+Expected: the referral appears once with a linked lead number. Select the lead
+number and confirm `TEST Referral Shop 0902` appears in **Leads & pipeline** under
+**New**.
 
 ## Quick UI check
 
-- Open the qualified lead and scroll to **Lead history**. The panel content
-  scrolls, while **Back**, the title, and the close button remain visible.
-- Select **Convert lead**. Its form scrolls independently; the header stays
-  visible and the **Back / Convert lead** bar fits the full bottom edge with no
-  gap underneath it.
-- Open the opportunity from **Sales pipeline**. Its cards, fields, amounts, and
-  history remain aligned without a second page scrollbar.
-- At phone width, the pipeline and all three panels become a readable vertical
-  flow with no horizontal scrolling.
-- Press `Esc`; the panel closes and focus returns to the button that opened it.
+- Open each panel and scroll from top to bottom. The header remains separate,
+  the content scrolls, and the action bar has no gap beneath it.
+- At phone width, cards, tabs, score buttons, and forms fit without horizontal
+  scrolling.
+- Press `Esc` in a panel; it closes without saving an unfinished form.

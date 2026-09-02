@@ -126,8 +126,7 @@ procurement-to-accounting and quotation-to-payment scenarios pass end to end.
 **Remaining**
 
 - Deliver the customer portal only if selected.
-- Deliver warranty cards, the unified CRM warranty-claim experience, surveys,
-  NPS, referrals, reproducible analytics/dashboards, exports, ERP/POS
+- Deliver reproducible CRM analytics/dashboards, exports, ERP/POS
   synchronization, and external APIs.
 
 **Depends on:** SLA-001, CRM-001, CRM-002, KPI-001, SVC-001, and the established

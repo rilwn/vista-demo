@@ -161,9 +161,9 @@ describe.skipIf(!runInfrastructureTests)('CRM lead and opportunity pipeline', ()
       .send(payload)
       .expect(201);
     lead = created.body as CrmLead;
+    expect(lead.number).toMatch(/^LEAD-\d{4}-\d{6}$/u);
     expect(lead).toMatchObject({
       contactName: payload.contactName,
-      number: expect.stringMatching(/^LEAD-\d{4}-\d{6}$/u),
       organizationName: payload.organizationName,
       status: 'new',
       version: 1,

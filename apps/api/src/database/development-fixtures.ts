@@ -660,6 +660,13 @@ async function ensureOperationalFixtures(
     partners.alfaStoreLocation,
     partners.printerEquipment,
   );
+  await ensureCrmAfterSalesFixtures(
+    client,
+    managerId,
+    partners.alfa,
+    partners.alfaStoreLocation,
+    fixtureId('customer-equipment:alfa-fiscal'),
+  );
   await ensureCrmTicketFixtures(
     client,
     managerId,
@@ -667,6 +674,31 @@ async function ensureOperationalFixtures(
     partners.alfa,
     partners.alfaStoreLocation,
     partners.printerEquipment,
+  );
+}
+
+async function ensureCrmAfterSalesFixtures(
+  client: PoolClient,
+  managerId: string,
+  customerPartnerId: string,
+  customerLocationId: string,
+  equipmentId: string,
+): Promise<void> {
+  const id = fixtureId('crm-warranty-card:alfa-fiscal');
+  await insertFixtureRow(
+    client,
+    'crm.warranty_cards',
+    id,
+    `INSERT INTO crm.warranty_cards (
+       id, card_number, customer_partner_id, customer_location_id,
+       customer_equipment_id, warranty_starts_on, warranty_ends_on, issued_by
+     )
+     SELECT $1, 'DEV-WCR-0001', $2, $3, equipment.id,
+            equipment.warranty_start_date, equipment.warranty_end_date, $5
+     FROM master_data.customer_equipment equipment
+     WHERE equipment.id = $4 AND equipment.warranty_end_date IS NOT NULL
+     ON CONFLICT (id) DO NOTHING`,
+    [id, customerPartnerId, customerLocationId, equipmentId, managerId],
   );
 }
 
@@ -992,8 +1024,13 @@ async function ensureCatalogFixtures(
       'master_data.products',
       product.id,
       `INSERT INTO master_data.products (
-         id, product_code, name, category_id, unit_id, created_by, updated_by
-       ) VALUES ($1, $2, $3, $4, $5, $6, $6) ON CONFLICT (id) DO NOTHING`,
+         id, product_code, name, category_id, unit_id, warranty_months, created_by, updated_by
+       ) VALUES (
+         $1, $2, $3, $4, $5,
+         (SELECT CASE WHEN tracking_mode = 'serial' THEN 24 ELSE NULL END
+          FROM master_data.product_categories WHERE id = $4),
+         $6, $6
+       ) ON CONFLICT (id) DO NOTHING`,
       [product.id, product.code, product.name, product.categoryId, unitId, managerId],
     );
     const barcodeId = fixtureId(`catalog:barcode:${product.code}`);

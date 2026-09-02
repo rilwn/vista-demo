@@ -35,6 +35,7 @@ interface ProductRow {
   unit_id: string;
   updated_at: Date | string;
   version: number;
+  warranty_months: number | null;
 }
 
 interface IdempotencyRow {
@@ -54,6 +55,7 @@ interface NormalizedProductInput {
   name: string;
   productCode: string;
   unitId: string;
+  warrantyMonths?: number;
 }
 
 @Injectable()
@@ -77,7 +79,8 @@ export class CatalogService {
   async products(): Promise<ProductSummary[]> {
     const result = await this.database.getPool().query<ProductRow>(
       `SELECT p.id, p.product_code, p.name, p.category_id, p.unit_id, p.active,
-              p.version, p.created_at, p.updated_at, category.tracking_mode,
+              p.version, p.created_at, p.updated_at, p.warranty_months,
+              category.tracking_mode,
               COALESCE((
                 SELECT json_agg(json_build_object(
                   'id', barcode.id,
@@ -167,14 +170,16 @@ export class CatalogService {
 
         const inserted = await client.query<Omit<ProductRow, 'barcodes' | 'tracking_mode'>>(
           `INSERT INTO master_data.products (
-             product_code, name, category_id, unit_id, created_by, updated_by
-           ) VALUES ($1, $2, $3, $4, $5, $5)
-           RETURNING id, product_code, name, category_id, unit_id, active, version, created_at, updated_at`,
+             product_code, name, category_id, unit_id, warranty_months, created_by, updated_by
+           ) VALUES ($1, $2, $3, $4, $5, $6, $6)
+           RETURNING id, product_code, name, category_id, unit_id, active, version,
+                     created_at, updated_at, warranty_months`,
           [
             normalized.productCode,
             normalized.name,
             normalized.categoryId,
             normalized.unitId,
+            normalized.warrantyMonths ?? (categoryRow.tracking_mode === 'serial' ? 24 : null),
             authentication.accountId,
           ],
         );
@@ -217,6 +222,7 @@ export class CatalogService {
           unitId: product.unit_id,
           updatedAt: new Date(product.updated_at).toISOString(),
           version: product.version,
+          ...(product.warranty_months === null ? {} : { warrantyMonths: product.warranty_months }),
         };
       },
       isProduct,
@@ -410,7 +416,26 @@ function normalizeProduct(input: CreateProductRequest): NormalizedProductInput {
     seenBarcodes.add(barcode);
     return { barcode, barcodeType: inputBarcode.barcodeType ?? 'other' };
   });
-  return { barcodes, categoryId: input.categoryId, name, productCode, unitId: input.unitId };
+  if (
+    input.warrantyMonths !== undefined &&
+    (!Number.isInteger(input.warrantyMonths) ||
+      input.warrantyMonths < 1 ||
+      input.warrantyMonths > 120)
+  ) {
+    throw new ApiErrorException(
+      'PRODUCT_WARRANTY_TERM_INVALID',
+      'Warranty term must be between 1 and 120 months.',
+      HttpStatus.BAD_REQUEST,
+    );
+  }
+  return {
+    barcodes,
+    categoryId: input.categoryId,
+    name,
+    productCode,
+    unitId: input.unitId,
+    ...(input.warrantyMonths === undefined ? {} : { warrantyMonths: input.warrantyMonths }),
+  };
 }
 
 function normalizeText(value: string): string {
@@ -441,6 +466,7 @@ function mapProduct(row: ProductRow): ProductSummary {
     unitId: row.unit_id,
     updatedAt: new Date(row.updated_at).toISOString(),
     version: row.version,
+    ...(row.warranty_months === null ? {} : { warrantyMonths: row.warranty_months }),
   };
 }
 

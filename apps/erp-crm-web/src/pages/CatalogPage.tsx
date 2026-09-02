@@ -414,10 +414,12 @@ function ProductDrawer({
   const [productCode, setProductCode] = useState('');
   const [categoryId, setCategoryId] = useState(categories[0]?.id ?? '');
   const [unitId, setUnitId] = useState(units[0]?.id ?? '');
+  const [warrantyMonths, setWarrantyMonths] = useState('24');
   const [barcodes, setBarcodes] = useState([{ barcode: '', barcodeType: 'other' as const }]);
   const [error, setError] = useState<ApiClientError | null>(null);
   const [saving, setSaving] = useState(false);
   const attempt = useRef<{ fingerprint: string; key: string } | null>(null);
+  const selectedCategory = categories.find((category) => category.id === categoryId);
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const input: CreateProductRequest = {
@@ -425,6 +427,9 @@ function ProductDrawer({
       name: name.trim(),
       productCode: productCode.trim(),
       unitId,
+      ...(selectedCategory?.trackingMode === 'serial' && warrantyMonths
+        ? { warrantyMonths: Number(warrantyMonths) }
+        : {}),
       ...(barcodes.some((barcode) => barcode.barcode.trim())
         ? { barcodes: barcodes.filter((barcode) => barcode.barcode.trim()) }
         : {}),
@@ -492,6 +497,18 @@ function ProductDrawer({
           options={units.map((unit) => ({ label: `${unit.code} · ${unit.name}`, value: unit.id }))}
           value={unitId}
         />
+        {selectedCategory?.trackingMode === 'serial' ? (
+          <TextField
+            id="product-warranty-months"
+            label="Warranty term (months)"
+            max={120}
+            min={1}
+            onChange={(event) => setWarrantyMonths(event.target.value)}
+            required
+            type="number"
+            value={warrantyMonths}
+          />
+        ) : null}
         <div className="barcode-form">
           <div>
             <strong>Barcodes</strong>

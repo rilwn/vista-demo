@@ -414,8 +414,15 @@ export class FilesService {
     action: 'edit' | 'view',
     auth: AuthenticationContext,
   ): Promise<void> {
-    const module = parentType === 'warranty_claim' ? 'erp.service' : 'crm';
-    if (!hasPermission(auth.permissions, { action, module })) {
+    const canAccessWarrantyClaim =
+      parentType === 'warranty_claim' &&
+      (hasPermission(auth.permissions, { action, module: 'erp.service' }) ||
+        hasPermission(auth.permissions, { action, module: 'crm' }));
+    const canAccessParent =
+      parentType === 'warranty_claim'
+        ? canAccessWarrantyClaim
+        : hasPermission(auth.permissions, { action, module: 'crm' });
+    if (!canAccessParent) {
       throw new ApiErrorException(
         'FILE_PARENT_ACCESS_DENIED',
         'You do not have access to files for this record.',
@@ -443,7 +450,8 @@ export class FilesService {
                AND ($2::boolean OR work_order.assigned_technician_account_id = $3)`,
         [
           parentId,
-          hasPermission(auth.permissions, { action: 'approve', module: 'erp.service' }),
+          hasPermission(auth.permissions, { action: 'approve', module: 'erp.service' }) ||
+            hasPermission(auth.permissions, { action, module: 'crm' }),
           auth.accountId,
         ],
       );

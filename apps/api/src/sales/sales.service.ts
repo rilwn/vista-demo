@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
+import type { AppEnvironment } from '@vista/config';
 import type {
   AcceptSalesHandoverRequest,
   ConfirmSalesQuotationRequest,
@@ -23,6 +24,7 @@ import type {
   RequestSecurityMetadata,
 } from '../auth/authentication.types.js';
 import { ApiErrorException } from '../common/api-error.exception.js';
+import { APP_ENVIRONMENT } from '../config/config.module.js';
 import { DatabaseService } from '../database/database.service.js';
 
 type QuotationRow = {
@@ -59,6 +61,7 @@ export class SalesService {
   constructor(
     @Inject(DatabaseService) private readonly database: DatabaseService,
     @Inject(AuditService) private readonly audit: AuditService,
+    @Inject(APP_ENVIRONMENT) private readonly environment: AppEnvironment,
   ) {}
 
   async referenceData(): Promise<SalesReferenceData> {
@@ -793,6 +796,7 @@ export class SalesService {
             normalized.customerLocationId,
           ],
         );
+        const warrantyCards = await this.issueWarrantyCards(client, certificateId, auth.accountId);
         const workflow = await this.loadWorkflow(client, row.quotation_id);
         for (const equipment of equipmentChanges)
           await this.sideEffects(
@@ -808,6 +812,17 @@ export class SalesService {
             auth,
             metadata,
             `${commandKey}:${equipment.id}`,
+          );
+        for (const card of warrantyCards)
+          await this.sideEffects(
+            client,
+            'crm_warranty_card',
+            card.id,
+            'crm.warranty-card.issued',
+            card,
+            auth,
+            metadata,
+            `${commandKey}:${card.id}`,
           );
         await this.sideEffects(
           client,
@@ -851,11 +866,13 @@ export class SalesService {
       product_name: string;
       serial_item_id: string | null;
       serial_number: string;
+      warranty_months: number | null;
     }>(
       `SELECT line.product_id, line.product_name, item.id AS serial_item_id,
-              selected.serial_number
+              selected.serial_number, product.warranty_months
        FROM sales.handover_certificate_lines line
        CROSS JOIN LATERAL unnest(line.serial_numbers) selected(serial_number)
+       JOIN master_data.products product ON product.id = line.product_id
        LEFT JOIN inventory.serialized_items item
          ON item.product_id = line.product_id
         AND upper(item.serial_number) = upper(selected.serial_number)
@@ -901,6 +918,16 @@ export class SalesService {
              WHERE id = $1`,
             [equipment.id, item.serial_item_id, actorAccountId],
           );
+        if (item.warranty_months !== null)
+          await client.query(
+            `UPDATE master_data.customer_equipment
+             SET warranty_end_date = COALESCE(
+                   warranty_end_date,
+                   ($2::date + make_interval(months => $3))::date
+                 ), updated_by = $4, updated_at = now()
+             WHERE id = $1`,
+            [equipment.id, purchaseDate, item.warranty_months, actorAccountId],
+          );
         if (!equipment.serialized_item_id)
           changes.push({
             eventType: 'master_data.customer_equipment.linked-to-stock-item',
@@ -913,8 +940,14 @@ export class SalesService {
       await client.query(
         `INSERT INTO master_data.customer_equipment (
            id, customer_location_id, product_id, serialized_item_id, device_name,
-           serial_number, purchase_date, warranty_start_date, created_by, updated_by
-         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$7,$8,$8)`,
+           serial_number, purchase_date, warranty_start_date, warranty_end_date,
+           created_by, updated_by
+         ) VALUES (
+           $1,$2,$3,$4,$5,$6,$7,$7,
+           CASE WHEN $8::integer IS NULL THEN NULL
+                ELSE ($7::date + make_interval(months => $8))::date END,
+           $9,$9
+         )`,
         [
           equipmentId,
           customerLocationId,
@@ -923,6 +956,7 @@ export class SalesService {
           item.product_name,
           item.serial_number,
           purchaseDate,
+          item.warranty_months,
           actorAccountId,
         ],
       );
@@ -933,6 +967,71 @@ export class SalesService {
       });
     }
     return changes;
+  }
+
+  private async issueWarrantyCards(
+    client: PoolClient,
+    certificateId: string,
+    actorAccountId: string,
+  ): Promise<Array<{ id: string; number: string; serialNumber: string; warrantyEndsOn: string }>> {
+    const equipment = await client.query<{
+      customer_location_id: string;
+      customer_partner_id: string;
+      equipment_id: string;
+      serial_number: string;
+      warranty_end_date: string;
+      warranty_start_date: string;
+    }>(
+      `SELECT equipment.id AS equipment_id, equipment.customer_location_id,
+              location.partner_id AS customer_partner_id, equipment.serial_number,
+              equipment.warranty_start_date::text, equipment.warranty_end_date::text
+       FROM sales.handover_certificate_lines line
+       CROSS JOIN LATERAL unnest(line.serial_numbers) selected(serial_number)
+       JOIN master_data.customer_equipment equipment
+         ON equipment.product_id = line.product_id
+        AND upper(equipment.serial_number) = upper(selected.serial_number)
+       JOIN master_data.customer_locations location ON location.id = equipment.customer_location_id
+       WHERE line.certificate_id = $1 AND equipment.warranty_end_date IS NOT NULL
+       ORDER BY line.id, selected.serial_number`,
+      [certificateId],
+    );
+    const issued: Array<{
+      id: string;
+      number: string;
+      serialNumber: string;
+      warrantyEndsOn: string;
+    }> = [];
+    for (const item of equipment.rows) {
+      const cardId = randomUUID();
+      const cardNumber = await this.nextCrmNumber(client, 'warranty_card', 'WCR');
+      const inserted = await client.query<{ id: string }>(
+        `INSERT INTO crm.warranty_cards (
+           id, card_number, customer_partner_id, customer_location_id,
+           customer_equipment_id, handover_certificate_id, warranty_starts_on,
+           warranty_ends_on, issued_by
+         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+         ON CONFLICT (customer_equipment_id) DO NOTHING RETURNING id`,
+        [
+          cardId,
+          cardNumber,
+          item.customer_partner_id,
+          item.customer_location_id,
+          item.equipment_id,
+          certificateId,
+          item.warranty_start_date,
+          item.warranty_end_date,
+          actorAccountId,
+        ],
+      );
+      if (inserted.rowCount)
+        issued.push({
+          id: cardId,
+          number: cardNumber,
+          serialNumber: item.serial_number,
+          warrantyEndsOn: item.warranty_end_date,
+        });
+    }
+    return issued;
   }
 
   async createDraftInvoice(
@@ -1400,6 +1499,26 @@ export class SalesService {
       [type],
     );
     return `${prefix}-${new Date().getUTCFullYear()}-${required(result.rows[0], 'Sequence allocation failed').allocated.padStart(6, '0')}`;
+  }
+
+  private async nextCrmNumber(client: PoolClient, type: string, prefix: string): Promise<string> {
+    await client.query(
+      `INSERT INTO crm.internal_document_sequences (document_type)
+       VALUES ($1) ON CONFLICT (document_type) DO NOTHING`,
+      [type],
+    );
+    const result = await client.query<{ allocated: string }>(
+      `UPDATE crm.internal_document_sequences
+       SET next_value = next_value + 1, updated_at = now()
+       WHERE document_type = $1
+       RETURNING (next_value - 1)::text AS allocated`,
+      [type],
+    );
+    const year = new Intl.DateTimeFormat('en', {
+      timeZone: this.environment.BUSINESS_TIMEZONE,
+      year: 'numeric',
+    }).format(new Date());
+    return `${prefix}-${year}-${required(result.rows[0], 'Sequence allocation failed').allocated.padStart(6, '0')}`;
   }
 
   private async command<T>(

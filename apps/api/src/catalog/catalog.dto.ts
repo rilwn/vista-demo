@@ -2,10 +2,13 @@ import {
   ArrayMaxSize,
   IsArray,
   IsIn,
+  IsInt,
   IsOptional,
   IsString,
   IsUUID,
   MaxLength,
+  Max,
+  Min,
   MinLength,
   ValidateNested,
 } from 'class-validator';
@@ -65,6 +68,12 @@ export class CreateProductDto implements CreateProductRequest {
   @MaxLength(80)
   productCode!: string;
   @ApiProperty({ type: String, format: 'uuid' }) @IsUUID('4') unitId!: string;
+  @ApiPropertyOptional({ maximum: 120, minimum: 1, type: Number })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(120)
+  warrantyMonths?: number;
 }
 
 export class UnitDto implements Unit {
@@ -94,4 +103,6 @@ export class ProductSummaryDto implements ProductSummary {
   @ApiProperty({ type: String, format: 'date-time' }) updatedAt!: string;
   @ApiProperty({ type: Number }) version!: number;
   @ApiProperty({ enum: ['none', 'serial', 'batch'] }) trackingMode!: ProductSummary['trackingMode'];
+  @ApiPropertyOptional({ maximum: 120, minimum: 1, type: Number })
+  warrantyMonths?: number;
 }

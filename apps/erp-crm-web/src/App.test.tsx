@@ -6009,6 +6009,86 @@ describe('ERP and CRM authenticated workspace', () => {
     expect(saved.expectedVersion).toBe(1);
     expect(saved.windows).toHaveLength(5);
   });
+
+  it('connects warranty, feedback, and referral work in CRM customer care', async () => {
+    const crmContext = {
+      ...authenticationContext,
+      permissions: [
+        { action: 'view', module: 'crm' },
+        { action: 'create', module: 'crm' },
+        { action: 'edit', module: 'crm' },
+      ],
+    };
+    storeAuthenticatedSession(crmContext);
+    const overview = {
+      assignees: [{ displayName: 'Mila Petrova', id: loginResponse.account.id }],
+      businessTimezone: 'Europe/Sofia',
+      claims: [],
+      customers: [{ id: partner.id, name: partner.displayName }],
+      nps: { detractors: 0, passives: 0, promoters: 0, responses: 0, trend: [] },
+      referrals: [],
+      surveySources: [
+        {
+          customerLocationId: 'f9fe18c8-f654-4305-8e36-687563318b0c',
+          customerName: partner.displayName,
+          customerPartnerId: partner.id,
+          id: 'f3e45425-7e87-4449-aa56-7b2bbf4da71b',
+          label: 'DEV-WO-0001 · completed Service job',
+          sourceKind: 'service',
+        },
+      ],
+      surveys: [],
+      warrantyCards: [
+        {
+          claimCount: 0,
+          customerEquipmentId: 'c98388f7-0578-4f39-85d0-d28a8dc61ea8',
+          customerLocationId: 'f9fe18c8-f654-4305-8e36-687563318b0c',
+          customerLocationName: 'Central Store',
+          customerName: partner.displayName,
+          customerPartnerId: partner.id,
+          deviceName: 'Fiscal Register X1',
+          id: '412c023d-8ac0-4b05-a431-3fc98c32f808',
+          issuedAt: '2026-08-20T09:00:00.000Z',
+          number: 'WCR-2026-000001',
+          offerStatus: 'not_offered',
+          remainingDays: 600,
+          serialNumber: 'TRACE-FR-0001',
+          status: 'active',
+          warrantyEndsOn: '2028-08-20',
+          warrantyStartsOn: '2026-08-20',
+        },
+      ],
+    };
+    const fetchMock = vi.fn((input: string) => {
+      if (input.endsWith('/auth/me')) return Promise.resolve(jsonResponse(crmContext));
+      if (input.endsWith('/crm/after-sales')) return Promise.resolve(jsonResponse(overview));
+      return Promise.resolve(jsonResponse({}));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderApplication(['/modules/crm/customer-care']);
+
+    expect(await screen.findByRole('heading', { name: 'Customer care' })).toBeTruthy();
+    expect(await screen.findByText('WCR-2026-000001')).toBeTruthy();
+    fireEvent.click(screen.getByText('WCR-2026-000001'));
+    expect(await screen.findByRole('dialog', { name: 'WCR-2026-000001' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Feedback & NPS' }));
+    expect(screen.getByText('Net Promoter Score')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /Send survey/u }));
+    const surveyDialog = await screen.findByRole('dialog', { name: 'Send customer survey' });
+    expect(surveyDialog).toBeTruthy();
+    expect(
+      screen.getByRole('option', { name: /DEV-WO-0001 · completed Service job/u }),
+    ).toBeTruthy();
+    fireEvent.click(within(surveyDialog).getByRole('button', { name: 'Close panel' }));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Referrals' }));
+    fireEvent.click(screen.getByRole('button', { name: /Record referral/u }));
+    expect(await screen.findByRole('dialog', { name: 'Record referral' })).toBeTruthy();
+    expect(screen.getByText('A new referral lead will be created automatically.')).toBeTruthy();
+  });
 });
 
 function renderApplication(initialEntries: string[]) {
