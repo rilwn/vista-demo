@@ -8,6 +8,7 @@ import { messages } from './messages';
 import { AccessPage } from './pages/AccessPage';
 import { CatalogPage } from './pages/CatalogPage';
 import { CrmTicketsPage } from './pages/CrmTicketsPage';
+import { CrmAnalyticsPage } from './pages/CrmAnalyticsPage';
 import { CrmAfterSalesPage } from './pages/CrmAfterSalesPage';
 import { CrmPipelinePage } from './pages/CrmPipelinePage';
 import { CrmTimelinePage } from './pages/CrmTimelinePage';
@@ -161,6 +162,9 @@ function pageForPath(
   }
   if (pathname === '/modules/crm/customer-care') {
     return hasPermission('crm') ? <CrmAfterSalesPage /> : <NotFoundPage />;
+  }
+  if (pathname === '/modules/crm/analytics') {
+    return hasPermission('crm') ? <CrmAnalyticsPage /> : <NotFoundPage />;
   }
   const workflow = findWorkflowPage(pathname);
   if (workflow) {

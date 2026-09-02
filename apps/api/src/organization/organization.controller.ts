@@ -94,7 +94,7 @@ export class OrganizationController {
   @ApiHeader({ name: 'Idempotency-Key', required: true })
   @ApiParam({ format: 'uuid', name: 'entityId' })
   createBranch(
-    @Param('entityId', new ParseUUIDPipe({ version: '4' })) entityId: string,
+    @Param('entityId', new ParseUUIDPipe()) entityId: string,
     @Body() input: CreateBusinessBranchDto,
     @Headers('idempotency-key') key: string | undefined,
     @Req() request: AuthenticatedRequest,
@@ -116,7 +116,7 @@ export class OrganizationController {
   @ApiHeader({ name: 'Idempotency-Key', required: true })
   @ApiParam({ format: 'uuid', name: 'branchId' })
   createLocation(
-    @Param('branchId', new ParseUUIDPipe({ version: '4' })) branchId: string,
+    @Param('branchId', new ParseUUIDPipe()) branchId: string,
     @Body() input: CreateBusinessLocationDto,
     @Headers('idempotency-key') key: string | undefined,
     @Req() request: AuthenticatedRequest,
@@ -138,7 +138,7 @@ export class OrganizationController {
   @ApiHeader({ name: 'Idempotency-Key', required: true })
   @ApiParam({ format: 'uuid', name: 'locationId' })
   createOperator(
-    @Param('locationId', new ParseUUIDPipe({ version: '4' })) locationId: string,
+    @Param('locationId', new ParseUUIDPipe()) locationId: string,
     @Body() input: CreateBusinessOperatorDto,
     @Headers('idempotency-key') key: string | undefined,
     @Req() request: AuthenticatedRequest,
@@ -160,7 +160,7 @@ export class OrganizationController {
   @ApiHeader({ name: 'Idempotency-Key', required: true })
   @ApiParam({ format: 'uuid', name: 'locationId' })
   createRegister(
-    @Param('locationId', new ParseUUIDPipe({ version: '4' })) locationId: string,
+    @Param('locationId', new ParseUUIDPipe()) locationId: string,
     @Body() input: CreateCashRegisterDto,
     @Headers('idempotency-key') key: string | undefined,
     @Req() request: AuthenticatedRequest,

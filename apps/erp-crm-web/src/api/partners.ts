@@ -5,6 +5,7 @@ import type {
   CreatePartnerBankAccountRequest,
   CreatePartnerContactRequest,
   CreatePartnerRequest,
+  CustomerOperationalOverview,
   CustomerEquipment,
   CustomerLocation,
   CustomerLocationProfile,
@@ -105,6 +106,19 @@ export function getPartnerProfile(token: string, partnerId: string): Promise<Par
     apiClient.GET('/api/v1/master-data/partners/{id}/profile', {
       headers: authorizationHeaders(token),
       params: { path: { id: partnerId } },
+    }),
+  );
+}
+
+export function getCustomerOperationalOverview(
+  token: string,
+  partnerId: string,
+  limit = 10,
+): Promise<CustomerOperationalOverview> {
+  return unwrapApiResponse(
+    apiClient.GET('/api/v1/master-data/partners/{id}/customer-overview', {
+      headers: authorizationHeaders(token),
+      params: { path: { id: partnerId }, query: { limit } },
     }),
   );
 }

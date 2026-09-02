@@ -24,7 +24,10 @@ describe('development fixtures', () => {
     expect(emails).toContain('backup.operator@vista.local');
     expect(
       developmentFixtureAccounts.find((account) => account.key === 'pos-operator')?.permissions,
-    ).toEqual([{ action: 'view', module: 'pos' }]);
+    ).toEqual([
+      { action: 'view', module: 'pos' },
+      { action: 'create', module: 'pos' },
+    ]);
     expect(
       developmentFixtureAccounts.find((account) => account.key === 'backup-operator')?.permissions,
     ).toEqual([{ action: 'view', module: 'backup' }]);

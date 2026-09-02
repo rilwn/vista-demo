@@ -2,6 +2,10 @@ import { createHash, randomUUID } from 'node:crypto';
 
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
 import type {
+  CrmReportDefinition,
+  CrmReportDefinitionKey,
+  CrmReportExport,
+  CrmReportExportPage,
   FinanceReportDefinition,
   FinanceReportDefinitionKey,
   FinanceReportExport,
@@ -21,6 +25,7 @@ import type {
   RequestSecurityMetadata,
 } from '../auth/authentication.types.js';
 import { ApiErrorException } from '../common/api-error.exception.js';
+import { CrmAnalyticsService } from '../crm/crm-analytics.service.js';
 import { DatabaseService } from '../database/database.service.js';
 import { FinanceReportsService } from '../finance/finance-reports.service.js';
 import { StructuredLogger } from '../logging/structured-logger.service.js';
@@ -34,9 +39,10 @@ import type {
 } from './finance-report-exports.dto.js';
 import { renderFinanceReport } from './finance-report-renderer.js';
 
-type ReportDefinitionKey = FinanceReportDefinitionKey | ServiceReportDefinitionKey;
-type AnyReportDefinition = FinanceReportDefinition | ServiceReportDefinition;
-type AnyReportExport = FinanceReportExport | ServiceReportExport;
+type ReportDefinitionKey =
+  CrmReportDefinitionKey | FinanceReportDefinitionKey | ServiceReportDefinitionKey;
+type AnyReportDefinition = CrmReportDefinition | FinanceReportDefinition | ServiceReportDefinition;
+type AnyReportExport = CrmReportExport | FinanceReportExport | ServiceReportExport;
 interface AnyReportExportPage {
   items: AnyReportExport[];
   page: number;
@@ -50,7 +56,7 @@ interface ReportExportRequest {
   definitionKey: ReportDefinitionKey;
   format: ReportExportFormat;
 }
-type ReportScope = 'finance' | 'service';
+type ReportScope = 'crm' | 'finance' | 'service';
 
 interface DefinitionRow {
   available_formats: ReportExportFormat[];
@@ -93,6 +99,7 @@ export class FinanceReportExportsService {
   constructor(
     @Inject(DatabaseService) private readonly database: DatabaseService,
     @Inject(AuditService) private readonly audit: AuditService,
+    @Inject(CrmAnalyticsService) private readonly crmAnalytics: CrmAnalyticsService,
     @Inject(FinanceReportsService) private readonly reports: FinanceReportsService,
     @Inject(ServiceReportsService) private readonly serviceReports: ServiceReportsService,
     @Inject(JobQueueService) private readonly jobs: JobQueueService,
@@ -120,6 +127,16 @@ export class FinanceReportExportsService {
     return result.rows.map(mapDefinition) as ServiceReportDefinition[];
   }
 
+  async crmDefinitions(): Promise<CrmReportDefinition[]> {
+    const result = await this.database.getPool().query<DefinitionRow>(
+      `SELECT id, definition_key, name, description, implementation_key, available_formats
+       FROM reporting.report_definitions
+       WHERE is_active = true AND definition_key LIKE 'crm.%'
+       ORDER BY name, definition_key`,
+    );
+    return result.rows.map(mapDefinition) as CrmReportDefinition[];
+  }
+
   async list(
     query: FinanceReportExportPageQueryDto,
     auth: AuthenticationContext,
@@ -132,6 +149,13 @@ export class FinanceReportExportsService {
     auth: AuthenticationContext,
   ): Promise<ServiceReportExportPage> {
     return this.listForScope(query, auth, 'service') as Promise<ServiceReportExportPage>;
+  }
+
+  async crmList(
+    query: FinanceReportExportPageQueryDto,
+    auth: AuthenticationContext,
+  ): Promise<CrmReportExportPage> {
+    return this.listForScope(query, auth, 'crm') as Promise<CrmReportExportPage>;
   }
 
   private async listForScope(
@@ -197,6 +221,15 @@ export class FinanceReportExportsService {
       metadata,
       'service',
     ) as Promise<ServiceReportExport>;
+  }
+
+  async crmCreate(
+    input: ReportExportRequest,
+    key: string | undefined,
+    auth: AuthenticationContext,
+    metadata: RequestSecurityMetadata,
+  ): Promise<CrmReportExport> {
+    return this.createForScope(input, key, auth, metadata, 'crm') as Promise<CrmReportExport>;
   }
 
   private async createForScope(
@@ -316,6 +349,14 @@ export class FinanceReportExportsService {
     return this.retryForScope(id, auth, metadata, 'service') as Promise<ServiceReportExport>;
   }
 
+  async crmRetry(
+    id: string,
+    auth: AuthenticationContext,
+    metadata: RequestSecurityMetadata,
+  ): Promise<CrmReportExport> {
+    return this.retryForScope(id, auth, metadata, 'crm') as Promise<CrmReportExport>;
+  }
+
   private async retryForScope(
     id: string,
     auth: AuthenticationContext,
@@ -373,6 +414,14 @@ export class FinanceReportExportsService {
     metadata: RequestSecurityMetadata,
   ): Promise<FinanceReportExportContent> {
     return this.contentForScope(id, auth, metadata, 'service');
+  }
+
+  crmContent(
+    id: string,
+    auth: AuthenticationContext,
+    metadata: RequestSecurityMetadata,
+  ): Promise<FinanceReportExportContent> {
+    return this.contentForScope(id, auth, metadata, 'crm');
   }
 
   private async contentForScope(
@@ -481,10 +530,15 @@ export class FinanceReportExportsService {
             existing.definition_key as ServiceReportDefinitionKey,
             existing.filters,
           )
-        : await this.reports.exportData(
-            existing.definition_key as FinanceReportDefinitionKey,
-            existing.filters,
-          );
+        : existing.definition_key.startsWith('crm.')
+          ? await this.crmAnalytics.exportData(
+              existing.definition_key as CrmReportDefinitionKey,
+              existing.filters,
+            )
+          : await this.reports.exportData(
+              existing.definition_key as FinanceReportDefinitionKey,
+              existing.filters,
+            );
       const rendered = await renderFinanceReport(existing.export_format, data);
       const checksum = createHash('sha256').update(rendered.buffer).digest('hex');
       const fileName = exportFileName(
@@ -646,9 +700,9 @@ function mapDefinition(row: DefinitionRow): AnyReportDefinition {
     name: row.name,
     requiresDateRange: dateRangeReportKeys.has(row.definition_key),
   };
-  return row.definition_key.startsWith('service.')
-    ? (mapped as ServiceReportDefinition)
-    : (mapped as FinanceReportDefinition);
+  if (row.definition_key.startsWith('service.')) return mapped as ServiceReportDefinition;
+  if (row.definition_key.startsWith('crm.')) return mapped as CrmReportDefinition;
+  return mapped as FinanceReportDefinition;
 }
 
 function mapExport(row: ExportRow): AnyReportExport {
@@ -752,4 +806,8 @@ const dateRangeReportKeys = new Set<ReportDefinitionKey>([
   'service.request-register',
   'service.technician-performance',
   'service.cost-summary',
+  'crm.customer-value',
+  'crm.pipeline-performance',
+  'crm.employee-performance',
+  'crm.revenue-breakdown',
 ]);

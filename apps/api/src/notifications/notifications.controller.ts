@@ -46,7 +46,7 @@ export class NotificationsController {
   @ApiParam({ format: 'uuid', name: 'id' })
   @ApiOkResponse({ type: NotificationMessageDto })
   markRead(
-    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Param('id', new ParseUUIDPipe()) id: string,
     @Req() request: AuthenticatedRequest,
   ): Promise<NotificationMessage> {
     return this.notifications.markRead(id, request.authentication);

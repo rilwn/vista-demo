@@ -1,6 +1,6 @@
 # Vista Integrated Information System — Remaining Implementation Plan
 
-Status date: 2026-09-01
+Status date: 2026-09-02
 Project: `BG16RFPR001-1.012-1324-C01`
 
 [`AGENTS.md`](AGENTS.md) is authoritative. This file contains only unfinished
@@ -126,32 +126,31 @@ procurement-to-accounting and quotation-to-payment scenarios pass end to end.
 **Remaining**
 
 - Deliver the customer portal only if selected.
-- Deliver reproducible CRM analytics/dashboards, exports, ERP/POS
-  synchronization, and external APIs.
+- Deliver the approved external enterprise CRM APIs and reconciliation adapters.
 
 **Depends on:** SLA-001, CRM-001, CRM-002, KPI-001, SVC-001, and the established
 Service correlation rules.
 
-**Accept when:** CRM does not create conflicting ERP-owned records; KPI formulas
-are documented; all remaining required CRM workflows and export paths pass.
+**Accept when:** CRM does not create conflicting ERP-owned records; selected
+optional and approved enterprise API paths pass.
 
 ## Phase 6 — Complete online POS
 
 **Remaining**
 
-- Connect the distinct POS terminal to shared identity, catalog, stock, prices,
-  promotions, customers, documents, accounting, registers, and operators.
-- Deliver barcode/name/code entry, quick access, certified fiscal-device
-  integration, fiscal-receipt invoice linkage, mandatory serial capture, and
-  warranty/customer transfer.
-- Deliver cash, PIN-pad card, on-account, split, advance, balance, and change
-  payments; recoverable fiscalization/payment/invoice/stock posting; linked
-  returns and fiscal reversal; authorized discounts; promotions; loyalty ledger;
-  corporate pricing; shifts; and all required POS reports.
+- Connect approved fiscal, PIN-pad, and scanner hardware; issue certified H-18
+  fiscal receipts; and deliver direct invoice creation from the linked receipt.
+- Deliver PIN-pad card, corporate on-account, split, advance, and remaining-
+  balance payments with recoverable payment/fiscal/document/stock coordination.
+- Deliver linked returns, fiscal reversal, eligible stock/service routing,
+  authorized manual discounts, approved bundle/quantity rules, and the loyalty
+  points ledger.
+- Complete shift, cashier, X/Z, product, category, payment, period, location,
+  and cross-location reports with Excel, CSV, and PDF export.
 - Keep unselected optional hardware and features disabled behind configuration.
 
 **Depends on:** POS-001, POS-003, BUS-001, BUS-002, Phase 3 finance/documents,
-and Phase 5 customer synchronization.
+and the established canonical ERP/CRM customer identity.
 
 **Accept when:** no sale, fiscal effect, serial movement, payment, or integration
 event can double-post; returns and discounts are authorized/audited; simulator

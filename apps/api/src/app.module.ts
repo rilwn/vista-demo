@@ -22,6 +22,7 @@ import { FinanceModule } from './finance/finance.module.js';
 import { ServiceOperationsModule } from './service/service.module.js';
 import { FilesModule } from './files/files.module.js';
 import { CrmModule } from './crm/crm.module.js';
+import { PosModule } from './pos/pos.module.js';
 
 @Module({
   controllers: [RootController],
@@ -47,6 +48,7 @@ import { CrmModule } from './crm/crm.module.js';
     ServiceOperationsModule,
     CrmModule,
     FilesModule,
+    PosModule,
   ],
 })
 export class AppModule {}

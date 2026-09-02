@@ -123,7 +123,7 @@ export function FinanceCashPage() {
             </p>
           </div>
           {hasPermission('platform.organization', 'create') ? (
-            <Link className="vista-button is-secondary" to="/organization">
+            <Link className="vista-button vista-button--secondary" to="/organization">
               Open business structure
             </Link>
           ) : null}

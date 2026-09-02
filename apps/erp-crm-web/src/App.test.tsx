@@ -1,7 +1,11 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type {
+  CrmAnalyticsOverview,
   CrmLead,
   CrmOpportunity,
+  CrmReportDefinition,
+  CrmReportExport,
+  CustomerOperationalOverview,
   FinanceAgingReport,
   FinanceJournalReport,
   FinanceReportDefinition,
@@ -13,6 +17,8 @@ import type {
   FinanceSupplierPayment,
   FinanceTurnoverReport,
   FinanceVatReviewReport,
+  PartnerProfile,
+  PartnerSummary,
   ProcurementSupplierRecord,
   SalesWorkflow,
   ServiceInspectionPlan,
@@ -64,7 +70,7 @@ const partner = {
   updatedAt: '2026-08-06T12:00:00.000Z',
   vatNumber: 'BG204000001',
   version: 1,
-};
+} satisfies PartnerSummary;
 
 const partnerPage = {
   items: [partner],
@@ -108,7 +114,7 @@ const partnerProfile = {
     },
   ],
   partner: { ...partner, version: 4 },
-};
+} satisfies PartnerProfile;
 
 const productCategories = [
   {
@@ -643,7 +649,12 @@ describe('ERP and CRM authenticated workspace', () => {
     expect(screen.getByText(messages.partners.results(1))).toBeTruthy();
     expect(screen.queryByRole('button', { name: messages.partners.create })).toBeNull();
     fireEvent.click(partnerButton);
-    expect(screen.getByRole('dialog', { name: messages.partners.detailsTitle })).toBeTruthy();
+    const detailDialog = screen.getByRole('dialog', { name: messages.partners.detailsTitle });
+    expect(detailDialog.classList.contains('partner-detail-drawer')).toBe(true);
+    expect(
+      within(detailDialog).getByRole('heading', { name: 'Registration details' }),
+    ).toBeTruthy();
+    expect(detailDialog.querySelectorAll('.partner-detail-list > div')).toHaveLength(5);
     expect(screen.getAllByText(partner.uic).length).toBeGreaterThan(0);
     expect(await screen.findByText('Maria Petrova')).toBeTruthy();
     expect(screen.getByText('GB82WEST12345698765432')).toBeTruthy();
@@ -1254,6 +1265,143 @@ describe('ERP and CRM authenticated workspace', () => {
     expect((uploadOptions.body as FormData).get('file')).toEqual(selected);
 
     fireEvent.click(screen.getByRole('button', { name: messages.partners.documents.back }));
+    expect(screen.getByRole('dialog', { name: messages.partners.detailsTitle })).toBeTruthy();
+  });
+
+  it('shows one customer view across CRM, sales, finance, payments, locations, and equipment', async () => {
+    const locationId = '3991eb4c-5257-4982-ae65-7c5cd2f81977';
+    const overview: CustomerOperationalOverview = {
+      financialDocuments: [
+        {
+          bgnGrossTotal: '60.0000',
+          currencyCode: 'BGN',
+          documentType: 'invoice',
+          draftNumber: 'DINV-2026-000001',
+          dueDate: '2026-09-08',
+          grossTotal: '60.0000',
+          id: 'cbd78dca-c987-4fa2-a64d-a1dd83ba5c79',
+          issueDate: '2026-08-25',
+          sourceSalesInvoiceId: '4d858c55-2579-4ed0-b0bd-91152013c987',
+          status: 'draft',
+        },
+      ],
+      locations: [
+        {
+          equipment: [
+            {
+              active: true,
+              customerLocationId: locationId,
+              deviceName: 'Demo Fiscal Register X1',
+              id: 'a84fc2ec-1fdd-41f8-820e-c41bf570086b',
+              purchaseDate: '2026-08-25',
+              serialNumber: 'DEMO-FR-ALFA-01',
+              status: 'active',
+              version: 1,
+              warrantyStartsOn: '2026-08-25',
+            },
+          ],
+          location: {
+            active: true,
+            addressLine1: '12 Hristo Botev Blvd.',
+            city: 'Vratsa',
+            countryCode: 'BG',
+            id: locationId,
+            locationType: 'Store',
+            name: 'Central Store',
+            partnerId: partner.id,
+            version: 1,
+          },
+        },
+      ],
+      payments: [
+        {
+          amount: '20.0000',
+          currencyCode: 'BGN',
+          id: 'c3603397-2627-47a4-a104-fb8a14ca2b2d',
+          number: 'PAY-2026-000001',
+          paymentDate: '2026-08-26',
+          paymentMethod: 'bank_transfer',
+          paymentReference: 'FIN-REV-2026-000001',
+          recordedAt: '2026-08-26T09:00:00.000Z',
+        },
+      ],
+      profile: partnerProfile,
+      purchases: [
+        {
+          currencyCode: 'BGN',
+          id: '4d858c55-2579-4ed0-b0bd-91152013c987',
+          lines: [
+            {
+              lineTotal: '50.0000',
+              productId: inventoryProductFixture.id,
+              productName: 'Demo Fiscal Register X1',
+              quantity: '1.0000',
+              unitPrice: '50.0000',
+            },
+          ],
+          number: 'DEV-INV-DRAFT-0001',
+          recordedAt: '2026-08-25T12:00:00.000Z',
+          source: 'erp_sales',
+          sourceShipmentId: '6ee1d759-5832-48f1-8743-d412624221b4',
+          total: '60.0000',
+        },
+      ],
+      receivables: [
+        {
+          allocatedTotal: '20.0000',
+          bgnTotal: '60.0000',
+          currencyCode: 'BGN',
+          documentDate: '2026-08-25',
+          dueDate: '2026-09-08',
+          id: '7ea2517a-1168-468f-9851-e74b8d884aa4',
+          number: 'FIN-REV-2026-000001',
+          outstandingTotal: '40.0000',
+          paymentStatus: 'partially_paid',
+          sourceSalesInvoiceId: '4d858c55-2579-4ed0-b0bd-91152013c987',
+          total: '60.0000',
+        },
+      ],
+      summary: {
+        activeEquipment: 1,
+        activeLocations: 1,
+        financialDocuments: 1,
+        lastPurchaseAt: '2026-08-25T12:00:00.000Z',
+        openReceivables: 1,
+        outstandingBgn: '40.0000',
+        payments: 1,
+        purchases: 1,
+      },
+    };
+    const fetchMock = vi.fn((input: string) => {
+      if (input.endsWith('/auth/me')) return Promise.resolve(jsonResponse(authenticationContext));
+      if (input.includes('/master-data/partners?'))
+        return Promise.resolve(jsonResponse(partnerPage));
+      if (input.endsWith(`/partners/${partner.id}/profile`))
+        return Promise.resolve(jsonResponse(partnerProfile));
+      if (input.endsWith(`/partners/${partner.id}/locations`))
+        return Promise.resolve(jsonResponse(overview.locations));
+      if (input.endsWith(`/partners/${partner.id}/customer-overview?limit=10`))
+        return Promise.resolve(jsonResponse(overview));
+      return Promise.resolve(jsonResponse({}));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    storeAuthenticatedSession(authenticationContext);
+
+    renderApplication(['/partners']);
+    fireEvent.click(await screen.findByRole('button', { name: /Vista Retail Partner Ltd\./u }));
+    await screen.findByText('Maria Petrova');
+    fireEvent.click(screen.getByRole('button', { name: 'Customer overview' }));
+
+    const dialog = await screen.findByRole('dialog', { name: 'Customer overview' });
+    expect(within(dialog).getByRole('heading', { name: partner.displayName })).toBeTruthy();
+    expect(within(dialog).getByText('FIN-REV-2026-000001')).toBeTruthy();
+    expect(within(dialog).getByText('DEV-INV-DRAFT-0001')).toBeTruthy();
+    expect(within(dialog).getAllByText('Demo Fiscal Register X1').length).toBeGreaterThan(0);
+    expect(within(dialog).getByText('DEMO-FR-ALFA-01')).toBeTruthy();
+    expect(within(dialog).getByText('PAY-2026-000001')).toBeTruthy();
+    expect(within(dialog).getByText('DINV-2026-000001')).toBeTruthy();
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Back to partner' }));
     expect(screen.getByRole('dialog', { name: messages.partners.detailsTitle })).toBeTruthy();
   });
 
@@ -6010,6 +6158,203 @@ describe('ERP and CRM authenticated workspace', () => {
     expect(saved.windows).toHaveLength(5);
   });
 
+  it('explores reproducible CRM analytics and opens a fitted export panel', async () => {
+    const crmContext = {
+      ...authenticationContext,
+      permissions: [
+        { action: 'view', module: 'crm' },
+        { action: 'create', module: 'crm' },
+      ],
+    };
+    storeAuthenticatedSession(crmContext);
+    const overview: CrmAnalyticsOverview = {
+      customerMetrics: {
+        activeCustomers: 2,
+        averageTransactionValueBgn: '72.00',
+        churnPercent: '0.00',
+        observedLifetimeValueBgn: '100.00',
+        purchaseFrequency: '1.50',
+        retentionPercent: '100.00',
+      },
+      dateFrom: '2026-06-05',
+      dateTo: '2026-09-02',
+      definitions: [
+        {
+          dataSources: ['finance.financial_documents'],
+          dateWindow: 'Invoice issue dates in the selected period.',
+          formula: 'Invoice count divided by active customers.',
+          key: 'customer-activity',
+          label: 'Customer activity',
+          statusFilters: ['Non-cancelled invoices only.'],
+        },
+      ],
+      employees: [
+        {
+          displayName: 'Mila Petrova',
+          requestsProcessed: 1,
+          salesCompleted: 2,
+          ticketsResolved: 3,
+          totalCompleted: 6,
+        },
+      ],
+      generatedAt: '2026-09-02T12:00:00.000Z',
+      pipeline: {
+        createdOpportunities: 2,
+        estimatedRevenueBgn: '1800.00',
+        lostCount: 0,
+        openPipelineValueBgn: '800.00',
+        stages: [
+          { currentCount: 0, enteredCount: 2, stage: 'new' },
+          {
+            conversionFromPreviousPercent: '50.00',
+            currentCount: 1,
+            enteredCount: 1,
+            stage: 'qualified',
+          },
+          {
+            conversionFromPreviousPercent: '100.00',
+            currentCount: 1,
+            enteredCount: 1,
+            stage: 'quotation_sent',
+          },
+          {
+            conversionFromPreviousPercent: '0.00',
+            currentCount: 0,
+            enteredCount: 0,
+            stage: 'negotiation',
+          },
+          {
+            conversionFromPreviousPercent: '0.00',
+            currentCount: 0,
+            enteredCount: 0,
+            stage: 'won',
+          },
+          { currentCount: 0, enteredCount: 0, stage: 'lost' },
+        ],
+        winRatePercent: '0.00',
+        wonCount: 0,
+      },
+      preferences: [
+        {
+          documentCount: 2,
+          kind: 'product',
+          label: 'Demo Fiscal Register X1',
+          netRevenueBgn: '100.00',
+          quantity: '2.0000',
+        },
+      ],
+      previousCustomerMetrics: {
+        activeCustomers: 1,
+        averageTransactionValueBgn: '60.00',
+        churnPercent: '0.00',
+        observedLifetimeValueBgn: '80.00',
+        purchaseFrequency: '1.00',
+        retentionPercent: '100.00',
+      },
+      previousDateFrom: '2026-03-07',
+      previousDateTo: '2026-06-04',
+      revenue: [
+        {
+          dimension: 'product',
+          documentCount: 2,
+          key: 'product-1',
+          label: 'Demo Fiscal Register X1',
+          netRevenueBgn: '100.00',
+          sharePercent: '100.00',
+        },
+        {
+          dimension: 'customer',
+          documentCount: 2,
+          key: partner.id,
+          label: 'Alfa Market Demo Ltd.',
+          netRevenueBgn: '100.00',
+          sharePercent: '100.00',
+        },
+      ],
+      timezone: 'Europe/Sofia',
+      totalNetRevenueBgn: '100.00',
+    };
+    const definitions: CrmReportDefinition[] = [
+      {
+        description: 'Customer activity, retention, churn, and observed value.',
+        formats: ['xlsx', 'csv', 'pdf'],
+        key: 'crm.customer-value',
+        name: 'Customer value and retention',
+        requiresDateRange: true,
+      },
+    ];
+    const completedExport: CrmReportExport = {
+      attemptCount: 1,
+      completedAt: '2026-09-02T12:01:00.000Z',
+      createdAt: '2026-09-02T12:00:00.000Z',
+      definitionKey: 'crm.customer-value',
+      fileName: 'customer-value-2026-09-02.xlsx',
+      format: 'xlsx',
+      id: 'e2b4db34-4bed-48dd-a0ab-d97db5f06639',
+      name: 'Customer value and retention',
+      rowCount: 2,
+      sizeBytes: 7283,
+      status: 'completed',
+    };
+    const fetchMock = vi.fn((input: string) => {
+      if (input.endsWith('/auth/me')) return Promise.resolve(jsonResponse(crmContext));
+      if (input.includes('/crm/analytics/overview')) return Promise.resolve(jsonResponse(overview));
+      if (input.endsWith('/crm/report-exports/definitions')) {
+        return Promise.resolve(jsonResponse(definitions));
+      }
+      if (input.includes('/crm/report-exports?')) {
+        return Promise.resolve(
+          jsonResponse({
+            items: [completedExport],
+            page: 1,
+            pageSize: 20,
+            total: 1,
+            totalPages: 1,
+          }),
+        );
+      }
+      return Promise.resolve(jsonResponse({}));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderApplication(['/modules/crm/analytics']);
+
+    expect(await screen.findByRole('heading', { name: 'Customer analytics' })).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Analytics' }).classList.contains('is-active')).toBe(
+      true,
+    );
+    expect((await screen.findAllByText('Demo Fiscal Register X1')).length).toBeGreaterThan(0);
+    expect(screen.getByText('Completed work by employee')).toBeTruthy();
+    expect(screen.getByRole('button', { name: '90 days' }).getAttribute('aria-pressed')).toBe(
+      'true',
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'This year' }));
+    expect(screen.getByRole('button', { name: 'This year' }).getAttribute('aria-pressed')).toBe(
+      'true',
+    );
+    expect(screen.getByRole('button', { name: '90 days' }).getAttribute('aria-pressed')).toBe(
+      'false',
+    );
+    fireEvent.click(await screen.findByRole('tab', { name: 'Customer' }));
+    expect(await screen.findByText('Alfa Market Demo Ltd.')).toBeTruthy();
+    fireEvent.click(screen.getByText('How these numbers are calculated'));
+    expect(screen.getByText('Invoice count divided by active customers.')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: /Export report/u }));
+    const dialog = await screen.findByRole('dialog', { name: 'Export CRM report' });
+    expect(
+      within(dialog).getByRole('option', { name: 'Customer value and retention' }),
+    ).toBeTruthy();
+    expect(within(dialog).getByText('Ready')).toBeTruthy();
+    const body = dialog.querySelector('.report-export-drawer-body');
+    const actions = body?.querySelector(':scope > .security-drawer-actions:last-child');
+    expect(body).toBeTruthy();
+    expect(actions).toBeTruthy();
+    expect(
+      within(actions as HTMLElement).getByRole('button', { name: 'Prepare export' }),
+    ).toBeTruthy();
+  });
+
   it('connects warranty, feedback, and referral work in CRM customer care', async () => {
     const crmContext = {
       ...authenticationContext,
@@ -6047,7 +6392,7 @@ describe('ERP and CRM authenticated workspace', () => {
           customerName: partner.displayName,
           customerPartnerId: partner.id,
           deviceName: 'Fiscal Register X1',
-          id: '412c023d-8ac0-4b05-a431-3fc98c32f808',
+          id: '76d38aa6-ada6-8b23-3c5b-c15be78edc09',
           issuedAt: '2026-08-20T09:00:00.000Z',
           number: 'WCR-2026-000001',
           offerStatus: 'not_offered',
@@ -6059,9 +6404,18 @@ describe('ERP and CRM authenticated workspace', () => {
         },
       ],
     };
-    const fetchMock = vi.fn((input: string) => {
+    const fetchMock = vi.fn((input: string, options?: RequestInit) => {
       if (input.endsWith('/auth/me')) return Promise.resolve(jsonResponse(crmContext));
       if (input.endsWith('/crm/after-sales')) return Promise.resolve(jsonResponse(overview));
+      if (
+        input.endsWith(
+          '/crm/after-sales/warranty-cards/76d38aa6-ada6-8b23-3c5b-c15be78edc09/offer',
+        ) &&
+        options?.method === 'POST'
+      )
+        return Promise.resolve(
+          jsonResponse({ ...overview.warrantyCards[0], offerStatus: 'offered' }),
+        );
       return Promise.resolve(jsonResponse({}));
     });
     vi.stubGlobal('fetch', fetchMock);
@@ -6069,12 +6423,43 @@ describe('ERP and CRM authenticated workspace', () => {
     renderApplication(['/modules/crm/customer-care']);
 
     expect(await screen.findByRole('heading', { name: 'Customer care' })).toBeTruthy();
+    const warrantiesTab = screen.getByRole('tab', { name: 'Warranties' });
+    expect(warrantiesTab.getAttribute('aria-selected')).toBe('true');
+    expect(screen.queryByText('Protected session')).toBeNull();
     expect(await screen.findByText('WCR-2026-000001')).toBeTruthy();
     fireEvent.click(screen.getByText('WCR-2026-000001'));
-    expect(await screen.findByRole('dialog', { name: 'WCR-2026-000001' })).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+    let warrantyDialog = await screen.findByRole('dialog', { name: 'WCR-2026-000001' });
+    fireEvent.click(within(warrantyDialog).getByRole('button', { name: /New claim/u }));
+    const claimDialog = await screen.findByRole('dialog', { name: 'New warranty claim' });
+    const claimBody = claimDialog.querySelector('.crm-care-drawer-body');
+    const claimForm = claimBody?.querySelector(':scope > .crm-care-form');
+    const claimActions = claimForm?.querySelector(':scope > .crm-care-drawer-actions:last-child');
+    expect(claimBody).toBeTruthy();
+    expect(claimForm).toBeTruthy();
+    expect(claimActions).toBeTruthy();
+    fireEvent.click(within(claimActions as HTMLElement).getByRole('button', { name: 'Back' }));
 
-    fireEvent.click(screen.getByRole('button', { name: 'Feedback & NPS' }));
+    fireEvent.click(screen.getByText('WCR-2026-000001'));
+    warrantyDialog = await screen.findByRole('dialog', { name: 'WCR-2026-000001' });
+    const offerSelect = warrantyDialog.querySelector('select');
+    expect(offerSelect).toBeTruthy();
+    fireEvent.change(offerSelect!, { target: { value: 'offered' } });
+    fireEvent.click(within(warrantyDialog).getByRole('button', { name: 'Save status' }));
+    await waitFor(() =>
+      expect(
+        fetchMock.mock.calls.some(
+          ([url, options]) =>
+            url.endsWith(
+              '/crm/after-sales/warranty-cards/76d38aa6-ada6-8b23-3c5b-c15be78edc09/offer',
+            ) && options?.method === 'POST',
+        ),
+      ).toBe(true),
+    );
+
+    const feedbackTab = await screen.findByRole('tab', { name: 'Feedback & NPS' });
+    fireEvent.click(feedbackTab);
+    expect(feedbackTab.getAttribute('aria-selected')).toBe('true');
+    expect(warrantiesTab.getAttribute('aria-selected')).toBe('false');
     expect(screen.getByText('Net Promoter Score')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: /Send survey/u }));
     const surveyDialog = await screen.findByRole('dialog', { name: 'Send customer survey' });
@@ -6084,7 +6469,7 @@ describe('ERP and CRM authenticated workspace', () => {
     ).toBeTruthy();
     fireEvent.click(within(surveyDialog).getByRole('button', { name: 'Close panel' }));
 
-    fireEvent.click(screen.getByRole('button', { name: 'Referrals' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Referrals' }));
     fireEvent.click(screen.getByRole('button', { name: /Record referral/u }));
     expect(await screen.findByRole('dialog', { name: 'Record referral' })).toBeTruthy();
     expect(screen.getByText('A new referral lead will be created automatically.')).toBeTruthy();

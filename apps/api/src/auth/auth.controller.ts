@@ -120,7 +120,7 @@ export class AuthController {
   @ApiOkResponse({ type: VerifyAccountRecoveryTotpResponseDto })
   @ApiBadRequestResponse({ description: 'The recovery code or authenticator code is invalid.' })
   verifyRecoveryTotpEnrollment(
-    @Param('enrollmentId', new ParseUUIDPipe({ version: '4' })) enrollmentId: string,
+    @Param('enrollmentId', new ParseUUIDPipe()) enrollmentId: string,
     @Body() input: VerifyAccountRecoveryTotpRequestDto,
     @Req() request: Request,
   ): Promise<VerifyAccountRecoveryTotpResponseDto> {
@@ -220,7 +220,7 @@ export class AuthController {
   @ApiBadRequestResponse({ description: 'The six-digit authenticator code is invalid.' })
   @ApiConflictResponse({ description: 'The authenticator setup expired.' })
   verifyTotpEnrollment(
-    @Param('enrollmentId', new ParseUUIDPipe({ version: '4' })) enrollmentId: string,
+    @Param('enrollmentId', new ParseUUIDPipe()) enrollmentId: string,
     @Body() input: VerifyTotpEnrollmentRequestDto,
     @Req() request: AuthenticatedRequest,
   ): Promise<VerifyTotpEnrollmentResponseDto> {

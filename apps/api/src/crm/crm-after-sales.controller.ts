@@ -65,7 +65,7 @@ export class CrmAfterSalesController {
   @ApiHeader({ name: 'Idempotency-Key', required: true })
   @ApiParam({ format: 'uuid', name: 'id' })
   updateWarrantyOffer(
-    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Param('id', new ParseUUIDPipe()) id: string,
     @Body() input: UpdateCrmWarrantyOfferDto,
     @Headers('idempotency-key') key: string | undefined,
     @Req() request: AuthenticatedRequest,
@@ -103,7 +103,7 @@ export class CrmAfterSalesController {
   @ApiHeader({ name: 'Idempotency-Key', required: true })
   @ApiParam({ format: 'uuid', name: 'id' })
   transitionWarrantyClaim(
-    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Param('id', new ParseUUIDPipe()) id: string,
     @Body() input: TransitionWarrantyClaimDto,
     @Headers('idempotency-key') key: string | undefined,
     @Req() request: AuthenticatedRequest,
@@ -141,7 +141,7 @@ export class CrmAfterSalesController {
   @ApiHeader({ name: 'Idempotency-Key', required: true })
   @ApiParam({ format: 'uuid', name: 'id' })
   recordSurveyResponse(
-    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Param('id', new ParseUUIDPipe()) id: string,
     @Body() input: RecordCrmSurveyResponseDto,
     @Headers('idempotency-key') key: string | undefined,
     @Req() request: AuthenticatedRequest,

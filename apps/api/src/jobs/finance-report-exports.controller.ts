@@ -102,7 +102,7 @@ export class FinanceReportExportsController {
   @ApiAcceptedResponse({ type: FinanceReportExportDto })
   @ApiParam({ format: 'uuid', name: 'id' })
   retry(
-    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Param('id', new ParseUUIDPipe()) id: string,
     @Req() request: AuthenticatedRequest,
   ): Promise<FinanceReportExportDto> {
     return this.exports.retry(id, request.authentication, requestMetadata(request));
@@ -128,7 +128,7 @@ export class FinanceReportExportsController {
     description: 'The completed report export.',
   })
   async content(
-    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Param('id', new ParseUUIDPipe()) id: string,
     @Req() request: AuthenticatedRequest,
     @Res() response: Response,
   ): Promise<void> {

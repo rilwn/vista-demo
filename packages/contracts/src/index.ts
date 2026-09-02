@@ -646,6 +646,239 @@ export interface CustomerLocationProfile {
   location: CustomerLocation;
 }
 
+export interface CustomerOverviewSummary {
+  activeEquipment: number;
+  activeLocations: number;
+  financialDocuments: number;
+  lastPurchaseAt?: string;
+  openReceivables: number;
+  outstandingBgn: string;
+  payments: number;
+  purchases: number;
+}
+
+export interface CustomerPurchaseLine {
+  lineTotal: string;
+  productId: string;
+  productName: string;
+  quantity: string;
+  unitPrice: string;
+}
+
+export interface CustomerPurchaseHistoryEntry {
+  currencyCode: string;
+  id: string;
+  lines: CustomerPurchaseLine[];
+  number: string;
+  recordedAt: string;
+  source: 'erp_sales' | 'pos';
+  sourceShipmentId?: string;
+  total: string;
+}
+
+export interface CustomerFinancialDocumentSummary {
+  bgnGrossTotal: string;
+  currencyCode: string;
+  documentType: 'credit_note' | 'debit_note' | 'invoice' | 'proforma';
+  draftNumber: string;
+  dueDate?: string;
+  grossTotal: string;
+  id: string;
+  issueDate: string;
+  officialNumber?: string;
+  sourceSalesInvoiceId?: string;
+  status: 'cancelled' | 'draft';
+}
+
+export interface CustomerReceivableSummary {
+  allocatedTotal: string;
+  bgnTotal: string;
+  currencyCode: string;
+  documentDate: string;
+  dueDate: string;
+  id: string;
+  number: string;
+  outstandingTotal: string;
+  paymentStatus: FinancePaymentStatus;
+  sourceSalesInvoiceId: string;
+  total: string;
+}
+
+export interface CustomerPaymentSummary {
+  amount: string;
+  currencyCode: string;
+  id: string;
+  number: string;
+  paymentDate: string;
+  paymentMethod: FinancePaymentMethod;
+  paymentReference?: string;
+  recordedAt: string;
+}
+
+export interface CustomerOperationalOverview {
+  financialDocuments: CustomerFinancialDocumentSummary[];
+  locations: CustomerLocationProfile[];
+  payments: CustomerPaymentSummary[];
+  profile: PartnerProfile;
+  purchases: CustomerPurchaseHistoryEntry[];
+  receivables: CustomerReceivableSummary[];
+  summary: CustomerOverviewSummary;
+}
+
+export type PosTrackingMode = 'batch' | 'none' | 'serial';
+export type PosVatTreatment = 'standard_20' | 'reduced_9' | 'zero' | 'exempt' | 'ica';
+
+export interface PosRegisterOption {
+  businessLocationId: string;
+  businessLocationName: string;
+  code: string;
+  fiscalDeviceLabel?: string;
+  fiscalMode: 'disabled' | 'hardware' | 'simulator';
+  id: string;
+  name: string;
+  operatorCode: string;
+  operatorId: string;
+  warehouseId: string;
+  warehouseName: string;
+}
+
+export interface PosShift {
+  cashRegisterId: string;
+  cashRegisterName: string;
+  closedAt?: string;
+  closingCashBgn?: string;
+  expectedCashBgn: string;
+  id: string;
+  openedAt: string;
+  openingCashBgn: string;
+  operatorCode: string;
+  operatorId: string;
+  shiftNumber: string;
+  status: 'closed' | 'open';
+  version: number;
+  warehouseId: string;
+  warehouseName: string;
+}
+
+export interface PosTerminalContext {
+  currentShift?: PosShift;
+  registers: PosRegisterOption[];
+}
+
+export interface OpenPosShiftRequest {
+  cashRegisterId: string;
+  openingCashBgn: string;
+}
+
+export interface ClosePosShiftRequest {
+  closingCashBgn: string;
+  version: number;
+}
+
+export interface PosCatalogBatch {
+  batchId: string;
+  batchNumber: string;
+  expiresOn?: string;
+  quantity: string;
+}
+
+export interface PosCatalogItem {
+  availableQuantity: string;
+  barcodes: string[];
+  batches: PosCatalogBatch[];
+  currencyCode: 'BGN';
+  id: string;
+  name: string;
+  priceListId?: string;
+  priceListName?: string;
+  productCode: string;
+  serialNumbers: string[];
+  trackingMode: PosTrackingMode;
+  unitCode: string;
+  unitPrice?: string;
+  vatTreatment?: PosVatTreatment;
+}
+
+export interface PosCatalogPage {
+  items: PosCatalogItem[];
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+}
+
+export interface PosCustomerLocationOption {
+  city: string;
+  id: string;
+  name: string;
+}
+
+export interface PosCustomerOption {
+  id: string;
+  locations: PosCustomerLocationOption[];
+  name: string;
+  uic?: string;
+  vatNumber?: string;
+}
+
+export interface CreatePosSaleLineRequest {
+  batchId?: string;
+  productId: string;
+  quantity: string;
+  serialNumbers?: string[];
+}
+
+export interface CreatePosCashSaleRequest {
+  cashTendered: string;
+  clientTransactionId: string;
+  customerLocationId?: string;
+  customerPartnerId?: string;
+  lines: CreatePosSaleLineRequest[];
+  shiftId: string;
+}
+
+export interface PosSaleLine {
+  grossTotal: string;
+  id: string;
+  netTotal: string;
+  productCode: string;
+  productId: string;
+  productName: string;
+  quantity: string;
+  serialNumbers: string[];
+  unitPrice: string;
+  vatTotal: string;
+  vatTreatment: PosVatTreatment;
+}
+
+export interface PosSale {
+  cashTendered: string;
+  changeAmount: string;
+  completedAt: string;
+  currencyCode: 'BGN';
+  customerName?: string;
+  customerPartnerId?: string;
+  fiscalAdapter: string;
+  fiscalReceiptNumber: string;
+  fiscalStatus: 'fiscalized' | 'reversed' | 'simulated';
+  grossTotal: string;
+  id: string;
+  lines: PosSaleLine[];
+  netTotal: string;
+  saleNumber: string;
+  shiftId: string;
+  status: 'completed' | 'reversed';
+  vatTotal: string;
+}
+
+export interface PosSalePage {
+  items: PosSale[];
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+}
+
 export interface LegalBusinessEntity {
   active: boolean;
   code: string;
@@ -1852,6 +2085,52 @@ export interface ServiceReportExport {
 
 export interface ServiceReportExportPage {
   items: ServiceReportExport[];
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+}
+
+export const crmReportDefinitionKeys = [
+  'crm.customer-value',
+  'crm.pipeline-performance',
+  'crm.employee-performance',
+  'crm.revenue-breakdown',
+] as const;
+export type CrmReportDefinitionKey = (typeof crmReportDefinitionKeys)[number];
+
+export interface CrmReportDefinition {
+  description: string;
+  formats: ReportExportFormat[];
+  key: CrmReportDefinitionKey;
+  name: string;
+  requiresDateRange: true;
+}
+
+export interface CreateCrmReportExportRequest {
+  dateFrom: string;
+  dateTo: string;
+  definitionKey: CrmReportDefinitionKey;
+  format: ReportExportFormat;
+}
+
+export interface CrmReportExport {
+  attemptCount: number;
+  completedAt?: string;
+  createdAt: string;
+  definitionKey: CrmReportDefinitionKey;
+  errorCode?: string;
+  fileName?: string;
+  format: ReportExportFormat;
+  id: string;
+  name: string;
+  rowCount?: number;
+  sizeBytes?: number;
+  status: ReportExportStatus;
+}
+
+export interface CrmReportExportPage {
+  items: CrmReportExport[];
   page: number;
   pageSize: number;
   total: number;
@@ -3178,6 +3457,102 @@ export interface CrmAfterSalesOverview {
   surveySources: CrmSurveySourceReference[];
   surveys: CrmCustomerSurvey[];
   warrantyCards: CrmWarrantyCard[];
+}
+
+export const crmAnalyticsPipelineStages = [
+  'new',
+  'qualified',
+  'quotation_sent',
+  'negotiation',
+  'won',
+  'lost',
+] as const;
+export type CrmAnalyticsPipelineStage = (typeof crmAnalyticsPipelineStages)[number];
+
+export const crmAnalyticsRevenueDimensions = [
+  'product',
+  'service',
+  'customer',
+  'region',
+  'employee',
+] as const;
+export type CrmAnalyticsRevenueDimension = (typeof crmAnalyticsRevenueDimensions)[number];
+
+export interface CrmAnalyticsCustomerMetrics {
+  activeCustomers: number;
+  averageTransactionValueBgn: string;
+  churnPercent: string;
+  observedLifetimeValueBgn: string;
+  purchaseFrequency: string;
+  retentionPercent: string;
+}
+
+export interface CrmAnalyticsPipelineStageMetric {
+  conversionFromPreviousPercent?: string;
+  currentCount: number;
+  enteredCount: number;
+  stage: CrmAnalyticsPipelineStage;
+}
+
+export interface CrmAnalyticsPipelineMetrics {
+  createdOpportunities: number;
+  estimatedRevenueBgn: string;
+  lostCount: number;
+  openPipelineValueBgn: string;
+  stages: CrmAnalyticsPipelineStageMetric[];
+  winRatePercent: string;
+  wonCount: number;
+}
+
+export interface CrmAnalyticsEmployeeMetric {
+  displayName: string;
+  requestsProcessed: number;
+  salesCompleted: number;
+  ticketsResolved: number;
+  totalCompleted: number;
+}
+
+export interface CrmAnalyticsPreference {
+  documentCount: number;
+  kind: 'product' | 'service';
+  label: string;
+  netRevenueBgn: string;
+  quantity: string;
+}
+
+export interface CrmAnalyticsRevenueMetric {
+  dimension: CrmAnalyticsRevenueDimension;
+  documentCount: number;
+  key: string;
+  label: string;
+  netRevenueBgn: string;
+  sharePercent: string;
+}
+
+export interface CrmAnalyticsDefinition {
+  dataSources: string[];
+  dateWindow: string;
+  formula: string;
+  key: string;
+  label: string;
+  statusFilters: string[];
+}
+
+export interface CrmAnalyticsOverview {
+  customerMetrics: CrmAnalyticsCustomerMetrics;
+  dateFrom: string;
+  dateTo: string;
+  definitions: CrmAnalyticsDefinition[];
+  employees: CrmAnalyticsEmployeeMetric[];
+  generatedAt: string;
+  pipeline: CrmAnalyticsPipelineMetrics;
+  preferences: CrmAnalyticsPreference[];
+  previousCustomerMetrics: CrmAnalyticsCustomerMetrics;
+  previousDateFrom: string;
+  previousDateTo: string;
+  revenue: CrmAnalyticsRevenueMetric[];
+  totalNetRevenueBgn: string;
+  timezone: string;
 }
 
 export interface AssignServiceWorkOrderRequest {

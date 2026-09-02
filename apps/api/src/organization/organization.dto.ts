@@ -115,7 +115,7 @@ export class CreateBusinessLocationDto implements CreateBusinessLocationRequest 
 
 export class CreateBusinessOperatorDto implements CreateBusinessOperatorRequest {
   @ApiProperty({ format: 'uuid', type: String })
-  @IsUUID('4')
+  @IsUUID('loose')
   accountId!: string;
 
   @ApiProperty({ maxLength: 30, minLength: 1, type: String })

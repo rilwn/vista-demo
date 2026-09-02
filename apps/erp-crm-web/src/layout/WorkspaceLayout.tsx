@@ -93,24 +93,13 @@ export function WorkspaceLayout({ children }: PropsWithChildren) {
         </nav>
 
         <div className="sidebar-footer">
-          <div className="sidebar-session-status">
-            <span aria-hidden="true">
-              <Icon name="shield" size={15} />
-            </span>
-            <div>
-              <strong>Protected session</strong>
-              <small>
-                {session.context.twoFactorVerified ? 'Two-factor verified' : 'Password verified'}
-              </small>
-            </div>
-          </div>
           <Link className="sidebar-profile-card" to="/access">
             <span className="account-avatar" aria-hidden="true">
               {initials}
             </span>
             <span className="account-copy">
               <strong>{session.context.displayName}</strong>
-              <small>My access &amp; security</small>
+              <small>Account &amp; security</small>
             </span>
             <Icon name="arrow" size={16} />
           </Link>

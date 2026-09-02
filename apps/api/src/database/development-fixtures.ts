@@ -221,6 +221,7 @@ export const developmentFixtureAccounts: readonly DevelopmentFixtureAccount[] = 
   ),
   account('pos-operator', 'DEV-POS', 'Vista Demo POS Operator', 'pos.operator@vista.local', [
     grant('pos', 'view'),
+    grant('pos', 'create'),
   ]),
   account(
     'backup-operator',
@@ -610,17 +611,24 @@ async function ensureOperationalFixtures(
     entity: fixtureId('organization:entity'),
     location: fixtureId('organization:location'),
     managerOperator: fixtureId('organization:operator:manager'),
+    posOperator: fixtureId('organization:operator:pos'),
     serviceWarehouse: fixtureId('warehouse:service'),
     technicianOperator: fixtureId('organization:operator:technician'),
     technicianWarehouse: fixtureId('warehouse:technician'),
   };
 
-  await ensureOrganizationFixtures(client, managerId, technicianId, organization);
+  await ensureOrganizationFixtures(
+    client,
+    managerId,
+    technicianId,
+    accountIds['pos-operator'],
+    organization,
+  );
 
   const catalog = await ensureCatalogFixtures(client, managerId);
   const partners = await ensurePartnerFixtures(client, managerId, catalog);
   await ensureInitialStock(client, managerId, partners.supplier, organization, catalog);
-  await ensurePricingFixtures(client, managerId, partners.balkan, catalog.adapter);
+  await ensurePricingFixtures(client, managerId, partners.balkan, catalog);
   await ensureSubscriptionFixture(
     client,
     managerId,
@@ -736,6 +744,7 @@ interface OrganizationFixtureIds {
   entity: string;
   location: string;
   managerOperator: string;
+  posOperator: string;
   serviceWarehouse: string;
   technicianOperator: string;
   technicianWarehouse: string;
@@ -745,6 +754,7 @@ async function ensureOrganizationFixtures(
   client: PoolClient,
   managerId: string,
   technicianId: string,
+  posAccountId: string,
   ids: OrganizationFixtureIds,
 ): Promise<void> {
   await insertFixtureRow(
@@ -793,6 +803,16 @@ async function ensureOrganizationFixtures(
   await insertFixtureRow(
     client,
     'organization.operators',
+    ids.posOperator,
+    `INSERT INTO organization.operators (
+       id, business_location_id, account_id, code, created_by, updated_by
+     ) VALUES ($1, $2, $3, 'POS-01', $4, $4)
+     ON CONFLICT (id) DO NOTHING`,
+    [ids.posOperator, ids.location, posAccountId, managerId],
+  );
+  await insertFixtureRow(
+    client,
+    'organization.operators',
     ids.technicianOperator,
     `INSERT INTO organization.operators (
        id, business_location_id, account_id, code, created_by, updated_by
@@ -817,6 +837,12 @@ async function ensureOrganizationFixtures(
        cash_register_id, operator_id, business_location_id, assigned_by
      ) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING`,
     [cashRegisterId, ids.managerOperator, ids.location, managerId],
+  );
+  await client.query(
+    `INSERT INTO organization.cash_register_operators (
+       cash_register_id, operator_id, business_location_id, assigned_by
+     ) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING`,
+    [cashRegisterId, ids.posOperator, ids.location, managerId],
   );
 
   await insertFixtureRow(
@@ -849,6 +875,20 @@ async function ensureOrganizationFixtures(
      ) VALUES ($1, 'WH-TECH-01', 'Demo Technician Warehouse', 'technician', $2, $3, $4, $4)
      ON CONFLICT (id) DO NOTHING`,
     [ids.technicianWarehouse, ids.location, ids.technicianOperator, managerId],
+  );
+  await client.query(
+    `INSERT INTO pos.terminal_configurations (
+       cash_register_id, warehouse_id, fiscal_mode, fiscal_device_label, configured_by
+     ) VALUES ($1, $2, 'simulator', 'Vista development receipt simulator', $3)
+     ON CONFLICT (cash_register_id) DO UPDATE
+     SET warehouse_id = EXCLUDED.warehouse_id,
+         fiscal_mode = EXCLUDED.fiscal_mode,
+         fiscal_device_label = EXCLUDED.fiscal_device_label,
+         active = true,
+         configured_by = EXCLUDED.configured_by,
+         configured_at = now(),
+         version = pos.terminal_configurations.version + 1`,
+    [cashRegisterId, ids.centralWarehouse, managerId],
   );
 }
 
@@ -1044,6 +1084,12 @@ async function ensureCatalogFixtures(
       [barcodeId, product.id, product.barcode, managerId],
     );
   }
+  await client.query(
+    `UPDATE master_data.products
+     SET pos_vat_treatment = 'standard_20', updated_by = $2, updated_at = now()
+     WHERE id = ANY($1::uuid[]) AND pos_vat_treatment IS NULL`,
+    [rows.map((product) => product.id), managerId],
+  );
   await insertFixtureRow(
     client,
     'inventory.batches',
@@ -1682,7 +1728,7 @@ async function ensurePricingFixtures(
   client: PoolClient,
   managerId: string,
   balkanPartnerId: string,
-  adapterProductId: string,
+  catalog: CatalogFixtureIds,
 ): Promise<void> {
   const customerGroupId = fixtureId('sales-price-group:retail');
   const campaignId = fixtureId('sales-campaign:local');
@@ -1735,8 +1781,42 @@ async function ensurePricingFixtures(
     lineId,
     `INSERT INTO sales.price_list_lines (id, price_list_id, product_id, unit_price)
      VALUES ($1, $2, $3, 45.0000) ON CONFLICT (id) DO NOTHING`,
-    [lineId, priceListId, adapterProductId],
+    [lineId, priceListId, catalog.adapter],
   );
+
+  const posPriceListId = fixtureId('sales-price-list:pos-all');
+  await insertFixtureRow(
+    client,
+    'sales.price_lists',
+    posPriceListId,
+    `INSERT INTO sales.price_lists (
+       id, code, name, scope, currency_code, valid_from, valid_to, priority,
+       created_by, updated_by
+     ) VALUES (
+       $1, 'DEMO-POS-BGN', 'Demo counter prices', 'all_customers', 'BGN',
+       CURRENT_DATE - INTERVAL '30 days', CURRENT_DATE + INTERVAL '10 years', 0, $2, $2
+     ) ON CONFLICT (id) DO NOTHING`,
+    [posPriceListId, managerId],
+  );
+  const posPrices: Array<[keyof CatalogFixtureIds, string]> = [
+    ['fiscal', '600.0000'],
+    ['scale', '420.0000'],
+    ['fuel', '1000.0000'],
+    ['receiptRoll', '2.5000'],
+    ['printHead', '75.0000'],
+    ['adapter', '50.0000'],
+  ];
+  for (const [productKey, unitPrice] of posPrices) {
+    const posLineId = fixtureId(`sales-price-list-line:pos:${productKey}`);
+    await insertFixtureRow(
+      client,
+      'sales.price_list_lines',
+      posLineId,
+      `INSERT INTO sales.price_list_lines (id, price_list_id, product_id, unit_price)
+       VALUES ($1, $2, $3, $4) ON CONFLICT (id) DO NOTHING`,
+      [posLineId, posPriceListId, catalog[productKey], unitPrice],
+    );
+  }
 }
 
 async function ensureSubscriptionFixture(

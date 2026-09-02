@@ -181,7 +181,7 @@ export class AccountRecoveryHandoffDto implements AccountRecoveryHandoff {
 
 export class SecuritySessionListQueryDto {
   @ApiPropertyOptional({ format: 'uuid', type: String })
-  @IsUUID('4')
+  @IsUUID('loose')
   @IsOptional()
   accountId?: string;
 }
@@ -194,7 +194,7 @@ export class AuditEventListQueryDto {
   action?: string;
 
   @ApiPropertyOptional({ format: 'uuid', type: String })
-  @IsUUID('4')
+  @IsUUID('loose')
   @IsOptional()
   actorAccountId?: string;
 

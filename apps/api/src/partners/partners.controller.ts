@@ -50,6 +50,11 @@ import {
   RecordVersionDto,
   UpdatePartnerDto,
 } from './partners.dto.js';
+import {
+  CustomerOperationalOverviewDto,
+  CustomerOverviewQueryDto,
+} from './customer-overview.dto.js';
+import { CustomerOverviewService } from './customer-overview.service.js';
 import { PartnersService } from './partners.service.js';
 
 @ApiTags('partner master data')
@@ -57,7 +62,10 @@ import { PartnersService } from './partners.service.js';
 @RateLimitPolicy('write')
 @Controller('master-data/partners')
 export class PartnersController {
-  constructor(@Inject(PartnersService) private readonly partners: PartnersService) {}
+  constructor(
+    @Inject(PartnersService) private readonly partners: PartnersService,
+    @Inject(CustomerOverviewService) private readonly customerOverview: CustomerOverviewService,
+  ) {}
 
   @Get()
   @RateLimitPolicy('read')
@@ -96,10 +104,25 @@ export class PartnersController {
   @RequirePermissions({ action: 'view', module: 'crm' })
   @ApiParam({ format: 'uuid', name: 'id' })
   @ApiOkResponse({ type: PartnerProfileDto })
-  profile(
-    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
-  ): Promise<PartnerProfileDto> {
+  profile(@Param('id', new ParseUUIDPipe()) id: string): Promise<PartnerProfileDto> {
     return this.partners.getProfile(id);
+  }
+
+  @Get(':id/customer-overview')
+  @RateLimitPolicy('read')
+  @RequirePermissions({ action: 'view', module: 'crm' })
+  @ApiOperation({
+    description:
+      'Reads a customer operational view from the ERP-owned partner, equipment, sales, and finance records.',
+  })
+  @ApiParam({ format: 'uuid', name: 'id' })
+  @ApiQuery({ default: 10, maximum: 50, minimum: 1, name: 'limit', required: false })
+  @ApiOkResponse({ type: CustomerOperationalOverviewDto })
+  customerOperationalOverview(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Query() query: CustomerOverviewQueryDto,
+  ): Promise<CustomerOperationalOverviewDto> {
+    return this.customerOverview.get(id, query.limit);
   }
 
   @Get(':id')
@@ -107,7 +130,7 @@ export class PartnersController {
   @RequirePermissions({ action: 'view', module: 'crm' })
   @ApiParam({ format: 'uuid', name: 'id' })
   @ApiOkResponse({ type: PartnerSummaryDto })
-  get(@Param('id', new ParseUUIDPipe({ version: '4' })) id: string): Promise<PartnerSummaryDto> {
+  get(@Param('id', new ParseUUIDPipe()) id: string): Promise<PartnerSummaryDto> {
     return this.partners.get(id);
   }
 
@@ -144,7 +167,7 @@ export class PartnersController {
   @ApiHeader({ name: 'Idempotency-Key', required: true })
   @ApiParam({ format: 'uuid', name: 'id' })
   update(
-    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Param('id', new ParseUUIDPipe()) id: string,
     @Body() input: UpdatePartnerDto,
     @Headers('idempotency-key') key: string | undefined,
     @Req() request: AuthenticatedRequest,
@@ -160,7 +183,7 @@ export class PartnersController {
   @ApiHeader({ name: 'Idempotency-Key', required: true })
   @ApiParam({ format: 'uuid', name: 'id' })
   deactivate(
-    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Param('id', new ParseUUIDPipe()) id: string,
     @Body() input: RecordVersionDto,
     @Headers('idempotency-key') key: string | undefined,
     @Req() request: AuthenticatedRequest,
@@ -183,7 +206,7 @@ export class PartnersController {
   @ApiHeader({ name: 'Idempotency-Key', required: true })
   @ApiParam({ format: 'uuid', name: 'id' })
   reactivate(
-    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Param('id', new ParseUUIDPipe()) id: string,
     @Body() input: RecordVersionDto,
     @Headers('idempotency-key') key: string | undefined,
     @Req() request: AuthenticatedRequest,
@@ -210,7 +233,7 @@ export class PartnersController {
   })
   @ApiParam({ format: 'uuid', name: 'id' })
   createAddress(
-    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Param('id', new ParseUUIDPipe()) id: string,
     @Body() input: CreatePartnerAddressDto,
     @Headers('idempotency-key') idempotencyKey: string | undefined,
     @Req() request: AuthenticatedRequest,
@@ -236,7 +259,7 @@ export class PartnersController {
   })
   @ApiParam({ format: 'uuid', name: 'id' })
   createContact(
-    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Param('id', new ParseUUIDPipe()) id: string,
     @Body() input: CreatePartnerContactDto,
     @Headers('idempotency-key') idempotencyKey: string | undefined,
     @Req() request: AuthenticatedRequest,
@@ -262,7 +285,7 @@ export class PartnersController {
   })
   @ApiParam({ format: 'uuid', name: 'id' })
   createBankAccount(
-    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Param('id', new ParseUUIDPipe()) id: string,
     @Body() input: CreatePartnerBankAccountDto,
     @Headers('idempotency-key') idempotencyKey: string | undefined,
     @Req() request: AuthenticatedRequest,

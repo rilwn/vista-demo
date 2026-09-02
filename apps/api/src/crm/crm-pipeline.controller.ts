@@ -90,7 +90,7 @@ export class CrmPipelineController {
   @ApiHeader({ name: 'Idempotency-Key', required: true })
   @ApiParam({ format: 'uuid', name: 'id' })
   qualifyLead(
-    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Param('id', new ParseUUIDPipe()) id: string,
     @Body() input: QualifyCrmLeadDto,
     @Headers('idempotency-key') key: string | undefined,
     @Req() request: AuthenticatedRequest,
@@ -107,7 +107,7 @@ export class CrmPipelineController {
   @ApiHeader({ name: 'Idempotency-Key', required: true })
   @ApiParam({ format: 'uuid', name: 'id' })
   convertLead(
-    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Param('id', new ParseUUIDPipe()) id: string,
     @Body() input: ConvertCrmLeadDto,
     @Headers('idempotency-key') key: string | undefined,
     @Req() request: AuthenticatedRequest,
@@ -128,9 +128,7 @@ export class CrmPipelineController {
   @RateLimitPolicy('read')
   @ApiOkResponse({ type: CrmOpportunityDto })
   @ApiParam({ format: 'uuid', name: 'id' })
-  opportunity(
-    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
-  ): Promise<CrmOpportunityDto> {
+  opportunity(@Param('id', new ParseUUIDPipe()) id: string): Promise<CrmOpportunityDto> {
     return this.pipeline.getOpportunity(id);
   }
 
@@ -158,7 +156,7 @@ export class CrmPipelineController {
   @ApiHeader({ name: 'Idempotency-Key', required: true })
   @ApiParam({ format: 'uuid', name: 'id' })
   moveOpportunity(
-    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Param('id', new ParseUUIDPipe()) id: string,
     @Body() input: MoveCrmOpportunityDto,
     @Headers('idempotency-key') key: string | undefined,
     @Req() request: AuthenticatedRequest,
@@ -175,7 +173,7 @@ export class CrmPipelineController {
   @ApiHeader({ name: 'Idempotency-Key', required: true })
   @ApiParam({ format: 'uuid', name: 'id' })
   linkQuotation(
-    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Param('id', new ParseUUIDPipe()) id: string,
     @Body() input: LinkCrmOpportunityQuotationDto,
     @Headers('idempotency-key') key: string | undefined,
     @Req() request: AuthenticatedRequest,

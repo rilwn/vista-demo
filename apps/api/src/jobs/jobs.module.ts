@@ -7,6 +7,7 @@ import { FinanceModule } from '../finance/finance.module.js';
 import { SalesModule } from '../sales/sales.module.js';
 import { ServiceOperationsModule } from '../service/service.module.js';
 import { ObjectStorageModule } from '../storage/object-storage.module.js';
+import { CrmReportExportsController } from './crm-report-exports.controller.js';
 import { FinanceReportExportDispatcherService } from './finance-report-export-dispatcher.service.js';
 import { FinanceReportExportsController } from './finance-report-exports.controller.js';
 import { FinanceReportExportsService } from './finance-report-exports.service.js';
@@ -19,7 +20,12 @@ import { RecurringBillingScheduleService } from './recurring-billing-schedule.se
 import { ServiceReportExportsController } from './service-report-exports.controller.js';
 
 @Module({
-  controllers: [FinanceReportExportsController, JobsController, ServiceReportExportsController],
+  controllers: [
+    CrmReportExportsController,
+    FinanceReportExportsController,
+    JobsController,
+    ServiceReportExportsController,
+  ],
   exports: [JobHandlerRegistry, JobQueueService],
   imports: [
     AuditModule,

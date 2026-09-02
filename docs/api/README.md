@@ -245,6 +245,12 @@ The ERP-owned canonical partner registry currently exposes:
   requires `crm:view`.
 - `GET /api/v1/master-data/partners/:id/profile` for the canonical partner plus
   its active addresses, contacts, and bank accounts. It requires `crm:view`.
+- `GET /api/v1/master-data/partners/:id/customer-overview` for one read-only
+  operational customer view over the same canonical partner, locations,
+  equipment, recent Sales purchases and lines, financial documents,
+  receivables, and payments. `limit` controls the most recent records in each
+  activity section from 1 to 50 and defaults to 10. It requires `crm:view` and
+  does not create a CRM copy of any ERP-owned record.
 - `GET /api/v1/master-data/partners/duplicates` for exact normalized legal-name
   or UIC candidates. It warns only and never merges records.
 - `POST /api/v1/master-data/partners` for legal entities or individuals with one
@@ -908,5 +914,24 @@ route planner under Logistics, where delivery time also consumes a configured
 technician's capacity. Daily retry-safe jobs prepare inspection and warranty-
 expiry reminders and create upcoming Service requests from active subscription
 plans. Their lead/horizon settings and schedules are environment-configurable.
-Official payment issuance, warranty-card generation, and a complete
-sale-to-service serial timeline remain pending.
+Official Service payment issuance and warranty-card printing remain pending
+their approved document and hardware decisions.
+
+## Online point of sale
+
+- `GET /api/v1/pos/terminal-context` returns assigned registers and the current
+  cashier shift; `POST /api/v1/pos/shifts` opens a shift and
+  `POST /api/v1/pos/shifts/:id/close` records the counted drawer amount.
+- `GET /api/v1/pos/catalog` returns live warehouse availability, applicable BGN
+  pricing, VAT treatment, barcodes, serials, and batches for an open shift.
+- `GET /api/v1/pos/customers` searches the canonical customer and location
+  registry.
+- `POST /api/v1/pos/sales` completes one cash sale; `GET /api/v1/pos/sales`
+  returns the signed-in cashier's completed sale history.
+
+Writes require `pos:create`, an idempotency key, and an assigned register.
+Reads require `pos:view`. Checkout recalculates all values on the server, locks
+stock and serial records, and commits the sale, payment, inventory movement,
+customer equipment/warranty record, audit event, and outbox event together. The
+development receipt simulator is rejected in production; it is not certified
+fiscal-device acceptance.

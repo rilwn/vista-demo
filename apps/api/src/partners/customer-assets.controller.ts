@@ -54,7 +54,7 @@ export class CustomerAssetsController {
   @ApiParam({ format: 'uuid', name: 'partnerId' })
   @ApiOkResponse({ isArray: true, type: CustomerLocationProfileDto })
   list(
-    @Param('partnerId', new ParseUUIDPipe({ version: '4' })) partnerId: string,
+    @Param('partnerId', new ParseUUIDPipe()) partnerId: string,
   ): Promise<CustomerLocationProfileDto[]> {
     return this.assets.list(partnerId);
   }
@@ -67,7 +67,7 @@ export class CustomerAssetsController {
   @ApiHeader({ name: 'Idempotency-Key', required: true })
   @ApiParam({ format: 'uuid', name: 'partnerId' })
   createLocation(
-    @Param('partnerId', new ParseUUIDPipe({ version: '4' })) partnerId: string,
+    @Param('partnerId', new ParseUUIDPipe()) partnerId: string,
     @Body() input: CreateCustomerLocationDto,
     @Headers('idempotency-key') key: string | undefined,
     @Req() request: AuthenticatedRequest,
@@ -90,8 +90,8 @@ export class CustomerAssetsController {
   @ApiParam({ format: 'uuid', name: 'partnerId' })
   @ApiParam({ format: 'uuid', name: 'locationId' })
   createEquipment(
-    @Param('partnerId', new ParseUUIDPipe({ version: '4' })) partnerId: string,
-    @Param('locationId', new ParseUUIDPipe({ version: '4' })) locationId: string,
+    @Param('partnerId', new ParseUUIDPipe()) partnerId: string,
+    @Param('locationId', new ParseUUIDPipe()) locationId: string,
     @Body() input: CreateCustomerEquipmentDto,
     @Headers('idempotency-key') key: string | undefined,
     @Req() request: AuthenticatedRequest,
@@ -114,8 +114,8 @@ export class CustomerAssetsController {
   @ApiParam({ format: 'uuid', name: 'partnerId' })
   @ApiParam({ format: 'uuid', name: 'locationId' })
   updateLocation(
-    @Param('partnerId', new ParseUUIDPipe({ version: '4' })) partnerId: string,
-    @Param('locationId', new ParseUUIDPipe({ version: '4' })) locationId: string,
+    @Param('partnerId', new ParseUUIDPipe()) partnerId: string,
+    @Param('locationId', new ParseUUIDPipe()) locationId: string,
     @Body() input: UpdateCustomerLocationDto,
     @Headers('idempotency-key') key: string | undefined,
     @Req() request: AuthenticatedRequest,
@@ -139,8 +139,8 @@ export class CustomerAssetsController {
   @ApiParam({ format: 'uuid', name: 'partnerId' })
   @ApiParam({ format: 'uuid', name: 'locationId' })
   deactivateLocation(
-    @Param('partnerId', new ParseUUIDPipe({ version: '4' })) partnerId: string,
-    @Param('locationId', new ParseUUIDPipe({ version: '4' })) locationId: string,
+    @Param('partnerId', new ParseUUIDPipe()) partnerId: string,
+    @Param('locationId', new ParseUUIDPipe()) locationId: string,
     @Body() input: CustomerAssetVersionDto,
     @Headers('idempotency-key') key: string | undefined,
     @Req() request: AuthenticatedRequest,
@@ -165,8 +165,8 @@ export class CustomerAssetsController {
   @ApiParam({ format: 'uuid', name: 'partnerId' })
   @ApiParam({ format: 'uuid', name: 'locationId' })
   reactivateLocation(
-    @Param('partnerId', new ParseUUIDPipe({ version: '4' })) partnerId: string,
-    @Param('locationId', new ParseUUIDPipe({ version: '4' })) locationId: string,
+    @Param('partnerId', new ParseUUIDPipe()) partnerId: string,
+    @Param('locationId', new ParseUUIDPipe()) locationId: string,
     @Body() input: CustomerAssetVersionDto,
     @Headers('idempotency-key') key: string | undefined,
     @Req() request: AuthenticatedRequest,
@@ -191,9 +191,9 @@ export class CustomerAssetsController {
   @ApiParam({ format: 'uuid', name: 'locationId' })
   @ApiParam({ format: 'uuid', name: 'equipmentId' })
   updateEquipment(
-    @Param('partnerId', new ParseUUIDPipe({ version: '4' })) partnerId: string,
-    @Param('locationId', new ParseUUIDPipe({ version: '4' })) locationId: string,
-    @Param('equipmentId', new ParseUUIDPipe({ version: '4' })) equipmentId: string,
+    @Param('partnerId', new ParseUUIDPipe()) partnerId: string,
+    @Param('locationId', new ParseUUIDPipe()) locationId: string,
+    @Param('equipmentId', new ParseUUIDPipe()) equipmentId: string,
     @Body() input: UpdateCustomerEquipmentDto,
     @Headers('idempotency-key') key: string | undefined,
     @Req() request: AuthenticatedRequest,
@@ -219,9 +219,9 @@ export class CustomerAssetsController {
   @ApiParam({ format: 'uuid', name: 'locationId' })
   @ApiParam({ format: 'uuid', name: 'equipmentId' })
   deactivateEquipment(
-    @Param('partnerId', new ParseUUIDPipe({ version: '4' })) partnerId: string,
-    @Param('locationId', new ParseUUIDPipe({ version: '4' })) locationId: string,
-    @Param('equipmentId', new ParseUUIDPipe({ version: '4' })) equipmentId: string,
+    @Param('partnerId', new ParseUUIDPipe()) partnerId: string,
+    @Param('locationId', new ParseUUIDPipe()) locationId: string,
+    @Param('equipmentId', new ParseUUIDPipe()) equipmentId: string,
     @Body() input: CustomerAssetVersionDto,
     @Headers('idempotency-key') key: string | undefined,
     @Req() request: AuthenticatedRequest,
@@ -248,9 +248,9 @@ export class CustomerAssetsController {
   @ApiParam({ format: 'uuid', name: 'locationId' })
   @ApiParam({ format: 'uuid', name: 'equipmentId' })
   reactivateEquipment(
-    @Param('partnerId', new ParseUUIDPipe({ version: '4' })) partnerId: string,
-    @Param('locationId', new ParseUUIDPipe({ version: '4' })) locationId: string,
-    @Param('equipmentId', new ParseUUIDPipe({ version: '4' })) equipmentId: string,
+    @Param('partnerId', new ParseUUIDPipe()) partnerId: string,
+    @Param('locationId', new ParseUUIDPipe()) locationId: string,
+    @Param('equipmentId', new ParseUUIDPipe()) equipmentId: string,
     @Body() input: CustomerAssetVersionDto,
     @Headers('idempotency-key') key: string | undefined,
     @Req() request: AuthenticatedRequest,

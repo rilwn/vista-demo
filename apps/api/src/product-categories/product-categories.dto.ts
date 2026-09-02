@@ -24,7 +24,7 @@ export class CreateProductCategoryDto implements CreateProductCategoryRequest {
 
   @ApiPropertyOptional({ format: 'uuid', type: String })
   @IsOptional()
-  @IsUUID('4')
+  @IsUUID('loose')
   parentId?: string;
 
   @ApiPropertyOptional({ default: false, type: Boolean })
@@ -47,7 +47,7 @@ export class ProductCategoryDto implements ProductCategory {
   createdAt!: string;
 
   @ApiProperty({ format: 'uuid', type: String })
-  @IsUUID('4')
+  @IsUUID('loose')
   id!: string;
 
   @ApiProperty({ type: String })

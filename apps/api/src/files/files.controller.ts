@@ -79,7 +79,7 @@ export class FilesController {
   @ApiParam({ format: 'uuid', name: 'id' })
   @ApiOkResponse({ isArray: true, type: ManagedFileDto })
   versions(
-    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Param('id', new ParseUUIDPipe()) id: string,
     @Req() request: AuthenticatedRequest,
   ): Promise<ManagedFileDto[]> {
     return this.files.versions(id, request.authentication);
@@ -99,7 +99,7 @@ export class FilesController {
     description: 'Authorized content for an available managed file.',
   })
   async content(
-    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Param('id', new ParseUUIDPipe()) id: string,
     @Req() request: AuthenticatedRequest,
     @Res() response: Response,
   ): Promise<void> {
@@ -153,7 +153,7 @@ export class FilesController {
   @ApiHeader({ name: 'Idempotency-Key', required: true })
   @ApiParam({ format: 'uuid', name: 'id' })
   uploadVersion(
-    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Param('id', new ParseUUIDPipe()) id: string,
     @UploadedFile() file: UploadedManagedFile | undefined,
     @Headers('idempotency-key') key: string | undefined,
     @Req() request: AuthenticatedRequest,

@@ -28,6 +28,7 @@ import { useAuth } from '../auth/AuthProvider';
 import { Icon } from '../components/Icon';
 import { messages } from '../messages';
 import { CustomerAssetsPanel } from './CustomerAssetsPanel';
+import { CustomerOperationalOverviewPanel } from './CustomerOperationalOverviewPanel';
 import { PartnerDocumentsPanel } from './PartnerDocumentsPanel';
 
 type OptionalKind = '' | PartnerKind;
@@ -538,6 +539,7 @@ function PartnerDetailDrawer({
   const [profileLoading, setProfileLoading] = useState(true);
   const [refresh, setRefresh] = useState(0);
   const [adding, setAdding] = useState<'address' | 'bank' | 'contact' | null>(null);
+  const [customerOverviewOpen, setCustomerOverviewOpen] = useState(false);
   const [editing, setEditing] = useState(false);
   const [documentsOpen, setDocumentsOpen] = useState(false);
   const [statusBusy, setStatusBusy] = useState(false);
@@ -568,7 +570,6 @@ function PartnerDetailDrawer({
   const details = useMemo(
     () => [
       [messages.partners.type, kindLabel(current.kind)],
-      [messages.partners.status, current.active ? messages.partners.active : 'Inactive'],
       [messages.partners.uic, current.uic ?? '—'],
       [messages.partners.vatNumber, current.vatNumber ?? '—'],
       [messages.partners.companyRepresentative, current.companyRepresentative ?? '—'],
@@ -617,33 +618,65 @@ function PartnerDetailDrawer({
       </Drawer>
     );
   }
+  if (customerOverviewOpen && token) {
+    return (
+      <Drawer
+        backLabel="Back to partner"
+        className="customer-overview-drawer"
+        onBack={() => setCustomerOverviewOpen(false)}
+        onClose={onClose}
+        title="Customer overview"
+      >
+        <CustomerOperationalOverviewPanel partnerId={current.id} token={token} />
+      </Drawer>
+    );
+  }
   return (
-    <Drawer onClose={onClose} title={messages.partners.detailsTitle}>
+    <Drawer
+      className="partner-detail-drawer"
+      onClose={onClose}
+      title={messages.partners.detailsTitle}
+    >
       <div className="partner-detail-identity">
         <span className="partner-monogram" aria-hidden="true">
-          {monogram(partner.displayName)}
+          {monogram(current.displayName)}
         </span>
-        <div>
+        <div className="partner-detail-identity-copy">
           <p className="page-eyebrow">{messages.partners.detailsEyebrow}</p>
-          <h2>{partner.displayName}</h2>
+          <h2>{current.displayName}</h2>
           <div className="partner-role-list">
-            {partner.roles.map((role) => (
+            {current.roles.map((role) => (
               <span className={`partner-role partner-role--${role}`} key={role}>
                 {roleLabel(role)}
               </span>
             ))}
           </div>
         </div>
+        <span
+          className={`partner-detail-status${current.active ? '' : ' is-inactive'}`}
+          role="status"
+        >
+          {current.active ? messages.partners.active : 'Inactive'}
+        </span>
       </div>
-      <dl className="partner-detail-list">
-        {details.map(([label, value]) => (
-          <div key={label}>
-            <dt>{label}</dt>
-            <dd>{value}</dd>
-          </div>
-        ))}
-      </dl>
+      <section className="partner-detail-summary" aria-labelledby="partner-registration-heading">
+        <div className="partner-detail-section-heading">
+          <h3 id="partner-registration-heading">Registration details</h3>
+          <p>Identity and tax information used across ERP and CRM records.</p>
+        </div>
+        <dl className="partner-detail-list">
+          {details.map(([label, value]) => (
+            <div key={label}>
+              <dt>{label}</dt>
+              <dd>{value}</dd>
+            </div>
+          ))}
+        </dl>
+      </section>
       <div className="partner-maintenance-actions">
+        {token && current.roles.includes('customer') ? (
+          <Button onClick={() => setCustomerOverviewOpen(true)}>Customer overview</Button>
+        ) : null}
         {token ? (
           <Button onClick={() => setDocumentsOpen(true)} variant="secondary">
             {messages.partners.documents.open}

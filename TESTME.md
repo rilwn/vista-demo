@@ -1,60 +1,57 @@
-# Test CRM customer care
+# Test the first operational POS flow
 
-Start the system with `npm run dev`, then sign in to the ERP/CRM app as
-`crm@vista.local` using your local fixture password.
+Start Vista with `npm run dev`. Open the **Vista POS** app at
+`http://localhost:5174/` and sign in as `pos.operator@vista.local` using the
+password in `DEV_FIXTURES_PASSWORD`.
 
-From the sidebar choose **Customers & CRM**, then under **Choose an area** open
-**Warranty, feedback & referrals**.
+## 1. Open the counter
 
-## 1. Review a warranty and complete a claim
+1. Choose **Shifts** in the left menu.
+2. Keep **Demo POS terminal** selected.
+3. Enter `100.00` for **Opening cash** and choose **Open cashier shift**.
 
-1. Under **Warranties**, open `DEV-WCR-0001`.
-2. Set **Follow-up status** to **Offer presented** and select **Save status**.
-3. Select **New claim** and enter:
-   - Device: keep the selected fiscal device
-   - Description: `Fiscal memory test fails after startup. Customer restarted the device twice.`
-4. Select **Create claim**, then open the new claim in **Warranty claims**.
-5. Under **Supporting files**, choose a small PDF or PNG and select **Upload file**.
-6. Select **Start review**.
-7. Enter the decision note `Fault confirmed under warranty.` and select
-   **Approve claim**.
-8. Select **Close claim**.
+Expected: **New sale** opens and shows live products and stock from the Demo
+Central Warehouse.
 
-Expected: the same claim moves through **Received → Under review → Approved →
-Closed**, and its history records each step. The warranty card remains linked to
-the device and serial number, and the uploaded file remains available.
+## 2. Complete a cash sale
 
-## 2. Send a survey and record its response
+1. Choose **Demo 12 V Power Adapter**.
+2. Enter `100.00` under **Cash received**.
+3. Choose **Pay cash**.
 
-1. Select **Feedback & NPS**, then **Send survey**.
-2. Choose any available completed Service job and select **Send survey**.
-3. Open the new survey, choose score `10`, and enter
-   `Fast visit and a clear explanation from the technician.`
-4. Select **Save response**.
+Expected: the sale completes for `60.00 BGN`, the change is `40.00 BGN`, and a
+clearly labelled development receipt opens. Choose **Start next sale**.
 
-Expected: the survey shows **Responded**, score `10`, and **Promoters** increases
-by one. The completed job can no longer receive a duplicate survey.
+## 3. Sell a serialised device
 
-## 3. Record a referral
+1. Choose **Demo Fiscal Register X1**.
+2. In the basket, choose any available serial number.
+3. Choose **Add customer**, search for `Alfa Market`, and select
+   **Alfa Market Demo Ltd.**
+4. Select **Alfa Market — Central Store**, then choose **Use customer**.
+5. Enter `800.00` under **Cash received** and choose **Pay cash**.
 
-1. Select **Referrals**, then **Record referral**.
-2. Enter:
-   - Referring customer: **Alfa Market Demo Ltd.**
-   - Lead owner: **Vista Demo CRM Coordinator**
-   - Organization: `TEST Referral Shop 0902`
-   - Contact person: `Mila Petrova`
-   - Telephone: `+359 888 555 902`
-   - Context: `Interested in a fiscal device and annual Service plan.`
-3. Select **Record referral**.
+Expected: the sale completes for `720.00 BGN`, the chosen serial disappears from
+available stock, and the receipt shows `80.00 BGN` change.
 
-Expected: the referral appears once with a linked lead number. Select the lead
-number and confirm `TEST Referral Shop 0902` appears in **Leads & pipeline** under
-**New**.
+## 4. Review and close
 
-## Quick UI check
+1. Choose **Sale history**. Confirm both sales are listed.
+2. Choose **Shifts**. Keep the prefilled expected amount under **Counted cash**
+   and choose **Close cashier shift**.
 
-- Open each panel and scroll from top to bottom. The header remains separate,
-  the content scrolls, and the action bar has no gap beneath it.
-- At phone width, cards, tabs, score buttons, and forms fit without horizontal
-  scrolling.
-- Press `Esc` in a panel; it closes without saving an unfinished form.
+Expected: the shift closes and its drawer count is recorded.
+
+## 5. Confirm the customer record
+
+1. Open the **ERP/CRM** app at `http://localhost:5173/` and sign in as
+   `manager@vista.local`.
+2. From the sidebar choose **Customers & CRM**, then **Partner registry**.
+3. Open **Alfa Market Demo Ltd.** and choose **Customer overview**.
+
+Expected: **Purchase history** includes the POS sale, and **Locations &
+equipment** includes the fiscal register and serial number sold in step 3.
+
+The receipt is a development simulator. Certified fiscal-device behavior is not
+part of this test and will not be claimed until the client approves and supplies
+the target hardware.

@@ -261,7 +261,10 @@ function PayableRegister({
     return (
       <SupplierFinanceState title="No supplier payables yet">
         <p>Record a supplier invoice in Procurement, then add it to this register.</p>
-        <Link className="vista-button is-secondary" to="/modules/erp.procurement/supplier-invoices">
+        <Link
+          className="vista-button vista-button--secondary"
+          to="/modules/erp.procurement/supplier-invoices"
+        >
           Open supplier invoices
         </Link>
       </SupplierFinanceState>
@@ -439,7 +442,7 @@ function CreatePayableDrawer({
           <h3>No supplier invoices are ready</h3>
           <p>Record a BGN supplier invoice in Procurement before adding a payable.</p>
           <Link
-            className="vista-button is-secondary"
+            className="vista-button vista-button--secondary"
             to="/modules/erp.procurement/supplier-invoices"
           >
             Open supplier invoices

@@ -119,7 +119,7 @@ export function CrmAfterSalesPage() {
         </InlineAlert>
       ) : null}
 
-      <nav aria-label="Customer care views" className="crm-care-view-tabs">
+      <nav aria-label="Customer care views" className="crm-care-view-tabs" role="tablist">
         {(
           [
             ['warranties', 'Warranties'],
@@ -128,9 +128,11 @@ export function CrmAfterSalesPage() {
           ] as const
         ).map(([value, label]) => (
           <button
+            aria-selected={tab === value}
             className={tab === value ? 'is-active' : undefined}
             key={value}
             onClick={() => setTab(value)}
+            role="tab"
             type="button"
           >
             {label}
@@ -580,7 +582,10 @@ function WarrantyCardDrawer({
               >
                 Save status
               </Button>
-              <Link className="vista-button is-secondary" to="/modules/erp.sales/subscriptions">
+              <Link
+                className="vista-button vista-button--secondary"
+                to="/modules/erp.sales/subscriptions"
+              >
                 Open Service plans
               </Link>
             </div>
@@ -1306,7 +1311,7 @@ function CareDrawer({
             <p>{subtitle}</p>
           </div>
         </header>
-        <div className="security-drawer-body">{children}</div>
+        <div className="security-drawer-body crm-care-drawer-body">{children}</div>
       </aside>
     </div>
   );

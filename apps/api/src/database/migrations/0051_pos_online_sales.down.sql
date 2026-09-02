@@ -1,0 +1,12 @@
+ALTER TABLE crm.warranty_cards DROP COLUMN IF EXISTS pos_sale_id;
+ALTER TABLE master_data.customer_equipment DROP COLUMN IF EXISTS source_pos_sale_id;
+DROP TABLE IF EXISTS pos.fiscal_operations;
+DROP TABLE IF EXISTS pos.payments;
+DROP TABLE IF EXISTS pos.sale_line_serials;
+DROP TABLE IF EXISTS pos.sale_lines;
+DROP TABLE IF EXISTS pos.sales;
+DROP TABLE IF EXISTS pos.document_sequences;
+DROP TABLE IF EXISTS pos.shifts;
+DROP TABLE IF EXISTS pos.terminal_configurations;
+DROP SCHEMA IF EXISTS pos;
+ALTER TABLE master_data.products DROP COLUMN IF EXISTS pos_vat_treatment;

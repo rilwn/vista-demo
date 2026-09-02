@@ -56,7 +56,7 @@ export class CreateProductDto implements CreateProductRequest {
   @ValidateNested({ each: true })
   @Type(() => ProductBarcodeInputDto)
   barcodes?: ProductBarcodeInputDto[];
-  @ApiProperty({ type: String, format: 'uuid' }) @IsUUID('4') categoryId!: string;
+  @ApiProperty({ type: String, format: 'uuid' }) @IsUUID('loose') categoryId!: string;
   @ApiProperty({ type: String, maxLength: 255, minLength: 1 })
   @IsString()
   @MinLength(1)
@@ -67,7 +67,7 @@ export class CreateProductDto implements CreateProductRequest {
   @MinLength(1)
   @MaxLength(80)
   productCode!: string;
-  @ApiProperty({ type: String, format: 'uuid' }) @IsUUID('4') unitId!: string;
+  @ApiProperty({ type: String, format: 'uuid' }) @IsUUID('loose') unitId!: string;
   @ApiPropertyOptional({ maximum: 120, minimum: 1, type: Number })
   @IsOptional()
   @IsInt()

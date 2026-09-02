@@ -179,7 +179,7 @@ test.
 | `finance@vista.local`          | Collections and payment allocation.                                         |
 | `dispatcher@vista.local`       | Service requests and dispatch.                                              |
 | `technician@vista.local`       | Assigned Service work and completion.                                       |
-| `pos.operator@vista.local`     | POS sign-in and terminal-shell review only.                                 |
+| `pos.operator@vista.local`     | Online POS shifts, live catalog, cash sales, customers, and sale history.   |
 | `backup.operator@vista.local`  | Backup Control sign-in and console-shell review only.                       |
 | `viewer@vista.local`           | Read-only ERP/CRM review outside restricted Service work.                   |
 

@@ -108,7 +108,7 @@ export class ServiceReportExportsController {
   @ApiAcceptedResponse({ type: ServiceReportExportDto })
   @ApiParam({ format: 'uuid', name: 'id' })
   retry(
-    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Param('id', new ParseUUIDPipe()) id: string,
     @Req() request: AuthenticatedRequest,
   ): Promise<ServiceReportExportDto> {
     return this.exports.serviceRetry(id, request.authentication, requestMetadata(request));
@@ -134,7 +134,7 @@ export class ServiceReportExportsController {
     description: 'The completed Service report export.',
   })
   async content(
-    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Param('id', new ParseUUIDPipe()) id: string,
     @Req() request: AuthenticatedRequest,
     @Res() response: Response,
   ): Promise<void> {

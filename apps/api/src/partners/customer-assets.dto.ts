@@ -76,7 +76,7 @@ export class CreateCustomerLocationDto implements CreateCustomerLocationRequest 
 
   @ApiPropertyOptional({ format: 'uuid', type: String })
   @IsOptional()
-  @IsUUID('4')
+  @IsUUID('loose')
   responsibleContactId?: string;
 }
 
@@ -89,7 +89,7 @@ export class CreateCustomerEquipmentDto implements CreateCustomerEquipmentReques
 
   @ApiPropertyOptional({ format: 'uuid', type: String })
   @IsOptional()
-  @IsUUID('4')
+  @IsUUID('loose')
   productId?: string;
 
   @ApiProperty({ format: 'date', type: String })

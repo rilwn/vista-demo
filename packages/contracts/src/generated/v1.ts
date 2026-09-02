@@ -340,6 +340,22 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/crm/analytics/overview': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['CrmAnalyticsController_overview'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/crm/interactions': {
     parameters: {
       query?: never;
@@ -476,6 +492,70 @@ export interface paths {
       cookie?: never;
     };
     get: operations['CrmPipelineController_referenceData'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/crm/report-exports': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['CrmReportExportsController_list'];
+    put?: never;
+    post: operations['CrmReportExportsController_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/crm/report-exports/{id}/content': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['CrmReportExportsController_content'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/crm/report-exports/{id}/retry': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['CrmReportExportsController_retry'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/crm/report-exports/definitions': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['CrmReportExportsController_definitions'];
     put?: never;
     post?: never;
     delete?: never;
@@ -1620,6 +1700,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/master-data/partners/{id}/customer-overview': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Reads a customer operational view from the ERP-owned partner, equipment, sales, and finance records. */
+    get: operations['PartnersController_customerOperationalOverview'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/master-data/partners/{id}/deactivate': {
     parameters: {
       query?: never;
@@ -2223,6 +2320,102 @@ export interface paths {
     get?: never;
     put?: never;
     post: operations['SecurityAdministrationController_revokeSession'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/pos/catalog': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['PosController_catalog'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/pos/customers': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['PosController_customers'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/pos/sales': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['PosController_sales'];
+    put?: never;
+    post: operations['PosController_completeSale'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/pos/shifts': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['PosController_openShift'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/pos/shifts/{id}/close': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['PosController_closeShift'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/pos/terminal-context': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['PosController_terminalContext'];
+    put?: never;
+    post?: never;
     delete?: never;
     options?: never;
     head?: never;
@@ -3576,6 +3769,11 @@ export interface components {
       expiresAt?: string;
       revokedOtherSessionCount: number;
     };
+    ClosePosShiftDto: {
+      /** @example 160.0000 */
+      closingCashBgn: string;
+      version: number;
+    };
     CompleteAccountRecoveryRequestDto: {
       /** Format: email */
       email: string;
@@ -3727,6 +3925,20 @@ export interface components {
       /** Format: uuid */
       referringCustomerPartnerId: string;
       telephone?: string;
+    };
+    CreateCrmReportExportDto: {
+      /** Format: date */
+      dateFrom: string;
+      /** Format: date */
+      dateTo: string;
+      /** @enum {string} */
+      definitionKey:
+        | 'crm.customer-value'
+        | 'crm.pipeline-performance'
+        | 'crm.employee-performance'
+        | 'crm.revenue-breakdown';
+      /** @enum {string} */
+      format: 'csv' | 'xlsx' | 'pdf';
     };
     CreateCrmTaskDto: {
       /** Format: uuid */
@@ -4084,6 +4296,28 @@ export interface components {
       uic?: string;
       vatNumber?: string;
     };
+    CreatePosCashSaleDto: {
+      /** @example 100.0000 */
+      cashTendered: string;
+      /** Format: uuid */
+      clientTransactionId: string;
+      /** Format: uuid */
+      customerLocationId?: string;
+      /** Format: uuid */
+      customerPartnerId?: string;
+      lines: components['schemas']['CreatePosSaleLineDto'][];
+      /** Format: uuid */
+      shiftId: string;
+    };
+    CreatePosSaleLineDto: {
+      /** Format: uuid */
+      batchId?: string;
+      /** Format: uuid */
+      productId: string;
+      /** @example 1.0000 */
+      quantity: string;
+      serialNumbers?: string[];
+    };
     CreatePriceListDto: {
       /** Format: uuid */
       campaignId?: string;
@@ -4360,6 +4594,98 @@ export interface components {
       surveySources: components['schemas']['CrmSurveySourceReferenceDto'][];
       warrantyCards: components['schemas']['CrmWarrantyCardDto'][];
     };
+    CrmAnalyticsCustomerMetricsDto: {
+      activeCustomers: number;
+      /** @example 60.00 */
+      averageTransactionValueBgn: string;
+      /** @example 0.00 */
+      churnPercent: string;
+      /** @example 60.00 */
+      observedLifetimeValueBgn: string;
+      /** @example 1.00 */
+      purchaseFrequency: string;
+      /** @example 100.00 */
+      retentionPercent: string;
+    };
+    CrmAnalyticsDefinitionDto: {
+      dataSources: string[];
+      dateWindow: string;
+      formula: string;
+      key: string;
+      label: string;
+      statusFilters: string[];
+    };
+    CrmAnalyticsEmployeeMetricDto: {
+      displayName: string;
+      requestsProcessed: number;
+      salesCompleted: number;
+      ticketsResolved: number;
+      totalCompleted: number;
+    };
+    CrmAnalyticsOverviewDto: {
+      customerMetrics: components['schemas']['CrmAnalyticsCustomerMetricsDto'];
+      /** Format: date */
+      dateFrom: string;
+      /** Format: date */
+      dateTo: string;
+      definitions: components['schemas']['CrmAnalyticsDefinitionDto'][];
+      employees: components['schemas']['CrmAnalyticsEmployeeMetricDto'][];
+      /** Format: date-time */
+      generatedAt: string;
+      pipeline: components['schemas']['CrmAnalyticsPipelineMetricsDto'];
+      preferences: components['schemas']['CrmAnalyticsPreferenceDto'][];
+      previousCustomerMetrics: components['schemas']['CrmAnalyticsCustomerMetricsDto'];
+      /** Format: date */
+      previousDateFrom: string;
+      /** Format: date */
+      previousDateTo: string;
+      revenue: components['schemas']['CrmAnalyticsRevenueMetricDto'][];
+      /** @example Europe/Sofia */
+      timezone: string;
+      /** @example 60.00 */
+      totalNetRevenueBgn: string;
+    };
+    CrmAnalyticsPipelineMetricsDto: {
+      createdOpportunities: number;
+      /** @example 1250.00 */
+      estimatedRevenueBgn: string;
+      lostCount: number;
+      /** @example 1250.00 */
+      openPipelineValueBgn: string;
+      stages: components['schemas']['CrmAnalyticsPipelineStageMetricDto'][];
+      /** @example 50.00 */
+      winRatePercent: string;
+      wonCount: number;
+    };
+    CrmAnalyticsPipelineStageMetricDto: {
+      /** @example 100.00 */
+      conversionFromPreviousPercent?: string;
+      currentCount: number;
+      enteredCount: number;
+      /** @enum {string} */
+      stage: 'new' | 'qualified' | 'quotation_sent' | 'negotiation' | 'won' | 'lost';
+    };
+    CrmAnalyticsPreferenceDto: {
+      documentCount: number;
+      /** @enum {string} */
+      kind: 'product' | 'service';
+      label: string;
+      /** @example 60.00 */
+      netRevenueBgn: string;
+      /** @example 1.0000 */
+      quantity: string;
+    };
+    CrmAnalyticsRevenueMetricDto: {
+      /** @enum {string} */
+      dimension: 'product' | 'service' | 'customer' | 'region' | 'employee';
+      documentCount: number;
+      key: string;
+      label: string;
+      /** @example 60.00 */
+      netRevenueBgn: string;
+      /** @example 100.00 */
+      sharePercent: string;
+    };
     CrmAssigneeReferenceDto: {
       displayName: string;
       /** Format: uuid */
@@ -4629,6 +4955,50 @@ export interface components {
       referringCustomerPartnerId: string;
       telephone?: string;
     };
+    CrmReportDefinitionDto: {
+      description: string;
+      formats: ('csv' | 'xlsx' | 'pdf')[];
+      /** @enum {string} */
+      key:
+        | 'crm.customer-value'
+        | 'crm.pipeline-performance'
+        | 'crm.employee-performance'
+        | 'crm.revenue-breakdown';
+      name: string;
+      /** @enum {boolean} */
+      requiresDateRange: true;
+    };
+    CrmReportExportDto: {
+      attemptCount: number;
+      /** Format: date-time */
+      completedAt?: string;
+      /** Format: date-time */
+      createdAt: string;
+      /** @enum {string} */
+      definitionKey:
+        | 'crm.customer-value'
+        | 'crm.pipeline-performance'
+        | 'crm.employee-performance'
+        | 'crm.revenue-breakdown';
+      errorCode?: string;
+      fileName?: string;
+      /** @enum {string} */
+      format: 'csv' | 'xlsx' | 'pdf';
+      /** Format: uuid */
+      id: string;
+      name: string;
+      rowCount?: number;
+      sizeBytes?: number;
+      /** @enum {string} */
+      status: 'queued' | 'processing' | 'completed' | 'failed';
+    };
+    CrmReportExportPageDto: {
+      items: components['schemas']['CrmReportExportDto'][];
+      page: number;
+      pageSize: number;
+      total: number;
+      totalPages: number;
+    };
     CrmSlaPolicyReferenceDto: {
       /** Format: uuid */
       customerPartnerId?: string;
@@ -4880,6 +5250,28 @@ export interface components {
       /** Format: date */
       warrantyStartsOn: string;
     };
+    CustomerFinancialDocumentSummaryDto: {
+      /** @example 60.0000 */
+      bgnGrossTotal: string;
+      /** @example BGN */
+      currencyCode: string;
+      /** @enum {string} */
+      documentType: 'invoice' | 'proforma' | 'credit_note' | 'debit_note';
+      draftNumber: string;
+      /** Format: date */
+      dueDate?: string;
+      /** @example 60.0000 */
+      grossTotal: string;
+      /** Format: uuid */
+      id: string;
+      /** Format: date */
+      issueDate: string;
+      officialNumber?: string;
+      /** Format: uuid */
+      sourceSalesInvoiceId?: string;
+      /** @enum {string} */
+      status: 'draft' | 'cancelled';
+    };
     CustomerLocationDto: {
       active: boolean;
       addressLine1: string;
@@ -4900,6 +5292,43 @@ export interface components {
       equipment: components['schemas']['CustomerEquipmentDto'][];
       location: components['schemas']['CustomerLocationDto'];
     };
+    CustomerOperationalOverviewDto: {
+      financialDocuments: components['schemas']['CustomerFinancialDocumentSummaryDto'][];
+      locations: components['schemas']['CustomerLocationProfileDto'][];
+      payments: components['schemas']['CustomerPaymentSummaryDto'][];
+      profile: components['schemas']['PartnerProfileDto'];
+      purchases: components['schemas']['CustomerPurchaseHistoryEntryDto'][];
+      receivables: components['schemas']['CustomerReceivableSummaryDto'][];
+      summary: components['schemas']['CustomerOverviewSummaryDto'];
+    };
+    CustomerOverviewSummaryDto: {
+      activeEquipment: number;
+      activeLocations: number;
+      financialDocuments: number;
+      /** Format: date-time */
+      lastPurchaseAt?: string;
+      openReceivables: number;
+      /** @example 60.0000 */
+      outstandingBgn: string;
+      payments: number;
+      purchases: number;
+    };
+    CustomerPaymentSummaryDto: {
+      /** @example 20.0000 */
+      amount: string;
+      /** @example BGN */
+      currencyCode: string;
+      /** Format: uuid */
+      id: string;
+      number: string;
+      /** Format: date */
+      paymentDate: string;
+      /** @enum {string} */
+      paymentMethod: 'cash' | 'bank_transfer' | 'pos_terminal' | 'card' | 'offset';
+      paymentReference?: string;
+      /** Format: date-time */
+      recordedAt: string;
+    };
     CustomerPriceGroupDto: {
       active: boolean;
       code: string;
@@ -4912,6 +5341,56 @@ export interface components {
       /** Format: date-time */
       updatedAt: string;
       version: number;
+    };
+    CustomerPurchaseHistoryEntryDto: {
+      /** @example BGN */
+      currencyCode: string;
+      /** Format: uuid */
+      id: string;
+      lines: components['schemas']['CustomerPurchaseLineDto'][];
+      number: string;
+      /** Format: date-time */
+      recordedAt: string;
+      /** @enum {string} */
+      source: 'erp_sales' | 'pos';
+      /** Format: uuid */
+      sourceShipmentId?: string;
+      /** @example 60.0000 */
+      total: string;
+    };
+    CustomerPurchaseLineDto: {
+      /** @example 50.0000 */
+      lineTotal: string;
+      /** Format: uuid */
+      productId: string;
+      productName: string;
+      /** @example 1.0000 */
+      quantity: string;
+      /** @example 50.0000 */
+      unitPrice: string;
+    };
+    CustomerReceivableSummaryDto: {
+      /** @example 20.0000 */
+      allocatedTotal: string;
+      /** @example 60.0000 */
+      bgnTotal: string;
+      /** @example BGN */
+      currencyCode: string;
+      /** Format: date */
+      documentDate: string;
+      /** Format: date */
+      dueDate: string;
+      /** Format: uuid */
+      id: string;
+      number: string;
+      /** @example 40.0000 */
+      outstandingTotal: string;
+      /** @enum {string} */
+      paymentStatus: 'unpaid' | 'partially_paid' | 'paid' | 'overdue' | 'cancelled';
+      /** Format: uuid */
+      sourceSalesInvoiceId: string;
+      /** @example 60.0000 */
+      total: string;
     };
     DisableTotpRequestDto: {
       /** @example 123456 */
@@ -6284,6 +6763,12 @@ export interface components {
       items: components['schemas']['NotificationMessageDto'][];
       unreadCount: number;
     };
+    OpenPosShiftDto: {
+      /** Format: uuid */
+      cashRegisterId: string;
+      /** @example 100.0000 */
+      openingCashBgn: string;
+    };
     OpenStocktakeDto: {
       referenceId: string;
       /** Format: uuid */
@@ -6390,6 +6875,151 @@ export interface components {
       phase: string;
       /** @enum {string} */
       status: 'in-progress';
+    };
+    PosCatalogBatchDto: {
+      /** Format: uuid */
+      batchId: string;
+      batchNumber: string;
+      /** Format: date */
+      expiresOn?: string;
+      quantity: string;
+    };
+    PosCatalogItemDto: {
+      availableQuantity: string;
+      barcodes: string[];
+      batches: components['schemas']['PosCatalogBatchDto'][];
+      /** @enum {string} */
+      currencyCode: 'BGN';
+      /** Format: uuid */
+      id: string;
+      name: string;
+      /** Format: uuid */
+      priceListId?: string;
+      priceListName?: string;
+      productCode: string;
+      serialNumbers: string[];
+      /** @enum {string} */
+      trackingMode: 'batch' | 'none' | 'serial';
+      unitCode: string;
+      unitPrice?: string;
+      /** @enum {string} */
+      vatTreatment?: 'exempt' | 'ica' | 'reduced_9' | 'standard_20' | 'zero';
+    };
+    PosCatalogPageDto: {
+      items: components['schemas']['PosCatalogItemDto'][];
+      page: number;
+      pageSize: number;
+      total: number;
+      totalPages: number;
+    };
+    PosCustomerLocationOptionDto: {
+      city: string;
+      /** Format: uuid */
+      id: string;
+      name: string;
+    };
+    PosCustomerOptionDto: {
+      /** Format: uuid */
+      id: string;
+      locations: components['schemas']['PosCustomerLocationOptionDto'][];
+      name: string;
+      uic?: string;
+      vatNumber?: string;
+    };
+    PosRegisterOptionDto: {
+      /** Format: uuid */
+      businessLocationId: string;
+      businessLocationName: string;
+      code: string;
+      fiscalDeviceLabel?: string;
+      /** @enum {string} */
+      fiscalMode: 'disabled' | 'hardware' | 'simulator';
+      /** Format: uuid */
+      id: string;
+      name: string;
+      operatorCode: string;
+      /** Format: uuid */
+      operatorId: string;
+      /** Format: uuid */
+      warehouseId: string;
+      warehouseName: string;
+    };
+    PosSaleDto: {
+      cashTendered: string;
+      changeAmount: string;
+      /** Format: date-time */
+      completedAt: string;
+      /** @enum {string} */
+      currencyCode: 'BGN';
+      customerName?: string;
+      /** Format: uuid */
+      customerPartnerId?: string;
+      fiscalAdapter: string;
+      fiscalReceiptNumber: string;
+      /** @enum {string} */
+      fiscalStatus: 'fiscalized' | 'reversed' | 'simulated';
+      grossTotal: string;
+      /** Format: uuid */
+      id: string;
+      lines: components['schemas']['PosSaleLineDto'][];
+      netTotal: string;
+      saleNumber: string;
+      /** Format: uuid */
+      shiftId: string;
+      /** @enum {string} */
+      status: 'completed' | 'reversed';
+      vatTotal: string;
+    };
+    PosSaleLineDto: {
+      grossTotal: string;
+      /** Format: uuid */
+      id: string;
+      netTotal: string;
+      productCode: string;
+      /** Format: uuid */
+      productId: string;
+      productName: string;
+      quantity: string;
+      serialNumbers: string[];
+      unitPrice: string;
+      vatTotal: string;
+      /** @enum {string} */
+      vatTreatment: 'exempt' | 'ica' | 'reduced_9' | 'standard_20' | 'zero';
+    };
+    PosSalePageDto: {
+      items: components['schemas']['PosSaleDto'][];
+      page: number;
+      pageSize: number;
+      total: number;
+      totalPages: number;
+    };
+    PosShiftDto: {
+      /** Format: uuid */
+      cashRegisterId: string;
+      cashRegisterName: string;
+      /** Format: date-time */
+      closedAt?: string;
+      closingCashBgn?: string;
+      expectedCashBgn: string;
+      /** Format: uuid */
+      id: string;
+      /** Format: date-time */
+      openedAt: string;
+      openingCashBgn: string;
+      operatorCode: string;
+      /** Format: uuid */
+      operatorId: string;
+      shiftNumber: string;
+      /** @enum {string} */
+      status: 'closed' | 'open';
+      version: number;
+      /** Format: uuid */
+      warehouseId: string;
+      warehouseName: string;
+    };
+    PosTerminalContextDto: {
+      currentShift?: components['schemas']['PosShiftDto'];
+      registers: components['schemas']['PosRegisterOptionDto'][];
     };
     PriceListDto: {
       active: boolean;
@@ -8952,6 +9582,42 @@ export interface operations {
       };
     };
   };
+  CrmAnalyticsController_overview: {
+    parameters: {
+      query: {
+        dateFrom: string;
+        dateTo: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CrmAnalyticsOverviewDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
   CrmTimelineController_createInteraction: {
     parameters: {
       query?: never;
@@ -9349,6 +10015,187 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['CrmPipelineReferenceDataDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  CrmReportExportsController_list: {
+    parameters: {
+      query?: {
+        page?: number;
+        pageSize?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CrmReportExportPageDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  CrmReportExportsController_create: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['CreateCrmReportExportDto'];
+      };
+    };
+    responses: {
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CrmReportExportDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  CrmReportExportsController_content: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: unknown;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description The completed CRM report export. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/pdf': string;
+          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': string;
+          'text/csv': string;
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  CrmReportExportsController_retry: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: unknown;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CrmReportExportDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  CrmReportExportsController_definitions: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CrmReportDefinitionDto'][];
         };
       };
       /** @description The endpoint request limit was exceeded. */
@@ -12706,6 +13553,43 @@ export interface operations {
       };
     };
   };
+  PartnersController_customerOperationalOverview: {
+    parameters: {
+      query?: {
+        limit?: unknown;
+      };
+      header?: never;
+      path: {
+        id: unknown;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CustomerOperationalOverviewDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
   PartnersController_deactivate: {
     parameters: {
       query?: never;
@@ -14320,6 +15204,268 @@ export interface operations {
           [name: string]: unknown;
         };
         content?: never;
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  PosController_catalog: {
+    parameters: {
+      query: {
+        customerPartnerId?: string;
+        page?: number;
+        pageSize?: number;
+        search?: string;
+        shiftId: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PosCatalogPageDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  PosController_customers: {
+    parameters: {
+      query?: {
+        search?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PosCustomerOptionDto'][];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  PosController_sales: {
+    parameters: {
+      query?: {
+        page?: number;
+        pageSize?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PosSalePageDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  PosController_completeSale: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['CreatePosCashSaleDto'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PosSaleDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  PosController_openShift: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['OpenPosShiftDto'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PosShiftDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  PosController_closeShift: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ClosePosShiftDto'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PosShiftDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  PosController_terminalContext: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PosTerminalContextDto'];
+        };
       };
       /** @description The endpoint request limit was exceeded. */
       429: {

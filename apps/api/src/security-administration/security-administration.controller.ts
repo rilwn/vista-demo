@@ -108,7 +108,7 @@ export class SecurityAdministrationController {
   @ApiParam({ format: 'uuid', name: 'id' })
   @ApiOkResponse({ type: SecurityAccountDto })
   disableAccount(
-    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Param('id', new ParseUUIDPipe()) id: string,
     @Body() input: ChangeAccountStatusDto,
     @Headers('idempotency-key') key: string | undefined,
     @Req() request: AuthenticatedRequest,
@@ -131,7 +131,7 @@ export class SecurityAdministrationController {
   @ApiParam({ format: 'uuid', name: 'id' })
   @ApiOkResponse({ type: SecurityAccountDto })
   reactivateAccount(
-    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Param('id', new ParseUUIDPipe()) id: string,
     @Body() input: ChangeAccountStatusDto,
     @Headers('idempotency-key') key: string | undefined,
     @Req() request: AuthenticatedRequest,
@@ -153,7 +153,7 @@ export class SecurityAdministrationController {
   @ApiParam({ format: 'uuid', name: 'id' })
   @ApiCreatedResponse({ type: AccountRecoveryHandoffDto })
   issueAccountRecoveryHandoff(
-    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Param('id', new ParseUUIDPipe()) id: string,
     @Body() input: IssueAccountRecoveryHandoffDto,
     @Headers('idempotency-key') key: string | undefined,
     @Req() request: AuthenticatedRequest,
@@ -174,7 +174,7 @@ export class SecurityAdministrationController {
   @ApiParam({ format: 'uuid', name: 'id' })
   @ApiOkResponse({ type: SecurityAccountDto })
   replaceRoles(
-    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Param('id', new ParseUUIDPipe()) id: string,
     @Body() input: ReplaceAccountRolesDto,
     @Headers('idempotency-key') key: string | undefined,
     @Req() request: AuthenticatedRequest,
@@ -224,7 +224,7 @@ export class SecurityAdministrationController {
   @ApiParam({ format: 'uuid', name: 'id' })
   @ApiNoContentResponse({ description: 'The selected login session is revoked.' })
   async revokeSession(
-    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Param('id', new ParseUUIDPipe()) id: string,
     @Req() request: AuthenticatedRequest,
   ): Promise<void> {
     await this.security.revokeSession(id, request.authentication, requestMetadata(request));

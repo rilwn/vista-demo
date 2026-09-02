@@ -82,9 +82,7 @@ export class IntegrationOperationsController {
   @ApiParam({ format: 'uuid', name: 'id' })
   @ApiOkResponse({ type: IntegrationEventDetailDto })
   @ApiNotFoundResponse({ description: 'The integration event does not exist.' })
-  detail(
-    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
-  ): Promise<IntegrationEventDetail> {
+  detail(@Param('id', new ParseUUIDPipe()) id: string): Promise<IntegrationEventDetail> {
     return this.integrations.detail(id);
   }
 
@@ -97,7 +95,7 @@ export class IntegrationOperationsController {
   @ApiParam({ format: 'uuid', name: 'id' })
   @ApiOkResponse({ type: IntegrationEventDetailDto })
   replay(
-    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Param('id', new ParseUUIDPipe()) id: string,
     @Body() input: ReplayIntegrationEventDto,
     @Headers('idempotency-key') key: string | undefined,
     @Req() request: AuthenticatedRequest,
