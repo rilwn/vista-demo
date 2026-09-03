@@ -1,4 +1,4 @@
-import { Button, InlineAlert } from '@vista/ui';
+import { Button, InlineAlert, Toast } from '@vista/ui';
 import type {
   CreateFinanceCustomerDocumentRequest,
   CreateFinancePaymentRequest,
@@ -88,14 +88,9 @@ function FinanceCollectionsPage({ view }: { view: FinanceView }) {
 
       <FinanceSummaryCards summary={data.summary} />
       {notice ? (
-        <InlineAlert tone="success">
-          <div className="finance-notice">
-            <span>{notice}</span>
-            <button aria-label="Dismiss message" onClick={() => setNotice(null)} type="button">
-              Close
-            </button>
-          </div>
-        </InlineAlert>
+        <Toast onDismiss={() => setNotice(null)} tone="success">
+          {notice}
+        </Toast>
       ) : null}
       <FinanceRegister documents={data.documents} onPreview={setSelected} />
 

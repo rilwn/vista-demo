@@ -1,4 +1,4 @@
-import { Button, InlineAlert, TextField } from '@vista/ui';
+import { Button, InlineAlert, TextField, Toast } from '@vista/ui';
 import type {
   ChangePasswordResponse,
   DisableTotpResponse,
@@ -95,9 +95,9 @@ export function AccessPage() {
       </header>
 
       {notice ? (
-        <InlineAlert tone="success">
-          <p>{notice}</p>
-        </InlineAlert>
+        <Toast onDismiss={() => setNotice('')} tone="success">
+          {notice}
+        </Toast>
       ) : null}
 
       <section className="content-panel access-panel">

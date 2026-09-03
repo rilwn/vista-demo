@@ -3,6 +3,7 @@ import { SearchableSelects } from '@vista/ui';
 import { useAuth } from './auth/AuthProvider';
 import { LoginPage } from './auth/LoginPage';
 import { RecoveryPage } from './auth/RecoveryPage';
+import { Icon } from './components/Icon';
 import { WorkspaceLayout } from './layout/WorkspaceLayout';
 import { messages } from './messages';
 import { AccessPage } from './pages/AccessPage';
@@ -200,7 +201,7 @@ function FullPageLoader() {
   return (
     <main className="full-page-loader" aria-live="polite">
       <span className="loader-mark" aria-hidden="true">
-        VS
+        <Icon name="brand" size={24} />
       </span>
       <strong>{messages.states.loading}</strong>
       <p>{messages.states.loadingDetail}</p>

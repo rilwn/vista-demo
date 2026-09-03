@@ -1,4 +1,4 @@
-import { Button, InlineAlert } from '@vista/ui';
+import { Button, InlineAlert, Toast } from '@vista/ui';
 import type {
   CreateCrmInteractionRequest,
   CreateCrmTaskRequest,
@@ -163,14 +163,9 @@ export function CrmTimelinePage() {
       <CrmTabs />
 
       {notice ? (
-        <InlineAlert tone="success">
-          <div className="crm-timeline-notice">
-            <span>{notice}</span>
-            <button onClick={() => setNotice(null)} type="button">
-              Close
-            </button>
-          </div>
-        </InlineAlert>
+        <Toast onDismiss={() => setNotice(null)} tone="success">
+          {notice}
+        </Toast>
       ) : null}
       {error ? (
         <InlineAlert tone="error">

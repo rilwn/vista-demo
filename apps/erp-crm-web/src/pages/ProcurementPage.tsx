@@ -82,6 +82,7 @@ export function ProcurementPage({ view }: { view: ProcurementView }) {
             : 'Warehouse receipts created from confirmed supplier deliveries.'
         }
         notice={notice}
+        onDismissNotice={() => setNotice(null)}
         title={view === 'purchase-orders' ? 'Purchase order register' : 'Goods receipt register'}
         view={view}
       >

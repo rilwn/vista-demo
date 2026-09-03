@@ -1,10 +1,14 @@
-import { Button, InlineAlert } from '@vista/ui';
+import { Button, InlineAlert, Toast } from '@vista/ui';
 import { useActiveItemVisibility } from '@vista/ui/navigation';
 import type {
   CreatePriceListLineRequest,
+  CreatePosCommercialRuleRequest,
   CustomerPriceGroup,
   PriceList,
   PriceListScope,
+  PosCommercialRule,
+  PosCommercialRuleType,
+  PosDiscountType,
   PromotionalCampaign,
   SalesPricingReferenceData,
   SalesResolvedPrice,
@@ -14,12 +18,15 @@ import { type FormEvent, useCallback, useEffect, useState } from 'react';
 import {
   createCustomerPriceGroup,
   createPriceList,
+  createPosCommercialRule,
   createPromotionalCampaign,
   getSalesPricingReferenceData,
   listPriceLists,
+  listPosCommercialRules,
   resolveSalesPrice,
   updateCustomerPriceGroup,
   updatePriceList,
+  updatePosCommercialRule,
   updatePromotionalCampaign,
 } from '../api/sales-pricing';
 import { ApiClientError } from '../api/client';
@@ -27,11 +34,12 @@ import { useAuth } from '../auth/AuthProvider';
 import { Icon } from '../components/Icon';
 import { salesPricingMessages as copy } from '../messages';
 
-type PricingTab = 'price-lists' | 'groups' | 'campaigns';
+type PricingTab = 'price-lists' | 'pos-offers' | 'groups' | 'campaigns';
 type PricingDrawer =
   | { mode: 'create'; type: PricingTab }
   | { mode: 'edit'; record: CustomerPriceGroup; type: 'groups' }
   | { mode: 'edit'; record: PriceList; type: 'price-lists' }
+  | { mode: 'edit'; record: PosCommercialRule; type: 'pos-offers' }
   | { mode: 'edit'; record: PromotionalCampaign; type: 'campaigns' };
 
 const emptyReferences: SalesPricingReferenceData = {
@@ -65,6 +73,7 @@ export function SalesPricingPage() {
   const labels: Record<PricingTab, string> = {
     campaigns: copy.campaigns,
     groups: copy.customerGroups,
+    'pos-offers': 'POS offers',
     'price-lists': copy.priceLists,
   };
 
@@ -81,33 +90,31 @@ export function SalesPricingPage() {
             <Icon name="plus" size={17} />
             {tab === 'price-lists'
               ? copy.addPriceList
-              : tab === 'groups'
-                ? copy.addCustomerGroup
-                : copy.addCampaign}
+              : tab === 'pos-offers'
+                ? 'Add POS offer'
+                : tab === 'groups'
+                  ? copy.addCustomerGroup
+                  : copy.addCampaign}
           </Button>
         ) : null}
       </header>
 
       <section aria-label="Pricing summary" className="pricing-summary">
         <PricingMetric label={copy.priceLists} value={data.priceLists.length} />
+        <PricingMetric label="POS offers" value={data.posRules.length} />
         <PricingMetric label={copy.customerGroups} value={data.references.customerGroups.length} />
         <PricingMetric label={copy.campaigns} value={data.references.campaigns.length} />
       </section>
 
       {notice ? (
-        <InlineAlert tone="success">
-          <div className="partners-inline-message">
-            <span>{notice}</span>
-            <button onClick={() => setNotice('')} type="button">
-              {copy.close}
-            </button>
-          </div>
-        </InlineAlert>
+        <Toast onDismiss={() => setNotice('')} tone="success">
+          {notice}
+        </Toast>
       ) : null}
 
       <section className="pricing-workbench">
         <div aria-label="Pricing areas" className="pricing-tabs" ref={tabs} role="tablist">
-          {(['price-lists', 'groups', 'campaigns'] as const).map((item) => (
+          {(['price-lists', 'pos-offers', 'groups', 'campaigns'] as const).map((item) => (
             <button
               aria-current={tab === item ? 'page' : undefined}
               aria-selected={tab === item}
@@ -130,6 +137,12 @@ export function SalesPricingPage() {
             references={data.references}
             token={token}
           />
+        ) : tab === 'pos-offers' ? (
+          <PosOffersRegister
+            canEdit={canEdit}
+            onEdit={(record) => setDrawer({ mode: 'edit', record, type: 'pos-offers' })}
+            rules={data.posRules}
+          />
         ) : tab === 'groups' ? (
           <GroupRegister
             canEdit={canEdit}
@@ -150,6 +163,14 @@ export function SalesPricingPage() {
         <PricingDrawerPanel onClose={() => setDrawer(null)} title={drawerTitle(drawer)}>
           {drawer.type === 'price-lists' ? (
             <PriceListForm
+              onClose={() => setDrawer(null)}
+              onSaved={() => saved(setDrawer, setNotice, data.reload)}
+              {...(drawer.mode === 'edit' ? { record: drawer.record } : {})}
+              references={data.references}
+              token={token}
+            />
+          ) : drawer.type === 'pos-offers' ? (
+            <PosCommercialRuleForm
               onClose={() => setDrawer(null)}
               onSaved={() => saved(setDrawer, setNotice, data.reload)}
               {...(drawer.mode === 'edit' ? { record: drawer.record } : {})}
@@ -333,6 +354,63 @@ function CampaignRegister({
         })
       ) : (
         <PricingState compact title={copy.emptyCampaigns} />
+      )}
+    </section>
+  );
+}
+
+function PosOffersRegister({
+  canEdit,
+  onEdit,
+  rules,
+}: {
+  canEdit: boolean;
+  onEdit: (record: PosCommercialRule) => void;
+  rules: PosCommercialRule[];
+}) {
+  const today = dateValue(new Date());
+  return (
+    <section aria-label="POS offers" className="pricing-card-grid pos-offers-grid">
+      {rules.length ? (
+        rules.map((rule) => {
+          const current = rule.active && rule.validFrom <= today && rule.validTo >= today;
+          return (
+            <article className={!rule.active ? 'is-inactive' : undefined} key={rule.id}>
+              <header>
+                <span className="pricing-card-mark">
+                  <Icon name="sales" size={18} />
+                </span>
+                <span className={`pricing-status ${current ? 'is-active' : ''}`}>
+                  {!rule.active ? 'Inactive' : current ? 'Running' : 'Scheduled'}
+                </span>
+              </header>
+              <h3>{rule.name}</h3>
+              <p>{rule.code}</p>
+              <div className="pricing-member-preview">
+                <strong>
+                  {rule.discountType === 'percentage'
+                    ? `${Number(rule.discountValue).toFixed(2)}% off`
+                    : `${formatMoney(rule.discountValue, 'BGN')} off`}
+                </strong>
+                <span>
+                  {rule.items
+                    .map((item) => `${Number(item.requiredQuantity)} × ${item.productName}`)
+                    .join(' + ')}
+                </span>
+              </div>
+              <small className="pos-offer-period">
+                {formatDate(rule.validFrom)} – {formatDate(rule.validTo)}
+              </small>
+              {canEdit ? (
+                <Button onClick={() => onEdit(rule)} variant="secondary">
+                  Edit offer
+                </Button>
+              ) : null}
+            </article>
+          );
+        })
+      ) : (
+        <PricingState compact title="No POS offers yet" />
       )}
     </section>
   );
@@ -662,6 +740,249 @@ function PriceListForm({
   );
 }
 
+function PosCommercialRuleForm({
+  onClose,
+  onSaved,
+  record,
+  references,
+  token,
+}: {
+  onClose: () => void;
+  onSaved: () => void;
+  record?: PosCommercialRule;
+  references: SalesPricingReferenceData;
+  token: string;
+}) {
+  const [active, setActive] = useState(record?.active ?? true);
+  const [busy, setBusy] = useState(false);
+  const [code, setCode] = useState(record?.code ?? '');
+  const [discountType, setDiscountType] = useState<PosDiscountType>(
+    record?.discountType ?? 'percentage',
+  );
+  const [discountValue, setDiscountValue] = useState(record?.discountValue ?? '10');
+  const [error, setError] = useState('');
+  const [items, setItems] = useState<
+    Array<CreatePosCommercialRuleRequest['items'][number] & { key: string }>
+  >(
+    record?.items.map((item) => ({
+      key: item.productId,
+      productId: item.productId,
+      requiredQuantity: item.requiredQuantity,
+    })) ?? [newOfferItem(references)],
+  );
+  const [name, setName] = useState(record?.name ?? '');
+  const [priority, setPriority] = useState(String(record?.priority ?? 0));
+  const [ruleType, setRuleType] = useState<PosCommercialRuleType>(record?.ruleType ?? 'quantity');
+  const [validFrom, setValidFrom] = useState(record?.validFrom ?? dateValue(new Date()));
+  const [validTo, setValidTo] = useState(record?.validTo ?? futureDate(30));
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    const input = {
+      code,
+      discountType,
+      discountValue,
+      items: items.map(({ productId, requiredQuantity }) => ({ productId, requiredQuantity })),
+      name,
+      priority: Number(priority),
+      ruleType,
+      validFrom,
+      validTo,
+    };
+    setBusy(true);
+    setError('');
+    try {
+      if (record)
+        await updatePosCommercialRule(token, record.id, crypto.randomUUID(), {
+          ...input,
+          active,
+          version: record.version,
+        });
+      else await createPosCommercialRule(token, crypto.randomUUID(), input);
+      onSaved();
+    } catch (caught) {
+      setError(errorText(caught));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <form className="pricing-form" onSubmit={(event) => void submit(event)}>
+      <p>
+        Apply a quantity saving to one product or a bundle saving when all selected products are in
+        the basket. Higher-priority offers are checked first and a product receives one automatic
+        offer at a time.
+      </p>
+      <div className="pricing-form-grid">
+        <PricingField label="Offer code">
+          <input
+            autoFocus
+            disabled={Boolean(record)}
+            maxLength={40}
+            onChange={(event) => setCode(event.target.value.toUpperCase())}
+            required
+            value={code}
+          />
+        </PricingField>
+        <PricingField label="Offer name">
+          <input
+            maxLength={150}
+            onChange={(event) => setName(event.target.value)}
+            required
+            value={name}
+          />
+        </PricingField>
+        <PricingField label="Offer type">
+          <select
+            onChange={(event) => {
+              const next = event.target.value as PosCommercialRuleType;
+              setRuleType(next);
+              setItems((current) =>
+                next === 'quantity'
+                  ? [current[0] ?? newOfferItem(references)]
+                  : current.length >= 2
+                    ? current
+                    : [...current, newOfferItem(references)],
+              );
+            }}
+            value={ruleType}
+          >
+            <option value="quantity">Quantity offer</option>
+            <option value="bundle">Bundle offer</option>
+          </select>
+        </PricingField>
+        <PricingField label="Discount type">
+          <select
+            onChange={(event) => setDiscountType(event.target.value as PosDiscountType)}
+            value={discountType}
+          >
+            <option value="percentage">Percentage</option>
+            <option value="fixed_amount">Fixed amount (BGN)</option>
+          </select>
+        </PricingField>
+        <PricingField label={discountType === 'percentage' ? 'Discount %' : 'Discount amount'}>
+          <input
+            inputMode="decimal"
+            max={discountType === 'percentage' ? 100 : undefined}
+            min="0.0001"
+            onChange={(event) => setDiscountValue(event.target.value)}
+            pattern="\d+(\.\d{1,4})?"
+            required
+            value={discountValue}
+          />
+        </PricingField>
+        <PricingField label="Priority" hint="Higher priority is applied first.">
+          <input
+            max="1000"
+            min="-1000"
+            onChange={(event) => setPriority(event.target.value)}
+            required
+            type="number"
+            value={priority}
+          />
+        </PricingField>
+        <PricingField label="Start date">
+          <input
+            onChange={(event) => setValidFrom(event.target.value)}
+            required
+            type="date"
+            value={validFrom}
+          />
+        </PricingField>
+        <PricingField label="End date">
+          <input
+            onChange={(event) => setValidTo(event.target.value)}
+            required
+            type="date"
+            value={validTo}
+          />
+        </PricingField>
+      </div>
+      <section className="pricing-line-editor">
+        <header>
+          <div>
+            <h3>{ruleType === 'quantity' ? 'Qualifying product' : 'Bundle products'}</h3>
+            <p>Set the minimum quantity needed each time the offer applies.</p>
+          </div>
+          {ruleType === 'bundle' ? (
+            <Button
+              onClick={() => setItems((current) => [...current, newOfferItem(references)])}
+              type="button"
+              variant="secondary"
+            >
+              <Icon name="plus" size={15} /> Add product
+            </Button>
+          ) : null}
+        </header>
+        {items.map((item, index) => (
+          <div className="pricing-line-row" key={item.key}>
+            <PricingSelect
+              label={`Product ${index + 1}`}
+              onChange={(value) =>
+                setItems((current) =>
+                  current.map((candidate) =>
+                    candidate.key === item.key ? { ...candidate, productId: value } : candidate,
+                  ),
+                )
+              }
+              options={references.products.map((product) => ({
+                label: `${product.name} · ${product.productCode}`,
+                value: product.id,
+              }))}
+              required
+              value={item.productId}
+            />
+            <PricingField label={`Minimum quantity ${index + 1}`}>
+              <input
+                inputMode="decimal"
+                min="0.0001"
+                onChange={(event) =>
+                  setItems((current) =>
+                    current.map((candidate) =>
+                      candidate.key === item.key
+                        ? { ...candidate, requiredQuantity: event.target.value }
+                        : candidate,
+                    ),
+                  )
+                }
+                pattern="\d+(\.\d{1,4})?"
+                required
+                value={item.requiredQuantity}
+              />
+            </PricingField>
+            {ruleType === 'bundle' && items.length > 2 ? (
+              <button
+                aria-label={`Remove product ${index + 1}`}
+                className="pricing-remove-line"
+                onClick={() =>
+                  setItems((current) => current.filter((candidate) => candidate.key !== item.key))
+                }
+                type="button"
+              >
+                <Icon name="close" size={16} />
+              </button>
+            ) : null}
+          </div>
+        ))}
+      </section>
+      {record ? (
+        <ActiveControl
+          active={active}
+          description="Inactive offers remain in history and no longer apply at checkout."
+          onChange={setActive}
+        />
+      ) : null}
+      {error ? <InlineAlert tone="error">{error}</InlineAlert> : null}
+      <DrawerActions
+        busy={busy}
+        onClose={onClose}
+        submit={record ? 'Save POS offer' : 'Create POS offer'}
+      />
+    </form>
+  );
+}
+
 function CustomerGroupForm({
   onClose,
   onSaved,
@@ -976,9 +1297,11 @@ function PricingSelect({
 
 function ActiveControl({
   active,
+  description = 'Inactive records remain in history but do not apply to future prices.',
   onChange,
 }: {
   active: boolean;
+  description?: string;
   onChange: (value: boolean) => void;
 }) {
   return (
@@ -990,7 +1313,7 @@ function ActiveControl({
       />
       <span>
         <strong>{copy.active}</strong>
-        <small>Inactive records remain in history but do not apply to future prices.</small>
+        <small>{description}</small>
       </span>
     </label>
   );
@@ -1038,6 +1361,7 @@ function PricingState({
 function usePricingData(token: string) {
   const [references, setReferences] = useState(emptyReferences);
   const [priceLists, setPriceLists] = useState<PriceList[]>([]);
+  const [posRules, setPosRules] = useState<PosCommercialRule[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [revision, setRevision] = useState(0);
@@ -1047,11 +1371,16 @@ function usePricingData(token: string) {
     let active = true;
     setLoading(true);
     setError(false);
-    void Promise.all([getSalesPricingReferenceData(token), listPriceLists(token)])
-      .then(([nextReferences, nextPriceLists]) => {
+    void Promise.all([
+      getSalesPricingReferenceData(token),
+      listPriceLists(token),
+      listPosCommercialRules(token),
+    ])
+      .then(([nextReferences, nextPriceLists, nextPosRules]) => {
         if (active) {
           setReferences(nextReferences);
           setPriceLists(nextPriceLists);
+          setPosRules(nextPosRules);
         }
       })
       .catch(() => {
@@ -1064,7 +1393,7 @@ function usePricingData(token: string) {
       active = false;
     };
   }, [revision, token]);
-  return { error, loading, priceLists, references, reload };
+  return { error, loading, posRules, priceLists, references, reload };
 }
 
 function saved(
@@ -1082,6 +1411,8 @@ function drawerTitle(drawer: PricingDrawer): string {
     return drawer.mode === 'create' ? copy.createPriceList : copy.savePriceList;
   if (drawer.type === 'groups')
     return drawer.mode === 'create' ? copy.createCustomerGroup : copy.saveCustomerGroup;
+  if (drawer.type === 'pos-offers')
+    return drawer.mode === 'create' ? 'Create POS offer' : 'Edit POS offer';
   return drawer.mode === 'create' ? copy.createCampaign : copy.saveCampaign;
 }
 
@@ -1093,6 +1424,14 @@ function scopeLabel(record: PriceList) {
 
 function newPriceLine(references: SalesPricingReferenceData) {
   return { key: crypto.randomUUID(), productId: references.products[0]?.id ?? '', unitPrice: '0' };
+}
+
+function newOfferItem(references: SalesPricingReferenceData) {
+  return {
+    key: crypto.randomUUID(),
+    productId: references.products[0]?.id ?? '',
+    requiredQuantity: '1',
+  };
 }
 
 function updatePriceLine(

@@ -30,15 +30,18 @@ import { RateLimitPolicy } from '../security/rate-limit.decorator.js';
 import {
   CreateCustomerPriceGroupDto,
   CreatePriceListDto,
+  CreatePosCommercialRuleDto,
   CreatePromotionalCampaignDto,
   CustomerPriceGroupDto,
   PriceListDto,
+  PosCommercialRuleDto,
   PromotionalCampaignDto,
   ResolveSalesPriceQueryDto,
   SalesPricingReferenceDataDto,
   SalesResolvedPriceDto,
   UpdateCustomerPriceGroupDto,
   UpdatePriceListDto,
+  UpdatePosCommercialRuleDto,
   UpdatePromotionalCampaignDto,
 } from './sales-pricing.dto.js';
 import { SalesPricingService } from './sales-pricing.service.js';
@@ -348,6 +351,54 @@ export class SalesController {
     @Req() request: AuthenticatedRequest,
   ): Promise<PriceListDto> {
     return this.pricing.updatePriceList(id, input, key, request.authentication, metadata(request));
+  }
+
+  @Get('pos-commercial-rules')
+  @RateLimitPolicy('read')
+  @RequirePermissions({ action: 'view', module: 'erp.sales' })
+  @ApiOkResponse({ isArray: true, type: PosCommercialRuleDto })
+  posCommercialRules(): Promise<PosCommercialRuleDto[]> {
+    return this.pricing.posCommercialRules();
+  }
+
+  @Post('pos-commercial-rules')
+  @HttpCode(HttpStatus.CREATED)
+  @RequirePermissions({ action: 'create', module: 'erp.sales' })
+  @ApiBody({ type: CreatePosCommercialRuleDto })
+  @ApiCreatedResponse({ type: PosCommercialRuleDto })
+  @ApiHeader({ name: 'Idempotency-Key', required: true })
+  createPosCommercialRule(
+    @Body() input: CreatePosCommercialRuleDto,
+    @Headers('idempotency-key') key: string | undefined,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<PosCommercialRuleDto> {
+    return this.pricing.createPosCommercialRule(
+      input,
+      key,
+      request.authentication,
+      metadata(request),
+    );
+  }
+
+  @Put('pos-commercial-rules/:id')
+  @RequirePermissions({ action: 'edit', module: 'erp.sales' })
+  @ApiBody({ type: UpdatePosCommercialRuleDto })
+  @ApiHeader({ name: 'Idempotency-Key', required: true })
+  @ApiOkResponse({ type: PosCommercialRuleDto })
+  @ApiParam({ format: 'uuid', name: 'id' })
+  updatePosCommercialRule(
+    @Param('id') id: string,
+    @Body() input: UpdatePosCommercialRuleDto,
+    @Headers('idempotency-key') key: string | undefined,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<PosCommercialRuleDto> {
+    return this.pricing.updatePosCommercialRule(
+      id,
+      input,
+      key,
+      request.authentication,
+      metadata(request),
+    );
   }
 
   @Get('prices/resolve')

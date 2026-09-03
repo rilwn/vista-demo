@@ -121,12 +121,8 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
       new URL('../src/database/migrations', import.meta.url),
     );
     await migrateUp(database, migrationDirectory);
-    expect(await migrateDown(database, migrationDirectory)).toBe(
-      '0046_serial_lifecycle_traceability',
-    );
-    expect(await migrateUp(database, migrationDirectory)).toContain(
-      '0046_serial_lifecycle_traceability',
-    );
+    expect(await migrateDown(database, migrationDirectory)).toBe('0052_pos_payments_returns');
+    expect(await migrateUp(database, migrationDirectory)).toContain('0052_pos_payments_returns');
 
     Object.assign(process.env, {
       BUSINESS_TIMEZONE: 'Europe/Sofia',

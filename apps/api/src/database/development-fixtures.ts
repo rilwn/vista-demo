@@ -131,6 +131,7 @@ const allOperationalPermissions: readonly PermissionGrant[] = [
   grant('erp.logistics', 'view'),
   grant('erp.logistics', 'create'),
   grant('erp.logistics', 'edit'),
+  grant('pos', 'approve'),
   grant('reports', 'view'),
 ];
 
@@ -222,6 +223,7 @@ export const developmentFixtureAccounts: readonly DevelopmentFixtureAccount[] = 
   account('pos-operator', 'DEV-POS', 'Vista Demo POS Operator', 'pos.operator@vista.local', [
     grant('pos', 'view'),
     grant('pos', 'create'),
+    grant('pos', 'edit'),
   ]),
   account(
     'backup-operator',
@@ -626,9 +628,16 @@ async function ensureOperationalFixtures(
   );
 
   const catalog = await ensureCatalogFixtures(client, managerId);
+  await ensurePosQuickAccessFixtures(
+    client,
+    fixtureId('organization:cash-register'),
+    accountIds['pos-operator'],
+    catalog,
+  );
   const partners = await ensurePartnerFixtures(client, managerId, catalog);
   await ensureInitialStock(client, managerId, partners.supplier, organization, catalog);
   await ensurePricingFixtures(client, managerId, partners.balkan, catalog);
+  await ensurePosCommercialFixtures(client, managerId, partners.alfa, catalog);
   await ensureSubscriptionFixture(
     client,
     managerId,
@@ -682,6 +691,27 @@ async function ensureOperationalFixtures(
     partners.alfa,
     partners.alfaStoreLocation,
     partners.printerEquipment,
+  );
+}
+
+async function ensurePosQuickAccessFixtures(
+  client: PoolClient,
+  cashRegisterId: string,
+  accountId: string,
+  catalog: CatalogFixtureIds,
+): Promise<void> {
+  const productIds = [catalog.receiptRoll, catalog.adapter, catalog.fiscal, catalog.printHead];
+  await client.query(
+    `INSERT INTO pos.quick_access_products (
+       cash_register_id, product_id, display_order, updated_by
+     )
+     SELECT $1, product_id, display_order, $2
+     FROM unnest($3::uuid[]) WITH ORDINALITY AS item(product_id, display_order)
+     WHERE NOT EXISTS (
+       SELECT 1 FROM pos.quick_access_products existing
+       WHERE existing.cash_register_id = $1
+     )`,
+    [cashRegisterId, accountId, productIds],
   );
 }
 
@@ -878,17 +908,23 @@ async function ensureOrganizationFixtures(
   );
   await client.query(
     `INSERT INTO pos.terminal_configurations (
-       cash_register_id, warehouse_id, fiscal_mode, fiscal_device_label, configured_by
-     ) VALUES ($1, $2, 'simulator', 'Vista development receipt simulator', $3)
+       cash_register_id, warehouse_id, fiscal_mode, fiscal_device_label,
+       payment_terminal_mode, payment_terminal_label, service_return_warehouse_id,
+       configured_by
+     ) VALUES ($1, $2, 'simulator', 'Development receipt simulator',
+       'simulator', 'Development card terminal', $3, $4)
      ON CONFLICT (cash_register_id) DO UPDATE
      SET warehouse_id = EXCLUDED.warehouse_id,
          fiscal_mode = EXCLUDED.fiscal_mode,
          fiscal_device_label = EXCLUDED.fiscal_device_label,
+         payment_terminal_mode = EXCLUDED.payment_terminal_mode,
+         payment_terminal_label = EXCLUDED.payment_terminal_label,
+         service_return_warehouse_id = EXCLUDED.service_return_warehouse_id,
          active = true,
          configured_by = EXCLUDED.configured_by,
          configured_at = now(),
          version = pos.terminal_configurations.version + 1`,
-    [cashRegisterId, ids.centralWarehouse, managerId],
+    [cashRegisterId, ids.centralWarehouse, ids.serviceWarehouse, managerId],
   );
 }
 
@@ -1817,6 +1853,106 @@ async function ensurePricingFixtures(
       [posLineId, posPriceListId, catalog[productKey], unitPrice],
     );
   }
+}
+
+async function ensurePosCommercialFixtures(
+  client: PoolClient,
+  managerId: string,
+  alfaPartnerId: string,
+  catalog: CatalogFixtureIds,
+): Promise<void> {
+  const rules = [
+    {
+      code: 'DEMO-QTY-ADAPTER',
+      discountType: 'percentage',
+      discountValue: '10.0000',
+      id: fixtureId('pos-commercial-rule:adapter-quantity'),
+      items: [{ productId: catalog.adapter, quantity: '2.0000' }],
+      name: 'Two adapters save 10%',
+      priority: 20,
+      type: 'quantity',
+    },
+    {
+      code: 'DEMO-BUNDLE-CARE',
+      discountType: 'fixed_amount',
+      discountValue: '5.0000',
+      id: fixtureId('pos-commercial-rule:care-bundle'),
+      items: [
+        { productId: catalog.receiptRoll, quantity: '1.0000' },
+        { productId: catalog.printHead, quantity: '1.0000' },
+      ],
+      name: 'Print care bundle',
+      priority: 10,
+      type: 'bundle',
+    },
+  ] as const;
+  for (const rule of rules) {
+    await insertFixtureRow(
+      client,
+      'sales.pos_commercial_rules',
+      rule.id,
+      `INSERT INTO sales.pos_commercial_rules (
+         id, code, name, rule_type, discount_type, discount_value,
+         priority, valid_from, valid_to, created_by, updated_by
+       ) VALUES (
+         $1,$2,$3,$4,$5,$6,$7,CURRENT_DATE - INTERVAL '30 days',
+         CURRENT_DATE + INTERVAL '10 years',$8,$8
+       ) ON CONFLICT (id) DO NOTHING`,
+      [
+        rule.id,
+        rule.code,
+        rule.name,
+        rule.type,
+        rule.discountType,
+        rule.discountValue,
+        rule.priority,
+        managerId,
+      ],
+    );
+    for (const item of rule.items)
+      await client.query(
+        `INSERT INTO sales.pos_commercial_rule_items (
+           rule_id, product_id, required_quantity
+         ) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING`,
+        [rule.id, item.productId, item.quantity],
+      );
+  }
+
+  const programId = fixtureId('pos-loyalty-program:standard');
+  await insertFixtureRow(
+    client,
+    'pos.loyalty_programs',
+    programId,
+    `INSERT INTO pos.loyalty_programs (
+       id, code, name, earn_points_per_bgn, redemption_value_bgn,
+       valid_from, created_by, updated_by
+     ) VALUES ($1,'VISTA-REWARDS','Vista Rewards',1,0.0100,
+       CURRENT_DATE - INTERVAL '30 days',$2,$2)
+     ON CONFLICT (id) DO NOTHING`,
+    [programId, managerId],
+  );
+  const accountId = fixtureId('pos-loyalty-account:alfa');
+  await insertFixtureRow(
+    client,
+    'pos.loyalty_accounts',
+    accountId,
+    `INSERT INTO pos.loyalty_accounts (
+       id, program_id, customer_partner_id, card_number, enrolled_by
+     ) VALUES ($1,$2,$3,'VISTA-DEMO-ALFA',$4)
+     ON CONFLICT (id) DO NOTHING`,
+    [accountId, programId, alfaPartnerId, managerId],
+  );
+  await insertFixtureRow(
+    client,
+    'pos.loyalty_points_ledger',
+    fixtureId('pos-loyalty-opening:alfa'),
+    `INSERT INTO pos.loyalty_points_ledger (
+       id, loyalty_account_id, entry_type, points, reason,
+       actor_account_id, correlation_id
+     ) VALUES ($1,$2,'adjustment',300,'Opening demo reward balance',$3,'development-fixture')
+     ON CONFLICT (id) DO NOTHING`,
+    [fixtureId('pos-loyalty-opening:alfa'), accountId, managerId],
+  );
 }
 
 async function ensureSubscriptionFixture(

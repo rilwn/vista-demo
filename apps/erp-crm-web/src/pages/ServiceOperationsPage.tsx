@@ -1,4 +1,4 @@
-import { Button, InlineAlert } from '@vista/ui';
+import { Button, InlineAlert, Toast } from '@vista/ui';
 import type {
   AssignServiceWorkOrderRequest,
   CompleteServiceWorkOrderRequest,
@@ -219,14 +219,13 @@ export function ServiceOperationsPage({ view }: { view: ServiceOperationsView })
       </nav>
 
       {notice ? (
-        <InlineAlert tone="success">
-          <div className="service-notice">
-            <span>{notice}</span>
-            <button aria-label="Dismiss message" onClick={() => setNotice(null)} type="button">
-              Close
-            </button>
-          </div>
-        </InlineAlert>
+        <Toast
+          durationMs={notice.includes('could not') ? 7000 : 5200}
+          onDismiss={() => setNotice(null)}
+          tone={notice.includes('could not') ? 'error' : 'success'}
+        >
+          {notice}
+        </Toast>
       ) : null}
 
       {view === 'requests' ? (
@@ -607,7 +606,11 @@ function ServiceScheduleView({
         </span>
       </div>
 
-      {notice ? <InlineAlert tone="success">{notice}</InlineAlert> : null}
+      {notice ? (
+        <Toast onDismiss={() => setNotice(null)} tone="success">
+          {notice}
+        </Toast>
+      ) : null}
       {error ? (
         <div className="service-calendar-message">
           <InlineAlert tone="error">{error}</InlineAlert>

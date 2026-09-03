@@ -35,7 +35,13 @@ export function Icon({ name, size = 19 }: IconProps) {
       aria-hidden="true"
       className="app-icon"
       fill="none"
+      focusable="false"
       height={size}
+      shapeRendering="geometricPrecision"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="1.7"
       viewBox="0 0 24 24"
       width={size}
     >

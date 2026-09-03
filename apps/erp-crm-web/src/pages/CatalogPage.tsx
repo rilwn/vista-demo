@@ -1,4 +1,4 @@
-import { Button, InlineAlert, TextField } from '@vista/ui';
+import { Button, InlineAlert, TextField, Toast } from '@vista/ui';
 import type {
   CreateProductRequest,
   CreateUnitRequest,
@@ -87,14 +87,9 @@ export function CatalogPage() {
       </header>
 
       {notice ? (
-        <InlineAlert tone="success">
-          <div className="partners-inline-message">
-            <span>{notice}</span>
-            <button onClick={() => setNotice(null)} type="button">
-              Close
-            </button>
-          </div>
-        </InlineAlert>
+        <Toast onDismiss={() => setNotice(null)} tone="success">
+          {notice}
+        </Toast>
       ) : null}
 
       <section className="catalog-context-strip">

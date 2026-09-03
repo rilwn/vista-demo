@@ -1,57 +1,54 @@
-# Test the first operational POS flow
+# Test POS offers, discounts, and rewards
 
-Start Vista with `npm run dev`. Open the **Vista POS** app at
-`http://localhost:5174/` and sign in as `pos.operator@vista.local` using the
-password in `DEV_FIXTURES_PASSWORD`.
+Run `npm run dev`. It now applies migrations and prepares local accounts
+automatically. Use the password already set in `DEV_FIXTURES_PASSWORD`.
 
-## 1. Open the counter
+## 1. Review the counter offers
 
-1. Choose **Shifts** in the left menu.
-2. Keep **Demo POS terminal** selected.
-3. Enter `100.00` for **Opening cash** and choose **Open cashier shift**.
+1. Open ERP/CRM and sign in as `sales@vista.local`.
+2. From the sidebar choose **ERP → Sales**.
+3. Open **Prices & promotions**, then choose **POS offers**.
 
-Expected: **New sale** opens and shows live products and stock from the Demo
-Central Warehouse.
+Expected: **Two adapters save 10%** and **Print care bundle** appear as running
+offers. **Add POS offer** opens a fitted, scrollable panel with dates, priority,
+discount, and qualifying products. Close it with **Back** without saving.
 
-## 2. Complete a cash sale
+## 2. Apply an offer and protected discount
 
-1. Choose **Demo 12 V Power Adapter**.
-2. Enter `100.00` under **Cash received**.
-3. Choose **Pay cash**.
+1. Open Vista POS and sign in as `pos.operator@vista.local`.
+2. Choose **Shifts**. If the counter is closed, choose **Open cashier shift**,
+   enter `100.00`, and open it. Return to **Sell**.
+3. Add **Demo 12 V Power Adapter**, then use its **+** button so the quantity is
+   `2`.
 
-Expected: the sale completes for `60.00 BGN`, the change is `40.00 BGN`, and a
-clearly labelled development receipt opens. Choose **Start next sale**.
+Expected: the basket shows **Two adapters save 10%**, **Offers −10.00 BGN**, and
+**Total due 108.00 BGN**.
 
-## 3. Sell a serialised device
+4. Choose **Add customer**, search `Alfa Market`, select **Alfa Market Demo
+   Ltd.**, keep **Central Store**, and choose **Use customer**.
+5. Choose **Manual discount**. Keep **Percentage** and `10`, use reason
+   `Customer care discount`, approver `manager@vista.local`, and the same local
+   fixture password. Leave the authentication code empty and choose **Approve
+   discount**.
 
-1. Choose **Demo Fiscal Register X1**.
-2. In the basket, choose any available serial number.
-3. Choose **Add customer**, search for `Alfa Market`, and select
-   **Alfa Market Demo Ltd.**
-4. Select **Alfa Market — Central Store**, then choose **Use customer**.
-5. Enter `800.00` under **Cash received** and choose **Pay cash**.
+Expected: the basket says **Manual discount approved**, names **Vista Demo
+Manager**, and shows **Manual discount −9.00 BGN**. Do not change the basket
+after approval; a change intentionally clears it.
 
-Expected: the sale completes for `720.00 BGN`, the chosen serial disappears from
-available stock, and the receipt shows `80.00 BGN` change.
+## 3. Redeem, earn, and verify points
 
-## 4. Review and close
+1. Confirm the selected customer starts with `300 reward points`.
+2. Enter `100` in **Points to use**.
 
-1. Choose **Sale history**. Confirm both sales are listed.
-2. Choose **Shifts**. Keep the prefilled expected amount under **Counted cash**
-   and choose **Close cashier shift**.
+Expected: **Rewards −1.00 BGN** and **Total due 96.00 BGN**.
 
-Expected: the shift closes and its drawer count is recorded.
+3. Keep **Cash**, enter `100.00` in **Cash received**, and choose **Complete
+   sale**.
 
-## 5. Confirm the customer record
+Expected: the receipt shows `96.00 BGN`, change `4.00 BGN`, `100` points used,
+and `96` points earned.
 
-1. Open the **ERP/CRM** app at `http://localhost:5173/` and sign in as
-   `manager@vista.local`.
-2. From the sidebar choose **Customers & CRM**, then **Partner registry**.
-3. Open **Alfa Market Demo Ltd.** and choose **Customer overview**.
+4. Close the receipt, add one adapter, and choose the customer's reward row.
 
-Expected: **Purchase history** includes the POS sale, and **Locations &
-equipment** includes the fiscal register and serial number sold in step 3.
-
-The receipt is a development simulator. Certified fiscal-device behavior is not
-part of this test and will not be claimed until the client approves and supplies
-the target hardware.
+Expected: the balance is `296 points`. The history keeps separate opening,
+redeemed, and earned entries with a running balance; no earlier entry is changed.

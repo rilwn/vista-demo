@@ -2326,6 +2326,22 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/pos/baskets/price': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['PosController_priceBasket'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/pos/catalog': {
     parameters: {
       query?: never;
@@ -2352,6 +2368,182 @@ export interface paths {
     get: operations['PosController_customers'];
     put?: never;
     post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/pos/discount-authorizations': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['PosController_authorizeDiscount'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/pos/loyalty/accounts': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['PosController_enrolLoyalty'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/pos/loyalty/customers/{customerPartnerId}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['PosController_loyaltyLedger'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/pos/quick-access': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['PosController_quickAccess'];
+    put: operations['PosController_updateQuickAccess'];
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/pos/report-exports': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['PosReportExportsController_list'];
+    put?: never;
+    post: operations['PosReportExportsController_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/pos/report-exports/{id}/content': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['PosReportExportsController_content'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/pos/report-exports/{id}/retry': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['PosReportExportsController_retry'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/pos/report-exports/definitions': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['PosReportExportsController_definitions'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/pos/reports/overview': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['PosReportsController_overview'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/pos/reports/reference-data': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['PosReportsController_referenceData'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/pos/returns': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['PosController_returns'];
+    put?: never;
+    post: operations['PosController_createReturn'];
     delete?: never;
     options?: never;
     head?: never;
@@ -2672,6 +2864,38 @@ export interface paths {
     get?: never;
     put?: never;
     post: operations['SalesController_createShipment'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/sales/pos-commercial-rules': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['SalesController_posCommercialRules'];
+    put?: never;
+    post: operations['SalesController_createPosCommercialRule'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/sales/pos-commercial-rules/{id}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put: operations['SalesController_updatePosCommercialRule'];
+    post?: never;
     delete?: never;
     options?: never;
     head?: never;
@@ -4296,9 +4520,96 @@ export interface components {
       uic?: string;
       vatNumber?: string;
     };
-    CreatePosCashSaleDto: {
-      /** @example 100.0000 */
-      cashTendered: string;
+    CreatePosCommercialRuleDto: {
+      code: string;
+      /** @enum {string} */
+      discountType: 'fixed_amount' | 'percentage';
+      /** @example 10.0000 */
+      discountValue: string;
+      items: components['schemas']['CreatePosCommercialRuleItemDto'][];
+      name: string;
+      priority: number;
+      /** @enum {string} */
+      ruleType: 'bundle' | 'quantity';
+      /** Format: date */
+      validFrom: string;
+      /** Format: date */
+      validTo: string;
+    };
+    CreatePosCommercialRuleItemDto: {
+      /** Format: uuid */
+      productId: string;
+      /** @example 2.0000 */
+      requiredQuantity: string;
+    };
+    CreatePosDiscountAuthorizationDto: {
+      /** Format: email */
+      approverEmail: string;
+      approverPassword: string;
+      /** Format: uuid */
+      customerPartnerId?: string;
+      /** @enum {string} */
+      discountType: 'fixed_amount' | 'percentage';
+      /** @example 10.0000 */
+      discountValue: string;
+      lines: components['schemas']['CreatePosSaleLineDto'][];
+      reason: string;
+      /** Format: uuid */
+      shiftId: string;
+      totpCode?: string;
+    };
+    CreatePosReportExportDto: {
+      /** Format: uuid */
+      businessLocationId?: string;
+      /** Format: uuid */
+      cashRegisterId?: string;
+      /** Format: date */
+      dateFrom?: string;
+      /** Format: date */
+      dateTo?: string;
+      /** @enum {string} */
+      definitionKey:
+        | 'pos.shift-register'
+        | 'pos.cashier-performance'
+        | 'pos.x-report'
+        | 'pos.z-report'
+        | 'pos.product-sales'
+        | 'pos.category-sales'
+        | 'pos.payment-methods'
+        | 'pos.location-sales'
+        | 'pos.location-comparison';
+      /** @enum {string} */
+      format: 'csv' | 'xlsx' | 'pdf';
+      /** Format: uuid */
+      operatorId?: string;
+      /** Format: uuid */
+      shiftId?: string;
+    };
+    CreatePosReturnDto: {
+      lines: components['schemas']['CreatePosReturnLineDto'][];
+      /** Format: uuid */
+      originalSaleId: string;
+      reason: string;
+      refunds: components['schemas']['CreatePosReturnRefundDto'][];
+      /** Format: uuid */
+      shiftId: string;
+    };
+    CreatePosReturnLineDto: {
+      /** @enum {string} */
+      disposition: 'restock' | 'service';
+      /** Format: uuid */
+      originalSaleLineId: string;
+      /** @example 1.0000 */
+      quantity: string;
+      serialNumbers?: string[];
+    };
+    CreatePosReturnRefundDto: {
+      /** @example 60.0000 */
+      amount: string;
+      /** @enum {string} */
+      method: 'card' | 'cash';
+    };
+    CreatePosSaleDto: {
       /** Format: uuid */
       clientTransactionId: string;
       /** Format: uuid */
@@ -4306,6 +4617,9 @@ export interface components {
       /** Format: uuid */
       customerPartnerId?: string;
       lines: components['schemas']['CreatePosSaleLineDto'][];
+      loyaltyPointsToRedeem?: number;
+      manualDiscount?: components['schemas']['PosManualDiscountDto'];
+      payments: components['schemas']['CreatePosSalePaymentDto'][];
       /** Format: uuid */
       shiftId: string;
     };
@@ -4317,6 +4631,14 @@ export interface components {
       /** @example 1.0000 */
       quantity: string;
       serialNumbers?: string[];
+    };
+    CreatePosSalePaymentDto: {
+      /** @example 60.0000 */
+      amount: string;
+      /** @enum {string} */
+      method: 'card' | 'cash';
+      /** @example 100.0000 */
+      tenderedAmount?: string;
     };
     CreatePriceListDto: {
       /** Format: uuid */
@@ -5403,6 +5725,10 @@ export interface components {
       /** Format: date-time */
       enrolledAt?: string;
       revokedOtherSessionCount: number;
+    };
+    EnrolPosLoyaltyDto: {
+      /** Format: uuid */
+      customerPartnerId: string;
     };
     FinanceAgingReportDto: {
       /** Format: date */
@@ -6876,6 +7202,41 @@ export interface components {
       /** @enum {string} */
       status: 'in-progress';
     };
+    PosBasketPricedLineDto: {
+      automaticDiscountTotal: string;
+      baseNetTotal: string;
+      grossTotal: string;
+      loyaltyDiscountTotal: string;
+      manualDiscountTotal: string;
+      netTotal: string;
+      pricingAdjustments: components['schemas']['PosPricingAdjustmentDto'][];
+      /** Format: uuid */
+      productId: string;
+      vatTotal: string;
+    };
+    PosBasketPricingDto: {
+      automaticDiscountTotal: string;
+      baseNetTotal: string;
+      grossTotal: string;
+      lines: components['schemas']['PosBasketPricedLineDto'][];
+      loyaltyBalance: number;
+      loyaltyDiscountTotal: string;
+      loyaltyPointsRedeemed: number;
+      manualDiscountTotal: string;
+      netTotal: string;
+      vatTotal: string;
+    };
+    PosCashierReportRowDto: {
+      grossReturnsBgn: string;
+      grossSalesBgn: string;
+      name: string;
+      netRevenueBgn: string;
+      operatorCode: string;
+      /** Format: uuid */
+      operatorId: string;
+      returnCount: number;
+      saleCount: number;
+    };
     PosCatalogBatchDto: {
       /** Format: uuid */
       batchId: string;
@@ -6912,6 +7273,46 @@ export interface components {
       total: number;
       totalPages: number;
     };
+    PosCategoryReportRowDto: {
+      /** Format: uuid */
+      categoryId: string;
+      categoryName: string;
+      grossReturnsBgn: string;
+      grossSalesBgn: string;
+      netRevenueBgn: string;
+      quantityReturned: string;
+      quantitySold: string;
+    };
+    PosCommercialRuleDto: {
+      active: boolean;
+      code: string;
+      /** Format: date-time */
+      createdAt: string;
+      /** @enum {string} */
+      discountType: 'fixed_amount' | 'percentage';
+      discountValue: string;
+      /** Format: uuid */
+      id: string;
+      items: components['schemas']['PosCommercialRuleItemDto'][];
+      name: string;
+      priority: number;
+      /** @enum {string} */
+      ruleType: 'bundle' | 'quantity';
+      /** Format: date-time */
+      updatedAt: string;
+      /** Format: date */
+      validFrom: string;
+      /** Format: date */
+      validTo: string;
+      version: number;
+    };
+    PosCommercialRuleItemDto: {
+      productCode: string;
+      /** Format: uuid */
+      productId: string;
+      productName: string;
+      requiredQuantity: string;
+    };
     PosCustomerLocationOptionDto: {
       city: string;
       /** Format: uuid */
@@ -6922,9 +7323,102 @@ export interface components {
       /** Format: uuid */
       id: string;
       locations: components['schemas']['PosCustomerLocationOptionDto'][];
+      loyalty?: components['schemas']['PosLoyaltyAccountDto'];
       name: string;
       uic?: string;
       vatNumber?: string;
+    };
+    PosDiscountAuthorizationDto: {
+      approverName: string;
+      /** @enum {string} */
+      discountType: 'fixed_amount' | 'percentage';
+      discountValue: string;
+      /** Format: date-time */
+      expiresAt: string;
+      /** Format: uuid */
+      id: string;
+      reason: string;
+    };
+    PosLocationReportRowDto: {
+      averageSaleBgn: string;
+      /** Format: uuid */
+      businessLocationId: string;
+      grossReturnsBgn: string;
+      grossSalesBgn: string;
+      locationName: string;
+      netRevenueBgn: string;
+      returnCount: number;
+      revenueSharePercent: number;
+      saleCount: number;
+    };
+    PosLoyaltyAccountDto: {
+      balance: number;
+      cardNumber: string;
+      /** Format: uuid */
+      id: string;
+      programName: string;
+      redemptionValueBgn: string;
+      /** @enum {string} */
+      status: 'active' | 'suspended';
+    };
+    PosLoyaltyLedgerDto: {
+      account: components['schemas']['PosLoyaltyAccountDto'];
+      entries: components['schemas']['PosLoyaltyLedgerEntryDto'][];
+    };
+    PosLoyaltyLedgerEntryDto: {
+      balanceAfter: number;
+      /** @enum {string} */
+      entryType: 'adjustment' | 'earned' | 'earned_reversed' | 'redeemed' | 'redemption_restored';
+      /** Format: uuid */
+      id: string;
+      /** Format: date-time */
+      occurredAt: string;
+      points: number;
+      reason: string;
+      /** Format: uuid */
+      returnId?: string;
+      /** Format: uuid */
+      saleId?: string;
+    };
+    PosManualDiscountDto: {
+      /** Format: uuid */
+      authorizationId: string;
+      /** @enum {string} */
+      discountType: 'fixed_amount' | 'percentage';
+      /** @example 10.0000 */
+      discountValue: string;
+    };
+    PosPaymentReportRowDto: {
+      collectedBgn: string;
+      /** @enum {string} */
+      method: 'card' | 'cash';
+      netBgn: string;
+      refundedBgn: string;
+    };
+    PosPricingAdjustmentDto: {
+      amount: string;
+      code: string;
+      label: string;
+      /** @enum {string} */
+      source: 'automatic' | 'loyalty' | 'manual';
+    };
+    PosProductReportRowDto: {
+      categoryName: string;
+      grossReturnsBgn: string;
+      grossSalesBgn: string;
+      netRevenueBgn: string;
+      productCode: string;
+      /** Format: uuid */
+      productId: string;
+      productName: string;
+      quantityReturned: string;
+      quantitySold: string;
+    };
+    PosQuickAccessDto: {
+      /** Format: uuid */
+      cashRegisterId: string;
+      items: components['schemas']['PosCatalogItemDto'][];
+      productIds: string[];
     };
     PosRegisterOptionDto: {
       /** Format: uuid */
@@ -6940,11 +7434,188 @@ export interface components {
       operatorCode: string;
       /** Format: uuid */
       operatorId: string;
+      paymentTerminalLabel?: string;
+      /** @enum {string} */
+      paymentTerminalMode: 'disabled' | 'hardware' | 'simulator';
+      /** Format: uuid */
+      serviceReturnWarehouseId?: string;
+      serviceReturnWarehouseName?: string;
       /** Format: uuid */
       warehouseId: string;
       warehouseName: string;
     };
+    PosReportDefinitionDto: {
+      description: string;
+      formats: ('csv' | 'xlsx' | 'pdf')[];
+      /** @enum {string} */
+      key:
+        | 'pos.shift-register'
+        | 'pos.cashier-performance'
+        | 'pos.x-report'
+        | 'pos.z-report'
+        | 'pos.product-sales'
+        | 'pos.category-sales'
+        | 'pos.payment-methods'
+        | 'pos.location-sales'
+        | 'pos.location-comparison';
+      name: string;
+      requiresDateRange: boolean;
+      requiresShift: boolean;
+    };
+    PosReportExportDto: {
+      attemptCount: number;
+      /** Format: date-time */
+      completedAt?: string;
+      /** Format: date-time */
+      createdAt: string;
+      /** @enum {string} */
+      definitionKey:
+        | 'pos.shift-register'
+        | 'pos.cashier-performance'
+        | 'pos.x-report'
+        | 'pos.z-report'
+        | 'pos.product-sales'
+        | 'pos.category-sales'
+        | 'pos.payment-methods'
+        | 'pos.location-sales'
+        | 'pos.location-comparison';
+      errorCode?: string;
+      fileName?: string;
+      /** @enum {string} */
+      format: 'csv' | 'xlsx' | 'pdf';
+      /** Format: uuid */
+      id: string;
+      name: string;
+      rowCount?: number;
+      sizeBytes?: number;
+      /** @enum {string} */
+      status: 'queued' | 'processing' | 'completed' | 'failed';
+    };
+    PosReportExportPageDto: {
+      items: components['schemas']['PosReportExportDto'][];
+      page: number;
+      pageSize: number;
+      total: number;
+      totalPages: number;
+    };
+    PosReportOperatorOptionDto: {
+      /** Format: uuid */
+      businessLocationId: string;
+      code: string;
+      /** Format: uuid */
+      id: string;
+      name: string;
+    };
+    PosReportOverviewDto: {
+      cashiers: components['schemas']['PosCashierReportRowDto'][];
+      categories: components['schemas']['PosCategoryReportRowDto'][];
+      /** Format: date */
+      dateFrom: string;
+      /** Format: date */
+      dateTo: string;
+      /** Format: date-time */
+      generatedAt: string;
+      locations: components['schemas']['PosLocationReportRowDto'][];
+      payments: components['schemas']['PosPaymentReportRowDto'][];
+      products: components['schemas']['PosProductReportRowDto'][];
+      shifts: components['schemas']['PosShiftReportRowDto'][];
+      timezone: string;
+      totals: components['schemas']['PosReportTotalsDto'];
+    };
+    PosReportReferenceDataDto: {
+      businessTimezone: string;
+      locations: components['schemas']['PosReportReferenceOptionDto'][];
+      operators: components['schemas']['PosReportOperatorOptionDto'][];
+      registers: components['schemas']['PosReportRegisterOptionDto'][];
+    };
+    PosReportReferenceOptionDto: {
+      /** Format: uuid */
+      id: string;
+      name: string;
+    };
+    PosReportRegisterOptionDto: {
+      /** Format: uuid */
+      businessLocationId: string;
+      code: string;
+      /** Format: uuid */
+      id: string;
+      name: string;
+    };
+    PosReportTotalsDto: {
+      averageSaleBgn: string;
+      grossReturnsBgn: string;
+      grossSalesBgn: string;
+      itemQuantityReturned: string;
+      itemQuantitySold: string;
+      netRevenueBgn: string;
+      netSalesBgn: string;
+      returnCount: number;
+      saleCount: number;
+      vatSalesBgn: string;
+    };
+    PosReturnDto: {
+      /** Format: date-time */
+      completedAt: string;
+      fiscalAdapter: string;
+      fiscalReversalNumber: string;
+      grossTotal: string;
+      /** Format: uuid */
+      id: string;
+      lines: components['schemas']['PosReturnLineDto'][];
+      loyaltyPointsEarnedReversed: number;
+      loyaltyPointsRedeemedRestored: number;
+      netTotal: string;
+      /** Format: uuid */
+      originalSaleId: string;
+      originalSaleNumber: string;
+      reason: string;
+      refunds: components['schemas']['PosReturnRefundDto'][];
+      returnNumber: string;
+      /** Format: uuid */
+      shiftId: string;
+      vatTotal: string;
+    };
+    PosReturnLineDto: {
+      /** Format: uuid */
+      destinationWarehouseId: string;
+      destinationWarehouseName: string;
+      /** @enum {string} */
+      disposition: 'restock' | 'service';
+      grossTotal: string;
+      /** Format: uuid */
+      id: string;
+      netTotal: string;
+      /** Format: uuid */
+      originalSaleLineId: string;
+      productCode: string;
+      /** Format: uuid */
+      productId: string;
+      productName: string;
+      quantity: string;
+      serialNumbers: string[];
+      vatTotal: string;
+    };
+    PosReturnPageDto: {
+      items: components['schemas']['PosReturnDto'][];
+      page: number;
+      pageSize: number;
+      total: number;
+      totalPages: number;
+    };
+    PosReturnRefundDto: {
+      adapter: string;
+      amount: string;
+      /** Format: uuid */
+      id: string;
+      /** @enum {string} */
+      method: 'card' | 'cash';
+      providerReference?: string;
+      /** @enum {string} */
+      status: 'completed' | 'simulated';
+    };
     PosSaleDto: {
+      automaticDiscountTotal: string;
+      baseNetTotal: string;
       cashTendered: string;
       changeAmount: string;
       /** Format: date-time */
@@ -6957,29 +7628,44 @@ export interface components {
       fiscalAdapter: string;
       fiscalReceiptNumber: string;
       /** @enum {string} */
-      fiscalStatus: 'fiscalized' | 'reversed' | 'simulated';
+      fiscalStatus: 'fiscalized' | 'partially_reversed' | 'reversed' | 'simulated';
       grossTotal: string;
       /** Format: uuid */
       id: string;
       lines: components['schemas']['PosSaleLineDto'][];
+      loyaltyDiscountTotal: string;
+      loyaltyPointsEarned: number;
+      loyaltyPointsRedeemed: number;
+      manualDiscountTotal: string;
       netTotal: string;
+      payments: components['schemas']['PosSalePaymentDto'][];
       saleNumber: string;
       /** Format: uuid */
       shiftId: string;
       /** @enum {string} */
-      status: 'completed' | 'reversed';
+      status: 'completed' | 'partially_returned' | 'returned';
       vatTotal: string;
     };
     PosSaleLineDto: {
+      automaticDiscountTotal: string;
+      baseNetTotal: string;
+      /** Format: uuid */
+      batchId?: string;
       grossTotal: string;
       /** Format: uuid */
       id: string;
+      loyaltyDiscountTotal: string;
+      manualDiscountTotal: string;
       netTotal: string;
+      pricingAdjustments: components['schemas']['PosPricingAdjustmentDto'][];
       productCode: string;
       /** Format: uuid */
       productId: string;
       productName: string;
       quantity: string;
+      returnableQuantity: string;
+      returnableSerialNumbers: string[];
+      returnedQuantity: string;
       serialNumbers: string[];
       unitPrice: string;
       vatTotal: string;
@@ -6992,6 +7678,20 @@ export interface components {
       pageSize: number;
       total: number;
       totalPages: number;
+    };
+    PosSalePaymentDto: {
+      adapter: string;
+      amount: string;
+      changeAmount: string;
+      /** Format: uuid */
+      id: string;
+      /** @enum {string} */
+      method: 'card' | 'cash';
+      providerReference?: string;
+      refundableAmount: string;
+      /** @enum {string} */
+      status: 'completed' | 'simulated';
+      tenderedAmount: string;
     };
     PosShiftDto: {
       /** Format: uuid */
@@ -7016,6 +7716,41 @@ export interface components {
       /** Format: uuid */
       warehouseId: string;
       warehouseName: string;
+    };
+    PosShiftReportRowDto: {
+      cashRefundsBgn: string;
+      cashRegisterCode: string;
+      /** Format: uuid */
+      cashRegisterId: string;
+      cashRegisterName: string;
+      cashSalesBgn: string;
+      /** Format: date-time */
+      closedAt?: string;
+      closingCashBgn?: string;
+      differenceBgn?: string;
+      expectedCashBgn: string;
+      /** @enum {string} */
+      fiscalMode: 'disabled' | 'hardware' | 'simulator';
+      grossReturnsBgn: string;
+      grossSalesBgn: string;
+      /** Format: uuid */
+      id: string;
+      locationName: string;
+      netRevenueBgn: string;
+      /** Format: date-time */
+      openedAt: string;
+      openingCashBgn: string;
+      operatorCode: string;
+      /** Format: uuid */
+      operatorId: string;
+      operatorName: string;
+      /** @enum {string} */
+      reportType: 'x' | 'z';
+      returnCount: number;
+      saleCount: number;
+      shiftNumber: string;
+      /** @enum {string} */
+      status: 'closed' | 'open';
     };
     PosTerminalContextDto: {
       currentShift?: components['schemas']['PosShiftDto'];
@@ -7053,6 +7788,15 @@ export interface components {
       productId: string;
       productName: string;
       unitPrice: string;
+    };
+    PricePosBasketDto: {
+      /** Format: uuid */
+      customerPartnerId?: string;
+      lines: components['schemas']['CreatePosSaleLineDto'][];
+      loyaltyPointsToRedeem?: number;
+      manualDiscount?: components['schemas']['PosManualDiscountDto'];
+      /** Format: uuid */
+      shiftId: string;
     };
     PricingOptionDto: {
       /** Format: uuid */
@@ -8566,6 +9310,29 @@ export interface components {
       roles: ('customer' | 'supplier' | 'partner')[];
       uic?: string;
       vatNumber?: string;
+    };
+    UpdatePosCommercialRuleDto: {
+      active: boolean;
+      code: string;
+      /** @enum {string} */
+      discountType: 'fixed_amount' | 'percentage';
+      /** @example 10.0000 */
+      discountValue: string;
+      items: components['schemas']['CreatePosCommercialRuleItemDto'][];
+      name: string;
+      priority: number;
+      /** @enum {string} */
+      ruleType: 'bundle' | 'quantity';
+      /** Format: date */
+      validFrom: string;
+      /** Format: date */
+      validTo: string;
+      version: number;
+    };
+    UpdatePosQuickAccessDto: {
+      productIds: string[];
+      /** Format: uuid */
+      shiftId: string;
     };
     UpdatePriceListDto: {
       active: boolean;
@@ -15221,6 +15988,43 @@ export interface operations {
       };
     };
   };
+  PosController_priceBasket: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['PricePosBasketDto'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PosBasketPricingDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
   PosController_catalog: {
     parameters: {
       query: {
@@ -15295,6 +16099,522 @@ export interface operations {
       };
     };
   };
+  PosController_authorizeDiscount: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['CreatePosDiscountAuthorizationDto'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PosDiscountAuthorizationDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  PosController_enrolLoyalty: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['EnrolPosLoyaltyDto'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PosLoyaltyAccountDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  PosController_loyaltyLedger: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        customerPartnerId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PosLoyaltyLedgerDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  PosController_quickAccess: {
+    parameters: {
+      query: {
+        customerPartnerId?: string;
+        shiftId: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PosQuickAccessDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  PosController_updateQuickAccess: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['UpdatePosQuickAccessDto'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PosQuickAccessDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  PosReportExportsController_list: {
+    parameters: {
+      query?: {
+        page?: number;
+        pageSize?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PosReportExportPageDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  PosReportExportsController_create: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['CreatePosReportExportDto'];
+      };
+    };
+    responses: {
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PosReportExportDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  PosReportExportsController_content: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: unknown;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description The completed point-of-sale report export. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/pdf': string;
+          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': string;
+          'text/csv': string;
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  PosReportExportsController_retry: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: unknown;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PosReportExportDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  PosReportExportsController_definitions: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PosReportDefinitionDto'][];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  PosReportsController_overview: {
+    parameters: {
+      query: {
+        businessLocationId?: string;
+        cashRegisterId?: string;
+        dateFrom: string;
+        dateTo: string;
+        operatorId?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PosReportOverviewDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  PosReportsController_referenceData: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PosReportReferenceDataDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  PosController_returns: {
+    parameters: {
+      query?: {
+        page?: number;
+        pageSize?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PosReturnPageDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  PosController_createReturn: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['CreatePosReturnDto'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PosReturnDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
   PosController_sales: {
     parameters: {
       query?: {
@@ -15342,7 +16662,7 @@ export interface operations {
     };
     requestBody: {
       content: {
-        'application/json': components['schemas']['CreatePosCashSaleDto'];
+        'application/json': components['schemas']['CreatePosSaleDto'];
       };
     };
     responses: {
@@ -16218,6 +17538,119 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['SalesWorkflowDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  SalesController_posCommercialRules: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PosCommercialRuleDto'][];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  SalesController_createPosCommercialRule: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['CreatePosCommercialRuleDto'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PosCommercialRuleDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  SalesController_updatePosCommercialRule: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path: {
+        id: unknown;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['UpdatePosCommercialRuleDto'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PosCommercialRuleDto'];
         };
       };
       /** @description The endpoint request limit was exceeded. */

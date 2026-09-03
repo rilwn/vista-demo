@@ -924,14 +924,59 @@ their approved document and hardware decisions.
   `POST /api/v1/pos/shifts/:id/close` records the counted drawer amount.
 - `GET /api/v1/pos/catalog` returns live warehouse availability, applicable BGN
   pricing, VAT treatment, barcodes, serials, and batches for an open shift.
+- `GET /api/v1/pos/quick-access` returns the active register's chosen products
+  with current price and availability; idempotent `PUT /api/v1/pos/quick-access`
+  replaces that ordered set with up to 12 active ERP products.
 - `GET /api/v1/pos/customers` searches the canonical customer and location
-  registry.
-- `POST /api/v1/pos/sales` completes one cash sale; `GET /api/v1/pos/sales`
-  returns the signed-in cashier's completed sale history.
+  registry and includes an active loyalty identity and derived balance when one
+  exists.
+- `POST /api/v1/pos/baskets/price` returns authoritative line and basket totals,
+  with each automatic, approved-manual, and loyalty adjustment identified.
+- `POST /api/v1/pos/discount-authorizations` verifies a different employee with
+  `pos:approve` and creates a five-minute, single-use approval for the exact
+  basket. Passwords and authentication codes are not retained in command or
+  audit payloads.
+- `POST /api/v1/pos/loyalty/accounts` enrols a canonical customer, while
+  `GET /api/v1/pos/loyalty/customers/:customerPartnerId` returns the derived
+  balance and append-only points history.
+- `POST /api/v1/pos/sales` completes one cash, card, or split-payment sale;
+  `GET /api/v1/pos/sales` returns the signed-in cashier's sale history.
+- `POST /api/v1/pos/returns` completes a partial or full return linked to its
+  original sale; `GET /api/v1/pos/returns` returns the cashier's return history.
+- `GET /api/v1/pos/reports/reference-data` and `/reports/overview` provide
+  filtered shift, cashier, product, category, payment, period, location, and
+  cross-location totals. Opening a shift row provides its X report; a closed
+  shift provides its final Z report and cash reconciliation.
+- `GET /api/v1/pos/report-exports/definitions`, `GET|POST
+/api/v1/pos/report-exports`, `POST /api/v1/pos/report-exports/:id/retry`, and
+  `GET /api/v1/pos/report-exports/:id/content` expose the nine controlled POS
+  reports as account-scoped queued CSV, Excel, or PDF files.
 
 Writes require `pos:create`, an idempotency key, and an assigned register.
-Reads require `pos:view`. Checkout recalculates all values on the server, locks
-stock and serial records, and commits the sale, payment, inventory movement,
-customer equipment/warranty record, audit event, and outbox event together. The
-development receipt simulator is rejected in production; it is not certified
-fiscal-device acceptance.
+Reads require `pos:view`; returns additionally require `pos:edit`. Checkout
+recalculates all prices, offers, discounts, rewards, and VAT on the server,
+locks stock and serial records, and
+commits the sale, payments, inventory movement, customer equipment/warranty
+record, audit event, and outbox event together. Returns lock the original sale,
+limit each line and serial to its unreturned balance, refund only its original
+payment methods, and atomically restore stock or transfer serialised equipment
+to Service. Loyalty earning and redemption commit with the sale; returns append
+proportional earned-point reversals and redeemed-point restorations. The database
+rejects updates or deletions to posted loyalty ledger entries. Repeated sale and
+return commands are idempotent. Development fiscal
+and card simulators are rejected in production; they are not certified device
+acceptance.
+
+Quick-access changes require `pos:edit`; report reads require `pos:view`, and
+preparing or retrying an export requires `pos:create`. Report totals use posted
+sale, return, payment, shift, register, operator, and immutable line-category
+evidence. X and Z output produced with the development fiscal simulator is
+clearly identified as operational test output rather than a certified H-18
+report.
+
+Sales users maintain quantity and bundle rules through
+`GET|POST /api/v1/sales/pos-commercial-rules` and versioned
+`PUT /api/v1/sales/pos-commercial-rules/:id`. Rules carry validity dates,
+priority, discount type/value, and qualifying products/quantities. A quantity
+rule has one product; a bundle has at least two. One automatic rule can claim a
+product per basket, so higher priority wins and results remain reproducible.

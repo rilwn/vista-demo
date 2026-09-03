@@ -1,4 +1,4 @@
-import { Button, InlineAlert } from '@vista/ui';
+import { Button, InlineAlert, Toast } from '@vista/ui';
 import type {
   CreateLogisticsDeliveryRequest,
   CreateLogisticsReturnRequest,
@@ -146,14 +146,9 @@ export function LogisticsOperationsPage({ view }: { view: LogisticsOperationsVie
       <LogisticsTabs />
 
       {notice ? (
-        <InlineAlert tone="success">
-          <div className="logistics-notice">
-            <span>{notice}</span>
-            <button aria-label="Dismiss message" onClick={() => setNotice(null)} type="button">
-              Close
-            </button>
-          </div>
-        </InlineAlert>
+        <Toast onDismiss={() => setNotice(null)} tone="success">
+          {notice}
+        </Toast>
       ) : null}
 
       {view === 'deliveries' ? (

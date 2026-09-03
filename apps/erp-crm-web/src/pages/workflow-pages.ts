@@ -86,7 +86,7 @@ export const workflowPages: WorkflowPageDefinition[] = [
         items: [
           'Sales-draft or manual preparation',
           'Original invoice and correction links',
-          'Concurrency-safe internal references by issuing scope',
+          'Protected document numbering for each issuing location',
         ],
       },
       {

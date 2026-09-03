@@ -1,14 +1,17 @@
 import type {
   CreateCustomerPriceGroupRequest,
   CreatePriceListRequest,
+  CreatePosCommercialRuleRequest,
   CreatePromotionalCampaignRequest,
   CustomerPriceGroup,
   PriceList,
+  PosCommercialRule,
   PromotionalCampaign,
   SalesPricingReferenceData,
   SalesResolvedPrice,
   UpdateCustomerPriceGroupRequest,
   UpdatePriceListRequest,
+  UpdatePosCommercialRuleRequest,
   UpdatePromotionalCampaignRequest,
 } from '@vista/contracts';
 
@@ -30,6 +33,43 @@ export function getSalesPricingReferenceData(token: string): Promise<SalesPricin
 export function listPriceLists(token: string): Promise<PriceList[]> {
   return unwrapApiResponse(
     apiClient.GET('/api/v1/sales/price-lists', { headers: authorizationHeaders(token) }),
+  );
+}
+
+export function listPosCommercialRules(token: string): Promise<PosCommercialRule[]> {
+  return unwrapApiResponse(
+    apiClient.GET('/api/v1/sales/pos-commercial-rules', {
+      headers: authorizationHeaders(token),
+    }),
+  );
+}
+
+export function createPosCommercialRule(
+  token: string,
+  key: string,
+  input: CreatePosCommercialRuleRequest,
+): Promise<PosCommercialRule> {
+  return unwrapApiResponse(
+    apiClient.POST('/api/v1/sales/pos-commercial-rules', {
+      body: input,
+      headers: authorizationHeaders(token),
+      params: { header: idempotencyParameters(key).header },
+    }),
+  );
+}
+
+export function updatePosCommercialRule(
+  token: string,
+  id: string,
+  key: string,
+  input: UpdatePosCommercialRuleRequest,
+): Promise<PosCommercialRule> {
+  return unwrapApiResponse(
+    apiClient.PUT('/api/v1/sales/pos-commercial-rules/{id}', {
+      body: input,
+      headers: authorizationHeaders(token),
+      params: { header: idempotencyParameters(key).header, path: { id } },
+    }),
   );
 }
 

@@ -1,4 +1,4 @@
-import { Button, InlineAlert } from '@vista/ui';
+import { Button, InlineAlert, Toast } from '@vista/ui';
 import type {
   CreateFinanceCashVoucherRequest,
   FinanceCashDailyReport,
@@ -101,14 +101,13 @@ export function FinanceCashPage() {
       <FinanceTabs />
 
       {notice ? (
-        <InlineAlert tone={notice.includes('could not') ? 'error' : 'success'}>
-          <div className="cash-notice">
-            <span>{notice}</span>
-            <button aria-label="Dismiss message" onClick={() => setNotice(null)} type="button">
-              Close
-            </button>
-          </div>
-        </InlineAlert>
+        <Toast
+          durationMs={notice.includes('could not') ? 7000 : 5200}
+          onDismiss={() => setNotice(null)}
+          tone={notice.includes('could not') ? 'error' : 'success'}
+        >
+          {notice}
+        </Toast>
       ) : null}
 
       {!data.references.cashRegisters.length ? (

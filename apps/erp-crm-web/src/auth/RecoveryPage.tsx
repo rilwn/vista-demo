@@ -87,40 +87,22 @@ export function RecoveryPage() {
   return (
     <main className="login-page recovery-page">
       <section className="login-context" aria-label={messages.product.name}>
-        <VistaMark product={messages.product.name} />
-        <div className="login-context-copy">
-          <p className="login-context-eyebrow">Account recovery</p>
-          <h1>Get back to work securely.</h1>
-          <p>
-            A recovery code is issued only after a Vista Service administrator verifies the
-            employee’s identity.
-          </p>
-          <ul>
-            <li>
-              <span aria-hidden="true" /> A short-lived, single-use code
-            </li>
-            <li>
-              <span aria-hidden="true" /> A fresh password for every recovery
-            </li>
-            <li>
-              <span aria-hidden="true" /> New authenticator setup for administrator accounts
-            </li>
-          </ul>
-        </div>
-        <p className="login-context-security">
-          <Icon name="shield" size={17} /> Your existing sign-ins are closed when recovery is
-          completed.
-        </p>
+        <VistaMark product="Vista Service" />
       </section>
 
       <section className="login-form-pane">
-        <div className="login-mobile-brand">
-          <VistaMark product={messages.product.name} />
-        </div>
         <div className="login-form-wrap recovery-form-wrap">
+          <header className="login-card-context">
+            <span className="login-product-icon" aria-hidden="true">
+              <Icon name="shield" size={24} />
+            </span>
+            <span>
+              <small>Secure staff access</small>
+              <strong>Account recovery</strong>
+            </span>
+          </header>
           {step === 'form' ? (
             <>
-              <p className="page-eyebrow">Employee access</p>
               <h2>Recover your account</h2>
               <p className="login-form-subtitle">
                 Enter the one-time code supplied by your administrator and choose a new password.
@@ -196,7 +178,6 @@ export function RecoveryPage() {
 
           {step === 'enrollment' && enrollment ? (
             <>
-              <p className="page-eyebrow">Account recovery</p>
               <h2>Set up your authenticator</h2>
               <p className="login-form-subtitle">
                 Add a time-based code in your authenticator app, then enter its current six-digit
@@ -277,7 +258,6 @@ function RecoveryStatus({
       <span className="recovery-status-mark" aria-hidden="true">
         <Icon name="shield" size={21} />
       </span>
-      <p className="page-eyebrow">Account recovery</p>
       <h2>{title}</h2>
       <p>{detail}</p>
       <div className="recovery-status-actions">{children}</div>

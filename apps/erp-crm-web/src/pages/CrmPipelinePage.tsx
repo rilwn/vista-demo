@@ -1,4 +1,4 @@
-import { Button, InlineAlert } from '@vista/ui';
+import { Button, InlineAlert, Toast } from '@vista/ui';
 import type {
   ConvertCrmLeadRequest,
   CreateCrmLeadRequest,
@@ -251,14 +251,9 @@ export function CrmPipelinePage() {
       <CrmTabs />
 
       {notice ? (
-        <InlineAlert tone="success">
-          <div className="crm-pipeline-notice">
-            <span>{notice}</span>
-            <button onClick={() => setNotice(null)} type="button">
-              Close
-            </button>
-          </div>
-        </InlineAlert>
+        <Toast onDismiss={() => setNotice(null)} tone="success">
+          {notice}
+        </Toast>
       ) : null}
       {error ? (
         <InlineAlert tone="error">

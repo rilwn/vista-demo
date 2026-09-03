@@ -1,4 +1,4 @@
-import { Button, InlineAlert } from '@vista/ui';
+import { Button, InlineAlert, Toast } from '@vista/ui';
 import type {
   CreateSalesQuotationRequest,
   SalesReferenceData,
@@ -59,7 +59,11 @@ export function SalesWorkflowPage() {
       </header>
 
       <WorkflowSummary workflows={data.workflows} />
-      {notice ? <InlineAlert tone="success">{notice}</InlineAlert> : null}
+      {notice ? (
+        <Toast onDismiss={() => setNotice(null)} tone="success">
+          {notice}
+        </Toast>
+      ) : null}
       <SalesRegister onPreview={setPreview} workflows={data.workflows} />
 
       {creating ? (

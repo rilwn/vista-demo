@@ -1,4 +1,4 @@
-import { Button, InlineAlert } from '@vista/ui';
+import { Button, InlineAlert, Toast } from '@vista/ui';
 import type {
   CreateFinanceReportExportRequest,
   FinanceAgingKind,
@@ -323,7 +323,11 @@ function ReportExportPanel({
         <div className="security-drawer-body report-export-drawer-body">
           {loading ? <ReportState title="Loading reports" /> : null}
           {error ? <InlineAlert tone="error">{error}</InlineAlert> : null}
-          {message ? <InlineAlert tone="success">{message}</InlineAlert> : null}
+          {message ? (
+            <Toast onDismiss={() => setMessage(null)} tone="success">
+              {message}
+            </Toast>
+          ) : null}
 
           {!loading ? (
             <section className="report-export-form" aria-label="Report options">

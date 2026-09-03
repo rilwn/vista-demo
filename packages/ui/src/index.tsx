@@ -4,7 +4,7 @@ import type {
   PropsWithChildren,
   ReactNode,
 } from 'react';
-import { type FormEvent, useState } from 'react';
+import { type FormEvent, useEffect, useRef, useState } from 'react';
 
 export { SearchableSelects } from './searchable-selects';
 
@@ -57,13 +57,24 @@ export function VistaMark({ compact = false, product = 'Vista Service' }: VistaM
   return (
     <div className="vista-mark" aria-label={compact ? product : undefined}>
       <span className="vista-mark-symbol" aria-hidden="true">
-        <span>V</span>
-        <span>S</span>
+        <svg
+          fill="none"
+          shapeRendering="geometricPrecision"
+          stroke="currentColor"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth="1.35"
+          viewBox="0 0 32 32"
+        >
+          <path d="M6.5 8.5 14 23.25 25.5 7" />
+          <path d="m12.5 8.5 5.25 10.25L25.5 7" />
+          <circle cx="25.5" cy="7" r="1.7" />
+        </svg>
       </span>
       {compact ? null : (
         <span className="vista-mark-copy">
           <strong>{product}</strong>
-          <small>Business systems</small>
+          <small>Vista workspace</small>
         </span>
       )}
     </div>
@@ -180,6 +191,146 @@ export function InlineAlert({ children, title, tone = 'info' }: InlineAlertProps
   );
 }
 
+export interface ToastProps extends PropsWithChildren {
+  durationMs?: number;
+  onDismiss?: () => void;
+  title?: string;
+  tone?: 'error' | 'info' | 'success' | 'warning';
+}
+
+/** A short-lived message for completed actions and other page-level feedback. */
+export function Toast({
+  children,
+  durationMs = 5200,
+  onDismiss,
+  title,
+  tone = 'info',
+}: ToastProps) {
+  const [visible, setVisible] = useState(true);
+  const onDismissRef = useRef(onDismiss);
+
+  useEffect(() => {
+    onDismissRef.current = onDismiss;
+  }, [onDismiss]);
+
+  useEffect(() => {
+    setVisible(true);
+    if (durationMs <= 0) return undefined;
+    const timer = window.setTimeout(() => {
+      setVisible(false);
+      onDismissRef.current?.();
+    }, durationMs);
+    return () => window.clearTimeout(timer);
+  }, [children, durationMs]);
+
+  if (!visible) return null;
+
+  const dismiss = () => {
+    setVisible(false);
+    onDismiss?.();
+  };
+
+  return (
+    <aside
+      aria-atomic="true"
+      className={`vista-toast vista-toast--${tone}`}
+      role={tone === 'error' ? 'alert' : 'status'}
+    >
+      <span className="vista-toast-icon" aria-hidden="true">
+        <ToastIcon tone={tone} />
+      </span>
+      <div className="vista-toast-copy">
+        {title ? <strong>{title}</strong> : null}
+        <div>{children}</div>
+      </div>
+      <button aria-label="Dismiss message" onClick={dismiss} type="button">
+        <svg
+          aria-hidden="true"
+          fill="none"
+          shapeRendering="geometricPrecision"
+          stroke="currentColor"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth="1.9"
+          viewBox="0 0 20 20"
+        >
+          <path d="m5.5 5.5 9 9m0-9-9 9" />
+        </svg>
+      </button>
+      {durationMs > 0 ? (
+        <span
+          className="vista-toast-timer"
+          style={{ animationDuration: `${durationMs}ms` }}
+          aria-hidden="true"
+        />
+      ) : null}
+    </aside>
+  );
+}
+
+function ToastIcon({ tone }: { tone: NonNullable<ToastProps['tone']> }) {
+  if (tone === 'success') {
+    return (
+      <svg
+        fill="none"
+        shapeRendering="geometricPrecision"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.9"
+        viewBox="0 0 24 24"
+      >
+        <path d="m6.5 12 3.4 3.5L17.8 8" />
+      </svg>
+    );
+  }
+  if (tone === 'error') {
+    return (
+      <svg
+        fill="none"
+        shapeRendering="geometricPrecision"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.9"
+        viewBox="0 0 24 24"
+      >
+        <path d="M12 8v5m0 3.1v.1" />
+        <circle cx="12" cy="12" r="8.5" />
+      </svg>
+    );
+  }
+  if (tone === 'warning') {
+    return (
+      <svg
+        fill="none"
+        shapeRendering="geometricPrecision"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.9"
+        viewBox="0 0 24 24"
+      >
+        <path d="M12 8v5m0 3.1v.1M4.6 18.5 12 5l7.4 13.5z" />
+      </svg>
+    );
+  }
+  return (
+    <svg
+      fill="none"
+      shapeRendering="geometricPrecision"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="1.9"
+      viewBox="0 0 24 24"
+    >
+      <path d="M12 10.5v6m0-9.2v.2" />
+      <circle cx="12" cy="12" r="8.5" />
+    </svg>
+  );
+}
+
 export interface BrowserSignInInput {
   email: string;
   password: string;
@@ -193,6 +344,7 @@ export interface AuthenticationFormProps {
   onAuthenticate: (input: BrowserSignInInput) => Promise<void>;
   subtitle: string;
   supportText: string;
+  variant?: 'operations' | 'pos' | 'recovery';
 }
 
 /** A restrained, shared sign-in surface for each separately hosted Vista app. */
@@ -203,6 +355,7 @@ export function AuthenticationForm({
   onAuthenticate,
   subtitle,
   supportText,
+  variant = 'operations',
 }: AuthenticationFormProps) {
   const [busy, setBusy] = useState(false);
   const [email, setEmail] = useState('');
@@ -210,6 +363,14 @@ export function AuthenticationForm({
   const [password, setPassword] = useState('');
   const [step, setStep] = useState<'credentials' | 'totp'>('credentials');
   const [totpCode, setTotpCode] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+
+  const credentialTitle =
+    variant === 'pos'
+      ? 'Open the counter'
+      : variant === 'recovery'
+        ? 'Open recovery centre'
+        : 'Open your workspace';
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -230,25 +391,26 @@ export function AuthenticationForm({
   }
 
   return (
-    <main className="vista-auth-page">
+    <main className={`vista-auth-page vista-auth-page--${variant}`}>
       <section className="vista-auth-context" aria-label={applicationName}>
-        <VistaMark product={applicationName} />
-        <div>
-          <p className="vista-auth-eyebrow">{eyebrow}</p>
-          <h1>{applicationName}</h1>
-          <p>{subtitle}</p>
-        </div>
-        <small>Individual employee access · Permission-controlled workspace</small>
+        <VistaMark product="Vista Service" />
       </section>
       <section className="vista-auth-panel">
         <div className="vista-auth-panel-inner">
-          <p className="vista-eyebrow">
-            {step === 'credentials' ? 'Employee access' : 'Step 2 of 2'}
-          </p>
-          <h2>{step === 'credentials' ? 'Sign in to continue' : 'Verify it is you'}</h2>
+          <header className="vista-auth-card-context">
+            <span className="vista-auth-product-icon" aria-hidden="true">
+              <AuthProductIcon variant={variant} />
+            </span>
+            <span>
+              <small>{eyebrow}</small>
+              <strong>{applicationName}</strong>
+            </span>
+            {step === 'totp' ? <em>Step 2</em> : null}
+          </header>
+          <h2>{step === 'credentials' ? credentialTitle : 'Confirm your sign-in'}</h2>
           <p>
             {step === 'credentials'
-              ? 'Use the individual account assigned to you.'
+              ? subtitle
               : 'Enter the current six-digit code from your authenticator app.'}
           </p>
           <form className="vista-auth-form" onSubmit={(event) => void submit(event)}>
@@ -277,7 +439,16 @@ export function AuthenticationForm({
                   maxLength={128}
                   onChange={(event) => setPassword(event.target.value)}
                   required
-                  type="password"
+                  trailingAction={
+                    <button
+                      aria-label={showPassword ? 'Hide password' : 'Show password'}
+                      onClick={() => setShowPassword((current) => !current)}
+                      type="button"
+                    >
+                      {showPassword ? 'Hide' : 'Show'}
+                    </button>
+                  }
+                  type={showPassword ? 'text' : 'password'}
                   value={password}
                 />
               </>
@@ -330,6 +501,41 @@ export function AuthenticationForm({
         </div>
       </section>
     </main>
+  );
+}
+
+function AuthProductIcon({
+  variant,
+}: {
+  variant: NonNullable<AuthenticationFormProps['variant']>;
+}) {
+  return (
+    <svg
+      fill="none"
+      shapeRendering="geometricPrecision"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="1.5"
+      viewBox="0 0 32 32"
+    >
+      {variant === 'pos' ? (
+        <>
+          <path d="M6.5 8.5h19v15h-19zM6.5 13h19" />
+          <path d="M10.5 18h5m5 0h1" />
+        </>
+      ) : variant === 'recovery' ? (
+        <>
+          <path d="M16 4.5 25 8v7.3c0 5.7-3.8 9.7-9 12.2-5.2-2.5-9-6.5-9-12.2V8z" />
+          <path d="m11.5 16 3 3 6.2-7" />
+        </>
+      ) : (
+        <>
+          <path d="M6 7h20v18H6zM6 12h20" />
+          <path d="M11 17h4m-4 4h9" />
+        </>
+      )}
+    </svg>
   );
 }
 

@@ -1,6 +1,6 @@
 import { useBrowserSession } from '@vista/auth/browser-session';
 import type { AuthenticationContextResponse, LoginRequest, LoginResponse } from '@vista/contracts';
-import { AuthenticationForm, Button, SearchableSelects } from '@vista/ui';
+import { AuthenticationForm, Button, SearchableSelects, VistaMark } from '@vista/ui';
 
 import { ApiClientError, authenticate, getCurrentAccount, revokeSession } from './api/auth';
 import { PosTerminal } from './PosTerminal';
@@ -37,8 +37,9 @@ function Application() {
         eyebrow="Cashier terminal"
         errorMessage={signInError}
         onAuthenticate={authentication.login}
-        subtitle="Secure cashier access for the Vista Service point of sale."
-        supportText="Contact a Vista Service administrator if you cannot sign in."
+        subtitle="Use your assigned cashier account."
+        supportText="Need help? Contact your Vista Service administrator."
+        variant="pos"
       />
     );
   }
@@ -54,6 +55,7 @@ function Application() {
   }
   return (
     <PosTerminal
+      accountId={session.context.accountId}
       employeeName={session.context.displayName}
       onSignOut={authentication.logout}
       token={session.sessionToken}
@@ -64,9 +66,9 @@ function Application() {
 function ApplicationLoading({ label }: { label: string }) {
   return (
     <main className="application-state" aria-live="polite">
-      <span aria-hidden="true">VS</span>
+      <VistaMark compact product="Vista POS" />
       <strong>{label}</strong>
-      <p>Checking the current browser session.</p>
+      <p>Getting your counter ready.</p>
     </main>
   );
 }
@@ -82,7 +84,7 @@ function AccessUnavailable({
 }) {
   return (
     <main className="application-state application-state--restricted">
-      <span aria-hidden="true">VS</span>
+      <VistaMark compact product={applicationName} />
       <p>{applicationName}</p>
       <h1>{title}</h1>
       <p>Use an account with the required application access, then sign in again.</p>

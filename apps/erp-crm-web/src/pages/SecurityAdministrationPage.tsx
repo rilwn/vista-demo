@@ -1,4 +1,4 @@
-import { Button, InlineAlert, TextField } from '@vista/ui';
+import { Button, InlineAlert, TextField, Toast } from '@vista/ui';
 import { useActiveItemVisibility } from '@vista/ui/navigation';
 import type {
   AccountRecoveryHandoff,
@@ -136,7 +136,11 @@ export function SecurityAdministrationPage() {
         </span>
       </header>
 
-      {notice ? <InlineAlert tone="success">{notice}</InlineAlert> : null}
+      {notice ? (
+        <Toast onDismiss={() => setNotice('')} tone="success">
+          {notice}
+        </Toast>
+      ) : null}
 
       <section className="content-panel security-admin-workspace">
         <div className="security-admin-toolbar">

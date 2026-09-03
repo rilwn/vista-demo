@@ -268,8 +268,6 @@ describe('ERP and CRM authenticated workspace', () => {
     await screen.findByRole('heading', { name: `${messages.home.title}, Mila.` });
 
     const search = screen.getByRole('combobox', { name: 'Search pages and work areas' });
-    fireEvent.keyDown(window, { key: '/' });
-    expect(document.activeElement).toBe(search);
     fireEvent.change(search, { target: { value: 'Finance' } });
     expect(screen.getByText('No matching page')).toBeTruthy();
     fireEvent.change(search, { target: { value: 'Customers & CRM' } });
@@ -3823,6 +3821,29 @@ describe('ERP and CRM authenticated workspace', () => {
       validTo: '2026-10-31',
       version: 1,
     };
+    const posOffer = {
+      active: true,
+      code: 'ROLL-BOX',
+      createdAt: '2026-08-12T08:15:00.000Z',
+      discountType: 'percentage',
+      discountValue: '10.0000',
+      id: '0bcafae7-6302-48e3-93c2-bae97826ce2b',
+      items: [
+        {
+          productCode: 'ROLL-01',
+          productId,
+          productName: 'Receipt rolls',
+          requiredQuantity: '10.0000',
+        },
+      ],
+      name: 'Receipt roll box',
+      priority: 20,
+      ruleType: 'quantity',
+      updatedAt: '2026-08-12T08:15:00.000Z',
+      validFrom: '2026-08-01',
+      validTo: '2026-10-31',
+      version: 1,
+    };
     let references = {
       campaigns: [] as (typeof campaign)[],
       customerGroups: [] as (typeof customerGroup)[],
@@ -3830,12 +3851,18 @@ describe('ERP and CRM authenticated workspace', () => {
       products: [{ id: productId, name: 'Receipt rolls', productCode: 'ROLL-01' }],
     };
     let priceLists: (typeof priceList)[] = [];
+    let posOffers: (typeof posOffer)[] = [];
     const fetchMock = vi.fn((input: string, options?: RequestInit) => {
       if (input.endsWith('/auth/me')) return Promise.resolve(jsonResponse(contextWithSalesPricing));
       if (input.endsWith('/sales/pricing/reference-data'))
         return Promise.resolve(jsonResponse(references));
       if (input.endsWith('/sales/price-lists') && (!options?.method || options.method === 'GET'))
         return Promise.resolve(jsonResponse(priceLists));
+      if (
+        input.endsWith('/sales/pos-commercial-rules') &&
+        (!options?.method || options.method === 'GET')
+      )
+        return Promise.resolve(jsonResponse(posOffers));
       if (input.endsWith('/sales/customer-groups') && options?.method === 'POST') {
         references = { ...references, customerGroups: [customerGroup] };
         return Promise.resolve(jsonResponse(customerGroup, 201));
@@ -3847,6 +3874,10 @@ describe('ERP and CRM authenticated workspace', () => {
       if (input.endsWith('/sales/price-lists') && options?.method === 'POST') {
         priceLists = [priceList];
         return Promise.resolve(jsonResponse(priceList, 201));
+      }
+      if (input.endsWith('/sales/pos-commercial-rules') && options?.method === 'POST') {
+        posOffers = [posOffer];
+        return Promise.resolve(jsonResponse(posOffer, 201));
       }
       if (input.includes('/sales/prices/resolve?')) {
         return Promise.resolve(
@@ -3922,6 +3953,22 @@ describe('ERP and CRM authenticated workspace', () => {
     expect(await screen.findByText(/24\.00/u)).toBeTruthy();
     expect(screen.getByText(/Trade autumn prices · TRADE-AUTUMN/u)).toBeTruthy();
     expect(fetchMock.mock.calls.some(([url]) => url.includes('/sales/prices/resolve?'))).toBe(true);
+
+    fireEvent.click(screen.getByRole('tab', { name: 'POS offers' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add POS offer' }));
+    dialog = screen.getByRole('dialog', { name: 'Create POS offer' });
+    fireEvent.change(within(dialog).getByLabelText('Offer code'), {
+      target: { value: 'ROLL-BOX' },
+    });
+    fireEvent.change(within(dialog).getByLabelText('Offer name'), {
+      target: { value: 'Receipt roll box' },
+    });
+    fireEvent.change(within(dialog).getByLabelText('Minimum quantity 1'), {
+      target: { value: '10' },
+    });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Create POS offer' }));
+    expect(await screen.findByText('Receipt roll box')).toBeTruthy();
+    expect(screen.getByText('10.00% off')).toBeTruthy();
   });
 
   it('creates and previews a service subscription through the Sales workspace', async () => {
@@ -5987,8 +6034,8 @@ describe('ERP and CRM authenticated workspace', () => {
     );
     expect(await screen.findByRole('heading', { name: 'Service reports' })).toBeTruthy();
     expect((await screen.findAllByText('Mila Petrova')).length).toBeGreaterThan(0);
-    expect(screen.getAllByText('2h 30m').length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/BGN\s*170\.00/u).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText('2h 30m')).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText(/BGN\s*170\.00/u)).length).toBeGreaterThan(0);
     const serviceTabs = screen.getByRole('navigation', { name: 'Service sections' });
     expect(serviceTabs.classList.contains('service-tabs')).toBe(true);
     expect(

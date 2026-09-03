@@ -1,4 +1,4 @@
-import { Button, InlineAlert, TextField } from '@vista/ui';
+import { Button, InlineAlert, TextField, Toast } from '@vista/ui';
 import type {
   CreateStockReservationRequest,
   IssueStockRequest,
@@ -156,7 +156,11 @@ function WarehousesView({ permissions, reload, token, warehouses }: OperationalP
       eyebrow="ERP · Warehouse"
       title="Warehouses"
     >
-      {notice ? <InlineAlert tone="success">{notice}</InlineAlert> : null}
+      {notice ? (
+        <Toast onDismiss={() => setNotice(null)} tone="success">
+          {notice}
+        </Toast>
+      ) : null}
       {creating ? (
         <WarehouseCreateForm
           onCreated={(warehouse) => {
@@ -378,7 +382,11 @@ function StockView({
       eyebrow="ERP · Warehouse"
       title="Stock overview"
     >
-      {notice ? <InlineAlert tone="success">{notice}</InlineAlert> : null}
+      {notice ? (
+        <Toast onDismiss={() => setNotice(null)} tone="success">
+          {notice}
+        </Toast>
+      ) : null}
       {settingsOpen ? (
         <StockSettingsForm
           accountId={accountId}

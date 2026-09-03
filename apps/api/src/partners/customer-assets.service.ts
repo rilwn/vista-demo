@@ -333,7 +333,13 @@ export class CustomerAssetsService {
       return equipment;
     } catch (error) {
       await client.query('ROLLBACK');
-      if (constraint(error) === 'customer_equipment_serial_unique') {
+      if (
+        [
+          'customer_equipment_active_serial_item_unique',
+          'customer_equipment_active_serial_number_unique',
+          'customer_equipment_serial_unique',
+        ].includes(constraint(error) ?? '')
+      ) {
         throw new ApiErrorException(
           'CUSTOMER_EQUIPMENT_SERIAL_DUPLICATE',
           'This serial number is already registered to customer equipment',

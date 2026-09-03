@@ -1,4 +1,4 @@
-import { Button, InlineAlert, TextField } from '@vista/ui';
+import { Button, InlineAlert, TextField, Toast } from '@vista/ui';
 import type { BusinessLocation, OrganizationMember, OrganizationTopology } from '@vista/contracts';
 import { type FormEvent, useCallback, useEffect, useRef, useState } from 'react';
 
@@ -92,7 +92,11 @@ export function OrganizationPage() {
         <span className="organization-policy-note">Flexible business structure</span>
       </header>
 
-      {notice ? <InlineAlert tone="success">{notice}</InlineAlert> : null}
+      {notice ? (
+        <Toast onDismiss={() => setNotice(null)} tone="success">
+          {notice}
+        </Toast>
+      ) : null}
       <TopologySummary topology={topology} />
 
       {canCreate ? (

@@ -1,4 +1,4 @@
-import { Button, InlineAlert } from '@vista/ui';
+import { Button, InlineAlert, Toast } from '@vista/ui';
 import type {
   CreateFinancialDocumentLineRequest,
   CreateFinancialDocumentRequest,
@@ -108,7 +108,15 @@ export function FinancialDocumentsPage() {
       <FinanceTabs />
 
       <InlineAlert tone="info">{copy.configurationBoundary}</InlineAlert>
-      {notice ? <InlineAlert tone="success">{notice}</InlineAlert> : null}
+      {notice ? (
+        <Toast
+          durationMs={notice.includes('could not') ? 7000 : 5200}
+          onDismiss={() => setNotice(null)}
+          tone={notice.includes('could not') ? 'error' : 'success'}
+        >
+          {notice}
+        </Toast>
+      ) : null}
 
       <section aria-label="Document summary" className="financial-document-summary">
         <SummaryMetric
@@ -879,7 +887,7 @@ function CreateDocumentDrawer({
         </FormSection>
 
         <FormSection number="4" title={copy.notes}>
-          <Field label="Internal preparation note">
+          <Field label="Preparation note">
             <textarea
               maxLength={2000}
               rows={3}
@@ -962,7 +970,7 @@ function DocumentPreviewDrawer({
             </p>
           </div>
           <div>
-            <span>Internal draft reference</span>
+            <span>Draft reference</span>
             <strong>No official number allocated</strong>
           </div>
         </section>

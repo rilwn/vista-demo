@@ -1,41 +1,86 @@
 import type {
   PosCatalogItem,
+  PosBasketPricing,
   PosCustomerLocationOption,
   PosCustomerOption,
+  PosDiscountAuthorization,
+  PosDiscountType,
+  PosLoyaltyLedger,
+  PosQuickAccess,
+  PosRegisterOption,
+  PosReturn,
   PosSale,
   PosShift,
   PosTerminalContext,
 } from '@vista/contracts';
+import { Toast, VistaMark } from '@vista/ui';
 import { useActiveItemVisibility } from '@vista/ui/navigation';
-import type { ReactNode } from 'react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import type { MouseEvent, ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { ApiClientError } from './api/client';
 import {
+  authorizePosDiscount,
   completePosSale,
+  createPosReturn,
   closePosShift,
+  enrolPosLoyalty,
   getPosCatalog,
   getPosCustomers,
+  getPosQuickAccess,
+  getPosLoyaltyLedger,
+  getPosReturns,
   getPosSales,
   getPosTerminalContext,
   openPosShift,
+  pricePosBasket,
+  updatePosQuickAccess,
 } from './api/pos';
+import { PosReports } from './PosReports';
 
-type PosScreen = 'sales' | 'sell' | 'shifts';
+type PosScreen = 'reports' | 'returns' | 'sales' | 'sell' | 'shifts';
 type Notice = { kind: 'error' | 'info' | 'success'; text: string };
 
 const screenLabels: Record<PosScreen, string> = {
+  reports: 'Reports',
+  returns: 'Returns',
   sales: 'Sale history',
   sell: 'Sell',
   shifts: 'Shifts',
 };
-const screenOrder: PosScreen[] = ['sell', 'sales', 'shifts'];
+const screenOrder: PosScreen[] = ['sell', 'returns', 'sales', 'shifts', 'reports'];
+const screenPaths: Record<PosScreen, string> = {
+  reports: '/reports',
+  returns: '/returns',
+  sales: '/sales',
+  sell: '/',
+  shifts: '/shifts',
+};
+
+function normalizePosPath(pathname: string): string {
+  if (!pathname || pathname === '/') return '/';
+  return `/${pathname.split('/').filter(Boolean).join('/')}`;
+}
+
+function screenForPath(pathname: string): PosScreen {
+  const normalized = normalizePosPath(pathname);
+  return (
+    (Object.entries(screenPaths).find(([, path]) => path === normalized)?.[0] as
+      PosScreen | undefined) ?? 'sell'
+  );
+}
+
+function shouldUseBrowserNavigation(event: MouseEvent<HTMLAnchorElement>): boolean {
+  return event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey;
+}
 
 export function PosTerminal({
+  accountId,
   employeeName,
   onSignOut,
   token,
 }: {
+  accountId: string;
   employeeName: string;
   onSignOut: () => Promise<void>;
   token: string;
@@ -43,8 +88,62 @@ export function PosTerminal({
   const [context, setContext] = useState<PosTerminalContext>();
   const [loading, setLoading] = useState(true);
   const [notice, setNotice] = useState<Notice>();
-  const [screen, setScreen] = useState<PosScreen>('sell');
+  const [screen, setScreen] = useState<PosScreen>(() => screenForPath(window.location.pathname));
+  const [accountMenuOpen, setAccountMenuOpen] = useState(false);
+  const [soundEnabled, setSoundEnabled] = useState(() => readSoundPreference(accountId));
+  const accountMenu = useRef<HTMLDivElement>(null);
   const navigation = useActiveItemVisibility<HTMLElement>(screen);
+
+  const navigate = useCallback((next: PosScreen, replace = false) => {
+    const path = screenPaths[next];
+    const method = replace ? 'replaceState' : 'pushState';
+    window.history[method](window.history.state, '', path);
+    setScreen(next);
+    setNotice(undefined);
+  }, []);
+
+  useEffect(() => {
+    const path = normalizePosPath(window.location.pathname);
+    if (!Object.values(screenPaths).includes(path)) navigate('sell', true);
+
+    const handlePopState = () => {
+      setScreen(screenForPath(window.location.pathname));
+      setNotice(undefined);
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [navigate]);
+
+  useEffect(() => {
+    if (!accountMenuOpen) return undefined;
+    const closeOutside = (event: PointerEvent) => {
+      if (!accountMenu.current?.contains(event.target as Node)) setAccountMenuOpen(false);
+    };
+    const closeWithKeyboard = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setAccountMenuOpen(false);
+    };
+    document.addEventListener('pointerdown', closeOutside);
+    document.addEventListener('keydown', closeWithKeyboard);
+    return () => {
+      document.removeEventListener('pointerdown', closeOutside);
+      document.removeEventListener('keydown', closeWithKeyboard);
+    };
+  }, [accountMenuOpen]);
+
+  useEffect(() => {
+    if (notice && soundEnabled) playNoticeSound(notice.kind);
+  }, [notice, soundEnabled]);
+
+  useEffect(() => {
+    if (!soundEnabled) return undefined;
+    const prime = () => primeNoticeAudio();
+    window.addEventListener('pointerdown', prime, { once: true });
+    window.addEventListener('keydown', prime, { once: true });
+    return () => {
+      window.removeEventListener('pointerdown', prime);
+      window.removeEventListener('keydown', prime);
+    };
+  }, [soundEnabled]);
 
   const refreshContext = useCallback(async () => {
     try {
@@ -62,6 +161,9 @@ export function PosTerminal({
   }, [refreshContext]);
 
   const shift = context?.currentShift;
+  const activeRegister = context?.registers.find(
+    (register) => register.id === shift?.cashRegisterId,
+  );
   const simulator = context?.registers.some((register) => register.fiscalMode === 'simulator');
 
   return (
@@ -69,64 +171,128 @@ export function PosTerminal({
       <header className="pos-topbar">
         <div className="pos-brand">
           <span aria-hidden="true" className="pos-brand-mark">
-            <PosIcon name="sell" />
+            <VistaMark compact product="Vista POS" />
           </span>
           <div>
             <strong>Vista POS</strong>
-            <small>{shift ? shift.cashRegisterName : 'Cashier terminal'}</small>
+            <small>{shift ? shift.cashRegisterName : 'Counter workspace'}</small>
           </div>
-        </div>
-        <div className="pos-terminal-context">
-          <span className="pos-context-label">Signed in as</span>
-          <strong>{employeeName}</strong>
         </div>
         <div className="pos-system-status" aria-label="Terminal system status">
           <span className={`pos-status-dot ${shift ? 'is-ready' : 'is-warning'}`} />
           <span>
             {loading ? 'Checking terminal' : shift ? `${shift.shiftNumber} open` : 'Shift closed'}
           </span>
-          <button onClick={() => setScreen('shifts')} type="button">
+          <button onClick={() => navigate('shifts')} type="button">
             {shift ? 'View shift' : 'Open shift'}
           </button>
         </div>
-        <button className="pos-sign-out-button" onClick={() => void onSignOut()} type="button">
-          Sign out
-        </button>
+        <div className="pos-account" ref={accountMenu}>
+          <button
+            aria-expanded={accountMenuOpen}
+            aria-haspopup="true"
+            aria-label="Open account menu"
+            className="pos-account-trigger"
+            onClick={() => setAccountMenuOpen((open) => !open)}
+            type="button"
+          >
+            <span>{initials(employeeName)}</span>
+            <strong>{employeeName}</strong>
+            <PosIcon name="chevron" />
+          </button>
+          {accountMenuOpen ? (
+            <div aria-label="Account options" className="pos-account-menu" role="group">
+              <div className="pos-account-summary">
+                <span>{initials(employeeName)}</span>
+                <div>
+                  <strong>{employeeName}</strong>
+                  <small>{shift ? shift.shiftNumber : 'No open shift'}</small>
+                </div>
+              </div>
+              <button
+                aria-checked={soundEnabled}
+                className="pos-sound-setting"
+                onClick={() => {
+                  const next = !soundEnabled;
+                  setSoundEnabled(next);
+                  writeSoundPreference(accountId, next);
+                  if (next) playNoticeSound('success');
+                }}
+                role="switch"
+                type="button"
+              >
+                <PosIcon name={soundEnabled ? 'volume' : 'volume-off'} />
+                <span>
+                  <strong>Sale sounds</strong>
+                  <small>Completed sales and errors</small>
+                </span>
+                <i className={soundEnabled ? 'is-on' : ''} aria-hidden="true" />
+              </button>
+              <button
+                className="pos-account-sign-out"
+                onClick={() => void onSignOut()}
+                type="button"
+              >
+                <PosIcon name="logout" />
+                Sign out
+              </button>
+            </div>
+          ) : null}
+        </div>
       </header>
 
       <div className="pos-workspace">
         <nav aria-label="POS navigation" className="pos-nav" ref={navigation}>
           {screenOrder.map((item) => (
-            <button
+            <a
               aria-current={screen === item ? 'page' : undefined}
               className={screen === item ? 'is-active' : undefined}
+              href={screenPaths[item]}
               key={item}
-              onClick={() => {
-                setScreen(item);
-                setNotice(undefined);
+              onClick={(event) => {
+                if (shouldUseBrowserNavigation(event)) return;
+                event.preventDefault();
+                navigate(item);
               }}
-              type="button"
             >
-              <PosIcon name={screenIcon(item)} />
-              {screenLabels[item]}
-            </button>
+              <span className="pos-nav-icon" aria-hidden="true">
+                <PosIcon name={screenIcon(item)} />
+              </span>
+              <span className="pos-nav-label">{screenLabels[item]}</span>
+            </a>
           ))}
         </nav>
 
-        <main className="pos-main">
+        <main className={`pos-main pos-main--${screen}`}>
           {notice ? <NoticeBar notice={notice} onClose={() => setNotice(undefined)} /> : null}
           {loading ? (
             <PageLoading />
           ) : screen === 'sell' ? (
-            <SellScreen onNavigate={setScreen} onNotice={setNotice} shift={shift} token={token} />
+            <SellScreen
+              onNavigate={navigate}
+              onNotice={setNotice}
+              register={activeRegister}
+              shift={shift}
+              token={token}
+            />
+          ) : screen === 'returns' ? (
+            <ReturnsScreen
+              onNavigate={navigate}
+              onNotice={setNotice}
+              register={activeRegister}
+              shift={shift}
+              token={token}
+            />
           ) : screen === 'shifts' ? (
             <ShiftScreen
               context={context}
-              onNavigate={setScreen}
+              onNavigate={navigate}
               onNotice={setNotice}
               onOpened={refreshContext}
               token={token}
             />
+          ) : screen === 'reports' ? (
+            <PosReports onNotice={setNotice} token={token} />
           ) : (
             <SaleHistory token={token} />
           )}
@@ -140,7 +306,7 @@ export function PosTerminal({
         </span>
         <span>
           <i className={simulator ? 'is-warning' : 'is-muted'} />
-          {simulator ? 'Development receipt simulator' : 'Fiscal device unavailable'}
+          {simulator ? 'Test receipt mode' : 'Fiscal device unavailable'}
         </span>
         <span>
           <i className="is-ready" />
@@ -154,11 +320,13 @@ export function PosTerminal({
 function SellScreen({
   onNavigate,
   onNotice,
+  register,
   shift,
   token,
 }: {
   onNavigate: (screen: PosScreen) => void;
   onNotice: (notice: Notice) => void;
+  register: PosRegisterOption | undefined;
   shift: PosShift | undefined;
   token: string;
 }) {
@@ -169,10 +337,22 @@ function SellScreen({
   const [catalogLoading, setCatalogLoading] = useState(false);
   const [customerPickerOpen, setCustomerPickerOpen] = useState(false);
   const [customer, setCustomer] = useState<CustomerSelection>();
+  const [discountDialogOpen, setDiscountDialogOpen] = useState(false);
+  const [loyaltyDialogOpen, setLoyaltyDialogOpen] = useState(false);
+  const [loyaltyLedger, setLoyaltyLedger] = useState<PosLoyaltyLedger>();
+  const [loyaltyPoints, setLoyaltyPoints] = useState('0');
+  const [manualDiscount, setManualDiscount] = useState<ApprovedManualDiscount>();
+  const [paymentMode, setPaymentMode] = useState<PaymentMode>('cash');
   const [paying, setPaying] = useState(false);
+  const [pricing, setPricing] = useState<PosBasketPricing>();
+  const [pricingError, setPricingError] = useState<string>();
+  const [pricingLoading, setPricingLoading] = useState(false);
   const [query, setQuery] = useState('');
+  const [quickAccess, setQuickAccess] = useState<PosQuickAccess>();
+  const [quickEditorOpen, setQuickEditorOpen] = useState(false);
   const [receipt, setReceipt] = useState<PosSale>();
   const [refreshKey, setRefreshKey] = useState(0);
+  const [splitCash, setSplitCash] = useState('');
   const [transactionId, setTransactionId] = useState(() => crypto.randomUUID());
 
   useEffect(() => {
@@ -195,14 +375,83 @@ function SellScreen({
     return () => window.clearTimeout(timer);
   }, [customer, query, refreshKey, shift, token]);
 
-  const totals = useMemo(() => basketTotals(basket), [basket]);
-  const cashChange = Math.max(0, Number(cashTendered || 0) - totals.gross);
-  const blockingIssue = basketIssue(basket, customer, cashTendered, totals.gross);
+  useEffect(() => {
+    if (!shift) {
+      setQuickAccess(undefined);
+      return;
+    }
+    void getPosQuickAccess(token, {
+      ...(customer ? { customerPartnerId: customer.customer.id } : {}),
+      shiftId: shift.id,
+    })
+      .then(setQuickAccess)
+      .catch((error) => onNotice({ kind: 'error', text: messageFor(error) }));
+  }, [customer, onNotice, refreshKey, shift, token]);
+
+  useEffect(() => {
+    if (!shift || !basket.length) {
+      setPricing(undefined);
+      setPricingError(undefined);
+      setPricingLoading(false);
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      setPricingLoading(true);
+      setPricingError(undefined);
+      void pricePosBasket(token, {
+        ...(customer ? { customerPartnerId: customer.customer.id } : {}),
+        lines: saleLinesFor(basket),
+        loyaltyPointsToRedeem: Math.max(0, Math.floor(Number(loyaltyPoints || 0))),
+        ...(manualDiscount
+          ? {
+              manualDiscount: {
+                authorizationId: manualDiscount.authorization.id,
+                discountType: manualDiscount.authorization.discountType,
+                discountValue: manualDiscount.authorization.discountValue,
+              },
+            }
+          : {}),
+        shiftId: shift.id,
+      })
+        .then(setPricing)
+        .catch((error) => {
+          setPricing(undefined);
+          setPricingError(messageFor(error));
+        })
+        .finally(() => setPricingLoading(false));
+    }, 140);
+    return () => window.clearTimeout(timer);
+  }, [basket, customer, loyaltyPoints, manualDiscount, shift, token]);
+
+  const localTotals = useMemo(() => basketTotals(basket), [basket]);
+  const totals = pricing
+    ? {
+        gross: Number(pricing.grossTotal),
+        net: Number(pricing.netTotal),
+        vat: Number(pricing.vatTotal),
+      }
+    : localTotals;
+  const cashPortion = paymentMode === 'cash' ? totals.gross : Number(splitCash || 0);
+  const cardPortion =
+    paymentMode === 'card' ? totals.gross : Math.max(0, totals.gross - cashPortion);
+  const cashChange = Math.max(0, Number(cashTendered || 0) - cashPortion);
+  const blockingIssue =
+    basketIssue(
+      basket,
+      customer,
+      paymentMode,
+      cashTendered,
+      splitCash,
+      totals.gross,
+      register?.paymentTerminalMode === 'simulator' || register?.paymentTerminalMode === 'hardware',
+    ) ?? (pricingLoading ? 'Checking offers…' : pricingError);
 
   function changed(next: BasketLine[]) {
     setBasket(next);
+    setManualDiscount(undefined);
     setTransactionId(crypto.randomUUID());
     setCashTendered('');
+    setSplitCash('');
   }
 
   function addItem(item: PosCatalogItem) {
@@ -234,16 +483,39 @@ function SellScreen({
       const sale = await completePosSale(
         token,
         {
-          cashTendered: Number(cashTendered).toFixed(4),
           clientTransactionId: transactionId,
           ...(customer?.location ? { customerLocationId: customer.location.id } : {}),
           ...(customer ? { customerPartnerId: customer.customer.id } : {}),
-          lines: basket.map((line) => ({
-            ...(line.batchId ? { batchId: line.batchId } : {}),
-            productId: line.item.id,
-            quantity: line.quantity.toFixed(4),
-            ...(line.serialNumber ? { serialNumbers: [line.serialNumber] } : {}),
-          })),
+          lines: saleLinesFor(basket),
+          loyaltyPointsToRedeem: pricing?.loyaltyPointsRedeemed ?? 0,
+          ...(manualDiscount
+            ? {
+                manualDiscount: {
+                  authorizationId: manualDiscount.authorization.id,
+                  discountType: manualDiscount.authorization.discountType,
+                  discountValue: manualDiscount.authorization.discountValue,
+                },
+              }
+            : {}),
+          payments:
+            paymentMode === 'cash'
+              ? [
+                  {
+                    amount: totals.gross.toFixed(4),
+                    method: 'cash',
+                    tenderedAmount: Number(cashTendered).toFixed(4),
+                  },
+                ]
+              : paymentMode === 'card'
+                ? [{ amount: totals.gross.toFixed(4), method: 'card' }]
+                : [
+                    {
+                      amount: cashPortion.toFixed(4),
+                      method: 'cash',
+                      tenderedAmount: Number(cashTendered).toFixed(4),
+                    },
+                    { amount: cardPortion.toFixed(4), method: 'card' },
+                  ],
           shiftId: shift.id,
         },
         transactionId,
@@ -251,6 +523,26 @@ function SellScreen({
       setReceipt(sale);
       setBasket([]);
       setCashTendered('');
+      setSplitCash('');
+      setLoyaltyPoints('0');
+      setManualDiscount(undefined);
+      setPricing(undefined);
+      setLoyaltyLedger(undefined);
+      if (customer?.customer.loyalty) {
+        setCustomer({
+          ...customer,
+          customer: {
+            ...customer.customer,
+            loyalty: {
+              ...customer.customer.loyalty,
+              balance:
+                customer.customer.loyalty.balance -
+                sale.loyaltyPointsRedeemed +
+                sale.loyaltyPointsEarned,
+            },
+          },
+        });
+      }
       setTransactionId(crypto.randomUUID());
       setRefreshKey((value) => value + 1);
       onNotice({ kind: 'success', text: `${sale.saleNumber} completed successfully.` });
@@ -286,6 +578,44 @@ function SellScreen({
           />
           <kbd>F2</kbd>
         </div>
+
+        {shift && !query.trim() ? (
+          <section className="pos-quick-access" aria-labelledby="quick-access-title">
+            <header>
+              <div>
+                <strong id="quick-access-title">Quick access</strong>
+                <span>Your counter shortcuts use current prices and stock.</span>
+              </div>
+              <button onClick={() => setQuickEditorOpen(true)} type="button">
+                Edit shortcuts
+              </button>
+            </header>
+            {quickAccess?.items.length ? (
+              <div className="pos-quick-grid">
+                {quickAccess.items.map((item) => (
+                  <button
+                    disabled={!item.unitPrice || Number(item.availableQuantity) <= 0}
+                    key={item.id}
+                    onClick={() => addItem(item)}
+                    type="button"
+                  >
+                    <span>{item.productCode}</span>
+                    <strong>{item.name}</strong>
+                    <small>{grossUnitPrice(item).toFixed(2)} BGN</small>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <button
+                className="pos-quick-empty"
+                onClick={() => setQuickEditorOpen(true)}
+                type="button"
+              >
+                Choose the products your team sells most often
+              </button>
+            )}
+          </section>
+        ) : null}
 
         <div className="pos-catalog-toolbar">
           <div>
@@ -353,7 +683,7 @@ function SellScreen({
             onClick={() => void pay()}
             type="button"
           >
-            <kbd>F12</kbd> Pay cash
+            <kbd>F12</kbd> Complete sale
           </button>
         </section>
       </section>
@@ -380,6 +710,11 @@ function SellScreen({
                   changed(basket.map((item) => (item.item.id === line.item.id ? next : item)))
                 }
                 onRemove={() => changed(basket.filter((item) => item.item.id !== line.item.id))}
+                {...(pricing?.lines.find((item) => item.productId === line.item.id)
+                  ? {
+                      pricedLine: pricing.lines.find((item) => item.productId === line.item.id)!,
+                    }
+                  : {})}
               />
             ))
           ) : (
@@ -391,7 +726,99 @@ function SellScreen({
           )}
         </div>
 
+        {basket.length ? (
+          <section className="pos-commercial-controls" aria-label="Offers and rewards">
+            <div className="pos-commercial-heading">
+              <span>Offers & rewards</span>
+              {pricingLoading ? <small>Checking…</small> : null}
+            </div>
+            <button
+              className={manualDiscount ? 'is-applied' : undefined}
+              onClick={() => setDiscountDialogOpen(true)}
+              type="button"
+            >
+              <PosIcon name="discount" />
+              <span>
+                <strong>{manualDiscount ? 'Manual discount approved' : 'Manual discount'}</strong>
+                <small>
+                  {manualDiscount
+                    ? `${discountLabel(manualDiscount.authorization)} · ${manualDiscount.authorization.approverName}`
+                    : 'Requires approval from another employee'}
+                </small>
+              </span>
+              <PosIcon name="chevron" />
+            </button>
+            {customer ? (
+              <button
+                className={customer.customer.loyalty ? 'is-applied' : undefined}
+                onClick={() => {
+                  setLoyaltyLedger(undefined);
+                  setLoyaltyDialogOpen(true);
+                  if (customer.customer.loyalty)
+                    void getPosLoyaltyLedger(token, customer.customer.id)
+                      .then(setLoyaltyLedger)
+                      .catch((error) => onNotice({ kind: 'error', text: messageFor(error) }));
+                }}
+                type="button"
+              >
+                <PosIcon name="loyalty" />
+                <span>
+                  <strong>
+                    {customer.customer.loyalty
+                      ? `${customer.customer.loyalty.balance} reward points`
+                      : 'Join Vista Rewards'}
+                  </strong>
+                  <small>
+                    {customer.customer.loyalty
+                      ? customer.customer.loyalty.cardNumber
+                      : 'Create a loyalty card for this customer'}
+                  </small>
+                </span>
+                <PosIcon name="chevron" />
+              </button>
+            ) : (
+              <p>Choose a customer to use rewards.</p>
+            )}
+            {customer?.customer.loyalty?.status === 'active' &&
+            customer.customer.loyalty.balance > 0 ? (
+              <label className="pos-points-entry">
+                <span>Points to use</span>
+                <input
+                  max={customer.customer.loyalty.balance}
+                  min="0"
+                  onChange={(event) => {
+                    setLoyaltyPoints(event.target.value);
+                    setTransactionId(crypto.randomUUID());
+                  }}
+                  step="1"
+                  type="number"
+                  value={loyaltyPoints}
+                />
+              </label>
+            ) : null}
+            {pricingError ? <p className="is-error">{pricingError}</p> : null}
+          </section>
+        ) : null}
+
         <div className="pos-totals">
+          {pricing && Number(pricing.automaticDiscountTotal) > 0 ? (
+            <div className="is-discount">
+              <span>Offers</span>
+              <strong>−{money(Number(pricing.automaticDiscountTotal))}</strong>
+            </div>
+          ) : null}
+          {pricing && Number(pricing.manualDiscountTotal) > 0 ? (
+            <div className="is-discount">
+              <span>Manual discount</span>
+              <strong>−{money(Number(pricing.manualDiscountTotal))}</strong>
+            </div>
+          ) : null}
+          {pricing && Number(pricing.loyaltyDiscountTotal) > 0 ? (
+            <div className="is-discount">
+              <span>Rewards</span>
+              <strong>−{money(Number(pricing.loyaltyDiscountTotal))}</strong>
+            </div>
+          ) : null}
           <div>
             <span>Net</span>
             <strong>{money(totals.net)}</strong>
@@ -406,35 +833,79 @@ function SellScreen({
           </div>
         </div>
 
-        <div className="pos-cash-entry">
-          <label htmlFor="cash-tendered">Cash received</label>
-          <div>
-            <input
-              disabled={!basket.length}
+        <section className="pos-payment-entry" aria-label="Payment method">
+          <span>Payment method</span>
+          <div className="pos-payment-methods">
+            {(['cash', 'card', 'split'] as const).map((method) => (
+              <button
+                aria-pressed={paymentMode === method}
+                className={paymentMode === method ? 'is-active' : undefined}
+                disabled={method !== 'cash' && register?.paymentTerminalMode === 'disabled'}
+                key={method}
+                onClick={() => {
+                  setPaymentMode(method);
+                  setCashTendered('');
+                  setSplitCash('');
+                  setTransactionId(crypto.randomUUID());
+                }}
+                type="button"
+              >
+                {method === 'cash' ? 'Cash' : method === 'card' ? 'Bank card' : 'Split'}
+              </button>
+            ))}
+          </div>
+          {paymentMode === 'split' ? (
+            <MoneyEntry
+              id="split-cash-portion"
+              label="Cash portion"
+              max={totals.gross}
+              onChange={setSplitCash}
+              value={splitCash}
+            />
+          ) : null}
+          {paymentMode !== 'card' ? (
+            <MoneyEntry
               id="cash-tendered"
-              inputMode="decimal"
-              min="0"
-              onChange={(event) => setCashTendered(event.target.value)}
-              placeholder="0.00"
-              step="0.01"
-              type="number"
+              label="Cash received"
+              onChange={setCashTendered}
               value={cashTendered}
             />
-            <span>BGN</span>
-          </div>
-          <p>
-            Change <strong>{money(cashChange)}</strong>
-          </p>
-        </div>
+          ) : (
+            <div className="pos-card-authorisation">
+              <span className="pos-status-dot is-ready" />
+              <p>
+                <strong>
+                  {register?.paymentTerminalMode === 'simulator'
+                    ? 'Test card terminal'
+                    : (register?.paymentTerminalLabel ?? 'Card terminal')}
+                </strong>
+                <small>{money(cardPortion)} will be authorised at checkout.</small>
+              </p>
+            </div>
+          )}
+          {paymentMode === 'split' ? (
+            <div className="pos-split-summary">
+              <span>Card portion</span>
+              <strong>{money(cardPortion)}</strong>
+            </div>
+          ) : null}
+          {paymentMode !== 'card' ? (
+            <p className="pos-change-line">
+              Change <strong>{money(cashChange)}</strong>
+            </p>
+          ) : null}
+        </section>
         <button
           className="pos-pay-button"
           disabled={Boolean(blockingIssue) || paying}
           onClick={() => void pay()}
           type="button"
         >
-          {paying ? 'Completing sale…' : `Pay cash · ${money(totals.gross)}`}
+          {paying ? 'Completing sale…' : `Complete sale · ${money(totals.gross)}`}
         </button>
-        <p className="pos-basket-disclaimer">{blockingIssue ?? 'Cash payment is ready.'}</p>
+        <p className="pos-basket-disclaimer">
+          {blockingIssue ?? `${paymentLabel(paymentMode)} payment is ready.`}
+        </p>
       </aside>
 
       {customerPickerOpen ? (
@@ -443,13 +914,61 @@ function SellScreen({
           onClose={() => setCustomerPickerOpen(false)}
           onSelect={(selection) => {
             setCustomer(selection);
+            setLoyaltyLedger(undefined);
+            setLoyaltyPoints('0');
+            setManualDiscount(undefined);
             setCustomerPickerOpen(false);
             setTransactionId(crypto.randomUUID());
           }}
           token={token}
         />
       ) : null}
+      {discountDialogOpen && shift && basket.length ? (
+        <DiscountAuthorizationDialog
+          basket={basket}
+          {...(customer ? { customerPartnerId: customer.customer.id } : {})}
+          onApproved={(approved) => {
+            setManualDiscount(approved);
+            setDiscountDialogOpen(false);
+            setTransactionId(crypto.randomUUID());
+            onNotice({
+              kind: 'success',
+              text: `Discount approved by ${approved.authorization.approverName}.`,
+            });
+          }}
+          onClose={() => setDiscountDialogOpen(false)}
+          shiftId={shift.id}
+          token={token}
+        />
+      ) : null}
+      {loyaltyDialogOpen && customer ? (
+        <LoyaltyDialog
+          customer={customer.customer}
+          {...(loyaltyLedger ? { initialLedger: loyaltyLedger } : {})}
+          onClose={() => setLoyaltyDialogOpen(false)}
+          onEnrolled={(account, ledger) => {
+            const nextCustomer = { ...customer.customer, loyalty: account };
+            setCustomer({ ...customer, customer: nextCustomer });
+            setLoyaltyLedger(ledger);
+          }}
+          token={token}
+        />
+      ) : null}
       {receipt ? <ReceiptDialog onClose={() => setReceipt(undefined)} sale={receipt} /> : null}
+      {quickEditorOpen && shift ? (
+        <QuickAccessDialog
+          {...(customer ? { customerPartnerId: customer.customer.id } : {})}
+          current={quickAccess?.productIds ?? []}
+          onClose={() => setQuickEditorOpen(false)}
+          onSaved={(next) => {
+            setQuickAccess(next);
+            setQuickEditorOpen(false);
+            onNotice({ kind: 'success', text: 'Quick-access products updated.' });
+          }}
+          shiftId={shift.id}
+          token={token}
+        />
+      ) : null}
     </div>
   );
 }
@@ -460,19 +979,203 @@ interface BasketLine {
   quantity: number;
   serialNumber?: string;
 }
+interface ApprovedManualDiscount {
+  authorization: PosDiscountAuthorization;
+}
+type PaymentMode = 'card' | 'cash' | 'split';
 interface CustomerSelection {
   customer: PosCustomerOption;
   location?: PosCustomerLocationOption;
+}
+
+function QuickAccessDialog({
+  current,
+  customerPartnerId,
+  onClose,
+  onSaved,
+  shiftId,
+  token,
+}: {
+  current: string[];
+  customerPartnerId?: string;
+  onClose: () => void;
+  onSaved: (quickAccess: PosQuickAccess) => void;
+  shiftId: string;
+  token: string;
+}) {
+  const [error, setError] = useState<string>();
+  const [items, setItems] = useState<PosCatalogItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [query, setQuery] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [selected, setSelected] = useState<string[]>(current);
+
+  useEffect(() => {
+    void getPosCatalog(token, {
+      ...(customerPartnerId ? { customerPartnerId } : {}),
+      shiftId,
+    })
+      .then((page) => setItems(page.items))
+      .catch((caught) => setError(messageFor(caught)))
+      .finally(() => setLoading(false));
+  }, [customerPartnerId, shiftId, token]);
+
+  const visible = items.filter((item) =>
+    `${item.name} ${item.productCode}`.toLocaleLowerCase().includes(query.toLocaleLowerCase()),
+  );
+
+  function toggle(productId: string) {
+    if (selected.includes(productId)) {
+      setSelected(selected.filter((id) => id !== productId));
+      return;
+    }
+    if (selected.length >= 12) {
+      setError('You can keep up to 12 quick-access products.');
+      return;
+    }
+    setError(undefined);
+    setSelected([...selected, productId]);
+  }
+
+  async function save() {
+    setSaving(true);
+    setError(undefined);
+    try {
+      await updatePosQuickAccess(token, { productIds: selected, shiftId });
+      onSaved(
+        await getPosQuickAccess(token, {
+          ...(customerPartnerId ? { customerPartnerId } : {}),
+          shiftId,
+        }),
+      );
+    } catch (caught) {
+      setError(messageFor(caught));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="pos-dialog-layer" role="presentation">
+      <section
+        aria-labelledby="quick-access-dialog-title"
+        aria-modal="true"
+        className="pos-dialog pos-quick-dialog"
+        role="dialog"
+      >
+        <header>
+          <div>
+            <p>Counter setup</p>
+            <h2 id="quick-access-dialog-title">Quick-access products</h2>
+          </div>
+          <button aria-label="Close quick-access setup" onClick={onClose} type="button">
+            <PosIcon name="close" />
+          </button>
+        </header>
+        <div className="pos-dialog-body">
+          <div className="pos-quick-dialog-intro">
+            <p>
+              Choose up to 12 products. Their live price and availability appear at the counter.
+            </p>
+            <strong>{selected.length} / 12 selected</strong>
+          </div>
+          <label className="pos-dialog-search">
+            <span>Find product</span>
+            <input
+              autoFocus
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Product name or code"
+              value={query}
+            />
+          </label>
+          {error ? <p className="pos-dialog-state is-error">{error}</p> : null}
+          {loading ? <p className="pos-dialog-state">Loading products…</p> : null}
+          {!loading ? (
+            <div className="pos-quick-options">
+              {visible.map((item) => {
+                const checked = selected.includes(item.id);
+                return (
+                  <label className={checked ? 'is-selected' : undefined} key={item.id}>
+                    <input checked={checked} onChange={() => toggle(item.id)} type="checkbox" />
+                    <span>
+                      <strong>{item.name}</strong>
+                      <small>
+                        {item.productCode} · {quantity(item.availableQuantity)} available
+                      </small>
+                    </span>
+                    <em>
+                      {item.unitPrice ? `${grossUnitPrice(item).toFixed(2)} BGN` : 'No price'}
+                    </em>
+                  </label>
+                );
+              })}
+              {!visible.length ? <p className="pos-dialog-state">No matching product.</p> : null}
+            </div>
+          ) : null}
+        </div>
+        <footer>
+          <button className="pos-secondary-button" onClick={onClose} type="button">
+            Back
+          </button>
+          <button
+            className="pos-primary-button"
+            disabled={saving}
+            onClick={() => void save()}
+            type="button"
+          >
+            {saving ? 'Saving…' : 'Save shortcuts'}
+          </button>
+        </footer>
+      </section>
+    </div>
+  );
+}
+
+function MoneyEntry({
+  id,
+  label,
+  max,
+  onChange,
+  value,
+}: {
+  id: string;
+  label: string;
+  max?: number;
+  onChange: (value: string) => void;
+  value: string;
+}) {
+  return (
+    <label className="pos-money-entry" htmlFor={id}>
+      <span>{label}</span>
+      <div>
+        <input
+          aria-label={label}
+          id={id}
+          inputMode="decimal"
+          min="0"
+          {...(max === undefined ? {} : { max })}
+          onChange={(event) => onChange(event.target.value)}
+          placeholder="0.00"
+          step="0.01"
+          type="number"
+          value={value}
+        />
+        <span>BGN</span>
+      </div>
+    </label>
+  );
 }
 
 function BasketRow({
   line,
   onChange,
   onRemove,
+  pricedLine,
 }: {
   line: BasketLine;
   onChange: (line: BasketLine) => void;
   onRemove: () => void;
+  pricedLine?: PosBasketPricing['lines'][number];
 }) {
   const maximum = Math.max(1, Math.floor(Number(line.item.availableQuantity)));
   return (
@@ -542,8 +1245,17 @@ function BasketRow({
             </button>
           </div>
         )}
-        <strong>{money(lineGross(line))}</strong>
+        <strong>{money(pricedLine ? Number(pricedLine.grossTotal) : lineGross(line))}</strong>
       </div>
+      {pricedLine?.pricingAdjustments.length ? (
+        <div className="pos-line-adjustments">
+          {pricedLine.pricingAdjustments.map((adjustment) => (
+            <span key={`${adjustment.source}-${adjustment.code}`}>
+              {adjustment.label} <strong>−{money(Number(adjustment.amount))}</strong>
+            </span>
+          ))}
+        </div>
+      ) : null}
     </article>
   );
 }
@@ -685,6 +1397,296 @@ function CustomerPicker({
   );
 }
 
+function DiscountAuthorizationDialog({
+  basket,
+  customerPartnerId,
+  onApproved,
+  onClose,
+  shiftId,
+  token,
+}: {
+  basket: BasketLine[];
+  customerPartnerId?: string;
+  onApproved: (discount: ApprovedManualDiscount) => void;
+  onClose: () => void;
+  shiftId: string;
+  token: string;
+}) {
+  const [approverEmail, setApproverEmail] = useState('manager@vista.local');
+  const [approverPassword, setApproverPassword] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [discountType, setDiscountType] = useState<PosDiscountType>('percentage');
+  const [discountValue, setDiscountValue] = useState('10');
+  const [error, setError] = useState<string>();
+  const [reason, setReason] = useState('Customer care discount');
+  const [totpCode, setTotpCode] = useState('');
+
+  async function approve() {
+    setBusy(true);
+    setError(undefined);
+    try {
+      const authorization = await authorizePosDiscount(token, {
+        approverEmail,
+        approverPassword,
+        ...(customerPartnerId ? { customerPartnerId } : {}),
+        discountType,
+        discountValue: Number(discountValue).toFixed(4),
+        lines: saleLinesFor(basket),
+        reason,
+        shiftId,
+        ...(totpCode ? { totpCode } : {}),
+      });
+      onApproved({ authorization });
+    } catch (caught) {
+      setError(messageFor(caught));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const invalid =
+    !approverEmail.trim() ||
+    !approverPassword ||
+    reason.trim().length < 3 ||
+    Number(discountValue) <= 0 ||
+    (discountType === 'percentage' && Number(discountValue) > 100);
+
+  return (
+    <div className="pos-dialog-layer" role="presentation">
+      <section
+        aria-labelledby="discount-authorization-title"
+        aria-modal="true"
+        className="pos-dialog pos-commercial-dialog"
+        role="dialog"
+      >
+        <header>
+          <div>
+            <p>Protected action</p>
+            <h2 id="discount-authorization-title">Approve manual discount</h2>
+          </div>
+          <button aria-label="Close discount approval" onClick={onClose} type="button">
+            <PosIcon name="close" />
+          </button>
+        </header>
+        <div className="pos-dialog-body">
+          <p className="pos-commercial-intro">
+            A different employee with discount approval access must confirm this basket.
+          </p>
+          <div className="pos-discount-value-grid">
+            <label>
+              <span>Discount type</span>
+              <select
+                onChange={(event) => setDiscountType(event.target.value as PosDiscountType)}
+                value={discountType}
+              >
+                <option value="percentage">Percentage</option>
+                <option value="fixed_amount">Fixed amount</option>
+              </select>
+            </label>
+            <label>
+              <span>{discountType === 'percentage' ? 'Percentage' : 'Amount (BGN)'}</span>
+              <input
+                max={discountType === 'percentage' ? 100 : undefined}
+                min="0.01"
+                onChange={(event) => setDiscountValue(event.target.value)}
+                step="0.01"
+                type="number"
+                value={discountValue}
+              />
+            </label>
+          </div>
+          <label className="pos-dialog-field">
+            <span>Reason</span>
+            <input
+              maxLength={500}
+              onChange={(event) => setReason(event.target.value)}
+              value={reason}
+            />
+          </label>
+          <div className="pos-approval-divider">
+            <span>Approver</span>
+          </div>
+          <label className="pos-dialog-field">
+            <span>Email</span>
+            <input
+              autoComplete="username"
+              onChange={(event) => setApproverEmail(event.target.value)}
+              type="email"
+              value={approverEmail}
+            />
+          </label>
+          <label className="pos-dialog-field">
+            <span>Password</span>
+            <input
+              autoComplete="current-password"
+              onChange={(event) => setApproverPassword(event.target.value)}
+              type="password"
+              value={approverPassword}
+            />
+          </label>
+          <label className="pos-dialog-field">
+            <span>
+              Authentication code <small>if enabled</small>
+            </span>
+            <input
+              inputMode="numeric"
+              maxLength={6}
+              onChange={(event) => setTotpCode(event.target.value.replace(/\D/gu, '').slice(0, 6))}
+              placeholder="6-digit code"
+              value={totpCode}
+            />
+          </label>
+          {error ? <p className="pos-dialog-state is-error">{error}</p> : null}
+        </div>
+        <footer>
+          <button className="pos-secondary-button" onClick={onClose} type="button">
+            Back
+          </button>
+          <button
+            className="pos-primary-button"
+            disabled={invalid || busy}
+            onClick={() => void approve()}
+            type="button"
+          >
+            {busy ? 'Approving…' : 'Approve discount'}
+          </button>
+        </footer>
+      </section>
+    </div>
+  );
+}
+
+function LoyaltyDialog({
+  customer,
+  initialLedger,
+  onClose,
+  onEnrolled,
+  token,
+}: {
+  customer: PosCustomerOption;
+  initialLedger?: PosLoyaltyLedger;
+  onClose: () => void;
+  onEnrolled: (
+    account: NonNullable<PosCustomerOption['loyalty']>,
+    ledger: PosLoyaltyLedger,
+  ) => void;
+  token: string;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string>();
+  const [ledger, setLedger] = useState(initialLedger);
+
+  useEffect(() => {
+    if (!customer.loyalty || initialLedger) return;
+    setBusy(true);
+    void getPosLoyaltyLedger(token, customer.id)
+      .then(setLedger)
+      .catch((caught) => setError(messageFor(caught)))
+      .finally(() => setBusy(false));
+  }, [customer.id, customer.loyalty, initialLedger, token]);
+
+  async function enrol() {
+    setBusy(true);
+    setError(undefined);
+    try {
+      const account = await enrolPosLoyalty(token, { customerPartnerId: customer.id });
+      const nextLedger = await getPosLoyaltyLedger(token, customer.id);
+      setLedger(nextLedger);
+      onEnrolled(account, nextLedger);
+    } catch (caught) {
+      setError(messageFor(caught));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const account = ledger?.account ?? customer.loyalty;
+  return (
+    <div className="pos-dialog-layer" role="presentation">
+      <section
+        aria-labelledby="loyalty-dialog-title"
+        aria-modal="true"
+        className="pos-dialog pos-commercial-dialog"
+        role="dialog"
+      >
+        <header>
+          <div>
+            <p>Customer rewards</p>
+            <h2 id="loyalty-dialog-title">{customer.name}</h2>
+          </div>
+          <button aria-label="Close rewards" onClick={onClose} type="button">
+            <PosIcon name="close" />
+          </button>
+        </header>
+        <div className="pos-dialog-body">
+          {account ? (
+            <>
+              <div className="pos-loyalty-balance">
+                <span>
+                  <PosIcon name="loyalty" />
+                </span>
+                <div>
+                  <small>Available balance</small>
+                  <strong>{account.balance} points</strong>
+                </div>
+                <em>{account.cardNumber}</em>
+              </div>
+              <div className="pos-loyalty-history">
+                <header>
+                  <strong>Points history</strong>
+                  <span>Running balance</span>
+                </header>
+                {ledger?.entries.length ? (
+                  ledger.entries.map((entry) => (
+                    <article key={entry.id}>
+                      <div>
+                        <strong>{entry.reason}</strong>
+                        <small>{dateTime(entry.occurredAt)}</small>
+                      </div>
+                      <span className={entry.points > 0 ? 'is-credit' : 'is-debit'}>
+                        {entry.points > 0 ? '+' : ''}
+                        {entry.points}
+                        <small>{entry.balanceAfter} balance</small>
+                      </span>
+                    </article>
+                  ))
+                ) : (
+                  <p>{busy ? 'Loading points…' : 'No points activity yet.'}</p>
+                )}
+              </div>
+            </>
+          ) : (
+            <div className="pos-loyalty-enrolment">
+              <span>
+                <PosIcon name="loyalty" />
+              </span>
+              <h3>Vista Rewards</h3>
+              <p>
+                Create a card for this customer. Points are earned on completed sales and kept in a
+                full transaction history.
+              </p>
+              <button
+                className="pos-primary-button"
+                disabled={busy}
+                onClick={() => void enrol()}
+                type="button"
+              >
+                {busy ? 'Creating card…' : 'Create loyalty card'}
+              </button>
+            </div>
+          )}
+          {error ? <p className="pos-dialog-state is-error">{error}</p> : null}
+        </div>
+        <footer>
+          <button className="pos-secondary-button" onClick={onClose} type="button">
+            Back
+          </button>
+        </footer>
+      </section>
+    </div>
+  );
+}
+
 function ReceiptDialog({ onClose, sale }: { onClose: () => void; sale: PosSale }) {
   return (
     <div className="pos-dialog-layer" role="presentation">
@@ -703,7 +1705,7 @@ function ReceiptDialog({ onClose, sale }: { onClose: () => void; sale: PosSale }
         </header>
         <div className="pos-dialog-body">
           <div className="pos-simulator-label">
-            Development receipt simulator<small>No certified fiscal receipt was issued.</small>
+            Test receipt mode<small>No certified fiscal receipt was issued.</small>
           </div>
           <dl className="pos-receipt-summary">
             <div>
@@ -714,14 +1716,38 @@ function ReceiptDialog({ onClose, sale }: { onClose: () => void; sale: PosSale }
               <dt>Total</dt>
               <dd>{money(Number(sale.grossTotal))}</dd>
             </div>
-            <div>
-              <dt>Cash received</dt>
-              <dd>{money(Number(sale.cashTendered))}</dd>
-            </div>
-            <div className="is-change">
-              <dt>Change due</dt>
-              <dd>{money(Number(sale.changeAmount))}</dd>
-            </div>
+            {Number(sale.automaticDiscountTotal) + Number(sale.manualDiscountTotal) > 0 ? (
+              <div>
+                <dt>Discounts</dt>
+                <dd>
+                  −{money(Number(sale.automaticDiscountTotal) + Number(sale.manualDiscountTotal))}
+                </dd>
+              </div>
+            ) : null}
+            {sale.loyaltyPointsRedeemed > 0 ? (
+              <div>
+                <dt>Points used</dt>
+                <dd>{sale.loyaltyPointsRedeemed}</dd>
+              </div>
+            ) : null}
+            {sale.loyaltyPointsEarned > 0 ? (
+              <div>
+                <dt>Points earned</dt>
+                <dd>+{sale.loyaltyPointsEarned}</dd>
+              </div>
+            ) : null}
+            {sale.payments.map((payment) => (
+              <div key={payment.id}>
+                <dt>{payment.method === 'cash' ? 'Cash' : 'Bank card'}</dt>
+                <dd>{money(Number(payment.amount))}</dd>
+              </div>
+            ))}
+            {Number(sale.changeAmount) > 0 ? (
+              <div className="is-change">
+                <dt>Change due</dt>
+                <dd>{money(Number(sale.changeAmount))}</dd>
+              </div>
+            ) : null}
           </dl>
         </div>
         <footer>
@@ -852,8 +1878,8 @@ function ShiftScreen({
             </label>
             <div>
               <p>
-                Count the drawer before closing. X/Z reporting will be added with the remaining POS
-                reports.
+                Count the drawer before closing. The final Z report will keep this counted amount
+                and any difference from expected cash.
               </p>
               <button
                 className="pos-secondary-button"
@@ -893,9 +1919,7 @@ function ShiftScreen({
                   <em>{register.warehouseName}</em>
                 </span>
                 <i>
-                  {register.fiscalMode === 'simulator'
-                    ? 'Development simulator'
-                    : register.fiscalMode}
+                  {register.fiscalMode === 'simulator' ? 'Test receipt mode' : register.fiscalMode}
                 </i>
               </label>
             ))}
@@ -922,7 +1946,7 @@ function ShiftScreen({
             </div>
           </label>
           <div className="pos-open-shift-actions">
-            <p>The simulator is restricted to local development and cannot run in production.</p>
+            <p>Test receipt mode is available only on this local installation.</p>
             <button
               className="pos-primary-button"
               disabled={!registerId || opening || Number(openingCash) < 0}
@@ -934,6 +1958,506 @@ function ShiftScreen({
           </div>
         </section>
       )}
+    </div>
+  );
+}
+
+function ReturnsScreen({
+  onNavigate,
+  onNotice,
+  register,
+  shift,
+  token,
+}: {
+  onNavigate: (screen: PosScreen) => void;
+  onNotice: (notice: Notice) => void;
+  register: PosRegisterOption | undefined;
+  shift: PosShift | undefined;
+  token: string;
+}) {
+  const [completed, setCompleted] = useState<PosReturn>();
+  const [error, setError] = useState<string>();
+  const [loading, setLoading] = useState(true);
+  const [returns, setReturns] = useState<PosReturn[]>([]);
+  const [sales, setSales] = useState<PosSale[]>([]);
+  const [selectedSale, setSelectedSale] = useState<PosSale>();
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(undefined);
+    try {
+      const [salePage, returnPage] = await Promise.all([getPosSales(token), getPosReturns(token)]);
+      setSales(salePage.items);
+      setReturns(returnPage.items);
+    } catch (caught) {
+      setError(messageFor(caught));
+    } finally {
+      setLoading(false);
+    }
+  }, [token]);
+
+  useEffect(() => void load(), [load]);
+  const returnable = sales.filter((sale) =>
+    sale.lines.some((line) => Number(line.returnableQuantity) > 0),
+  );
+
+  return (
+    <div className="pos-register-page pos-returns-page">
+      <header className="pos-page-heading">
+        <div>
+          <p>Point of sale</p>
+          <h1>Returns</h1>
+          <span>Refund items against their original receipt and choose where the stock goes.</span>
+        </div>
+        {!shift ? (
+          <button className="pos-primary-button" onClick={() => onNavigate('shifts')} type="button">
+            Open shift
+          </button>
+        ) : null}
+      </header>
+      {loading ? <PageLoading /> : null}
+      {error ? <div className="pos-page-error">{error}</div> : null}
+      {!loading && !error ? (
+        <div className="pos-returns-layout">
+          <section className="pos-returnable-sales">
+            <header>
+              <div>
+                <h2>Receipts with returnable items</h2>
+                <p>Select the original sale before choosing products.</p>
+              </div>
+              <span>{returnable.length}</span>
+            </header>
+            {returnable.length ? (
+              <div className="pos-returnable-list">
+                {returnable.map((sale) => (
+                  <article key={sale.id}>
+                    <div className="pos-sale-history-main">
+                      <span className="pos-sale-avatar">
+                        <PosIcon name="returns" />
+                      </span>
+                      <div>
+                        <strong>{sale.saleNumber}</strong>
+                        <small>
+                          {sale.customerName ?? 'Counter customer'} · {dateTime(sale.completedAt)}
+                        </small>
+                      </div>
+                    </div>
+                    <div>
+                      <small>
+                        {sale.lines.filter((line) => Number(line.returnableQuantity) > 0).length}{' '}
+                        returnable products
+                      </small>
+                      <strong>{money(Number(sale.grossTotal))}</strong>
+                    </div>
+                    <button
+                      className="pos-secondary-button"
+                      disabled={!shift}
+                      onClick={() => setSelectedSale(sale)}
+                      type="button"
+                    >
+                      Start return
+                    </button>
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <ActionEmpty
+                description="New completed sales with returnable items will appear here."
+                title="No returnable receipts"
+              />
+            )}
+          </section>
+          <section className="pos-recent-returns">
+            <header>
+              <div>
+                <h2>Recent returns</h2>
+                <p>Refund and stock-routing records from this cashier account.</p>
+              </div>
+            </header>
+            {returns.length ? (
+              <div className="pos-return-history">
+                {returns.map((item) => (
+                  <article key={item.id}>
+                    <div>
+                      <strong>{item.returnNumber}</strong>
+                      <small>
+                        From {item.originalSaleNumber} · {dateTime(item.completedAt)}
+                      </small>
+                    </div>
+                    <span>
+                      {item.lines.map((line) => dispositionLabel(line.disposition)).join(', ')}
+                    </span>
+                    <strong>{money(Number(item.grossTotal))}</strong>
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <p className="pos-inline-empty">No returns have been completed.</p>
+            )}
+          </section>
+        </div>
+      ) : null}
+      {selectedSale && shift ? (
+        <ReturnDialog
+          onClose={() => setSelectedSale(undefined)}
+          onComplete={(result) => {
+            setSelectedSale(undefined);
+            setCompleted(result);
+            onNotice({ kind: 'success', text: `${result.returnNumber} completed successfully.` });
+            void load();
+          }}
+          register={register}
+          sale={selectedSale}
+          shift={shift}
+          token={token}
+        />
+      ) : null}
+      {completed ? (
+        <ReturnReceiptDialog item={completed} onClose={() => setCompleted(undefined)} />
+      ) : null}
+    </div>
+  );
+}
+
+interface ReturnSelection {
+  disposition: 'restock' | 'service';
+  quantity: number;
+  serialNumbers: string[];
+}
+
+function ReturnDialog({
+  onClose,
+  onComplete,
+  register,
+  sale,
+  shift,
+  token,
+}: {
+  onClose: () => void;
+  onComplete: (item: PosReturn) => void;
+  register: PosRegisterOption | undefined;
+  sale: PosSale;
+  shift: PosShift;
+  token: string;
+}) {
+  const [error, setError] = useState<string>();
+  const [reason, setReason] = useState('Customer returned the item');
+  const [saving, setSaving] = useState(false);
+  const [selected, setSelected] = useState<Record<string, ReturnSelection>>({});
+  const returnableLines = sale.lines.filter((line) => Number(line.returnableQuantity) > 0);
+  const total = returnableLines.reduce((sumValue, line) => {
+    const selection = selected[line.id];
+    if (!selection) return sumValue;
+    return sumValue + returnLineGross(line, selection.quantity);
+  }, 0);
+  const refunds = allocateRefunds(sale, total);
+  const selectedLines = returnableLines.filter((line) => selected[line.id]);
+  const selectionIssue = (() => {
+    if (selectedLines.length === 0) return 'Choose at least one product to return.';
+    for (const line of selectedLines) {
+      const selection = selected[line.id];
+      if (!selection) continue;
+      const maximum = Number(line.returnableQuantity);
+      if (!Number.isFinite(selection.quantity) || selection.quantity <= 0) {
+        return `Enter a valid quantity for ${line.productName}.`;
+      }
+      if (selection.quantity > maximum) {
+        return `Only ${quantity(line.returnableQuantity)} of ${line.productName} can be returned.`;
+      }
+      if (
+        line.serialNumbers.length > 0 &&
+        (selection.serialNumbers.length === 0 ||
+          selection.quantity !== selection.serialNumbers.length)
+      ) {
+        return `Choose the serial number for ${line.productName}.`;
+      }
+    }
+    if (reason.trim().length < 3) return 'Enter a short reason for the return.';
+    const refundTotal = refunds.reduce((sumValue, refund) => sumValue + refund.amount, 0);
+    if (!Number.isFinite(total) || total <= 0 || Math.abs(refundTotal - total) > 0.005) {
+      return 'The refund cannot be completed against the original payments.';
+    }
+    return undefined;
+  })();
+  const ready = !selectionIssue;
+
+  function toggleLine(line: PosSale['lines'][number], checked: boolean) {
+    if (!checked) {
+      const next = { ...selected };
+      delete next[line.id];
+      setSelected(next);
+      return;
+    }
+    const serial = line.returnableSerialNumbers[0];
+    setSelected({
+      ...selected,
+      [line.id]: {
+        disposition: 'restock',
+        quantity: 1,
+        serialNumbers: serial ? [serial] : [],
+      },
+    });
+  }
+
+  async function submit() {
+    if (!ready) return;
+    setSaving(true);
+    setError(undefined);
+    try {
+      const result = await createPosReturn(
+        token,
+        {
+          lines: returnableLines.flatMap((line) => {
+            const selection = selected[line.id];
+            return selection
+              ? [
+                  {
+                    disposition: selection.disposition,
+                    originalSaleLineId: line.id,
+                    quantity: selection.quantity.toFixed(4),
+                    ...(selection.serialNumbers.length
+                      ? { serialNumbers: selection.serialNumbers }
+                      : {}),
+                  },
+                ]
+              : [];
+          }),
+          originalSaleId: sale.id,
+          reason: reason.trim(),
+          refunds: refunds.map((refund) => ({
+            amount: refund.amount.toFixed(4),
+            method: refund.method,
+          })),
+          shiftId: shift.id,
+        },
+        crypto.randomUUID(),
+      );
+      onComplete(result);
+    } catch (caught) {
+      setError(messageFor(caught));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="pos-dialog-layer" role="presentation">
+      <section
+        aria-labelledby="return-title"
+        aria-modal="true"
+        className="pos-dialog pos-return-dialog"
+        role="dialog"
+      >
+        <header>
+          <div>
+            <p>Linked return</p>
+            <h2 id="return-title">{sale.saleNumber}</h2>
+            <small>
+              {sale.customerName ?? 'Counter customer'} · {sale.fiscalReceiptNumber}
+            </small>
+          </div>
+          <button aria-label="Close return" onClick={onClose} type="button">
+            <PosIcon name="close" />
+          </button>
+        </header>
+        <div className="pos-dialog-body">
+          {error ? <div className="pos-dialog-state is-error">{error}</div> : null}
+          <section className="pos-return-step">
+            <div className="pos-return-step-heading">
+              <span>1</span>
+              <div>
+                <h3>Choose products</h3>
+                <p>Only quantities still available on this receipt are shown.</p>
+              </div>
+            </div>
+            <div className="pos-return-line-list">
+              {returnableLines.map((line) => {
+                const selection = selected[line.id];
+                const serialised = line.serialNumbers.length > 0;
+                return (
+                  <article className={selection ? 'is-selected' : undefined} key={line.id}>
+                    <label className="pos-return-line-check">
+                      <input
+                        checked={Boolean(selection)}
+                        onChange={(event) => toggleLine(line, event.target.checked)}
+                        type="checkbox"
+                      />
+                      <span>
+                        <strong>{line.productName}</strong>
+                        <small>
+                          {line.productCode} · {quantity(line.returnableQuantity)} available
+                        </small>
+                      </span>
+                      <em>{money(returnLineGross(line, Number(line.returnableQuantity)))}</em>
+                    </label>
+                    {selection ? (
+                      <div className="pos-return-line-fields">
+                        {serialised ? (
+                          <fieldset>
+                            <legend>Serial number</legend>
+                            {line.returnableSerialNumbers.map((serial) => (
+                              <label key={serial}>
+                                <input
+                                  checked={selection.serialNumbers.includes(serial)}
+                                  onChange={(event) => {
+                                    const serialNumbers = event.target.checked
+                                      ? [...selection.serialNumbers, serial]
+                                      : selection.serialNumbers.filter((item) => item !== serial);
+                                    setSelected({
+                                      ...selected,
+                                      [line.id]: {
+                                        ...selection,
+                                        quantity: serialNumbers.length,
+                                        serialNumbers,
+                                      },
+                                    });
+                                  }}
+                                  type="checkbox"
+                                />
+                                <span>{serial}</span>
+                              </label>
+                            ))}
+                          </fieldset>
+                        ) : (
+                          <label>
+                            <span>Quantity</span>
+                            <input
+                              max={Number(line.returnableQuantity)}
+                              min="0.0001"
+                              onChange={(event) =>
+                                setSelected({
+                                  ...selected,
+                                  [line.id]: { ...selection, quantity: Number(event.target.value) },
+                                })
+                              }
+                              step="0.0001"
+                              type="number"
+                              value={selection.quantity}
+                            />
+                          </label>
+                        )}
+                        <label>
+                          <span>Send item to</span>
+                          <select
+                            onChange={(event) =>
+                              setSelected({
+                                ...selected,
+                                [line.id]: {
+                                  ...selection,
+                                  disposition: event.target.value as ReturnSelection['disposition'],
+                                },
+                              })
+                            }
+                            value={selection.disposition}
+                          >
+                            <option value="restock">Return to saleable stock</option>
+                            {serialised && register?.serviceReturnWarehouseId ? (
+                              <option value="service">Send to Service for inspection</option>
+                            ) : null}
+                          </select>
+                        </label>
+                      </div>
+                    ) : null}
+                  </article>
+                );
+              })}
+            </div>
+          </section>
+          <section className="pos-return-step">
+            <div className="pos-return-step-heading">
+              <span>2</span>
+              <div>
+                <h3>Reason and refund</h3>
+                <p>The refund follows the payment methods used on the original receipt.</p>
+              </div>
+            </div>
+            <label className="pos-return-reason">
+              <span>Reason for return</span>
+              <textarea
+                maxLength={1000}
+                onChange={(event) => setReason(event.target.value)}
+                rows={3}
+                value={reason}
+              />
+            </label>
+            <div className="pos-refund-summary">
+              {refunds.map((refund) => (
+                <div key={refund.method}>
+                  <span>{refund.method === 'cash' ? 'Cash refund' : 'Card refund'}</span>
+                  <strong>{money(refund.amount)}</strong>
+                </div>
+              ))}
+              <div className="is-total">
+                <span>Total refund</span>
+                <strong>{money(total)}</strong>
+              </div>
+            </div>
+            <p className={ready ? 'pos-return-guidance is-ready' : 'pos-return-guidance'}>
+              {ready ? 'Ready to complete the return.' : selectionIssue}
+            </p>
+          </section>
+        </div>
+        <footer>
+          <button className="pos-secondary-button" onClick={onClose} type="button">
+            Back
+          </button>
+          <button
+            className="pos-primary-button"
+            disabled={!ready || saving}
+            onClick={() => void submit()}
+            type="button"
+          >
+            {saving ? 'Completing return…' : `Complete return · ${money(total)}`}
+          </button>
+        </footer>
+      </section>
+    </div>
+  );
+}
+
+function ReturnReceiptDialog({ item, onClose }: { item: PosReturn; onClose: () => void }) {
+  return (
+    <div className="pos-dialog-layer" role="presentation">
+      <section
+        aria-labelledby="return-receipt-title"
+        aria-modal="true"
+        className="pos-dialog pos-receipt"
+        role="dialog"
+      >
+        <header>
+          <div>
+            <p>Return complete</p>
+            <h2 id="return-receipt-title">{item.returnNumber}</h2>
+          </div>
+          <span className="pos-receipt-check">✓</span>
+        </header>
+        <div className="pos-dialog-body">
+          <div className="pos-simulator-label">
+            Reversal recorded<small>{item.fiscalReversalNumber}</small>
+          </div>
+          <dl className="pos-receipt-summary">
+            <div>
+              <dt>Original sale</dt>
+              <dd>{item.originalSaleNumber}</dd>
+            </div>
+            {item.refunds.map((refund) => (
+              <div key={refund.id}>
+                <dt>{refund.method === 'cash' ? 'Cash refund' : 'Card refund'}</dt>
+                <dd>{money(Number(refund.amount))}</dd>
+              </div>
+            ))}
+            <div className="is-change">
+              <dt>Total returned</dt>
+              <dd>{money(Number(item.grossTotal))}</dd>
+            </div>
+          </dl>
+        </div>
+        <footer>
+          <button className="pos-primary-button" onClick={onClose} type="button">
+            Done
+          </button>
+        </footer>
+      </section>
     </div>
   );
 }
@@ -956,7 +2480,7 @@ function SaleHistory({ token }: { token: string }) {
         <div>
           <p>Point of sale</p>
           <h1>Sale history</h1>
-          <span>Completed sales for this cashier account, with receipt and cash details.</span>
+          <span>Receipts, payment methods, and return status for this cashier account.</span>
         </div>
       </header>
       {loading ? <PageLoading /> : null}
@@ -982,12 +2506,12 @@ function SaleHistory({ token }: { token: string }) {
               </div>
             </div>
             <div className="pos-sale-history-receipt">
-              <small>Simulated receipt</small>
+              <small>{saleStatusLabel(sale.status)}</small>
               <strong>{sale.fiscalReceiptNumber}</strong>
             </div>
             <div className="pos-sale-history-total">
               <small>
-                {sale.lines.length} product{sale.lines.length === 1 ? '' : 's'}
+                {sale.payments.map((payment) => paymentLabel(payment.method)).join(' + ')}
               </small>
               <strong>{money(Number(sale.grossTotal))}</strong>
             </div>
@@ -1000,16 +2524,13 @@ function SaleHistory({ token }: { token: string }) {
 
 function NoticeBar({ notice, onClose }: { notice: Notice; onClose: () => void }) {
   return (
-    <div
-      className={`pos-notice is-${notice.kind}`}
-      role={notice.kind === 'error' ? 'alert' : 'status'}
+    <Toast
+      durationMs={notice.kind === 'error' ? 7000 : 4800}
+      onDismiss={onClose}
+      tone={notice.kind}
     >
-      <span />
-      <p>{notice.text}</p>
-      <button aria-label="Dismiss message" onClick={onClose} type="button">
-        <PosIcon name="close" />
-      </button>
-    </div>
+      {notice.text}
+    </Toast>
   );
 }
 
@@ -1059,17 +2580,43 @@ function PageLoading() {
 }
 
 type PosIconName =
-  'close' | 'customers' | 'devices' | 'reports' | 'returns' | 'sales' | 'scan' | 'sell' | 'shifts';
+  | 'chevron'
+  | 'close'
+  | 'customers'
+  | 'devices'
+  | 'discount'
+  | 'loyalty'
+  | 'logout'
+  | 'reports'
+  | 'returns'
+  | 'sales'
+  | 'scan'
+  | 'sell'
+  | 'shifts'
+  | 'volume'
+  | 'volume-off';
 
 function PosIcon({ name }: { name: PosIconName }) {
   return (
-    <svg aria-hidden="true" className="pos-icon" fill="none" viewBox="0 0 24 24">
+    <svg
+      aria-hidden="true"
+      className="pos-icon"
+      fill="none"
+      focusable="false"
+      shapeRendering="geometricPrecision"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="1.8"
+      viewBox="0 0 24 24"
+    >
       {posIconPaths[name]}
     </svg>
   );
 }
 
 const posIconPaths: Record<PosIconName, ReactNode> = {
+  chevron: <path d="m8 10 4 4 4-4" />,
   close: <path d="m6 6 12 12M18 6 6 18" />,
   customers: (
     <>
@@ -1078,15 +2625,120 @@ const posIconPaths: Record<PosIconName, ReactNode> = {
     </>
   ),
   devices: <path d="M4 5h16v11H4zM8 20h8M12 16v4M7 9h2m2 0h2" />,
+  discount: (
+    <>
+      <path d="M4 7.5 7.5 4H14l6 6-10 10-6-6z" />
+      <circle cx="9" cy="9" r="1" />
+      <path d="m11 15 4-4" />
+    </>
+  ),
+  loyalty: (
+    <>
+      <path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10Z" />
+      <path d="m9.5 12 1.6 1.6 3.5-3.7" />
+    </>
+  ),
+  logout: <path d="M10 5H5v14h5m4-3 4-4-4-4m4 4H9" />,
   reports: <path d="M5 20V10m5 10V5m5 15v-7m5 7V8M3 20h19" />,
   returns: <path d="M9 7 4 12l5 5M4 12h10a6 6 0 0 1 6 6" />,
   sales: <path d="M5 4h14v16H5zM8 8h8M8 12h5M8 16h3" />,
   scan: <path d="M4 8V4h4m8 0h4v4M4 16v4h4m8 0h4v-4M8 8v8m3-8v8m3-8v8m3-8v8" />,
   sell: <path d="M4 5h16v14H4zM4 10h16M8 15h4" />,
   shifts: <path d="M5 3v3m14-3v3M4 8h16v12H4zM8 12h3m2 0h3M8 16h3" />,
+  volume: <path d="M5 10v4h3l4 3V7L8 10zm10-1.5a5 5 0 0 1 0 7m2-9a8 8 0 0 1 0 11" />,
+  'volume-off': <path d="M5 10v4h3l4 3V7L8 10zm4.5 1.5 6 6m0-6-6 6" />,
 };
 
+function initials(name: string) {
+  const parts = name.trim().split(/\s+/u).filter(Boolean);
+  return (
+    (parts.length > 1 ? `${parts[0]?.[0]}${parts.at(-1)?.[0]}` : parts[0]?.slice(0, 2))
+      ?.toUpperCase()
+      .replace(/[^\p{L}\p{N}]/gu, '') || 'VS'
+  );
+}
+
+function preferenceKey(accountId: string) {
+  return `vista.pos.preferences.${accountId}`;
+}
+
+function readSoundPreference(accountId: string) {
+  try {
+    const stored = window.localStorage.getItem(preferenceKey(accountId));
+    if (!stored) return true;
+    return (JSON.parse(stored) as { sounds?: boolean }).sounds !== false;
+  } catch {
+    return true;
+  }
+}
+
+function writeSoundPreference(accountId: string, sounds: boolean) {
+  try {
+    window.localStorage.setItem(preferenceKey(accountId), JSON.stringify({ sounds }));
+  } catch {
+    // The preference remains active for this session when browser storage is unavailable.
+  }
+}
+
+function playNoticeSound(kind: Notice['kind']) {
+  if (kind === 'info') return;
+  try {
+    const audio = primeNoticeAudio();
+    if (!audio) return;
+    if (audio.state === 'suspended') {
+      void audio
+        .resume()
+        .then(() => scheduleNoticeNotes(audio, kind))
+        .catch(() => undefined);
+      return;
+    }
+    scheduleNoticeNotes(audio, kind);
+  } catch {
+    // Sound is optional and must never interrupt a sale.
+  }
+}
+
+let noticeAudioContext: AudioContext | undefined;
+
+function primeNoticeAudio() {
+  try {
+    if (!noticeAudioContext && window.AudioContext) {
+      noticeAudioContext = new window.AudioContext();
+    }
+    if (noticeAudioContext?.state === 'suspended') {
+      void noticeAudioContext.resume().catch(() => undefined);
+    }
+    return noticeAudioContext;
+  } catch {
+    return undefined;
+  }
+}
+
+function scheduleNoticeNotes(audio: AudioContext, kind: Exclude<Notice['kind'], 'info'>) {
+  try {
+    const notes = kind === 'success' ? [660, 880] : [220, 175];
+    notes.forEach((frequency, index) => {
+      const oscillator = audio.createOscillator();
+      const gain = audio.createGain();
+      const start = audio.currentTime + index * 0.095;
+      oscillator.type = kind === 'success' ? 'sine' : 'triangle';
+      oscillator.frequency.setValueAtTime(frequency, start);
+      gain.gain.setValueAtTime(0.0001, start);
+      gain.gain.exponentialRampToValueAtTime(0.045, start + 0.012);
+      gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.11);
+      oscillator.connect(gain);
+      gain.connect(audio.destination);
+      oscillator.start(start);
+      oscillator.stop(start + 0.12);
+    });
+  } catch {
+    // Sound is optional and must never interrupt a sale.
+  }
+}
+
 function screenIcon(screen: PosScreen): PosIconName {
+  if (screen === 'reports') return 'reports';
+  if (screen === 'returns') return 'returns';
   if (screen === 'sales') return 'sales';
   if (screen === 'sell') return 'sell';
   return 'shifts';
@@ -1124,11 +2776,29 @@ function basketTotals(lines: BasketLine[]) {
   );
   return { gross: net + vat, net, vat };
 }
+
+function saleLinesFor(lines: BasketLine[]) {
+  return lines.map((line) => ({
+    ...(line.batchId ? { batchId: line.batchId } : {}),
+    productId: line.item.id,
+    quantity: line.quantity.toFixed(4),
+    ...(line.serialNumber ? { serialNumbers: [line.serialNumber] } : {}),
+  }));
+}
+
+function discountLabel(authorization: PosDiscountAuthorization) {
+  return authorization.discountType === 'percentage'
+    ? `${Number(authorization.discountValue).toFixed(2)}%`
+    : money(Number(authorization.discountValue));
+}
 function basketIssue(
   lines: BasketLine[],
   customer: CustomerSelection | undefined,
+  paymentMode: PaymentMode,
   cashTendered: string,
+  splitCash: string,
   gross: number,
+  cardAvailable: boolean,
 ) {
   if (!lines.length) return 'Add at least one product.';
   const serial = lines.find((line) => line.item.trackingMode === 'serial');
@@ -1137,8 +2807,48 @@ function basketIssue(
     return 'Choose the customer and receiving location for serialised equipment.';
   const batch = lines.find((line) => line.item.trackingMode === 'batch' && !line.batchId);
   if (batch) return `Choose the batch for ${batch.item.name}.`;
-  if (!cashTendered || Number(cashTendered) < gross) return 'Enter enough cash to cover the total.';
+  if (paymentMode !== 'cash' && !cardAvailable)
+    return 'Card payment is not available on this register.';
+  if (
+    paymentMode === 'split' &&
+    (!splitCash || Number(splitCash) <= 0 || Number(splitCash) >= gross)
+  )
+    return 'Enter a cash portion smaller than the total.';
+  const cashDue = paymentMode === 'cash' ? gross : paymentMode === 'split' ? Number(splitCash) : 0;
+  if (cashDue > 0 && (!cashTendered || Number(cashTendered) < cashDue))
+    return `Enter at least ${money(cashDue)} in cash.`;
   return undefined;
+}
+function paymentLabel(method: 'card' | 'cash' | 'split') {
+  return method === 'cash' ? 'Cash' : method === 'card' ? 'Bank card' : 'Split';
+}
+function saleStatusLabel(status: PosSale['status']) {
+  if (status === 'returned') return 'Fully returned';
+  if (status === 'partially_returned') return 'Partially returned';
+  return 'Completed receipt';
+}
+function dispositionLabel(disposition: PosReturn['lines'][number]['disposition']) {
+  return disposition === 'service' ? 'Sent to Service' : 'Restocked';
+}
+function returnLineGross(line: PosSale['lines'][number], selectedQuantity: number) {
+  const rate =
+    line.vatTreatment === 'reduced_9'
+      ? 0.09
+      : line.vatTreatment === 'standard_20' || line.vatTreatment === 'ica'
+        ? 0.2
+        : 0;
+  return Number(line.unitPrice) * (1 + rate) * selectedQuantity;
+}
+function allocateRefunds(sale: PosSale, total: number) {
+  let unallocated = Math.round(total * 10000) / 10000;
+  const refunds: Array<{ amount: number; method: 'card' | 'cash' }> = [];
+  for (const payment of sale.payments) {
+    const available = Number(payment.refundableAmount);
+    const amount = Math.min(available, unallocated);
+    if (amount > 0) refunds.push({ amount, method: payment.method });
+    unallocated = Math.round((unallocated - amount) * 10000) / 10000;
+  }
+  return unallocated <= 0.00005 ? refunds : [];
 }
 function money(value: number) {
   return `${value.toLocaleString('en-BG', { maximumFractionDigits: 2, minimumFractionDigits: 2 })} BGN`;

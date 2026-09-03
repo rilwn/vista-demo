@@ -10,6 +10,10 @@ import type {
   FinanceReportDefinitionKey,
   FinanceReportExport,
   FinanceReportExportPage,
+  PosReportDefinition,
+  PosReportDefinitionKey,
+  PosReportExport,
+  PosReportExportPage,
   ReportExportFormat,
   ReportExportStatus,
   ServiceReportDefinition,
@@ -29,6 +33,7 @@ import { CrmAnalyticsService } from '../crm/crm-analytics.service.js';
 import { DatabaseService } from '../database/database.service.js';
 import { FinanceReportsService } from '../finance/finance-reports.service.js';
 import { StructuredLogger } from '../logging/structured-logger.service.js';
+import { PosReportsService } from '../pos/pos-reports.service.js';
 import { ServiceReportsService } from '../service/service-reports.service.js';
 import { ObjectStorageService } from '../storage/object-storage.service.js';
 import type { BackgroundJobContext } from './job-handler-registry.service.js';
@@ -40,9 +45,14 @@ import type {
 import { renderFinanceReport } from './finance-report-renderer.js';
 
 type ReportDefinitionKey =
-  CrmReportDefinitionKey | FinanceReportDefinitionKey | ServiceReportDefinitionKey;
-type AnyReportDefinition = CrmReportDefinition | FinanceReportDefinition | ServiceReportDefinition;
-type AnyReportExport = CrmReportExport | FinanceReportExport | ServiceReportExport;
+  | CrmReportDefinitionKey
+  | FinanceReportDefinitionKey
+  | PosReportDefinitionKey
+  | ServiceReportDefinitionKey;
+type AnyReportDefinition =
+  CrmReportDefinition | FinanceReportDefinition | PosReportDefinition | ServiceReportDefinition;
+type AnyReportExport =
+  CrmReportExport | FinanceReportExport | PosReportExport | ServiceReportExport;
 interface AnyReportExportPage {
   items: AnyReportExport[];
   page: number;
@@ -51,12 +61,16 @@ interface AnyReportExportPage {
   totalPages: number;
 }
 interface ReportExportRequest {
+  businessLocationId?: string;
+  cashRegisterId?: string;
   dateFrom?: string;
   dateTo?: string;
   definitionKey: ReportDefinitionKey;
   format: ReportExportFormat;
+  operatorId?: string;
+  shiftId?: string;
 }
-type ReportScope = 'crm' | 'finance' | 'service';
+type ReportScope = 'crm' | 'finance' | 'pos' | 'service';
 
 interface DefinitionRow {
   available_formats: ReportExportFormat[];
@@ -76,7 +90,15 @@ interface ExportRow extends DefinitionRow {
   error_code: string | null;
   export_format: ReportExportFormat;
   file_name: string | null;
-  filters: { dateFrom?: string; dateTo?: string };
+  filters: {
+    asOf?: string;
+    businessLocationId?: string;
+    cashRegisterId?: string;
+    dateFrom?: string;
+    dateTo?: string;
+    operatorId?: string;
+    shiftId?: string;
+  };
   id: string;
   media_type: string | null;
   queue_job_id: string | null;
@@ -101,6 +123,7 @@ export class FinanceReportExportsService {
     @Inject(AuditService) private readonly audit: AuditService,
     @Inject(CrmAnalyticsService) private readonly crmAnalytics: CrmAnalyticsService,
     @Inject(FinanceReportsService) private readonly reports: FinanceReportsService,
+    @Inject(PosReportsService) private readonly posReports: PosReportsService,
     @Inject(ServiceReportsService) private readonly serviceReports: ServiceReportsService,
     @Inject(JobQueueService) private readonly jobs: JobQueueService,
     @Inject(ObjectStorageService) private readonly storage: ObjectStorageService,
@@ -137,6 +160,16 @@ export class FinanceReportExportsService {
     return result.rows.map(mapDefinition) as CrmReportDefinition[];
   }
 
+  async posDefinitions(): Promise<PosReportDefinition[]> {
+    const result = await this.database.getPool().query<DefinitionRow>(
+      `SELECT id, definition_key, name, description, implementation_key, available_formats
+       FROM reporting.report_definitions
+       WHERE is_active = true AND definition_key LIKE 'pos.%'
+       ORDER BY name, definition_key`,
+    );
+    return result.rows.map(mapDefinition) as PosReportDefinition[];
+  }
+
   async list(
     query: FinanceReportExportPageQueryDto,
     auth: AuthenticationContext,
@@ -156,6 +189,13 @@ export class FinanceReportExportsService {
     auth: AuthenticationContext,
   ): Promise<CrmReportExportPage> {
     return this.listForScope(query, auth, 'crm') as Promise<CrmReportExportPage>;
+  }
+
+  async posList(
+    query: FinanceReportExportPageQueryDto,
+    auth: AuthenticationContext,
+  ): Promise<PosReportExportPage> {
+    return this.listForScope(query, auth, 'pos') as Promise<PosReportExportPage>;
   }
 
   private async listForScope(
@@ -230,6 +270,15 @@ export class FinanceReportExportsService {
     metadata: RequestSecurityMetadata,
   ): Promise<CrmReportExport> {
     return this.createForScope(input, key, auth, metadata, 'crm') as Promise<CrmReportExport>;
+  }
+
+  async posCreate(
+    input: ReportExportRequest,
+    key: string | undefined,
+    auth: AuthenticationContext,
+    metadata: RequestSecurityMetadata,
+  ): Promise<PosReportExport> {
+    return this.createForScope(input, key, auth, metadata, 'pos') as Promise<PosReportExport>;
   }
 
   private async createForScope(
@@ -357,6 +406,14 @@ export class FinanceReportExportsService {
     return this.retryForScope(id, auth, metadata, 'crm') as Promise<CrmReportExport>;
   }
 
+  async posRetry(
+    id: string,
+    auth: AuthenticationContext,
+    metadata: RequestSecurityMetadata,
+  ): Promise<PosReportExport> {
+    return this.retryForScope(id, auth, metadata, 'pos') as Promise<PosReportExport>;
+  }
+
   private async retryForScope(
     id: string,
     auth: AuthenticationContext,
@@ -422,6 +479,14 @@ export class FinanceReportExportsService {
     metadata: RequestSecurityMetadata,
   ): Promise<FinanceReportExportContent> {
     return this.contentForScope(id, auth, metadata, 'crm');
+  }
+
+  posContent(
+    id: string,
+    auth: AuthenticationContext,
+    metadata: RequestSecurityMetadata,
+  ): Promise<FinanceReportExportContent> {
+    return this.contentForScope(id, auth, metadata, 'pos');
   }
 
   private async contentForScope(
@@ -525,20 +590,25 @@ export class FinanceReportExportsService {
       [exportId],
     );
     try {
-      const data = existing.definition_key.startsWith('service.')
-        ? await this.serviceReports.exportData(
-            existing.definition_key as ServiceReportDefinitionKey,
+      const data = existing.definition_key.startsWith('pos.')
+        ? await this.posReports.exportData(
+            existing.definition_key as PosReportDefinitionKey,
             existing.filters,
           )
-        : existing.definition_key.startsWith('crm.')
-          ? await this.crmAnalytics.exportData(
-              existing.definition_key as CrmReportDefinitionKey,
+        : existing.definition_key.startsWith('service.')
+          ? await this.serviceReports.exportData(
+              existing.definition_key as ServiceReportDefinitionKey,
               existing.filters,
             )
-          : await this.reports.exportData(
-              existing.definition_key as FinanceReportDefinitionKey,
-              existing.filters,
-            );
+          : existing.definition_key.startsWith('crm.')
+            ? await this.crmAnalytics.exportData(
+                existing.definition_key as CrmReportDefinitionKey,
+                existing.filters,
+              )
+            : await this.reports.exportData(
+                existing.definition_key as FinanceReportDefinitionKey,
+                existing.filters,
+              );
       const rendered = await renderFinanceReport(existing.export_format, data);
       const checksum = createHash('sha256').update(rendered.buffer).digest('hex');
       const fileName = exportFileName(
@@ -700,6 +770,11 @@ function mapDefinition(row: DefinitionRow): AnyReportDefinition {
     name: row.name,
     requiresDateRange: dateRangeReportKeys.has(row.definition_key),
   };
+  if (row.definition_key.startsWith('pos.'))
+    return {
+      ...mapped,
+      requiresShift: row.definition_key === 'pos.x-report' || row.definition_key === 'pos.z-report',
+    } as PosReportDefinition;
   if (row.definition_key.startsWith('service.')) return mapped as ServiceReportDefinition;
   if (row.definition_key.startsWith('crm.')) return mapped as CrmReportDefinition;
   return mapped as FinanceReportDefinition;
@@ -726,6 +801,32 @@ function reportFilters(
   input: ReportExportRequest,
   definitionKey: ReportDefinitionKey,
 ): Record<string, string> {
+  if (definitionKey === 'pos.x-report' || definitionKey === 'pos.z-report') {
+    if (!input.shiftId) {
+      throw new ApiErrorException(
+        'POS_REPORT_SHIFT_REQUIRED',
+        'Choose a cashier shift for this report.',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    if (
+      input.dateFrom ||
+      input.dateTo ||
+      input.businessLocationId ||
+      input.cashRegisterId ||
+      input.operatorId
+    ) {
+      throw new ApiErrorException(
+        'REPORT_FILTER_NOT_APPLICABLE',
+        'X and Z reports use the selected cashier shift.',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    return {
+      ...(definitionKey === 'pos.x-report' ? { asOf: new Date().toISOString() } : {}),
+      shiftId: input.shiftId,
+    };
+  }
   const requiresDateRange = dateRangeReportKeys.has(definitionKey);
   if (!requiresDateRange) {
     if (input.dateFrom || input.dateTo) {
@@ -751,7 +852,13 @@ function reportFilters(
       HttpStatus.BAD_REQUEST,
     );
   }
-  return { dateFrom: input.dateFrom, dateTo: input.dateTo };
+  return {
+    ...(input.businessLocationId ? { businessLocationId: input.businessLocationId } : {}),
+    ...(input.cashRegisterId ? { cashRegisterId: input.cashRegisterId } : {}),
+    dateFrom: input.dateFrom,
+    dateTo: input.dateTo,
+    ...(input.operatorId ? { operatorId: input.operatorId } : {}),
+  };
 }
 
 function validIdempotencyKey(value: string | undefined): string {
@@ -810,4 +917,11 @@ const dateRangeReportKeys = new Set<ReportDefinitionKey>([
   'crm.pipeline-performance',
   'crm.employee-performance',
   'crm.revenue-breakdown',
+  'pos.shift-register',
+  'pos.cashier-performance',
+  'pos.product-sales',
+  'pos.category-sales',
+  'pos.payment-methods',
+  'pos.location-sales',
+  'pos.location-comparison',
 ]);

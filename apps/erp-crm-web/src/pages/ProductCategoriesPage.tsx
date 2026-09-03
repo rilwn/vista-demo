@@ -1,4 +1,4 @@
-import { Button, InlineAlert, TextField } from '@vista/ui';
+import { Button, InlineAlert, TextField, Toast } from '@vista/ui';
 import type {
   CreateProductCategoryRequest,
   ProductCategory,
@@ -60,14 +60,9 @@ export function ProductCategoriesPage() {
       </header>
 
       {success ? (
-        <InlineAlert tone="success">
-          <div className="partners-inline-message">
-            <span>{success}</span>
-            <button onClick={() => setSuccess('')} type="button">
-              {messages.partners.close}
-            </button>
-          </div>
-        </InlineAlert>
+        <Toast onDismiss={() => setSuccess('')} tone="success">
+          {success}
+        </Toast>
       ) : null}
 
       <section className="category-registry" aria-labelledby="category-registry-heading">

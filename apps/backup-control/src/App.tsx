@@ -1,6 +1,6 @@
 import { useBrowserSession } from '@vista/auth/browser-session';
 import type { AuthenticationContextResponse, LoginRequest, LoginResponse } from '@vista/contracts';
-import { AuthenticationForm, Button, SearchableSelects } from '@vista/ui';
+import { AuthenticationForm, Button, SearchableSelects, VistaMark } from '@vista/ui';
 import { useActiveItemVisibility } from '@vista/ui/navigation';
 import { useState } from 'react';
 
@@ -108,8 +108,9 @@ function Application() {
         eyebrow="Backup and recovery"
         errorMessage={signInError}
         onAuthenticate={authentication.login}
-        subtitle="Controlled access to Vista Service backup and disaster-recovery operations."
-        supportText="Contact a Vista Service administrator if you cannot sign in."
+        subtitle="Use your assigned recovery account."
+        supportText="Need help? Contact your Vista Service administrator."
+        variant="recovery"
       />
     );
   }
@@ -139,7 +140,9 @@ function BackupConsole({
     <div className="backup-console">
       <aside className="backup-sidebar">
         <div className="backup-brand">
-          <span>VS</span>
+          <span>
+            <BackupIcon name="brand" />
+          </span>
           <div>
             <strong>Vista Recovery</strong>
             <small>Backup & recovery</small>
@@ -254,9 +257,9 @@ function BackupConsole({
 function ApplicationLoading({ label }: { label: string }) {
   return (
     <main className="backup-application-state" aria-live="polite">
-      <span aria-hidden="true">VS</span>
+      <VistaMark compact product="Vista Recovery" />
       <strong>{label}</strong>
-      <p>Checking the current browser session.</p>
+      <p>Getting your recovery workspace ready.</p>
     </main>
   );
 }
@@ -264,7 +267,7 @@ function ApplicationLoading({ label }: { label: string }) {
 function AccessUnavailable({ onSignOut }: { onSignOut: () => Promise<void> }) {
   return (
     <main className="backup-application-state backup-application-state--restricted">
-      <span aria-hidden="true">VS</span>
+      <VistaMark compact product="Vista Recovery" />
       <p>Vista Recovery</p>
       <h1>Backup access is not assigned</h1>
       <p>Use an account with backup access, then sign in again.</p>
@@ -305,7 +308,7 @@ function signInError(error: unknown): string {
 }
 
 type BackupIconName =
-  'approvals' | 'audit' | 'dr-tests' | 'jobs' | 'overview' | 'policies' | 'sources';
+  'approvals' | 'audit' | 'brand' | 'dr-tests' | 'jobs' | 'overview' | 'policies' | 'sources';
 
 function screenIcon(screen: BackupScreen): BackupIconName {
   return screen;
@@ -313,7 +316,18 @@ function screenIcon(screen: BackupScreen): BackupIconName {
 
 function BackupIcon({ name }: { name: BackupIconName }) {
   return (
-    <svg aria-hidden="true" className="backup-icon" fill="none" viewBox="0 0 24 24">
+    <svg
+      aria-hidden="true"
+      className="backup-icon"
+      fill="none"
+      focusable="false"
+      shapeRendering="geometricPrecision"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="1.7"
+      viewBox="0 0 24 24"
+    >
       {backupIconPaths[name]}
     </svg>
   );
@@ -322,6 +336,7 @@ function BackupIcon({ name }: { name: BackupIconName }) {
 const backupIconPaths: Record<BackupIconName, React.ReactNode> = {
   approvals: <path d="M5 4h14v16H5zM8 9h8m-8 4h5m-5 4h3M15 16l2 2 4-5" />,
   audit: <path d="M12 3a8 8 0 1 0 8 8M12 7v5l3 2M17 3v4h4" />,
+  brand: <path d="M4.5 6.5 10.5 19 19.5 5m-10 1.5 4 8.5 6-10" />,
   'dr-tests': <path d="M4 19h16M6 16V8l6-4 6 4v8M9 12h6M12 9v6" />,
   jobs: <path d="M5 5h14v14H5zM8 9h8m-8 4h5m-5 4h8" />,
   overview: <path d="M4 13h6V4H4zm10 7h6v-9h-6zM4 20h6v-3H4zm10-13h6V4h-6z" />,

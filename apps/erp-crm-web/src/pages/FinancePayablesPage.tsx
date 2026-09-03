@@ -1,4 +1,4 @@
-import { Button, InlineAlert } from '@vista/ui';
+import { Button, InlineAlert, Toast } from '@vista/ui';
 import type {
   CreateFinanceSupplierAdvanceRequest,
   CreateFinanceSupplierOffsetRequest,
@@ -116,14 +116,13 @@ export function FinancePayablesPage() {
       </section>
 
       {notice ? (
-        <InlineAlert tone={notice.includes('could not') ? 'error' : 'success'}>
-          <div className="supplier-finance-notice">
-            <span>{notice}</span>
-            <button aria-label="Dismiss message" onClick={() => setNotice(null)} type="button">
-              Close
-            </button>
-          </div>
-        </InlineAlert>
+        <Toast
+          durationMs={notice.includes('could not') ? 7000 : 5200}
+          onDismiss={() => setNotice(null)}
+          tone={notice.includes('could not') ? 'error' : 'success'}
+        >
+          {notice}
+        </Toast>
       ) : null}
 
       <div aria-label="Supplier finance views" className="supplier-finance-view-switch">

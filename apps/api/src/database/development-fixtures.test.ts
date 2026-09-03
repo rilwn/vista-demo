@@ -27,6 +27,7 @@ describe('development fixtures', () => {
     ).toEqual([
       { action: 'view', module: 'pos' },
       { action: 'create', module: 'pos' },
+      { action: 'edit', module: 'pos' },
     ]);
     expect(
       developmentFixtureAccounts.find((account) => account.key === 'backup-operator')?.permissions,
@@ -40,6 +41,13 @@ describe('development fixtures', () => {
             (permission.action === 'create' || permission.action === 'approve'),
         ),
     ).toBe(false);
+    expect(
+      developmentFixtureAccounts
+        .find((account) => account.key === 'manager')
+        ?.permissions.some(
+          (permission) => permission.module === 'pos' && permission.action === 'approve',
+        ),
+    ).toBe(true);
     expect(
       developmentFixtureAccounts
         .find((account) => account.key === 'viewer')

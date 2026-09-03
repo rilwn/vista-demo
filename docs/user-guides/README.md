@@ -27,6 +27,11 @@ select one of the shown suggestions to confirm the value. Multiple-choice lists,
 such as serial-number allocation, keep the selection list visible and provide a
 separate search box without clearing items already selected.
 
+Completed actions and short updates appear in a toast near the top-right of the
+workspace and close automatically. Select its close icon to dismiss it sooner.
+Validation and recovery guidance stays beside the relevant form or record so it
+does not disappear before it has been resolved.
+
 To change a password, open **My access → Change password**. The panel shows the
 currently configured requirements. Enter the current password and the new
 password twice. A successful change keeps this browser session active and signs
@@ -184,10 +189,40 @@ test.
 | `viewer@vista.local`           | Read-only ERP/CRM review outside restricted Service work.                   |
 
 The fixture accounts are intentionally non-administrative because administrative
-roles require a configured second factor. POS and Backup Control now use the
-same authenticated session controls as ERP/CRM, but their operational workflows
-remain unavailable. Signing in confirms access control and the controlled shell;
-it does not test selling, fiscalization, backup jobs, restore, or DR operations.
+roles require a configured second factor. POS and Backup Control use the same
+authenticated session controls as ERP/CRM. Online POS sales, returns, shifts,
+quick access, and reports are available for local testing. Certified
+fiscal-device behavior and the operational Backup/DR workflows remain pending
+their approved hardware, infrastructure, and business decisions.
+
+## POS counter
+
+Sign in to **Vista POS** with the assigned cashier account. The terminal keeps
+its top bar, navigation, and connection strip in view; product results, the
+basket, and register lists scroll inside their own areas. Use **Shifts** to open
+the assigned register before selling, then use **Sell** to scan or search for a
+product, select any required customer and serial number, choose the payment
+method, and complete the sale.
+
+Open the account menu in the top-right to change **Sale sounds** or sign out.
+Sale sounds are enabled by default and play only for completed actions and
+errors. Turning them off affects only the signed-in employee in that browser and
+does not affect any receipt, payment, or stock operation.
+
+Sales employees maintain counter offers from **ERP → Sales → Prices &
+promotions → POS offers**. A quantity offer applies when one product reaches its
+minimum quantity. A bundle applies only when every listed product reaches its
+minimum. Set the active dates and priority deliberately; the higher-priority
+offer wins when two offers include the same product.
+
+In **Vista POS → Sell**, eligible offers appear below their basket lines and in
+the totals automatically. **Manual discount** asks a different employee with
+discount approval access to enter their credentials; changing the customer or
+basket clears that approval. For a selected customer, **Vista Rewards** shows
+the card, available points, and full running history. Enter whole points to use
+before payment. The completed receipt shows points used and earned. A linked
+return restores redeemed points and reverses earned points through new history
+entries rather than changing the original activity.
 
 ## Business structure
 

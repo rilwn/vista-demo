@@ -23,16 +23,22 @@ import {
   type CreateCustomerPriceGroupRequest,
   type CreatePriceListLineRequest,
   type CreatePriceListRequest,
+  type CreatePosCommercialRuleRequest,
   type CreatePromotionalCampaignRequest,
   type CustomerPriceGroup,
   type PriceList,
   type PriceListLine,
   type PriceListScope,
+  type PosCommercialRule,
+  type PosCommercialRuleItem,
+  type PosCommercialRuleType,
+  type PosDiscountType,
   type PromotionalCampaign,
   type SalesPricingReferenceData,
   type SalesResolvedPrice,
   type UpdateCustomerPriceGroupRequest,
   type UpdatePriceListRequest,
+  type UpdatePosCommercialRuleRequest,
   type UpdatePromotionalCampaignRequest,
 } from '@vista/contracts';
 
@@ -221,6 +227,103 @@ export class ResolveSalesPriceQueryDto {
   @ApiProperty({ format: 'uuid', type: String })
   @IsUUID('loose')
   productId!: string;
+}
+
+export class CreatePosCommercialRuleItemDto {
+  @ApiProperty({ format: 'uuid', type: String })
+  @IsUUID('loose')
+  productId!: string;
+
+  @ApiProperty({ example: '2.0000', type: String })
+  @IsString()
+  @Matches(decimalPattern)
+  requiredQuantity!: string;
+}
+
+export class CreatePosCommercialRuleDto implements CreatePosCommercialRuleRequest {
+  @ApiProperty({ maxLength: 40, type: String })
+  @IsString()
+  @MaxLength(40)
+  code!: string;
+
+  @ApiProperty({ enum: ['fixed_amount', 'percentage'] })
+  @IsIn(['fixed_amount', 'percentage'])
+  discountType!: PosDiscountType;
+
+  @ApiProperty({ example: '10.0000', type: String })
+  @IsString()
+  @Matches(decimalPattern)
+  discountValue!: string;
+
+  @ApiProperty({ isArray: true, type: CreatePosCommercialRuleItemDto })
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(50)
+  @ValidateNested({ each: true })
+  @Type(() => CreatePosCommercialRuleItemDto)
+  items!: CreatePosCommercialRuleItemDto[];
+
+  @ApiProperty({ maxLength: 150, type: String })
+  @IsString()
+  @MaxLength(150)
+  name!: string;
+
+  @ApiProperty({ maximum: 1000, minimum: -1000, type: Number })
+  @IsInt()
+  @Min(-1000)
+  @Max(1000)
+  priority!: number;
+
+  @ApiProperty({ enum: ['bundle', 'quantity'] })
+  @IsIn(['bundle', 'quantity'])
+  ruleType!: PosCommercialRuleType;
+
+  @ApiProperty({ format: 'date', type: String })
+  @IsDateString()
+  validFrom!: string;
+
+  @ApiProperty({ format: 'date', type: String })
+  @IsDateString()
+  validTo!: string;
+}
+
+export class UpdatePosCommercialRuleDto
+  extends CreatePosCommercialRuleDto
+  implements UpdatePosCommercialRuleRequest
+{
+  @ApiProperty({ type: Boolean })
+  @IsBoolean()
+  active!: boolean;
+
+  @ApiProperty({ minimum: 1, type: Number })
+  @IsInt()
+  @Min(1)
+  version!: number;
+}
+
+class PosCommercialRuleItemDto implements PosCommercialRuleItem {
+  @ApiProperty({ type: String }) productCode!: string;
+  @ApiProperty({ format: 'uuid', type: String }) productId!: string;
+  @ApiProperty({ type: String }) productName!: string;
+  @ApiProperty({ type: String }) requiredQuantity!: string;
+}
+
+export class PosCommercialRuleDto implements PosCommercialRule {
+  @ApiProperty({ type: Boolean }) active!: boolean;
+  @ApiProperty({ type: String }) code!: string;
+  @ApiProperty({ format: 'date-time', type: String }) createdAt!: string;
+  @ApiProperty({ enum: ['fixed_amount', 'percentage'] }) discountType!: PosDiscountType;
+  @ApiProperty({ type: String }) discountValue!: string;
+  @ApiProperty({ format: 'uuid', type: String }) id!: string;
+  @ApiProperty({ isArray: true, type: PosCommercialRuleItemDto })
+  items!: PosCommercialRuleItem[];
+  @ApiProperty({ type: String }) name!: string;
+  @ApiProperty({ type: Number }) priority!: number;
+  @ApiProperty({ enum: ['bundle', 'quantity'] }) ruleType!: PosCommercialRuleType;
+  @ApiProperty({ format: 'date-time', type: String }) updatedAt!: string;
+  @ApiProperty({ format: 'date', type: String }) validFrom!: string;
+  @ApiProperty({ format: 'date', type: String }) validTo!: string;
+  @ApiProperty({ type: Number }) version!: number;
 }
 
 class PricingOptionDto {

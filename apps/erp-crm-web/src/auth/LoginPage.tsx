@@ -22,7 +22,7 @@ export function LoginPage() {
     return (
       <main className="full-page-loader" aria-live="polite">
         <span className="loader-mark" aria-hidden="true">
-          VS
+          <Icon name="brand" size={24} />
         </span>
         <strong>{messages.states.loading}</strong>
         <p>{messages.states.loadingDetail}</p>
@@ -81,36 +81,21 @@ export function LoginPage() {
   return (
     <main className="login-page">
       <section className="login-context" aria-label={messages.product.name}>
-        <VistaMark product={messages.product.name} />
-        <div className="login-context-copy">
-          <p className="login-context-eyebrow">{messages.authContext.eyebrow}</p>
-          <h1>{messages.authContext.title}</h1>
-          <p>{messages.authContext.subtitle}</p>
-          <ul>
-            {messages.authContext.modules.map((module) => (
-              <li key={module}>
-                <span aria-hidden="true" />
-                {module}
-              </li>
-            ))}
-          </ul>
-        </div>
-        <p className="login-context-security">
-          <Icon name="shield" size={17} />
-          {messages.auth.securityNote}
-        </p>
+        <VistaMark product="Vista Service" />
       </section>
 
       <section className="login-form-pane">
-        <div className="login-mobile-brand">
-          <VistaMark product={messages.product.name} />
-        </div>
         <div className="login-form-wrap">
-          <div className="login-step" aria-hidden="true">
-            <span className="is-complete" />
-            <span className={step === 'totp' ? 'is-complete' : ''} />
-          </div>
-          <p className="page-eyebrow">{copy.eyebrow}</p>
+          <header className="login-card-context">
+            <span className="login-product-icon" aria-hidden="true">
+              <Icon name="organization" size={25} />
+            </span>
+            <span>
+              <small>{messages.product.suite}</small>
+              <strong>{messages.product.name}</strong>
+            </span>
+            {step === 'totp' ? <em>{copy.eyebrow}</em> : null}
+          </header>
           <h2>{copy.title}</h2>
           <p className="login-form-subtitle">{copy.subtitle}</p>
 
@@ -131,7 +116,6 @@ export function LoginPage() {
                 <TextField
                   autoComplete="username"
                   autoFocus
-                  hint={messages.auth.emailHint}
                   id="email"
                   label={messages.auth.emailLabel}
                   maxLength={320}

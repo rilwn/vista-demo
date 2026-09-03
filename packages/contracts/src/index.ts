@@ -738,6 +738,10 @@ export interface PosRegisterOption {
   name: string;
   operatorCode: string;
   operatorId: string;
+  paymentTerminalLabel?: string;
+  paymentTerminalMode: 'disabled' | 'hardware' | 'simulator';
+  serviceReturnWarehouseId?: string;
+  serviceReturnWarehouseName?: string;
   warehouseId: string;
   warehouseName: string;
 }
@@ -807,6 +811,17 @@ export interface PosCatalogPage {
   totalPages: number;
 }
 
+export interface UpdatePosQuickAccessRequest {
+  productIds: string[];
+  shiftId: string;
+}
+
+export interface PosQuickAccess {
+  cashRegisterId: string;
+  items: PosCatalogItem[];
+  productIds: string[];
+}
+
 export interface PosCustomerLocationOption {
   city: string;
   id: string;
@@ -815,10 +830,40 @@ export interface PosCustomerLocationOption {
 
 export interface PosCustomerOption {
   id: string;
+  loyalty?: PosLoyaltyAccount;
   locations: PosCustomerLocationOption[];
   name: string;
   uic?: string;
   vatNumber?: string;
+}
+
+export interface PosLoyaltyAccount {
+  balance: number;
+  cardNumber: string;
+  id: string;
+  programName: string;
+  redemptionValueBgn: string;
+  status: 'active' | 'suspended';
+}
+
+export interface PosLoyaltyLedgerEntry {
+  balanceAfter: number;
+  entryType: 'adjustment' | 'earned' | 'earned_reversed' | 'redeemed' | 'redemption_restored';
+  id: string;
+  occurredAt: string;
+  points: number;
+  reason: string;
+  returnId?: string;
+  saleId?: string;
+}
+
+export interface PosLoyaltyLedger {
+  account: PosLoyaltyAccount;
+  entries: PosLoyaltyLedgerEntry[];
+}
+
+export interface EnrolPosLoyaltyRequest {
+  customerPartnerId: string;
 }
 
 export interface CreatePosSaleLineRequest {
@@ -828,30 +873,132 @@ export interface CreatePosSaleLineRequest {
   serialNumbers?: string[];
 }
 
-export interface CreatePosCashSaleRequest {
-  cashTendered: string;
+export type PosDiscountType = 'fixed_amount' | 'percentage';
+
+export interface PosManualDiscountRequest {
+  authorizationId: string;
+  discountType: PosDiscountType;
+  discountValue: string;
+}
+
+export interface CreatePosDiscountAuthorizationRequest {
+  approverEmail: string;
+  approverPassword: string;
+  customerPartnerId?: string;
+  discountType: PosDiscountType;
+  discountValue: string;
+  lines: CreatePosSaleLineRequest[];
+  reason: string;
+  shiftId: string;
+  totpCode?: string;
+}
+
+export interface PosDiscountAuthorization {
+  approverName: string;
+  discountType: PosDiscountType;
+  discountValue: string;
+  expiresAt: string;
+  id: string;
+  reason: string;
+}
+
+export interface PricePosBasketRequest {
+  customerPartnerId?: string;
+  lines: CreatePosSaleLineRequest[];
+  loyaltyPointsToRedeem?: number;
+  manualDiscount?: PosManualDiscountRequest;
+  shiftId: string;
+}
+
+export interface PosPricingAdjustment {
+  amount: string;
+  code: string;
+  label: string;
+  source: 'automatic' | 'loyalty' | 'manual';
+}
+
+export interface PosBasketPricedLine {
+  automaticDiscountTotal: string;
+  baseNetTotal: string;
+  grossTotal: string;
+  loyaltyDiscountTotal: string;
+  manualDiscountTotal: string;
+  netTotal: string;
+  pricingAdjustments: PosPricingAdjustment[];
+  productId: string;
+  vatTotal: string;
+}
+
+export interface PosBasketPricing {
+  automaticDiscountTotal: string;
+  baseNetTotal: string;
+  grossTotal: string;
+  lines: PosBasketPricedLine[];
+  loyaltyBalance: number;
+  loyaltyDiscountTotal: string;
+  loyaltyPointsRedeemed: number;
+  manualDiscountTotal: string;
+  netTotal: string;
+  vatTotal: string;
+}
+
+export type PosPaymentMethod = 'card' | 'cash';
+
+export interface CreatePosSalePaymentRequest {
+  amount: string;
+  method: PosPaymentMethod;
+  tenderedAmount?: string;
+}
+
+export interface CreatePosSaleRequest {
   clientTransactionId: string;
   customerLocationId?: string;
   customerPartnerId?: string;
   lines: CreatePosSaleLineRequest[];
+  loyaltyPointsToRedeem?: number;
+  manualDiscount?: PosManualDiscountRequest;
+  payments: CreatePosSalePaymentRequest[];
   shiftId: string;
 }
 
 export interface PosSaleLine {
+  automaticDiscountTotal: string;
+  baseNetTotal: string;
+  batchId?: string;
   grossTotal: string;
   id: string;
+  loyaltyDiscountTotal: string;
+  manualDiscountTotal: string;
   netTotal: string;
   productCode: string;
   productId: string;
   productName: string;
+  pricingAdjustments: PosPricingAdjustment[];
   quantity: string;
+  returnableQuantity: string;
+  returnableSerialNumbers: string[];
+  returnedQuantity: string;
   serialNumbers: string[];
   unitPrice: string;
   vatTotal: string;
   vatTreatment: PosVatTreatment;
 }
 
+export interface PosSalePayment {
+  adapter: string;
+  amount: string;
+  changeAmount: string;
+  id: string;
+  method: PosPaymentMethod;
+  providerReference?: string;
+  refundableAmount: string;
+  status: 'completed' | 'simulated';
+  tenderedAmount: string;
+}
+
 export interface PosSale {
+  automaticDiscountTotal: string;
+  baseNetTotal: string;
   cashTendered: string;
   changeAmount: string;
   completedAt: string;
@@ -860,14 +1007,19 @@ export interface PosSale {
   customerPartnerId?: string;
   fiscalAdapter: string;
   fiscalReceiptNumber: string;
-  fiscalStatus: 'fiscalized' | 'reversed' | 'simulated';
+  fiscalStatus: 'fiscalized' | 'partially_reversed' | 'reversed' | 'simulated';
   grossTotal: string;
   id: string;
   lines: PosSaleLine[];
+  loyaltyDiscountTotal: string;
+  loyaltyPointsEarned: number;
+  loyaltyPointsRedeemed: number;
+  manualDiscountTotal: string;
   netTotal: string;
+  payments: PosSalePayment[];
   saleNumber: string;
   shiftId: string;
-  status: 'completed' | 'reversed';
+  status: 'completed' | 'partially_returned' | 'returned';
   vatTotal: string;
 }
 
@@ -877,6 +1029,221 @@ export interface PosSalePage {
   pageSize: number;
   total: number;
   totalPages: number;
+}
+
+export type PosReturnDisposition = 'restock' | 'service';
+
+export interface CreatePosReturnLineRequest {
+  disposition: PosReturnDisposition;
+  originalSaleLineId: string;
+  quantity: string;
+  serialNumbers?: string[];
+}
+
+export interface CreatePosReturnRequest {
+  lines: CreatePosReturnLineRequest[];
+  originalSaleId: string;
+  reason: string;
+  refunds: CreatePosReturnRefundRequest[];
+  shiftId: string;
+}
+
+export interface CreatePosReturnRefundRequest {
+  amount: string;
+  method: PosPaymentMethod;
+}
+
+export interface PosReturnLine {
+  destinationWarehouseId: string;
+  destinationWarehouseName: string;
+  disposition: PosReturnDisposition;
+  grossTotal: string;
+  id: string;
+  netTotal: string;
+  originalSaleLineId: string;
+  productCode: string;
+  productId: string;
+  productName: string;
+  quantity: string;
+  serialNumbers: string[];
+  vatTotal: string;
+}
+
+export interface PosReturn {
+  completedAt: string;
+  fiscalAdapter: string;
+  fiscalReversalNumber: string;
+  grossTotal: string;
+  id: string;
+  lines: PosReturnLine[];
+  loyaltyPointsEarnedReversed: number;
+  loyaltyPointsRedeemedRestored: number;
+  netTotal: string;
+  originalSaleId: string;
+  originalSaleNumber: string;
+  reason: string;
+  refunds: PosReturnRefund[];
+  returnNumber: string;
+  shiftId: string;
+  vatTotal: string;
+}
+
+export interface PosReturnRefund {
+  adapter: string;
+  amount: string;
+  id: string;
+  method: PosPaymentMethod;
+  providerReference?: string;
+  status: 'completed' | 'simulated';
+}
+
+export interface PosReturnPage {
+  items: PosReturn[];
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+}
+
+export interface PosReportFilters {
+  businessLocationId?: string;
+  cashRegisterId?: string;
+  dateFrom: string;
+  dateTo: string;
+  operatorId?: string;
+}
+
+export interface PosReportLocationOption {
+  id: string;
+  name: string;
+}
+
+export interface PosReportRegisterOption {
+  businessLocationId: string;
+  code: string;
+  id: string;
+  name: string;
+}
+
+export interface PosReportOperatorOption {
+  businessLocationId: string;
+  code: string;
+  id: string;
+  name: string;
+}
+
+export interface PosReportReferenceData {
+  businessTimezone: string;
+  locations: PosReportLocationOption[];
+  operators: PosReportOperatorOption[];
+  registers: PosReportRegisterOption[];
+}
+
+export interface PosReportTotals {
+  averageSaleBgn: string;
+  grossReturnsBgn: string;
+  grossSalesBgn: string;
+  itemQuantityReturned: string;
+  itemQuantitySold: string;
+  netRevenueBgn: string;
+  netSalesBgn: string;
+  returnCount: number;
+  saleCount: number;
+  vatSalesBgn: string;
+}
+
+export interface PosCashierReportRow {
+  grossReturnsBgn: string;
+  grossSalesBgn: string;
+  name: string;
+  netRevenueBgn: string;
+  operatorCode: string;
+  operatorId: string;
+  returnCount: number;
+  saleCount: number;
+}
+
+export interface PosProductReportRow {
+  categoryName: string;
+  grossReturnsBgn: string;
+  grossSalesBgn: string;
+  netRevenueBgn: string;
+  productCode: string;
+  productId: string;
+  productName: string;
+  quantityReturned: string;
+  quantitySold: string;
+}
+
+export interface PosCategoryReportRow {
+  categoryId: string;
+  categoryName: string;
+  grossReturnsBgn: string;
+  grossSalesBgn: string;
+  netRevenueBgn: string;
+  quantityReturned: string;
+  quantitySold: string;
+}
+
+export interface PosPaymentReportRow {
+  collectedBgn: string;
+  method: PosPaymentMethod;
+  netBgn: string;
+  refundedBgn: string;
+}
+
+export interface PosLocationReportRow {
+  averageSaleBgn: string;
+  businessLocationId: string;
+  grossReturnsBgn: string;
+  grossSalesBgn: string;
+  locationName: string;
+  netRevenueBgn: string;
+  revenueSharePercent: number;
+  returnCount: number;
+  saleCount: number;
+}
+
+export interface PosShiftReportRow {
+  cashRegisterCode: string;
+  cashRegisterId: string;
+  cashRegisterName: string;
+  cashRefundsBgn: string;
+  cashSalesBgn: string;
+  closedAt?: string;
+  closingCashBgn?: string;
+  differenceBgn?: string;
+  expectedCashBgn: string;
+  fiscalMode: 'disabled' | 'hardware' | 'simulator';
+  grossReturnsBgn: string;
+  grossSalesBgn: string;
+  id: string;
+  locationName: string;
+  netRevenueBgn: string;
+  openedAt: string;
+  openingCashBgn: string;
+  operatorCode: string;
+  operatorId: string;
+  operatorName: string;
+  reportType: 'x' | 'z';
+  returnCount: number;
+  saleCount: number;
+  shiftNumber: string;
+  status: 'closed' | 'open';
+}
+
+export interface PosReportOverview {
+  cashiers: PosCashierReportRow[];
+  categories: PosCategoryReportRow[];
+  dateFrom: string;
+  dateTo: string;
+  generatedAt: string;
+  locations: PosLocationReportRow[];
+  payments: PosPaymentReportRow[];
+  products: PosProductReportRow[];
+  shifts: PosShiftReportRow[];
+  timezone: string;
+  totals: PosReportTotals;
 }
 
 export interface LegalBusinessEntity {
@@ -2131,6 +2498,62 @@ export interface CrmReportExport {
 
 export interface CrmReportExportPage {
   items: CrmReportExport[];
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+}
+
+export const posReportDefinitionKeys = [
+  'pos.shift-register',
+  'pos.cashier-performance',
+  'pos.x-report',
+  'pos.z-report',
+  'pos.product-sales',
+  'pos.category-sales',
+  'pos.payment-methods',
+  'pos.location-sales',
+  'pos.location-comparison',
+] as const;
+export type PosReportDefinitionKey = (typeof posReportDefinitionKeys)[number];
+
+export interface PosReportDefinition {
+  description: string;
+  formats: ReportExportFormat[];
+  key: PosReportDefinitionKey;
+  name: string;
+  requiresDateRange: boolean;
+  requiresShift: boolean;
+}
+
+export interface CreatePosReportExportRequest {
+  businessLocationId?: string;
+  cashRegisterId?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  definitionKey: PosReportDefinitionKey;
+  format: ReportExportFormat;
+  operatorId?: string;
+  shiftId?: string;
+}
+
+export interface PosReportExport {
+  attemptCount: number;
+  completedAt?: string;
+  createdAt: string;
+  definitionKey: PosReportDefinitionKey;
+  errorCode?: string;
+  fileName?: string;
+  format: ReportExportFormat;
+  id: string;
+  name: string;
+  rowCount?: number;
+  sizeBytes?: number;
+  status: ReportExportStatus;
+}
+
+export interface PosReportExportPage {
+  items: PosReportExport[];
   page: number;
   pageSize: number;
   total: number;
@@ -4150,6 +4573,49 @@ export interface SalesResolvedPrice {
   priority?: number;
   productId: string;
   unitPrice?: string;
+}
+
+export type PosCommercialRuleType = 'bundle' | 'quantity';
+
+export interface PosCommercialRuleItem {
+  productCode: string;
+  productId: string;
+  productName: string;
+  requiredQuantity: string;
+}
+
+export interface PosCommercialRule {
+  active: boolean;
+  code: string;
+  createdAt: string;
+  discountType: PosDiscountType;
+  discountValue: string;
+  id: string;
+  items: PosCommercialRuleItem[];
+  name: string;
+  priority: number;
+  ruleType: PosCommercialRuleType;
+  updatedAt: string;
+  validFrom: string;
+  validTo: string;
+  version: number;
+}
+
+export interface CreatePosCommercialRuleRequest {
+  code: string;
+  discountType: PosDiscountType;
+  discountValue: string;
+  items: Array<{ productId: string; requiredQuantity: string }>;
+  name: string;
+  priority: number;
+  ruleType: PosCommercialRuleType;
+  validFrom: string;
+  validTo: string;
+}
+
+export interface UpdatePosCommercialRuleRequest extends CreatePosCommercialRuleRequest {
+  active: boolean;
+  version: number;
 }
 
 export const warehouseTypes = ['standard', 'technician'] as const;

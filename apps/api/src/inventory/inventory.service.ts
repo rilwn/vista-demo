@@ -308,9 +308,11 @@ export class InventoryService {
        JOIN master_data.products product ON product.id = item.product_id
        JOIN master_data.warehouses warehouse ON warehouse.id = item.warehouse_id
        LEFT JOIN master_data.customer_equipment equipment
-         ON equipment.serialized_item_id = item.id
-          OR (equipment.product_id = item.product_id
-            AND upper(equipment.serial_number) = upper(item.serial_number))
+         ON equipment.active AND (
+           equipment.serialized_item_id = item.id
+           OR (equipment.product_id = item.product_id
+             AND upper(equipment.serial_number) = upper(item.serial_number))
+         )
        LEFT JOIN master_data.customer_locations location
          ON location.id = equipment.customer_location_id
        LEFT JOIN master_data.partners customer ON customer.id = location.partner_id

@@ -1,4 +1,4 @@
-import { Button, InlineAlert } from '@vista/ui';
+import { Button, InlineAlert, Toast } from '@vista/ui';
 import type {
   CreateCrmReferralRequest,
   CrmAfterSalesOverview,
@@ -99,14 +99,9 @@ export function CrmAfterSalesPage() {
       <CrmTabs />
 
       {notice ? (
-        <InlineAlert tone="success">
-          <div className="crm-care-notice">
-            <span>{notice}</span>
-            <button onClick={() => setNotice(null)} type="button">
-              Close
-            </button>
-          </div>
-        </InlineAlert>
+        <Toast onDismiss={() => setNotice(null)} tone="success">
+          {notice}
+        </Toast>
       ) : null}
       {error ? (
         <InlineAlert tone="error">

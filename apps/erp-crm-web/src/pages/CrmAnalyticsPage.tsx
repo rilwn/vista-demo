@@ -1,4 +1,4 @@
-import { Button, InlineAlert } from '@vista/ui';
+import { Button, InlineAlert, Toast } from '@vista/ui';
 import type {
   CreateCrmReportExportRequest,
   CrmAnalyticsDefinition,
@@ -675,7 +675,11 @@ function CrmReportExportPanel({
         <div className="security-drawer-body report-export-drawer-body">
           {loading ? <AnalyticsState title="Loading reports" /> : null}
           {error ? <InlineAlert tone="error">{error}</InlineAlert> : null}
-          {message ? <InlineAlert tone="success">{message}</InlineAlert> : null}
+          {message ? (
+            <Toast onDismiss={() => setMessage(null)} tone="success">
+              {message}
+            </Toast>
+          ) : null}
           {!loading ? (
             <section aria-label="Report options" className="report-export-form">
               <div className="report-export-field">

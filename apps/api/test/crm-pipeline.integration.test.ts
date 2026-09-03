@@ -53,12 +53,8 @@ describe.skipIf(!runInfrastructureTests)('CRM lead and opportunity pipeline', ()
     );
     const applied = await migrateUp(database, migrationDirectory);
     expect(applied).toContain('0048_crm_lead_opportunity_pipeline');
-    expect(await migrateDown(database, migrationDirectory)).toBe(
-      '0048_crm_lead_opportunity_pipeline',
-    );
-    expect(await migrateUp(database, migrationDirectory)).toContain(
-      '0048_crm_lead_opportunity_pipeline',
-    );
+    expect(await migrateDown(database, migrationDirectory)).toBe('0052_pos_payments_returns');
+    expect(await migrateUp(database, migrationDirectory)).toContain('0052_pos_payments_returns');
 
     Object.assign(process.env, {
       BUSINESS_TIMEZONE: 'Europe/Sofia',

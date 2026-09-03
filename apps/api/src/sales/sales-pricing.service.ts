@@ -4,15 +4,20 @@ import { HttpStatus, Inject, Injectable } from '@nestjs/common';
 import type {
   CreateCustomerPriceGroupRequest,
   CreatePriceListRequest,
+  CreatePosCommercialRuleRequest,
   CreatePromotionalCampaignRequest,
   CustomerPriceGroup,
   PriceList,
   PriceListScope,
+  PosCommercialRule,
+  PosCommercialRuleType,
+  PosDiscountType,
   PromotionalCampaign,
   SalesPricingReferenceData,
   SalesResolvedPrice,
   UpdateCustomerPriceGroupRequest,
   UpdatePriceListRequest,
+  UpdatePosCommercialRuleRequest,
   UpdatePromotionalCampaignRequest,
 } from '@vista/contracts';
 import type { PoolClient } from 'pg';
@@ -63,6 +68,22 @@ type PriceListRow = {
   name: string;
   priority: number;
   scope: PriceListScope;
+  updated_at: string;
+  valid_from: string;
+  valid_to: string;
+  version: number;
+};
+
+type PosCommercialRuleRow = {
+  active: boolean;
+  code: string;
+  created_at: string;
+  discount_type: PosDiscountType;
+  discount_value: string;
+  id: string;
+  name: string;
+  priority: number;
+  rule_type: PosCommercialRuleType;
   updated_at: string;
   valid_from: string;
   valid_to: string;
@@ -296,6 +317,123 @@ export class SalesPricingService {
         'SELECT id FROM sales.price_lists ORDER BY active DESC, priority DESC, code, id',
       );
     return Promise.all(result.rows.map((row) => this.priceListFromPool(row.id)));
+  }
+
+  async posCommercialRules(): Promise<PosCommercialRule[]> {
+    const result = await this.database.getPool().query<{ id: string }>(
+      `SELECT id FROM sales.pos_commercial_rules
+         ORDER BY active DESC, priority DESC, code, id`,
+    );
+    return Promise.all(result.rows.map((row) => this.posCommercialRuleFromPool(row.id)));
+  }
+
+  async createPosCommercialRule(
+    input: CreatePosCommercialRuleRequest,
+    key: string | undefined,
+    auth: AuthenticationContext,
+    metadata: RequestSecurityMetadata,
+  ): Promise<PosCommercialRule> {
+    const normalized = normalizePosCommercialRule(input);
+    return this.command(
+      'sales.pos-commercial-rule.create',
+      key,
+      normalized,
+      HttpStatus.CREATED,
+      async (client, idempotencyKey) => {
+        await this.requireProducts(
+          client,
+          normalized.items.map((item) => item.productId),
+        );
+        const id = randomUUID();
+        await client.query(
+          `INSERT INTO sales.pos_commercial_rules (
+             id, code, name, rule_type, discount_type, discount_value,
+             priority, valid_from, valid_to, created_by, updated_by
+           ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$10)`,
+          [
+            id,
+            normalized.code,
+            normalized.name,
+            normalized.ruleType,
+            normalized.discountType,
+            normalized.discountValue,
+            normalized.priority,
+            normalized.validFrom,
+            normalized.validTo,
+            auth.accountId,
+          ],
+        );
+        await this.replacePosCommercialRuleItems(client, id, normalized.items);
+        const rule = await this.posCommercialRule(client, id);
+        await this.sideEffects(
+          client,
+          'pos_commercial_rule',
+          id,
+          'sales.pos_commercial_rule.created',
+          rule,
+          auth,
+          metadata,
+          idempotencyKey,
+        );
+        return rule;
+      },
+    );
+  }
+
+  async updatePosCommercialRule(
+    id: string,
+    input: UpdatePosCommercialRuleRequest,
+    key: string | undefined,
+    auth: AuthenticationContext,
+    metadata: RequestSecurityMetadata,
+  ): Promise<PosCommercialRule> {
+    const normalized = normalizePosCommercialRuleUpdate(input);
+    return this.command(
+      `sales.pos-commercial-rule.update:${id}`,
+      key,
+      normalized,
+      HttpStatus.OK,
+      async (client, idempotencyKey) => {
+        await this.requireProducts(
+          client,
+          normalized.items.map((item) => item.productId),
+        );
+        const before = await this.posCommercialRule(client, id, true);
+        if (before.version !== normalized.version) throw staleVersion('POS offer');
+        await client.query(
+          `UPDATE sales.pos_commercial_rules SET name = $2, rule_type = $3,
+             discount_type = $4, discount_value = $5, priority = $6,
+             valid_from = $7, valid_to = $8, active = $9,
+             version = version + 1, updated_by = $10, updated_at = now()
+           WHERE id = $1`,
+          [
+            id,
+            normalized.name,
+            normalized.ruleType,
+            normalized.discountType,
+            normalized.discountValue,
+            normalized.priority,
+            normalized.validFrom,
+            normalized.validTo,
+            normalized.active,
+            auth.accountId,
+          ],
+        );
+        await this.replacePosCommercialRuleItems(client, id, normalized.items);
+        const rule = await this.posCommercialRule(client, id);
+        await this.sideEffects(
+          client,
+          'pos_commercial_rule',
+          id,
+          'sales.pos_commercial_rule.updated',
+          { after: rule, before },
+          auth,
+          metadata,
+          idempotencyKey,
+        );
+        return rule;
+      },
+    );
   }
 
   async createPriceList(
@@ -591,6 +729,87 @@ export class SalesPricingService {
       validTo: row.valid_to,
       version: row.version,
     };
+  }
+
+  private async posCommercialRuleFromPool(id: string): Promise<PosCommercialRule> {
+    const client = await this.database.getPool().connect();
+    try {
+      return await this.posCommercialRule(client, id);
+    } finally {
+      client.release();
+    }
+  }
+
+  private async posCommercialRule(
+    client: PoolClient,
+    id: string,
+    lock = false,
+  ): Promise<PosCommercialRule> {
+    if (lock) {
+      const locked = await client.query(
+        'SELECT id FROM sales.pos_commercial_rules WHERE id = $1 FOR UPDATE',
+        [id],
+      );
+      if (!locked.rowCount) throw notFound('POS offer');
+    }
+    const result = await client.query<PosCommercialRuleRow>(
+      `SELECT id, code, name, rule_type, discount_type, discount_value::text,
+         priority, valid_from::text, valid_to::text, active, version,
+         created_at, updated_at
+       FROM sales.pos_commercial_rules WHERE id = $1`,
+      [id],
+    );
+    const row = result.rows[0];
+    if (!row) throw notFound('POS offer');
+    const items = await client.query<{
+      product_code: string;
+      product_id: string;
+      product_name: string;
+      required_quantity: string;
+    }>(
+      `SELECT item.product_id, product.product_code, product.name AS product_name,
+         item.required_quantity::text
+       FROM sales.pos_commercial_rule_items item
+       JOIN master_data.products product ON product.id = item.product_id
+       WHERE item.rule_id = $1 ORDER BY product.name, product.id`,
+      [id],
+    );
+    return {
+      active: row.active,
+      code: row.code,
+      createdAt: asIso(row.created_at),
+      discountType: row.discount_type,
+      discountValue: row.discount_value,
+      id: row.id,
+      items: items.rows.map((item) => ({
+        productCode: item.product_code,
+        productId: item.product_id,
+        productName: item.product_name,
+        requiredQuantity: item.required_quantity,
+      })),
+      name: row.name,
+      priority: row.priority,
+      ruleType: row.rule_type,
+      updatedAt: asIso(row.updated_at),
+      validFrom: row.valid_from,
+      validTo: row.valid_to,
+      version: row.version,
+    };
+  }
+
+  private async replacePosCommercialRuleItems(
+    client: PoolClient,
+    ruleId: string,
+    items: Array<{ productId: string; requiredQuantity: string }>,
+  ) {
+    await client.query('DELETE FROM sales.pos_commercial_rule_items WHERE rule_id = $1', [ruleId]);
+    for (const item of items)
+      await client.query(
+        `INSERT INTO sales.pos_commercial_rule_items (
+           rule_id, product_id, required_quantity
+         ) VALUES ($1,$2,$3)`,
+        [ruleId, item.productId, item.requiredQuantity],
+      );
   }
 
   private async requirePricingReferences(
@@ -898,6 +1117,68 @@ function normalizePriceListCore(input: CreatePriceListRequest) {
   };
 }
 
+function normalizePosCommercialRule(input: CreatePosCommercialRuleRequest) {
+  return normalizePosCommercialRuleCore(input);
+}
+
+function normalizePosCommercialRuleUpdate(input: UpdatePosCommercialRuleRequest) {
+  return {
+    ...normalizePosCommercialRuleCore(input),
+    active: input.active,
+    version: positiveVersion(input.version),
+  };
+}
+
+function normalizePosCommercialRuleCore(input: CreatePosCommercialRuleRequest) {
+  const dates = normalizePeriod(input.validFrom, input.validTo);
+  const productIds = input.items.map((item) => item.productId);
+  if (new Set(productIds).size !== productIds.length)
+    throw new ApiErrorException(
+      'SALES_POS_RULE_PRODUCT_DUPLICATE',
+      'Each product can appear only once in an offer',
+      HttpStatus.BAD_REQUEST,
+    );
+  if (
+    (input.ruleType === 'quantity' && input.items.length !== 1) ||
+    (input.ruleType === 'bundle' && input.items.length < 2)
+  )
+    throw new ApiErrorException(
+      'SALES_POS_RULE_ITEMS_INVALID',
+      input.ruleType === 'quantity'
+        ? 'A quantity offer must contain one product'
+        : 'A bundle offer must contain at least two products',
+      HttpStatus.BAD_REQUEST,
+    );
+  const discountValue = positiveDecimal(input.discountValue, 'Discount');
+  if (input.discountType === 'percentage' && Number(discountValue) > 100)
+    throw new ApiErrorException(
+      'SALES_POS_RULE_PERCENTAGE_INVALID',
+      'Percentage discounts cannot be greater than 100%',
+      HttpStatus.BAD_REQUEST,
+    );
+  if (!Number.isInteger(input.priority) || input.priority < -1000 || input.priority > 1000)
+    throw new ApiErrorException(
+      'SALES_POS_RULE_PRIORITY_INVALID',
+      'Priority must be a whole number between -1000 and 1000',
+      HttpStatus.BAD_REQUEST,
+    );
+  return {
+    code: normalizeCode(input.code),
+    discountType: input.discountType,
+    discountValue,
+    items: input.items
+      .map((item) => ({
+        productId: item.productId,
+        requiredQuantity: positiveDecimal(item.requiredQuantity, 'Required quantity'),
+      }))
+      .sort((left, right) => left.productId.localeCompare(right.productId)),
+    name: normalizeName(input.name),
+    priority: input.priority,
+    ruleType: input.ruleType,
+    ...dates,
+  };
+}
+
 function normalizeScope(
   scope: PriceListScope,
   customerGroupId: string | undefined,
@@ -987,6 +1268,17 @@ function normalizeDecimal(value: string) {
     );
   const [whole = '0', fraction = ''] = value.split('.');
   return `${BigInt(whole).toString()}.${fraction.padEnd(4, '0')}`;
+}
+
+function positiveDecimal(value: string, label: string) {
+  const normalized = normalizeDecimal(value);
+  if (Number(normalized) <= 0)
+    throw new ApiErrorException(
+      'SALES_POS_RULE_VALUE_INVALID',
+      `${label} must be greater than zero`,
+      HttpStatus.BAD_REQUEST,
+    );
+  return normalized;
 }
 
 function uniqueIds(ids: string[]) {

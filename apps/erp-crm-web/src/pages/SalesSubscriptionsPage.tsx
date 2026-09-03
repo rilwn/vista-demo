@@ -1,4 +1,4 @@
-import { Button, InlineAlert } from '@vista/ui';
+import { Button, InlineAlert, Toast } from '@vista/ui';
 import type {
   CreateServiceSubscriptionRequest,
   SalesSubscriptionReferenceData,
@@ -83,14 +83,9 @@ export function SalesSubscriptionsPage() {
       </section>
 
       {notice ? (
-        <InlineAlert tone="success">
-          <div className="partners-inline-message">
-            <span>{notice}</span>
-            <button onClick={() => setNotice('')} type="button">
-              Close
-            </button>
-          </div>
-        </InlineAlert>
+        <Toast onDismiss={() => setNotice('')} tone="success">
+          {notice}
+        </Toast>
       ) : null}
 
       <SubscriptionRegister contracts={data.contracts} onPreview={setSelected} />

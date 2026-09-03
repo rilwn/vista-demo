@@ -1,6 +1,6 @@
 # Vista Integrated Information System — Remaining Implementation Plan
 
-Status date: 2026-09-02
+Status date: 2026-09-03
 Project: `BG16RFPR001-1.012-1324-C01`
 
 [`AGENTS.md`](AGENTS.md) is authoritative. This file contains only unfinished
@@ -139,14 +139,12 @@ optional and approved enterprise API paths pass.
 **Remaining**
 
 - Connect approved fiscal, PIN-pad, and scanner hardware; issue certified H-18
-  fiscal receipts; and deliver direct invoice creation from the linked receipt.
-- Deliver PIN-pad card, corporate on-account, split, advance, and remaining-
-  balance payments with recoverable payment/fiscal/document/stock coordination.
-- Deliver linked returns, fiscal reversal, eligible stock/service routing,
-  authorized manual discounts, approved bundle/quantity rules, and the loyalty
-  points ledger.
-- Complete shift, cashier, X/Z, product, category, payment, period, location,
-  and cross-location reports with Excel, CSV, and PDF export.
+  receipts and reversals; print warranty cards; and deliver direct invoice
+  creation from a linked receipt.
+- Deliver corporate on-account, advance, and remaining-balance payments, and
+  replace the development card simulator with the approved PIN-pad adapter and
+  recoverable hardware coordination.
+- Deliver the approved return-exception workflow.
 - Keep unselected optional hardware and features disabled behind configuration.
 
 **Depends on:** POS-001, POS-003, BUS-001, BUS-002, Phase 3 finance/documents,

@@ -51,7 +51,7 @@ describe('backup-control application shell', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Sign out' }));
 
-    expect(await screen.findByRole('heading', { name: 'Sign in to continue' })).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: 'Open recovery centre' })).toBeTruthy();
     expect(sessionStorage.getItem('vista.backup-control.session.v1')).toBeNull();
   });
 
@@ -64,7 +64,7 @@ describe('backup-control application shell', () => {
     vi.stubGlobal('fetch', fetchMock);
     render(<App />);
 
-    expect(await screen.findByRole('heading', { name: 'Sign in to continue' })).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: 'Open recovery centre' })).toBeTruthy();
     fireEvent.change(screen.getByLabelText('Work email'), {
       target: { value: 'backup.operator@vista.local' },
     });

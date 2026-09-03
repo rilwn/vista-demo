@@ -1,4 +1,4 @@
-import { Button, InlineAlert } from '@vista/ui';
+import { Button, InlineAlert, Toast } from '@vista/ui';
 import { useActiveItemVisibility } from '@vista/ui/navigation';
 import type {
   CreateSupplierClaimRequest,
@@ -77,6 +77,7 @@ export function SupplierProcurementPage({ view }: { view: SupplierProcurementVie
         countLabel={`${viewRecordCount(view, data)} ${viewRecordLabel(view, data)}`}
         description={viewRegisterDescription(view)}
         notice={notice}
+        onDismissNotice={() => setNotice(null)}
         title={viewRegisterTitle(view)}
         view={view}
       >
@@ -167,6 +168,7 @@ export function ProcurementWorkspace({
   countLabel,
   description,
   notice,
+  onDismissNotice,
   title,
   view,
 }: {
@@ -174,6 +176,7 @@ export function ProcurementWorkspace({
   countLabel: string;
   description: string;
   notice?: string | null;
+  onDismissNotice: () => void;
   title: string;
   view: ProcurementTabView;
 }) {
@@ -188,7 +191,11 @@ export function ProcurementWorkspace({
           </div>
           <span>{countLabel}</span>
         </header>
-        {notice ? <InlineAlert tone="success">{notice}</InlineAlert> : null}
+        {notice ? (
+          <Toast onDismiss={onDismissNotice} tone="success">
+            {notice}
+          </Toast>
+        ) : null}
         <div className="procurement-tab-body">{children}</div>
       </section>
     </div>

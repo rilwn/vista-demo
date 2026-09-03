@@ -7,6 +7,7 @@ import { FinanceModule } from '../finance/finance.module.js';
 import { SalesModule } from '../sales/sales.module.js';
 import { ServiceOperationsModule } from '../service/service.module.js';
 import { ObjectStorageModule } from '../storage/object-storage.module.js';
+import { PosModule } from '../pos/pos.module.js';
 import { CrmReportExportsController } from './crm-report-exports.controller.js';
 import { FinanceReportExportDispatcherService } from './finance-report-export-dispatcher.service.js';
 import { FinanceReportExportsController } from './finance-report-exports.controller.js';
@@ -16,6 +17,7 @@ import { JobsController } from './jobs.controller.js';
 import { JobQueueService } from './job-queue.service.js';
 import { NamedJobTriggerHandlersService } from './named-job-trigger-handlers.service.js';
 import { PlatformJobWorkerService } from './platform-job-worker.service.js';
+import { PosReportExportsController } from './pos-report-exports.controller.js';
 import { RecurringBillingScheduleService } from './recurring-billing-schedule.service.js';
 import { ServiceReportExportsController } from './service-report-exports.controller.js';
 
@@ -24,6 +26,7 @@ import { ServiceReportExportsController } from './service-report-exports.control
     CrmReportExportsController,
     FinanceReportExportsController,
     JobsController,
+    PosReportExportsController,
     ServiceReportExportsController,
   ],
   exports: [JobHandlerRegistry, JobQueueService],
@@ -33,6 +36,7 @@ import { ServiceReportExportsController } from './service-report-exports.control
     DatabaseModule,
     FinanceModule,
     ObjectStorageModule,
+    PosModule,
     SalesModule,
     ServiceOperationsModule,
   ],

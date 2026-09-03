@@ -51,7 +51,7 @@ describe('HTTP rate-limit coverage', () => {
       })),
     );
 
-    expect(assignments).toHaveLength(126);
+    expect(assignments).toHaveLength(129);
     expect(assignments.filter(({ policy }) => policy === undefined)).toEqual([]);
     expect(assignments).toEqual(
       expect.arrayContaining([
