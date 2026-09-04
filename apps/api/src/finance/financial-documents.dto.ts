@@ -305,6 +305,9 @@ export class FinancialDocumentDto implements FinancialDocument {
   @ApiProperty({ type: String }) rateSource!: string;
   @ApiPropertyOptional({ format: 'uuid', type: String }) sourceSalesInvoiceId?: string;
   @ApiPropertyOptional({ type: String }) sourceSalesInvoiceNumber?: string;
+  @ApiPropertyOptional({ type: String }) sourceFiscalReceiptNumber?: string;
+  @ApiPropertyOptional({ format: 'uuid', type: String }) sourcePosSaleId?: string;
+  @ApiPropertyOptional({ type: String }) sourcePosSaleNumber?: string;
   @ApiPropertyOptional({ format: 'uuid', type: String }) sourceServiceWorkOrderId?: string;
   @ApiPropertyOptional({ type: String }) sourceServiceWorkOrderNumber?: string;
   @ApiProperty({ enum: financialDocumentStatuses }) status!: FinancialDocumentStatus;

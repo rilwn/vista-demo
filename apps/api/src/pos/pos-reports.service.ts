@@ -824,7 +824,10 @@ function roundPercent(value: number): number {
 }
 
 function paymentLabel(method: PosPaymentReportRow['method']): string {
-  return method === 'cash' ? 'Cash' : 'Bank card';
+  if (method === 'cash') return 'Cash';
+  if (method === 'card') return 'Bank card';
+  if (method === 'advance') return 'Customer advance';
+  return 'On account';
 }
 
 function fiscalCriterion(mode: PosShiftReportRow['fiscalMode']): string {

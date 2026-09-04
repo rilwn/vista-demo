@@ -64,6 +64,9 @@ interface HeaderRow {
   rate_date: string;
   rate_source: string;
   source_invoice_number: string | null;
+  source_fiscal_receipt_number: string | null;
+  source_pos_sale_id: string | null;
+  source_pos_sale_number: string | null;
   source_sales_invoice_id: string | null;
   source_service_work_order_id: string | null;
   source_service_work_order_number: string | null;
@@ -418,6 +421,76 @@ export class FinancialDocumentsService {
     }
   }
 
+  async createFromPosReceipt(
+    saleId: string,
+    key: string | undefined,
+    auth: AuthenticationContext,
+    metadata: RequestSecurityMetadata,
+  ): Promise<FinancialDocument> {
+    const source = await this.database.getPool().query<{
+      business_location_id: string;
+      cash_register_id: string;
+      customer_partner_id: string | null;
+      legal_entity_id: string;
+      operator_id: string;
+      sale_date: string;
+      due_date: string;
+    }>(
+      `SELECT register.business_location_id, sale.cash_register_id, sale.operator_id,
+              branch.legal_entity_id, sale.customer_partner_id,
+              (sale.completed_at AT TIME ZONE $3)::date::text AS sale_date,
+              GREATEST(
+                (now() AT TIME ZONE $3)::date,
+                COALESCE(max(payment.account_due_on), (now() AT TIME ZONE $3)::date)
+              )::text AS due_date
+       FROM pos.sales sale
+       JOIN organization.operators operator ON operator.id = sale.operator_id
+       JOIN organization.cash_registers register ON register.id = sale.cash_register_id
+       JOIN organization.business_locations location ON location.id = register.business_location_id
+       JOIN organization.branches branch ON branch.id = location.branch_id
+       LEFT JOIN pos.payments payment ON payment.sale_id = sale.id
+       WHERE sale.id = $1 AND operator.account_id = $2
+       GROUP BY sale.id, register.business_location_id, branch.legal_entity_id
+       LIMIT 1`,
+      [saleId, auth.accountId, this.environment.BUSINESS_TIMEZONE],
+    );
+    const row = source.rows[0];
+    if (!row)
+      throw new ApiErrorException(
+        'POS_SALE_NOT_FOUND',
+        'The POS sale was not found for this cashier account.',
+        HttpStatus.NOT_FOUND,
+      );
+    if (!row.customer_partner_id)
+      throw new ApiErrorException(
+        'POS_INVOICE_CUSTOMER_REQUIRED',
+        'A customer must be linked to the receipt before an invoice can be prepared.',
+        HttpStatus.CONFLICT,
+      );
+    const issueDate = businessDate(this.environment.BUSINESS_TIMEZONE);
+    return this.create(
+      {
+        businessLocationId: row.business_location_id,
+        cashRegisterId: row.cash_register_id,
+        currencyCode: 'BGN',
+        customerPartnerId: row.customer_partner_id,
+        documentType: 'invoice',
+        dueDate: row.due_date,
+        exchangeRate: '1.00000000',
+        issueDate,
+        legalEntityId: row.legal_entity_id,
+        operatorId: row.operator_id,
+        rateDate: issueDate,
+        rateSource: 'internal_bgn',
+        sourcePosSaleId: saleId,
+        taxEventDate: row.sale_date,
+      },
+      key,
+      auth,
+      metadata,
+    );
+  }
+
   async create(
     input: CreateFinancialDocumentRequest,
     key: string | undefined,
@@ -434,18 +507,24 @@ export class FinancialDocumentsService {
         const scope = await requireScope(client, normalized);
         const customer = await requireCustomer(client, normalized.customerPartnerId);
         const correction = await requireCorrection(client, normalized);
-        const lines = normalized.sourceSalesInvoiceId
-          ? await salesDraftLines(client, normalized, customer.id)
-          : normalized.sourceServiceWorkOrderId
-            ? await serviceDraftLines(client, normalized, customer.id)
-            : await manualLines(client, normalized.lines ?? []);
+        const posSource = normalized.sourcePosSaleId
+          ? await posReceiptSource(client, normalized, customer.id)
+          : undefined;
+        const lines = posSource
+          ? posSource.lines
+          : normalized.sourceSalesInvoiceId
+            ? await salesDraftLines(client, normalized, customer.id)
+            : normalized.sourceServiceWorkOrderId
+              ? await serviceDraftLines(client, normalized, customer.id)
+              : await manualLines(client, normalized.lines ?? []);
         if (!lines.length)
           throw inputError('FINANCE_DOCUMENT_LINES_REQUIRED', 'Add at least one document line.');
         const existingSourceDocumentId = await findExistingSourceDocument(client, normalized);
         if (existingSourceDocumentId) return this.loadDocument(client, existingSourceDocumentId);
         let calculation;
         try {
-          calculation = calculateFinancialDocument(lines, normalized.exchangeRate);
+          calculation =
+            posSource?.calculation ?? calculateFinancialDocument(lines, normalized.exchangeRate);
         } catch (error) {
           throw inputError(
             'FINANCE_DOCUMENT_CALCULATION_INVALID',
@@ -458,7 +537,8 @@ export class FinancialDocumentsService {
           `INSERT INTO finance.financial_documents (
            id, draft_number, document_type, legal_entity_id, branch_id, business_location_id,
            cash_register_id, operator_id, customer_partner_id, source_sales_invoice_id,
-           source_service_work_order_id, correction_of_document_id, correction_reason,
+           source_service_work_order_id, source_pos_sale_id, source_fiscal_receipt_number,
+           correction_of_document_id, correction_reason,
            issue_date, tax_event_date, due_date,
            currency_code, exchange_rate, rate_date, rate_source,
            issuer_name, issuer_uic, issuer_vat_number, issuer_address,
@@ -467,7 +547,7 @@ export class FinancialDocumentsService {
            notes, created_by
          ) VALUES (
            $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,
-           $21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36
+           $21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38
          )`,
           [
             id,
@@ -481,6 +561,8 @@ export class FinancialDocumentsService {
             customer.id,
             normalized.sourceSalesInvoiceId ?? null,
             normalized.sourceServiceWorkOrderId ?? null,
+            normalized.sourcePosSaleId ?? null,
+            posSource?.fiscalReceiptNumber ?? null,
             correction?.id ?? null,
             normalized.correctionReason ?? null,
             normalized.issueDate,
@@ -733,6 +815,11 @@ export class FinancialDocumentsService {
       rateSource: row.rate_source,
       ...(row.source_sales_invoice_id ? { sourceSalesInvoiceId: row.source_sales_invoice_id } : {}),
       ...(row.source_invoice_number ? { sourceSalesInvoiceNumber: row.source_invoice_number } : {}),
+      ...(row.source_pos_sale_id ? { sourcePosSaleId: row.source_pos_sale_id } : {}),
+      ...(row.source_pos_sale_number ? { sourcePosSaleNumber: row.source_pos_sale_number } : {}),
+      ...(row.source_fiscal_receipt_number
+        ? { sourceFiscalReceiptNumber: row.source_fiscal_receipt_number }
+        : {}),
       ...(row.source_service_work_order_id
         ? { sourceServiceWorkOrderId: row.source_service_work_order_id }
         : {}),
@@ -857,12 +944,14 @@ function normalizeInput(input: CreateFinancialDocumentRequest) {
       'Only credit and debit notes can correct an invoice.',
     );
   }
-  if (input.sourceSalesInvoiceId && input.sourceServiceWorkOrderId)
-    throw inputError(
-      'FINANCE_DOCUMENT_SOURCE_CONFLICT',
-      'Choose either a Sales draft or completed Service work, not both.',
-    );
-  if (!input.sourceSalesInvoiceId && !input.sourceServiceWorkOrderId && !input.lines?.length)
+  const sourceCount = [
+    input.sourceSalesInvoiceId,
+    input.sourceServiceWorkOrderId,
+    input.sourcePosSaleId,
+  ].filter(Boolean).length;
+  if (sourceCount > 1)
+    throw inputError('FINANCE_DOCUMENT_SOURCE_CONFLICT', 'Choose one document source.');
+  if (sourceCount === 0 && !input.lines?.length)
     throw inputError(
       'FINANCE_DOCUMENT_LINES_REQUIRED',
       'Select prepared Sales or Service work, or add at least one line.',
@@ -892,6 +981,7 @@ function normalizeInput(input: CreateFinancialDocumentRequest) {
     rateDate: normalizeDate(input.rateDate),
     rateSource,
     ...(input.sourceSalesInvoiceId ? { sourceSalesInvoiceId: input.sourceSalesInvoiceId } : {}),
+    ...(input.sourcePosSaleId ? { sourcePosSaleId: input.sourcePosSaleId } : {}),
     ...(input.sourceServiceWorkOrderId
       ? { sourceServiceWorkOrderId: input.sourceServiceWorkOrderId }
       : {}),
@@ -1102,6 +1192,114 @@ async function salesDraftLines(
     unitPrice: normalizeDecimal(line.unit_price, 4),
     vatTreatment: line.vat_treatment,
   }));
+}
+
+async function posReceiptSource(
+  client: PoolClient,
+  input: ReturnType<typeof normalizeInput>,
+  customerId: string,
+) {
+  if (input.documentType !== 'invoice')
+    throw inputError(
+      'FINANCE_POS_SOURCE_TYPE_INVALID',
+      'A POS receipt can be used only to prepare an invoice.',
+    );
+  const header = await client.query<{
+    currency_code: string;
+    customer_partner_id: string | null;
+    fiscal_receipt_number: string;
+    gross_total: string;
+    net_total: string;
+    vat_total: string;
+  }>(
+    `SELECT sale.customer_partner_id, sale.currency_code, sale.fiscal_receipt_number,
+            sale.net_total::text, sale.vat_total::text, sale.gross_total::text
+     FROM pos.sales sale WHERE sale.id = $1 FOR UPDATE OF sale`,
+    [input.sourcePosSaleId],
+  );
+  const sale = header.rows[0];
+  if (!sale) throw inputError('FINANCE_POS_RECEIPT_INVALID', 'Select an available POS receipt.');
+  if (sale.customer_partner_id !== customerId || sale.currency_code !== input.currencyCode)
+    throw inputError(
+      'FINANCE_POS_RECEIPT_CONTEXT_MISMATCH',
+      'The invoice customer and currency must match the POS receipt.',
+    );
+  const result = await client.query<{
+    base_net_total: string;
+    gross_total: string;
+    net_total: string;
+    product_id: string;
+    product_name: string;
+    quantity: string;
+    unit_code: string;
+    unit_price: string;
+    vat_total: string;
+    vat_treatment: VatTreatment;
+  }>(
+    `SELECT line.product_id, line.product_name, line.unit_code,
+            line.quantity::text, line.unit_price::text, line.vat_treatment,
+            line.base_net_total::text, line.net_total::text,
+            line.vat_total::text, line.gross_total::text
+     FROM pos.sale_lines line WHERE line.sale_id = $1 ORDER BY line.id`,
+    [input.sourcePosSaleId],
+  );
+  if (!result.rows.length)
+    throw inputError('FINANCE_POS_RECEIPT_EMPTY', 'The POS receipt has no document lines.');
+  const lines = result.rows.map((line) => ({
+    description: line.product_name,
+    discountPercent: effectiveDiscount(line.base_net_total, line.net_total),
+    productId: line.product_id,
+    quantity: line.quantity,
+    unitCode: line.unit_code,
+    unitPrice: line.unit_price,
+    vatTreatment: line.vat_treatment,
+  }));
+  const summaries = new Map<
+    string,
+    { net: bigint; rate: string; treatment: VatTreatment; vat: bigint }
+  >();
+  const calculatedLines = result.rows.map((line, index) => {
+    const vatRate = vatRateFor(line.vat_treatment);
+    const key = `${line.vat_treatment}:${vatRate}`;
+    const summary = summaries.get(key) ?? {
+      net: 0n,
+      rate: vatRate,
+      treatment: line.vat_treatment,
+      vat: 0n,
+    };
+    summary.net += decimalUnits(line.net_total, 4);
+    summary.vat += decimalUnits(line.vat_total, 4);
+    summaries.set(key, summary);
+    return {
+      discountPercent: lines[index]!.discountPercent,
+      grossTotal: normalizeDecimal(line.gross_total, 4),
+      netTotal: normalizeDecimal(line.net_total, 4),
+      quantity: normalizeDecimal(line.quantity, 4),
+      unitPrice: normalizeDecimal(line.unit_price, 4),
+      vatAmount: normalizeDecimal(line.vat_total, 4),
+      vatRate,
+      vatTreatment: line.vat_treatment,
+    };
+  });
+  return {
+    calculation: {
+      bgnGrossTotal: normalizeDecimal(sale.gross_total, 4),
+      bgnNetTotal: normalizeDecimal(sale.net_total, 4),
+      bgnVatTotal: normalizeDecimal(sale.vat_total, 4),
+      grossTotal: normalizeDecimal(sale.gross_total, 4),
+      lines: calculatedLines,
+      netTotal: normalizeDecimal(sale.net_total, 4),
+      vatSummary: [...summaries.values()].map((summary) => ({
+        netTotal: formatDecimalUnits(summary.net, 4),
+        vatAmount: formatDecimalUnits(summary.vat, 4),
+        vatRate: summary.rate,
+        vatTreatment: summary.treatment,
+      })),
+      vatTotal: normalizeDecimal(sale.vat_total, 4),
+    },
+    fiscalReceiptNumber: sale.fiscal_receipt_number,
+    lines,
+  };
 }
 
 async function serviceDraftLines(
@@ -1321,8 +1519,11 @@ async function findExistingSourceDocument(
     ? 'source_sales_invoice_id'
     : input.sourceServiceWorkOrderId
       ? 'source_service_work_order_id'
-      : undefined;
-  const sourceId = input.sourceSalesInvoiceId ?? input.sourceServiceWorkOrderId;
+      : input.sourcePosSaleId
+        ? 'source_pos_sale_id'
+        : undefined;
+  const sourceId =
+    input.sourceSalesInvoiceId ?? input.sourceServiceWorkOrderId ?? input.sourcePosSaleId;
   if (!sourceColumn || !sourceId) return undefined;
   const result = await client.query<{ id: string }>(
     `SELECT id FROM finance.financial_documents
@@ -1340,6 +1541,8 @@ function headerQuery() {
                  location.name AS business_location_name, register.name AS cash_register_name,
                  employee.display_name AS operator_name, document.customer_partner_id,
                  document.source_sales_invoice_id, source.invoice_number AS source_invoice_number,
+                 document.source_pos_sale_id, pos_source.sale_number AS source_pos_sale_number,
+                 document.source_fiscal_receipt_number,
                  document.source_service_work_order_id,
                  service_source.work_order_number AS source_service_work_order_number,
                  document.correction_of_document_id, document.correction_reason,
@@ -1360,6 +1563,7 @@ function headerQuery() {
           LEFT JOIN identity.user_accounts account ON account.id = operator.account_id
           LEFT JOIN identity.employees employee ON employee.id = account.employee_id
           LEFT JOIN sales.invoices source ON source.id = document.source_sales_invoice_id
+          LEFT JOIN pos.sales pos_source ON pos_source.id = document.source_pos_sale_id
           LEFT JOIN service.work_orders service_source
             ON service_source.id = document.source_service_work_order_id`;
 }
@@ -1384,6 +1588,34 @@ function normalizeDecimal(value: string, scale: number) {
 function decimalUnits(value: string, scale: number) {
   const [whole, fraction = ''] = value.split('.');
   return BigInt(`${whole}${fraction.padEnd(scale, '0')}`);
+}
+
+function effectiveDiscount(baseNetTotal: string, netTotal: string): string {
+  const base = decimalUnits(baseNetTotal, 4);
+  const net = decimalUnits(netTotal, 4);
+  if (base <= 0n || net >= base) return '0.0000';
+  const scaledPercent = ((base - net) * 100n * 10_000n + base / 2n) / base;
+  return formatDecimalUnits(scaledPercent, 4);
+}
+
+function formatDecimalUnits(value: bigint, scale: number): string {
+  const text = value.toString().padStart(scale + 1, '0');
+  return `${text.slice(0, -scale)}.${text.slice(-scale)}`;
+}
+
+function vatRateFor(treatment: VatTreatment): string {
+  if (treatment === 'reduced_9') return '9.0000';
+  if (treatment === 'standard_20' || treatment === 'ica') return '20.0000';
+  return '0.0000';
+}
+
+function businessDate(timezone: string): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    day: '2-digit',
+    month: '2-digit',
+    timeZone: timezone,
+    year: 'numeric',
+  }).format(new Date());
 }
 
 function inputError(code: string, message: string) {

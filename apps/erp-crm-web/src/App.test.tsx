@@ -5,6 +5,7 @@ import type {
   CrmOpportunity,
   CrmReportDefinition,
   CrmReportExport,
+  CustomerPaymentAccount,
   CustomerOperationalOverview,
   FinanceAgingReport,
   FinanceJournalReport,
@@ -4195,6 +4196,123 @@ describe('ERP and CRM authenticated workspace', () => {
     fireEvent.click(screen.getByRole('link', { name: 'Collections & payments' }));
     expect(await screen.findByRole('heading', { name: 'Collections & payments' })).toBeTruthy();
     expect(screen.getByText(/1 payment/u)).toBeTruthy();
+  });
+
+  it('manages customer credit terms and received advances from Finance', async () => {
+    const financeContext = {
+      ...authenticationContext,
+      permissions: [
+        ...authenticationContext.permissions,
+        { action: 'view', module: 'erp.finance' },
+        { action: 'create', module: 'erp.finance' },
+        { action: 'edit', module: 'erp.finance' },
+      ],
+    };
+    storeAuthenticatedSession(financeContext);
+    const customerId = 'de41d613-0df0-4455-b3ed-1282e8cb6658';
+    const advanceId = '36955864-d3b0-4936-92a7-da716403cb75';
+    let account: CustomerPaymentAccount = {
+      advanceBalance: '80.0000',
+      advances: [
+        {
+          amount: '80.0000',
+          availableAmount: '80.0000',
+          customerPartnerId: customerId,
+          id: '03dbb5fa-13c2-494f-bd4f-34e9dd345538',
+          number: 'DEV-ADV-ALFA-001',
+          paymentMethod: 'bank_transfer',
+          receivedOn: '2026-09-03',
+        },
+      ],
+      availableCredit: '2000.0000',
+      customerName: 'Alfa Market Demo Ltd.',
+      customerPartnerId: customerId,
+      entries: [],
+      outstandingBalance: '0.0000',
+      terms: {
+        creditLimitBgn: '2000.0000',
+        id: '4d263df9-af2a-4f30-9fd1-999325135f39',
+        onAccountEnabled: true,
+        paymentTermsDays: 14,
+        status: 'active',
+        validFrom: '2026-01-01',
+        validTo: '2030-12-31',
+        version: 1,
+      },
+      uic: '206666666',
+    };
+    const fetchMock = vi.fn((input: string, options?: RequestInit) => {
+      if (input.endsWith('/auth/me')) return Promise.resolve(jsonResponse(financeContext));
+      if (input.endsWith('/finance/customer-accounts/reference-data'))
+        return Promise.resolve(
+          jsonResponse({
+            customers: [{ id: customerId, name: account.customerName, uic: account.uic }],
+          }),
+        );
+      if (
+        input.endsWith('/finance/customer-accounts') &&
+        (!options?.method || options.method === 'GET')
+      )
+        return Promise.resolve(jsonResponse([account]));
+      if (input.endsWith(`/finance/customer-accounts/${customerId}/terms`)) {
+        const body = JSON.parse(typeof options?.body === 'string' ? options.body : '') as {
+          creditLimitBgn: string;
+        };
+        account = {
+          ...account,
+          availableCredit: Number(body.creditLimitBgn).toFixed(4),
+          terms: {
+            ...account.terms!,
+            creditLimitBgn: Number(body.creditLimitBgn).toFixed(4),
+            version: 2,
+          },
+        };
+        return Promise.resolve(jsonResponse(account));
+      }
+      if (input.endsWith('/finance/customer-accounts/advances') && options?.method === 'POST') {
+        const advance = {
+          amount: '100.0000',
+          availableAmount: '100.0000',
+          customerPartnerId: customerId,
+          id: advanceId,
+          number: 'ADV-2026-000001',
+          paymentMethod: 'bank_transfer' as const,
+          paymentReference: 'TEST-ADV-0904',
+          receivedOn: '2026-09-04',
+        };
+        account = {
+          ...account,
+          advanceBalance: '180.0000',
+          advances: [...account.advances, advance],
+        };
+        return Promise.resolve(jsonResponse(advance, 201));
+      }
+      return Promise.resolve(jsonResponse({}));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderApplication(['/modules/erp.finance/customer-accounts']);
+    expect(await screen.findByRole('heading', { name: 'Customer payment accounts' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+    let dialog = await screen.findByRole('dialog', { name: 'Alfa Market Demo Ltd.' });
+    expect(within(dialog).getByText('DEV-ADV-ALFA-001')).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Edit terms' }));
+    dialog = await screen.findByRole('dialog', { name: 'Set payment terms' });
+    fireEvent.change(within(dialog).getByLabelText('Credit limit (BGN)'), {
+      target: { value: '1500' },
+    });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save payment terms' }));
+    expect(
+      await screen.findByText('Payment terms for Alfa Market Demo Ltd. were saved.'),
+    ).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Record advance' }));
+    dialog = await screen.findByRole('dialog', { name: 'Record customer advance' });
+    fireEvent.change(within(dialog).getByLabelText('Payment reference (optional)'), {
+      target: { value: 'TEST-ADV-0904' },
+    });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Record advance' }));
+    expect(await screen.findByText('ADV-2026-000001 was recorded.')).toBeTruthy();
   });
 
   it('moves a supplier invoice through payable, payment, advance allocation, and offset screens', async () => {

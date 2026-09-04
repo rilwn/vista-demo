@@ -23,6 +23,9 @@ describe('POS application', () => {
     render(<App />);
 
     expect(await screen.findByRole('heading', { name: 'New sale' })).toBeTruthy();
+    expect(
+      screen.getByRole('region', { name: 'Sale details and payment' }).getAttribute('tabindex'),
+    ).toBe('0');
     expect(screen.getByLabelText('Search or scan').hasAttribute('disabled')).toBe(true);
     expect(screen.getByRole('heading', { name: 'The counter is closed' })).toBeTruthy();
     expect(screen.getByText('Test receipt mode')).toBeTruthy();
@@ -52,6 +55,20 @@ describe('POS application', () => {
     expect(await screen.findByRole('heading', { name: 'Reports' })).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Reports' }).getAttribute('aria-current')).toBe('page');
     expect(window.location.pathname).toBe('/reports');
+  });
+
+  it('prepares a Finance invoice from a customer receipt in sale history', async () => {
+    installApiMock();
+    render(<App />);
+    await screen.findByRole('heading', { name: 'New sale' });
+
+    fireEvent.click(screen.getByRole('link', { name: 'Sale history' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'View receipt' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Prepare invoice' }));
+
+    expect(await screen.findByText(posInvoice.number)).toBeTruthy();
+    expect(screen.getByText(`${posInvoice.number} is ready for Finance review.`)).toBeTruthy();
+    expect(screen.getByText(/Linked to SIM-RECEIPT/u)).toBeTruthy();
   });
 
   it('lets the cashier configure register shortcuts after opening a shift', async () => {
@@ -101,7 +118,9 @@ describe('POS application', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Open cashier shift' }));
 
     expect(await screen.findByRole('heading', { name: 'New sale' })).toBeTruthy();
-    fireEvent.click(await screen.findByRole('button', { name: /Demo 12 V Power Adapter/u }));
+    fireEvent.click(
+      (await screen.findAllByRole('button', { name: /Demo 12 V Power Adapter/u }))[0]!,
+    );
     fireEvent.change(screen.getByLabelText('Cash received'), { target: { value: '100' } });
     fireEvent.click(screen.getByRole('button', { name: /Complete sale · 60.00 BGN/u }));
 
@@ -126,6 +145,43 @@ describe('POS application', () => {
     expect(screen.getAllByText('10.00 BGN').length).toBeGreaterThanOrEqual(2);
     fireEvent.click(screen.getByRole('button', { name: /Complete sale · 60.00 BGN/u }));
     expect(await screen.findByRole('heading', { name: sale.fiscalReceiptNumber })).toBeTruthy();
+  });
+
+  it('uses a customer advance and approved credit in one sale', async () => {
+    const fetchMock = installApiMock();
+    render(<App />);
+    await screen.findByRole('heading', { name: 'New sale' });
+
+    fireEvent.click(screen.getByRole('link', { name: 'Shifts' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Open cashier shift' }));
+    await screen.findByRole('heading', { name: 'New sale' });
+    fireEvent.click(screen.getByRole('button', { name: 'Add customer' }));
+    fireEvent.click(await screen.findByRole('button', { name: /Alfa Market Demo Ltd\./u }));
+    fireEvent.click(screen.getByRole('button', { name: 'Use customer' }));
+    fireEvent.click(
+      (await screen.findAllByRole('button', { name: /Demo 12 V Power Adapter/u }))[0]!,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Advance / account' }));
+
+    expect(await screen.findByText('80.00 BGN')).toBeTruthy();
+    expect(screen.getByText('2,000.00 BGN')).toBeTruthy();
+    fireEvent.change(screen.getByLabelText('Use from advance'), { target: { value: '20' } });
+    expect(screen.getByText(/Due in 14 days/u)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /Complete sale · 60.00 BGN/u }));
+
+    await screen.findByRole('heading', { name: sale.fiscalReceiptNumber });
+    const saleCall = fetchMock.mock.calls.find(([input, init]) => {
+      const requestUrl =
+        typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      return requestUrl.endsWith('/pos/sales') && init?.method === 'POST';
+    });
+    const body = JSON.parse(typeof saleCall?.[1]?.body === 'string' ? saleCall[1].body : '') as {
+      payments: unknown[];
+    };
+    expect(body.payments).toEqual([
+      { advanceId: customerPaymentOptions.advances[0]!.id, amount: '20.0000', method: 'advance' },
+      { amount: '40.0000', method: 'on_account' },
+    ]);
   });
 
   it('shows automatic offers, approved discounts, and a customer rewards ledger', async () => {
@@ -363,7 +419,11 @@ function installApiMock() {
       return jsonResponse(reportDefinitions);
     if (url.pathname.endsWith('/pos/report-exports'))
       return jsonResponse({ items: [], page: 1, pageSize: 20, total: 0, totalPages: 0 });
+    if (/\/pos\/customers\/[^/]+\/payment-options$/u.test(url.pathname))
+      return jsonResponse(customerPaymentOptions);
     if (url.pathname.endsWith('/pos/customers')) return jsonResponse([customer]);
+    if (/\/pos\/sales\/[^/]+\/invoice-draft$/u.test(url.pathname) && method === 'POST')
+      return jsonResponse(posInvoice, 201);
     if (url.pathname.endsWith('/pos/sales') && method === 'POST') return jsonResponse(sale, 201);
     if (url.pathname.endsWith('/pos/sales'))
       return jsonResponse({ items: [sale], page: 1, pageSize: 50, total: 1, totalPages: 1 });
@@ -472,6 +532,8 @@ const sale = {
   changeAmount: '40.0000',
   completedAt: '2026-09-02T12:10:00.000Z',
   currencyCode: 'BGN',
+  customerName: customer.name,
+  customerPartnerId: customer.id,
   fiscalAdapter: 'development-simulator',
   fiscalReceiptNumber: 'SIM-RECEIPT-POS-01-POS-01-2026-000001',
   fiscalStatus: 'simulated',
@@ -521,6 +583,43 @@ const sale = {
   shiftId: shift.id,
   status: 'completed',
   vatTotal: '10.0000',
+  warrantyCards: [],
+};
+
+const posInvoice = {
+  bgnGrossTotal: '60.0000',
+  bgnNetTotal: '50.0000',
+  bgnVatTotal: '10.0000',
+  branchName: 'Vratsa',
+  businessLocationId: register.businessLocationId,
+  businessLocationName: register.businessLocationName,
+  cashRegisterName: register.name,
+  createdAt: '2026-09-05T10:00:00.000Z',
+  currencyCode: 'BGN',
+  customerPartnerId: customer.id,
+  customerSnapshot: { address: 'Central Store, Vratsa, BG', name: customer.name },
+  documentType: 'invoice',
+  dueDate: '2026-09-05',
+  exchangeRate: '1.00000000',
+  grossTotal: '60.0000',
+  id: '0a0a0a0a-0a0a-4a0a-8a0a-0a0a0a0a0a0a',
+  issueDate: '2026-09-05',
+  issuerSnapshot: { address: 'Vratsa, BG', name: 'Vista Demo Ltd.' },
+  legalEntityId: '0b0b0b0b-0b0b-4b0b-8b0b-0b0b0b0b0b0b',
+  lines: [],
+  netTotal: '50.0000',
+  number: 'DINV-POS-01-2026-000001',
+  operatorName: 'Mila POS',
+  rateDate: '2026-09-05',
+  rateSource: 'internal_bgn',
+  sourceFiscalReceiptNumber: sale.fiscalReceiptNumber,
+  sourcePosSaleId: sale.id,
+  sourcePosSaleNumber: sale.saleNumber,
+  status: 'draft',
+  taxEventDate: '2026-09-05',
+  vatSummary: [],
+  vatTotal: '10.0000',
+  version: 1,
 };
 
 const posReturn = {
@@ -558,12 +657,35 @@ const posReturn = {
       amount: '60.0000',
       id: '12121212-1212-4212-8212-121212121212',
       method: 'cash',
+      originalPaymentId: sale.payments[0]!.id,
       status: 'completed',
     },
   ],
   returnNumber: 'RETURN-POS-01-POS-01-2026-000001',
   shiftId: shift.id,
   vatTotal: '10.0000',
+};
+
+const customerPaymentOptions = {
+  advanceBalance: '80.0000',
+  advances: [
+    {
+      amount: '80.0000',
+      availableAmount: '80.0000',
+      customerPartnerId: customer.id,
+      id: '15151515-1515-4515-8515-151515151515',
+      number: 'DEV-ADV-ALFA-001',
+      paymentMethod: 'bank_transfer',
+      paymentReference: 'DEMO-ALFA-ADVANCE',
+      receivedOn: '2026-09-03',
+    },
+  ],
+  availableCredit: '2000.0000',
+  customerName: customer.name,
+  customerPartnerId: customer.id,
+  onAccountAvailable: true,
+  outstandingBalance: '0.0000',
+  paymentTermsDays: 14,
 };
 
 const discountAuthorization = {

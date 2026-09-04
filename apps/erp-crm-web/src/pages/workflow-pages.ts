@@ -124,6 +124,30 @@ export const workflowPages: WorkflowPageDefinition[] = [
     ],
   ),
   finance(
+    'customer-accounts',
+    'Customer payment accounts',
+    'Manage approved POS credit terms, received advances, and outstanding customer balances.',
+    'Record advance',
+    [
+      {
+        title: 'POS payment terms',
+        items: [
+          'Dated on-account eligibility',
+          'Credit limit and payment due period',
+          'Available balance checked at checkout',
+        ],
+      },
+      {
+        title: 'Customer advances',
+        items: [
+          'Received advance register',
+          'Unused balance visible at the counter',
+          'Linked sale and return trail',
+        ],
+      },
+    ],
+  ),
+  finance(
     'payables',
     'Supplier payables',
     'Track supplier balances, payments, advances, and compensation offsets.',

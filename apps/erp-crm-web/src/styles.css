@@ -24140,6 +24140,540 @@ select.vista-field-input {
   display: block;
 }
 
+/* Customer credit and advance workspace */
+.customer-accounts-header-actions,
+.customer-account-hero-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  flex-wrap: wrap;
+}
+
+.customer-account-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  overflow: hidden;
+  border: 1px solid var(--vista-line);
+  border-radius: 1rem;
+  background: var(--vista-surface);
+  box-shadow: var(--vista-shadow-soft);
+}
+
+.customer-account-summary > div {
+  min-width: 0;
+  padding: 1rem 1.1rem;
+}
+
+.customer-account-summary > div + div {
+  border-left: 1px solid var(--vista-line);
+}
+
+.customer-account-summary span,
+.customer-account-value small {
+  display: block;
+  color: var(--vista-text-muted);
+  font-size: 0.72rem;
+  font-weight: 650;
+}
+
+.customer-account-summary strong {
+  display: block;
+  margin-top: 0.28rem;
+  color: var(--vista-text-strong);
+  font-size: clamp(1.05rem, 1.7vw, 1.35rem);
+}
+
+.customer-account-register {
+  overflow: hidden;
+  border: 1px solid var(--vista-line);
+  border-radius: 1rem;
+  background: var(--vista-surface);
+  box-shadow: var(--vista-shadow-soft);
+}
+
+.customer-account-register-head,
+.customer-account-row {
+  display: grid;
+  grid-template-columns: minmax(15rem, 1.45fr) repeat(3, minmax(8rem, 0.72fr)) auto;
+  gap: 1rem;
+  align-items: center;
+}
+
+.customer-account-register-head {
+  padding: 0.72rem 1.1rem;
+  border-bottom: 1px solid var(--vista-line);
+  background: var(--vista-surface-soft);
+  color: var(--vista-text-muted);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.customer-account-row {
+  padding: 0.88rem 1.1rem;
+}
+
+.customer-account-row + .customer-account-row {
+  border-top: 1px solid var(--vista-line);
+}
+
+.customer-account-row:hover {
+  background: color-mix(in srgb, var(--vista-accent-soft) 40%, transparent);
+}
+
+.customer-account-identity {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.customer-account-identity > span {
+  display: grid;
+  width: 2.35rem;
+  height: 2.35rem;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 0.72rem;
+  background: var(--vista-accent-soft);
+  color: var(--vista-accent-strong);
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.customer-account-identity > div,
+.customer-account-value {
+  min-width: 0;
+}
+
+.customer-account-identity strong,
+.customer-account-identity small,
+.customer-account-value strong {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.customer-account-identity small {
+  margin-top: 0.18rem;
+  color: var(--vista-text-muted);
+}
+
+.customer-account-value strong {
+  margin-top: 0.18rem;
+  font-size: 0.83rem;
+}
+
+.customer-account-drawer.security-drawer.is-wide {
+  width: min(48rem, 100vw);
+}
+
+.customer-account-drawer > .security-drawer-body {
+  padding: 1rem;
+}
+
+.customer-account-preview,
+.customer-account-form {
+  display: flex;
+  min-height: 100%;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.customer-account-hero,
+.customer-account-section,
+.customer-account-form-card {
+  border: 1px solid var(--vista-line);
+  border-radius: 1rem;
+  background: var(--vista-surface);
+  box-shadow: var(--vista-shadow-soft);
+}
+
+.customer-account-hero {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem;
+  background: linear-gradient(135deg, var(--vista-accent-soft), var(--vista-surface) 72%);
+}
+
+.customer-account-hero > div:first-child > * {
+  display: block;
+}
+
+.customer-account-hero span,
+.customer-account-hero small {
+  color: var(--vista-text-muted);
+  font-size: 0.73rem;
+}
+
+.customer-account-hero strong {
+  margin: 0.15rem 0;
+  color: var(--vista-accent-strong);
+  font-size: 1.55rem;
+}
+
+.customer-account-section,
+.customer-account-form-card {
+  padding: 1rem;
+}
+
+.customer-account-section > header,
+.customer-account-form-card > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding-bottom: 0.8rem;
+  border-bottom: 1px solid var(--vista-line);
+}
+
+.customer-account-form-card > header {
+  justify-content: flex-start;
+}
+
+.customer-account-form-card > header > span {
+  display: grid;
+  width: 1.65rem;
+  height: 1.65rem;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 0.55rem;
+  background: var(--vista-accent-soft);
+  color: var(--vista-accent-strong);
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.customer-account-section h3,
+.customer-account-section p,
+.customer-account-form-card h3,
+.customer-account-form-card p {
+  margin: 0;
+}
+
+.customer-account-section h3,
+.customer-account-form-card h3 {
+  font-size: 0.88rem;
+}
+
+.customer-account-section p,
+.customer-account-form-card p {
+  margin-top: 0.18rem;
+  color: var(--vista-text-muted);
+  font-size: 0.72rem;
+  line-height: 1.45;
+}
+
+.customer-account-status {
+  padding: 0.3rem 0.55rem;
+  border-radius: 999px;
+  background: var(--vista-surface-soft);
+  color: var(--vista-text-muted);
+  font-size: 0.66rem;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+.customer-account-status.is-active {
+  background: var(--vista-success-soft);
+  color: var(--vista-success-strong);
+}
+
+.customer-account-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0;
+}
+
+.customer-account-detail-grid > div {
+  min-width: 0;
+  padding: 0.85rem 0;
+}
+
+.customer-account-detail-grid > div:nth-child(even) {
+  padding-left: 1rem;
+  border-left: 1px solid var(--vista-line);
+}
+
+.customer-account-detail-grid > div:nth-child(n + 3) {
+  border-top: 1px solid var(--vista-line);
+}
+
+.customer-account-detail-grid dt,
+.customer-account-detail-grid dd {
+  margin: 0;
+}
+
+.customer-account-detail-grid dt {
+  color: var(--vista-text-muted);
+  font-size: 0.7rem;
+}
+
+.customer-account-detail-grid dd {
+  margin-top: 0.2rem;
+  font-size: 0.8rem;
+  font-weight: 720;
+}
+
+.customer-advance-list article,
+.customer-account-entry-list article {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.75rem 0;
+}
+
+.customer-advance-list article + article,
+.customer-account-entry-list article + article {
+  border-top: 1px solid var(--vista-line);
+}
+
+.customer-advance-list article > div,
+.customer-account-entry-list article > div {
+  min-width: 0;
+}
+
+.customer-advance-list strong,
+.customer-advance-list small,
+.customer-advance-list span,
+.customer-account-entry-list strong,
+.customer-account-entry-list small {
+  display: block;
+}
+
+.customer-advance-list small,
+.customer-advance-list span,
+.customer-account-entry-list small {
+  margin-top: 0.15rem;
+  color: var(--vista-text-muted);
+  font-size: 0.7rem;
+}
+
+.customer-advance-list article > div:last-child,
+.customer-account-entry-list article > strong:last-child {
+  flex: 0 0 auto;
+  text-align: right;
+}
+
+.customer-account-entry-list article > span {
+  flex: 0 0 auto;
+  padding: 0.25rem 0.42rem;
+  border-radius: 0.4rem;
+  background: var(--vista-warning-soft);
+  color: var(--vista-warning-strong);
+  font-size: 0.64rem;
+  font-weight: 800;
+}
+
+.customer-account-entry-list article > span.is-credit {
+  background: var(--vista-success-soft);
+  color: var(--vista-success-strong);
+}
+
+.customer-account-empty {
+  padding: 0.95rem 0 0.1rem;
+}
+
+.customer-account-form-card > .customer-account-field,
+.customer-account-switch,
+.customer-account-form-grid {
+  margin-top: 0.9rem;
+}
+
+.customer-account-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.85rem;
+}
+
+.customer-account-field {
+  display: grid;
+  min-width: 0;
+  gap: 0.36rem;
+}
+
+.customer-account-field > span {
+  color: var(--vista-text-muted);
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.customer-account-field :is(input, select) {
+  width: 100%;
+  min-width: 0;
+  min-height: 2.65rem;
+  border: 1px solid var(--vista-line-strong);
+  border-radius: 0.7rem;
+  background: var(--vista-surface);
+  color: var(--vista-text-strong);
+  padding: 0.62rem 0.72rem;
+}
+
+.customer-account-field :is(input, select):focus {
+  border-color: var(--vista-accent);
+  outline: 3px solid color-mix(in srgb, var(--vista-accent) 14%, transparent);
+}
+
+.customer-account-field :is(input, select):disabled {
+  background: var(--vista-surface-soft);
+  color: var(--vista-text-muted);
+}
+
+.customer-account-input-suffix {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.customer-account-input-suffix input {
+  border-radius: 0.7rem 0 0 0.7rem;
+}
+
+.customer-account-input-suffix span {
+  display: flex;
+  align-items: center;
+  padding: 0 0.75rem;
+  border: 1px solid var(--vista-line-strong);
+  border-left: 0;
+  border-radius: 0 0.7rem 0.7rem 0;
+  background: var(--vista-surface-soft);
+  color: var(--vista-text-muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.customer-account-switch {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  padding: 0.72rem;
+  border: 1px solid var(--vista-line);
+  border-radius: 0.75rem;
+  background: var(--vista-surface-soft);
+}
+
+.customer-account-switch input {
+  width: 1rem;
+  height: 1rem;
+  margin-top: 0.08rem;
+  accent-color: var(--vista-accent);
+}
+
+.customer-account-switch span,
+.customer-account-switch strong,
+.customer-account-switch small {
+  display: block;
+}
+
+.customer-account-switch small {
+  margin-top: 0.14rem;
+  color: var(--vista-text-muted);
+  font-size: 0.7rem;
+  line-height: 1.4;
+}
+
+.customer-account-actions {
+  position: sticky;
+  z-index: 8;
+  bottom: -1rem;
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.65rem;
+  margin: auto -1rem -1rem;
+  padding: 0.8rem 1rem;
+  border-top: 1px solid var(--vista-line);
+  background: color-mix(in srgb, var(--vista-surface) 96%, transparent);
+  box-shadow: 0 -0.6rem 1.2rem rgb(25 55 39 / 0.04);
+}
+
+@media (max-width: 980px) {
+  .customer-account-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .customer-account-summary > div:nth-child(3) {
+    border-top: 1px solid var(--vista-line);
+    border-left: 0;
+  }
+
+  .customer-account-summary > div:nth-child(4) {
+    border-top: 1px solid var(--vista-line);
+  }
+
+  .customer-account-register-head {
+    display: none;
+  }
+
+  .customer-account-row {
+    grid-template-columns: minmax(0, 1fr) repeat(3, minmax(7.5rem, auto)) auto;
+  }
+}
+
+@media (max-width: 720px) {
+  .customer-accounts-header,
+  .customer-account-hero {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .customer-accounts-header-actions > .vista-button,
+  .customer-account-hero-actions > .vista-button {
+    flex: 1;
+  }
+
+  .customer-account-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .customer-account-identity {
+    grid-column: 1 / -1;
+  }
+
+  .customer-account-row > .vista-button {
+    grid-column: 1 / -1;
+    width: 100%;
+  }
+}
+
+@media (max-width: 520px) {
+  .customer-account-summary,
+  .customer-account-form-grid,
+  .customer-account-detail-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .customer-account-summary > div + div,
+  .customer-account-summary > div:nth-child(4) {
+    padding-left: 1.1rem;
+    border-top: 1px solid var(--vista-line);
+    border-left: 0;
+  }
+
+  .customer-account-detail-grid > div:nth-child(even),
+  .customer-account-detail-grid > div:nth-child(n + 3) {
+    padding-left: 0;
+    border-top: 1px solid var(--vista-line);
+    border-left: 0;
+  }
+
+  .customer-account-row {
+    grid-template-columns: 1fr;
+  }
+
+  .customer-account-actions {
+    flex-direction: column;
+  }
+
+  .customer-account-actions .vista-button {
+    width: 100%;
+  }
+}
+
 .finance-drawer .finance-form {
   display: flex;
   min-height: 100%;

@@ -33,6 +33,7 @@ import type {
   PosCatalogItem,
   PosCatalogPage,
   PosCustomerOption,
+  PosCustomerPaymentOptions,
   PosDiscountAuthorization,
   PosDiscountType,
   PosLoyaltyAccount,
@@ -45,12 +46,14 @@ import type {
   PosReturnPage,
   PosReturnRefund,
   PosSale,
+  PosSaleInvoiceDocument,
   PosSaleLine,
   PosSalePayment,
   PosSalePage,
   PosShift,
   PosTerminalContext,
   PosVatTreatment,
+  PosWarrantyCardDocument,
   PricePosBasketRequest,
   UpdatePosQuickAccessRequest,
 } from '@vista/contracts';
@@ -287,13 +290,18 @@ export class EnrolPosLoyaltyDto implements EnrolPosLoyaltyRequest {
 }
 
 export class CreatePosSalePaymentDto implements CreatePosSalePaymentRequest {
+  @ApiPropertyOptional({ format: 'uuid', type: String })
+  @IsOptional()
+  @IsUUID('loose')
+  advanceId?: string;
+
   @ApiProperty({ example: '60.0000', type: String })
   @IsString()
   @Matches(decimalPattern)
   amount!: string;
 
-  @ApiProperty({ enum: ['card', 'cash'] })
-  @IsIn(['card', 'cash'])
+  @ApiProperty({ enum: ['advance', 'card', 'cash', 'on_account'] })
+  @IsIn(['advance', 'card', 'cash', 'on_account'])
   method!: CreatePosSalePaymentRequest['method'];
 
   @ApiPropertyOptional({ example: '100.0000', type: String })
@@ -341,7 +349,7 @@ export class CreatePosSaleDto implements CreatePosSaleRequest {
   @ApiProperty({ isArray: true, type: CreatePosSalePaymentDto })
   @IsArray()
   @ArrayMinSize(1)
-  @ArrayMaxSize(2)
+  @ArrayMaxSize(4)
   @ValidateNested({ each: true })
   @Type(() => CreatePosSalePaymentDto)
   payments!: CreatePosSalePaymentDto[];
@@ -451,6 +459,30 @@ export class PosCustomerOptionDto implements PosCustomerOption {
   @ApiPropertyOptional({ type: String }) vatNumber?: string;
 }
 
+class PosCustomerAdvanceOptionDto {
+  @ApiProperty({ type: String }) amount!: string;
+  @ApiProperty({ type: String }) availableAmount!: string;
+  @ApiProperty({ format: 'uuid', type: String }) customerPartnerId!: string;
+  @ApiProperty({ format: 'uuid', type: String }) id!: string;
+  @ApiProperty({ type: String }) number!: string;
+  @ApiProperty({ enum: ['bank_transfer', 'card', 'cash', 'pos_terminal'] })
+  paymentMethod!: PosCustomerPaymentOptions['advances'][number]['paymentMethod'];
+  @ApiPropertyOptional({ type: String }) paymentReference?: string;
+  @ApiProperty({ format: 'date', type: String }) receivedOn!: string;
+}
+
+export class PosCustomerPaymentOptionsDto implements PosCustomerPaymentOptions {
+  @ApiProperty({ type: String }) advanceBalance!: string;
+  @ApiProperty({ isArray: true, type: PosCustomerAdvanceOptionDto })
+  advances!: PosCustomerPaymentOptions['advances'];
+  @ApiProperty({ type: String }) availableCredit!: string;
+  @ApiProperty({ type: String }) customerName!: string;
+  @ApiProperty({ format: 'uuid', type: String }) customerPartnerId!: string;
+  @ApiProperty({ type: Boolean }) onAccountAvailable!: boolean;
+  @ApiProperty({ type: String }) outstandingBalance!: string;
+  @ApiPropertyOptional({ type: Number }) paymentTermsDays?: number;
+}
+
 export class PosLoyaltyAccountDto implements PosLoyaltyAccount {
   @ApiProperty({ type: Number }) balance!: number;
   @ApiProperty({ type: String }) cardNumber!: string;
@@ -551,15 +583,37 @@ export class PosSaleLineDto implements PosSaleLine {
 }
 
 export class PosSalePaymentDto implements PosSalePayment {
+  @ApiPropertyOptional({ format: 'date', type: String }) accountDueOn?: string;
   @ApiProperty({ type: String }) adapter!: string;
+  @ApiPropertyOptional({ format: 'uuid', type: String }) advanceId?: string;
+  @ApiPropertyOptional({ type: String }) advanceNumber?: string;
   @ApiProperty({ type: String }) amount!: string;
   @ApiProperty({ type: String }) changeAmount!: string;
   @ApiProperty({ format: 'uuid', type: String }) id!: string;
-  @ApiProperty({ enum: ['card', 'cash'] }) method!: PosSalePayment['method'];
+  @ApiProperty({ enum: ['advance', 'card', 'cash', 'on_account'] })
+  method!: PosSalePayment['method'];
   @ApiPropertyOptional({ type: String }) providerReference?: string;
   @ApiProperty({ type: String }) refundableAmount!: string;
   @ApiProperty({ enum: ['completed', 'simulated'] }) status!: PosSalePayment['status'];
   @ApiProperty({ type: String }) tenderedAmount!: string;
+}
+
+class PosSaleInvoiceDocumentDto implements PosSaleInvoiceDocument {
+  @ApiProperty({ format: 'uuid', type: String }) id!: string;
+  @ApiProperty({ type: String }) number!: string;
+  @ApiProperty({ type: String }) sourceFiscalReceiptNumber!: string;
+  @ApiProperty({ enum: ['cancelled', 'draft'] }) status!: PosSaleInvoiceDocument['status'];
+}
+
+class PosWarrantyCardDocumentDto implements PosWarrantyCardDocument {
+  @ApiProperty({ type: String }) customerLocationName!: string;
+  @ApiProperty({ type: String }) customerName!: string;
+  @ApiProperty({ format: 'uuid', type: String }) id!: string;
+  @ApiProperty({ type: String }) number!: string;
+  @ApiProperty({ type: String }) productName!: string;
+  @ApiProperty({ type: String }) serialNumber!: string;
+  @ApiProperty({ format: 'date', type: String }) warrantyEndsOn!: string;
+  @ApiProperty({ format: 'date', type: String }) warrantyStartsOn!: string;
 }
 
 export class PosSaleDto implements PosSale {
@@ -577,6 +631,8 @@ export class PosSaleDto implements PosSale {
   fiscalStatus!: PosSale['fiscalStatus'];
   @ApiProperty({ type: String }) grossTotal!: string;
   @ApiProperty({ format: 'uuid', type: String }) id!: string;
+  @ApiPropertyOptional({ type: PosSaleInvoiceDocumentDto })
+  invoiceDocument?: PosSaleInvoiceDocument;
   @ApiProperty({ isArray: true, type: PosSaleLineDto }) lines!: PosSaleLine[];
   @ApiProperty({ type: String }) loyaltyDiscountTotal!: string;
   @ApiProperty({ type: Number }) loyaltyPointsEarned!: number;
@@ -589,6 +645,8 @@ export class PosSaleDto implements PosSale {
   @ApiProperty({ enum: ['completed', 'partially_returned', 'returned'] })
   status!: PosSale['status'];
   @ApiProperty({ type: String }) vatTotal!: string;
+  @ApiProperty({ isArray: true, type: PosWarrantyCardDocumentDto })
+  warrantyCards!: PosWarrantyCardDocument[];
 }
 
 export class PosSalePageDto implements PosSalePage {
@@ -628,9 +686,13 @@ export class CreatePosReturnRefundDto implements CreatePosReturnRefundRequest {
   @Matches(decimalPattern)
   amount!: string;
 
-  @ApiProperty({ enum: ['card', 'cash'] })
-  @IsIn(['card', 'cash'])
+  @ApiProperty({ enum: ['advance', 'card', 'cash', 'on_account'] })
+  @IsIn(['advance', 'card', 'cash', 'on_account'])
   method!: CreatePosReturnRefundRequest['method'];
+
+  @ApiProperty({ format: 'uuid', type: String })
+  @IsUUID('loose')
+  originalPaymentId!: string;
 }
 
 export class CreatePosReturnDto implements CreatePosReturnRequest {
@@ -655,7 +717,7 @@ export class CreatePosReturnDto implements CreatePosReturnRequest {
   @ApiProperty({ isArray: true, type: CreatePosReturnRefundDto })
   @IsArray()
   @ArrayMinSize(1)
-  @ArrayMaxSize(2)
+  @ArrayMaxSize(4)
   @ValidateNested({ each: true })
   @Type(() => CreatePosReturnRefundDto)
   refunds!: CreatePosReturnRefundDto[];
@@ -685,7 +747,9 @@ export class PosReturnRefundDto implements PosReturnRefund {
   @ApiProperty({ type: String }) adapter!: string;
   @ApiProperty({ type: String }) amount!: string;
   @ApiProperty({ format: 'uuid', type: String }) id!: string;
-  @ApiProperty({ enum: ['card', 'cash'] }) method!: PosReturnRefund['method'];
+  @ApiProperty({ enum: ['advance', 'card', 'cash', 'on_account'] })
+  method!: PosReturnRefund['method'];
+  @ApiProperty({ format: 'uuid', type: String }) originalPaymentId!: string;
   @ApiPropertyOptional({ type: String }) providerReference?: string;
   @ApiProperty({ enum: ['completed', 'simulated'] }) status!: PosReturnRefund['status'];
 }

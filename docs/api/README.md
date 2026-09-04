@@ -914,8 +914,8 @@ route planner under Logistics, where delivery time also consumes a configured
 technician's capacity. Daily retry-safe jobs prepare inspection and warranty-
 expiry reminders and create upcoming Service requests from active subscription
 plans. Their lead/horizon settings and schedules are environment-configurable.
-Official Service payment issuance and warranty-card printing remain pending
-their approved document and hardware decisions.
+Official Service payment issuance and direct physical warranty-card printing
+remain pending their approved document and hardware decisions.
 
 ## Online point of sale
 
@@ -930,6 +930,9 @@ their approved document and hardware decisions.
 - `GET /api/v1/pos/customers` searches the canonical customer and location
   registry and includes an active loyalty identity and derived balance when one
   exists.
+- `GET /api/v1/pos/customers/:customerPartnerId/payment-options` returns unused
+  advances, approved credit, the current POS account balance, and payment terms
+  for the selected customer.
 - `POST /api/v1/pos/baskets/price` returns authoritative line and basket totals,
   with each automatic, approved-manual, and loyalty adjustment identified.
 - `POST /api/v1/pos/discount-authorizations` verifies a different employee with
@@ -939,8 +942,13 @@ their approved document and hardware decisions.
 - `POST /api/v1/pos/loyalty/accounts` enrols a canonical customer, while
   `GET /api/v1/pos/loyalty/customers/:customerPartnerId` returns the derived
   balance and append-only points history.
-- `POST /api/v1/pos/sales` completes one cash, card, or split-payment sale;
+- `POST /api/v1/pos/sales` completes one cash, card, split, advance, or approved
+  on-account sale, including an advance with a cash, card, or account remainder;
   `GET /api/v1/pos/sales` returns the signed-in cashier's sale history.
+- `POST /api/v1/pos/sales/:id/invoice-draft` prepares or returns the one Finance
+  invoice draft linked to a completed customer receipt.
+- `GET /api/v1/pos/sales/:saleId/warranty-cards/:cardId/pdf` downloads a
+  printable warranty card belonging to one of the signed-in cashier's sales.
 - `POST /api/v1/pos/returns` completes a partial or full return linked to its
   original sale; `GET /api/v1/pos/returns` returns the cashier's return history.
 - `GET /api/v1/pos/reports/reference-data` and `/reports/overview` provide
@@ -963,9 +971,22 @@ payment methods, and atomically restore stock or transfer serialised equipment
 to Service. Loyalty earning and redemption commit with the sale; returns append
 proportional earned-point reversals and redeemed-point restorations. The database
 rejects updates or deletions to posted loyalty ledger entries. Repeated sale and
-return commands are idempotent. Development fiscal
+return commands are idempotent. Invoice preparation takes a sale lock and
+copies exact posted line and VAT snapshots, so parallel requests cannot create
+two active Finance drafts. Warranty-card downloads re-check cashier ownership
+and leave audit evidence. Development fiscal
 and card simulators are rejected in production; they are not certified device
 acceptance.
+
+Finance users manage POS customer accounts through
+`GET /api/v1/finance/customer-accounts`,
+`GET /api/v1/finance/customer-accounts/:customerPartnerId`, versioned and
+idempotent `PUT /:customerPartnerId/terms`, and idempotent `POST /advances`.
+Terms use the Sofia business date and are locked at checkout. Credit and advance
+balances are rechecked inside the sale transaction so concurrent checkouts
+cannot overspend them. Account charges, advance applications, linked return
+credits, and advance restorations are append-only. Each refund identifies the
+exact original payment it reverses.
 
 Quick-access changes require `pos:edit`; report reads require `pos:view`, and
 preparing or retrying an export requires `pos:create`. Report totals use posted

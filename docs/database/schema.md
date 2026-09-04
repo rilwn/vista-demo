@@ -472,3 +472,22 @@ customer. Separate lead and opportunity sequences allocate stable operational
 references under a row lock. Command idempotency, optimistic versions, audit
 events, and transactional outbox records protect conversion, stage movement,
 and quotation linking from duplicate or stale updates.
+
+Migration `0056_pos_customer_accounts` adds one versioned, dated customer credit
+policy per canonical customer, concurrency-safe customer-advance numbering, and
+append-only customer advance and POS account ledgers. Each on-account charge
+snapshots its due date, credit limit, and payment-term days. POS payment records
+retain their exact advance or account source, while every linked return refund
+points to the original payment and appends a compensating credit or advance
+restoration. Database triggers reject updates and deletes on posted customer
+ledger entries; restrictive keys preserve the sale and return chain.
+
+Migration `0057_pos_receipt_documents` snapshots each completed POS line's unit
+code and links a Finance invoice draft to its exact POS sale and fiscal-receipt
+number. A partial unique index permits only one active Finance document for a
+sale, while the creation command also locks the source sale so concurrent
+requests reopen the same draft. Receipt lines and VAT totals are copied from the
+posted sale values; later product, price, tax, or unit changes cannot silently
+rewrite them. The same sale response exposes its transactionally generated
+warranty cards, whose printable content is rendered on demand rather than
+stored as an unauthorised duplicate file.

@@ -942,9 +942,90 @@ export interface PosBasketPricing {
   vatTotal: string;
 }
 
-export type PosPaymentMethod = 'card' | 'cash';
+export type CustomerAdvancePaymentMethod = 'bank_transfer' | 'card' | 'cash' | 'pos_terminal';
+export type CustomerPaymentTermsStatus = 'active' | 'suspended';
+
+export interface CustomerPaymentTerms {
+  creditLimitBgn: string;
+  id: string;
+  onAccountEnabled: boolean;
+  paymentTermsDays: number;
+  status: CustomerPaymentTermsStatus;
+  validFrom: string;
+  validTo?: string;
+  version: number;
+}
+
+export interface CustomerAdvance {
+  amount: string;
+  availableAmount: string;
+  customerPartnerId: string;
+  id: string;
+  number: string;
+  paymentMethod: CustomerAdvancePaymentMethod;
+  paymentReference?: string;
+  receivedOn: string;
+}
+
+export interface CustomerAccountEntry {
+  amount: string;
+  dueOn: string;
+  entryType: 'charge' | 'return_credit';
+  id: string;
+  occurredAt: string;
+  saleNumber: string;
+  returnNumber?: string;
+}
+
+export interface CustomerPaymentAccount {
+  advanceBalance: string;
+  advances: CustomerAdvance[];
+  availableCredit: string;
+  customerName: string;
+  customerPartnerId: string;
+  entries: CustomerAccountEntry[];
+  outstandingBalance: string;
+  terms?: CustomerPaymentTerms;
+  uic?: string;
+}
+
+export interface CustomerPaymentAccountReferenceData {
+  customers: Array<{ id: string; name: string; uic?: string }>;
+}
+
+export interface UpsertCustomerPaymentTermsRequest {
+  creditLimitBgn: string;
+  expectedVersion?: number;
+  onAccountEnabled: boolean;
+  paymentTermsDays: number;
+  status: CustomerPaymentTermsStatus;
+  validFrom: string;
+  validTo?: string;
+}
+
+export interface CreateCustomerAdvanceRequest {
+  amount: string;
+  customerPartnerId: string;
+  paymentMethod: CustomerAdvancePaymentMethod;
+  paymentReference?: string;
+  receivedOn: string;
+}
+
+export interface PosCustomerPaymentOptions {
+  advanceBalance: string;
+  advances: CustomerAdvance[];
+  availableCredit: string;
+  customerName: string;
+  customerPartnerId: string;
+  onAccountAvailable: boolean;
+  outstandingBalance: string;
+  paymentTermsDays?: number;
+}
+
+export type PosPaymentMethod = 'advance' | 'card' | 'cash' | 'on_account';
 
 export interface CreatePosSalePaymentRequest {
+  advanceId?: string;
   amount: string;
   method: PosPaymentMethod;
   tenderedAmount?: string;
@@ -985,7 +1066,10 @@ export interface PosSaleLine {
 }
 
 export interface PosSalePayment {
+  accountDueOn?: string;
   adapter: string;
+  advanceId?: string;
+  advanceNumber?: string;
   amount: string;
   changeAmount: string;
   id: string;
@@ -994,6 +1078,24 @@ export interface PosSalePayment {
   refundableAmount: string;
   status: 'completed' | 'simulated';
   tenderedAmount: string;
+}
+
+export interface PosSaleInvoiceDocument {
+  id: string;
+  number: string;
+  sourceFiscalReceiptNumber: string;
+  status: 'cancelled' | 'draft';
+}
+
+export interface PosWarrantyCardDocument {
+  customerLocationName: string;
+  customerName: string;
+  id: string;
+  number: string;
+  productName: string;
+  serialNumber: string;
+  warrantyEndsOn: string;
+  warrantyStartsOn: string;
 }
 
 export interface PosSale {
@@ -1010,6 +1112,7 @@ export interface PosSale {
   fiscalStatus: 'fiscalized' | 'partially_reversed' | 'reversed' | 'simulated';
   grossTotal: string;
   id: string;
+  invoiceDocument?: PosSaleInvoiceDocument;
   lines: PosSaleLine[];
   loyaltyDiscountTotal: string;
   loyaltyPointsEarned: number;
@@ -1021,6 +1124,7 @@ export interface PosSale {
   shiftId: string;
   status: 'completed' | 'partially_returned' | 'returned';
   vatTotal: string;
+  warrantyCards: PosWarrantyCardDocument[];
 }
 
 export interface PosSalePage {
@@ -1051,6 +1155,7 @@ export interface CreatePosReturnRequest {
 export interface CreatePosReturnRefundRequest {
   amount: string;
   method: PosPaymentMethod;
+  originalPaymentId: string;
 }
 
 export interface PosReturnLine {
@@ -1093,6 +1198,7 @@ export interface PosReturnRefund {
   amount: string;
   id: string;
   method: PosPaymentMethod;
+  originalPaymentId: string;
   providerReference?: string;
   status: 'completed' | 'simulated';
 }
@@ -3135,6 +3241,7 @@ export interface CreateFinancialDocumentRequest {
   rateDate: string;
   rateSource: string;
   sourceSalesInvoiceId?: string;
+  sourcePosSaleId?: string;
   sourceServiceWorkOrderId?: string;
   taxEventDate: string;
 }
@@ -3200,6 +3307,9 @@ export interface FinancialDocument {
   rateSource: string;
   sourceSalesInvoiceId?: string;
   sourceSalesInvoiceNumber?: string;
+  sourcePosSaleId?: string;
+  sourcePosSaleNumber?: string;
+  sourceFiscalReceiptNumber?: string;
   sourceServiceWorkOrderId?: string;
   sourceServiceWorkOrderNumber?: string;
   status: FinancialDocumentStatus;

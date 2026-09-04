@@ -1953,6 +1953,42 @@ async function ensurePosCommercialFixtures(
      ON CONFLICT (id) DO NOTHING`,
     [fixtureId('pos-loyalty-opening:alfa'), accountId, managerId],
   );
+
+  await insertFixtureRow(
+    client,
+    'sales.customer_payment_terms',
+    fixtureId('customer-payment-terms:alfa'),
+    `INSERT INTO sales.customer_payment_terms (
+       id, customer_partner_id, on_account_enabled, credit_limit_bgn,
+       payment_terms_days, valid_from, valid_to, created_by, updated_by
+     ) VALUES ($1,$2,true,2000.0000,14,CURRENT_DATE - INTERVAL '30 days',
+       CURRENT_DATE + INTERVAL '10 years',$3,$3)
+     ON CONFLICT (id) DO NOTHING`,
+    [fixtureId('customer-payment-terms:alfa'), alfaPartnerId, managerId],
+  );
+  const customerAdvanceId = fixtureId('customer-advance:alfa-opening');
+  await insertFixtureRow(
+    client,
+    'finance.customer_advances',
+    customerAdvanceId,
+    `INSERT INTO finance.customer_advances (
+       id, advance_number, customer_partner_id, amount, received_on,
+       payment_method, payment_reference, recorded_by
+     ) VALUES ($1,'DEV-ADV-ALFA-001',$2,80.0000,CURRENT_DATE - INTERVAL '1 day',
+       'bank_transfer','DEMO-ALFA-ADVANCE',$3)
+     ON CONFLICT (id) DO NOTHING`,
+    [customerAdvanceId, alfaPartnerId, managerId],
+  );
+  await insertFixtureRow(
+    client,
+    'finance.customer_advance_entries',
+    fixtureId('customer-advance-entry:alfa-opening'),
+    `INSERT INTO finance.customer_advance_entries (
+       id, advance_id, entry_type, amount, actor_account_id, correlation_id
+     ) VALUES ($1,$2,'received',80.0000,$3,'development-fixture')
+     ON CONFLICT (id) DO NOTHING`,
+    [fixtureId('customer-advance-entry:alfa-opening'), customerAdvanceId, managerId],
+  );
 }
 
 async function ensureSubscriptionFixture(

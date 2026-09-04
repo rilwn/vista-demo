@@ -5,6 +5,7 @@ import type {
   PosReportFilters,
   PosReportOverview,
   PosReportReferenceData,
+  PosPaymentMethod,
   PosShiftReportRow,
   ReportExportFormat,
 } from '@vista/contracts';
@@ -448,7 +449,7 @@ function ReportTable({
         columns={['Payment method', 'Collected', 'Refunded', 'Net']}
         empty="No payments recorded in this period."
         rows={overview.payments.map((row) => [
-          <strong key="method">{row.method === 'cash' ? 'Cash' : 'Bank card'}</strong>,
+          <strong key="method">{paymentMethodLabel(row.method)}</strong>,
           <span key="collected">{money(row.collectedBgn)}</span>,
           <span key="refunded">{money(row.refundedBgn)}</span>,
           <strong key="net">{money(row.netBgn)}</strong>,
@@ -483,6 +484,13 @@ function ReportTable({
       ])}
     />
   );
+}
+
+function paymentMethodLabel(method: PosPaymentMethod) {
+  if (method === 'cash') return 'Cash';
+  if (method === 'card') return 'Bank card';
+  if (method === 'advance') return 'Customer advance';
+  return 'On account';
 }
 
 function Table({

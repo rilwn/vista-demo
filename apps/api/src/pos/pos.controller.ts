@@ -11,6 +11,7 @@ import {
   Put,
   Query,
   Req,
+  Res,
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
@@ -19,9 +20,11 @@ import {
   ApiHeader,
   ApiOkResponse,
   ApiParam,
+  ApiProduces,
   ApiQuery,
   ApiTags,
 } from '@nestjs/swagger';
+import type { Response } from 'express';
 
 import { RequirePermissions } from '../auth/auth.decorators.js';
 import type {
@@ -30,6 +33,7 @@ import type {
 } from '../auth/authentication.types.js';
 import type { CorrelatedRequest } from '../common/correlation-id.middleware.js';
 import { RateLimitPolicy } from '../security/rate-limit.decorator.js';
+import { FinancialDocumentDto } from '../finance/financial-documents.dto.js';
 import {
   CreatePosDiscountAuthorizationDto,
   CreatePosReturnDto,
@@ -40,6 +44,7 @@ import {
   PosCatalogPageDto,
   PosCatalogQueryDto,
   PosCustomerOptionDto,
+  PosCustomerPaymentOptionsDto,
   PosCustomerQueryDto,
   PosDiscountAuthorizationDto,
   PosLoyaltyAccountDto,
@@ -135,6 +140,17 @@ export class PosController {
   @ApiQuery({ name: 'search', required: false, type: String })
   customers(@Query() query: PosCustomerQueryDto): Promise<PosCustomerOptionDto[]> {
     return this.pos.customers(query.search);
+  }
+
+  @Get('customers/:customerPartnerId/payment-options')
+  @RateLimitPolicy('read')
+  @RequirePermissions({ action: 'view', module: 'pos' })
+  @ApiOkResponse({ type: PosCustomerPaymentOptionsDto })
+  @ApiParam({ format: 'uuid', name: 'customerPartnerId', type: String })
+  customerPaymentOptions(
+    @Param('customerPartnerId') customerPartnerId: string,
+  ): Promise<PosCustomerPaymentOptionsDto> {
+    return this.pos.customerPaymentOptions(customerPartnerId);
   }
 
   @Get('quick-access')
@@ -242,6 +258,55 @@ export class PosController {
     @Req() request: AuthenticatedRequest,
   ): Promise<PosSalePageDto> {
     return this.pos.sales(query.page ?? 1, query.pageSize ?? 25, request.authentication);
+  }
+
+  @Post('sales/:id/invoice-draft')
+  @HttpCode(HttpStatus.CREATED)
+  @RequirePermissions({ action: 'create', module: 'pos' })
+  @ApiCreatedResponse({ type: FinancialDocumentDto })
+  @ApiHeader({ name: 'Idempotency-Key', required: true })
+  @ApiParam({ format: 'uuid', name: 'id', type: String })
+  createInvoiceDraft(
+    @Param('id') id: string,
+    @Headers('idempotency-key') key: string | undefined,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<FinancialDocumentDto> {
+    return this.pos.createInvoiceDraft(id, key, request.authentication, metadata(request));
+  }
+
+  @Get('sales/:saleId/warranty-cards/:cardId/pdf')
+  @RateLimitPolicy('read')
+  @RequirePermissions({ action: 'view', module: 'pos' })
+  @ApiParam({ format: 'uuid', name: 'saleId', type: String })
+  @ApiParam({ format: 'uuid', name: 'cardId', type: String })
+  @ApiProduces('application/pdf')
+  @ApiOkResponse({
+    content: {
+      'application/pdf': { schema: { format: 'binary', type: 'string' } },
+    },
+    description: 'Printable warranty card for a serialised POS sale.',
+  })
+  async warrantyCardPdf(
+    @Param('saleId') saleId: string,
+    @Param('cardId') cardId: string,
+    @Req() request: AuthenticatedRequest,
+    @Res() response: Response,
+  ): Promise<void> {
+    const content = await this.pos.warrantyCardContent(
+      saleId,
+      cardId,
+      request.authentication,
+      metadata(request),
+    );
+    response.setHeader('Cache-Control', 'private, no-store');
+    response.setHeader(
+      'Content-Disposition',
+      `attachment; filename*=UTF-8''${encodeURIComponent(content.fileName)}`,
+    );
+    response.setHeader('Content-Length', String(content.buffer.length));
+    response.setHeader('Content-Type', content.mediaType);
+    response.setHeader('X-Content-Type-Options', 'nosniff');
+    response.status(HttpStatus.OK).send(content.buffer);
   }
 
   @Post('returns')

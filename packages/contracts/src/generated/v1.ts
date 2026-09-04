@@ -964,6 +964,86 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/finance/customer-accounts': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['FinanceCustomerAccountsController_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/finance/customer-accounts/{customerPartnerId}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['FinanceCustomerAccountsController_account'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/finance/customer-accounts/{customerPartnerId}/terms': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put: operations['FinanceCustomerAccountsController_upsertTerms'];
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/finance/customer-accounts/advances': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['FinanceCustomerAccountsController_createAdvance'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/finance/customer-accounts/reference-data': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['FinanceCustomerAccountsController_referenceData'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/finance/documents': {
     parameters: {
       query?: never;
@@ -2374,6 +2454,22 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/pos/customers/{customerPartnerId}/payment-options': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['PosController_customerPaymentOptions'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/pos/discount-authorizations': {
     parameters: {
       query?: never;
@@ -2560,6 +2656,38 @@ export interface paths {
     get: operations['PosController_sales'];
     put?: never;
     post: operations['PosController_completeSale'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/pos/sales/{id}/invoice-draft': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['PosController_createInvoiceDraft'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/pos/sales/{saleId}/warranty-cards/{cardId}/pdf': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['PosController_warrantyCardPdf'];
+    put?: never;
+    post?: never;
     delete?: never;
     options?: never;
     head?: never;
@@ -4212,6 +4340,17 @@ export interface components {
       /** Format: uuid */
       slaPolicyId: string;
     };
+    CreateCustomerAdvanceDto: {
+      /** @example 150.0000 */
+      amount: string;
+      /** Format: uuid */
+      customerPartnerId: string;
+      /** @enum {string} */
+      paymentMethod: 'bank_transfer' | 'card' | 'cash' | 'pos_terminal';
+      paymentReference?: string;
+      /** Format: date */
+      receivedOn: string;
+    };
     CreateCustomerEquipmentDto: {
       deviceName: string;
       /** Format: uuid */
@@ -4607,7 +4746,9 @@ export interface components {
       /** @example 60.0000 */
       amount: string;
       /** @enum {string} */
-      method: 'card' | 'cash';
+      method: 'advance' | 'card' | 'cash' | 'on_account';
+      /** Format: uuid */
+      originalPaymentId: string;
     };
     CreatePosSaleDto: {
       /** Format: uuid */
@@ -4633,10 +4774,12 @@ export interface components {
       serialNumbers?: string[];
     };
     CreatePosSalePaymentDto: {
+      /** Format: uuid */
+      advanceId?: string;
       /** @example 60.0000 */
       amount: string;
       /** @enum {string} */
-      method: 'card' | 'cash';
+      method: 'advance' | 'card' | 'cash' | 'on_account';
       /** @example 100.0000 */
       tenderedAmount?: string;
     };
@@ -5547,6 +5690,33 @@ export interface components {
       /** Format: date */
       warrantyStartsOn: string;
     };
+    CustomerAccountEntryDto: {
+      amount: string;
+      /** Format: date */
+      dueOn: string;
+      /** @enum {string} */
+      entryType: 'charge' | 'return_credit';
+      /** Format: uuid */
+      id: string;
+      /** Format: date-time */
+      occurredAt: string;
+      returnNumber?: string;
+      saleNumber: string;
+    };
+    CustomerAdvanceDto: {
+      amount: string;
+      availableAmount: string;
+      /** Format: uuid */
+      customerPartnerId: string;
+      /** Format: uuid */
+      id: string;
+      number: string;
+      /** @enum {string} */
+      paymentMethod: 'bank_transfer' | 'card' | 'cash' | 'pos_terminal';
+      paymentReference?: string;
+      /** Format: date */
+      receivedOn: string;
+    };
     CustomerAssetVersionDto: {
       expectedVersion: number;
     };
@@ -5635,6 +5805,27 @@ export interface components {
       payments: number;
       purchases: number;
     };
+    CustomerPaymentAccountCustomerDto: {
+      /** Format: uuid */
+      id: string;
+      name: string;
+      uic?: string;
+    };
+    CustomerPaymentAccountDto: {
+      advanceBalance: string;
+      advances: components['schemas']['CustomerAdvanceDto'][];
+      availableCredit: string;
+      customerName: string;
+      /** Format: uuid */
+      customerPartnerId: string;
+      entries: components['schemas']['CustomerAccountEntryDto'][];
+      outstandingBalance: string;
+      terms?: components['schemas']['CustomerPaymentTermsDto'];
+      uic?: string;
+    };
+    CustomerPaymentAccountReferenceDataDto: {
+      customers: components['schemas']['CustomerPaymentAccountCustomerDto'][];
+    };
     CustomerPaymentSummaryDto: {
       /** @example 20.0000 */
       amount: string;
@@ -5650,6 +5841,20 @@ export interface components {
       paymentReference?: string;
       /** Format: date-time */
       recordedAt: string;
+    };
+    CustomerPaymentTermsDto: {
+      creditLimitBgn: string;
+      /** Format: uuid */
+      id: string;
+      onAccountEnabled: boolean;
+      paymentTermsDays: number;
+      /** @enum {string} */
+      status: 'active' | 'suspended';
+      /** Format: date */
+      validFrom: string;
+      /** Format: date */
+      validTo?: string;
+      version: number;
     };
     CustomerPriceGroupDto: {
       active: boolean;
@@ -6437,6 +6642,10 @@ export interface components {
       /** Format: date */
       rateDate: string;
       rateSource: string;
+      sourceFiscalReceiptNumber?: string;
+      /** Format: uuid */
+      sourcePosSaleId?: string;
+      sourcePosSaleNumber?: string;
       /** Format: uuid */
       sourceSalesInvoiceId?: string;
       sourceSalesInvoiceNumber?: string;
@@ -7313,6 +7522,20 @@ export interface components {
       productName: string;
       requiredQuantity: string;
     };
+    PosCustomerAdvanceOptionDto: {
+      amount: string;
+      availableAmount: string;
+      /** Format: uuid */
+      customerPartnerId: string;
+      /** Format: uuid */
+      id: string;
+      number: string;
+      /** @enum {string} */
+      paymentMethod: 'bank_transfer' | 'card' | 'cash' | 'pos_terminal';
+      paymentReference?: string;
+      /** Format: date */
+      receivedOn: string;
+    };
     PosCustomerLocationOptionDto: {
       city: string;
       /** Format: uuid */
@@ -7327,6 +7550,17 @@ export interface components {
       name: string;
       uic?: string;
       vatNumber?: string;
+    };
+    PosCustomerPaymentOptionsDto: {
+      advanceBalance: string;
+      advances: components['schemas']['PosCustomerAdvanceOptionDto'][];
+      availableCredit: string;
+      customerName: string;
+      /** Format: uuid */
+      customerPartnerId: string;
+      onAccountAvailable: boolean;
+      outstandingBalance: string;
+      paymentTermsDays?: number;
     };
     PosDiscountAuthorizationDto: {
       approverName: string;
@@ -7608,7 +7842,9 @@ export interface components {
       /** Format: uuid */
       id: string;
       /** @enum {string} */
-      method: 'card' | 'cash';
+      method: 'advance' | 'card' | 'cash' | 'on_account';
+      /** Format: uuid */
+      originalPaymentId: string;
       providerReference?: string;
       /** @enum {string} */
       status: 'completed' | 'simulated';
@@ -7632,6 +7868,7 @@ export interface components {
       grossTotal: string;
       /** Format: uuid */
       id: string;
+      invoiceDocument?: components['schemas']['PosSaleInvoiceDocumentDto'];
       lines: components['schemas']['PosSaleLineDto'][];
       loyaltyDiscountTotal: string;
       loyaltyPointsEarned: number;
@@ -7645,6 +7882,15 @@ export interface components {
       /** @enum {string} */
       status: 'completed' | 'partially_returned' | 'returned';
       vatTotal: string;
+      warrantyCards: components['schemas']['PosWarrantyCardDocumentDto'][];
+    };
+    PosSaleInvoiceDocumentDto: {
+      /** Format: uuid */
+      id: string;
+      number: string;
+      sourceFiscalReceiptNumber: string;
+      /** @enum {string} */
+      status: 'cancelled' | 'draft';
     };
     PosSaleLineDto: {
       automaticDiscountTotal: string;
@@ -7680,13 +7926,18 @@ export interface components {
       totalPages: number;
     };
     PosSalePaymentDto: {
+      /** Format: date */
+      accountDueOn?: string;
       adapter: string;
+      /** Format: uuid */
+      advanceId?: string;
+      advanceNumber?: string;
       amount: string;
       changeAmount: string;
       /** Format: uuid */
       id: string;
       /** @enum {string} */
-      method: 'card' | 'cash';
+      method: 'advance' | 'card' | 'cash' | 'on_account';
       providerReference?: string;
       refundableAmount: string;
       /** @enum {string} */
@@ -7755,6 +8006,19 @@ export interface components {
     PosTerminalContextDto: {
       currentShift?: components['schemas']['PosShiftDto'];
       registers: components['schemas']['PosRegisterOptionDto'][];
+    };
+    PosWarrantyCardDocumentDto: {
+      customerLocationName: string;
+      customerName: string;
+      /** Format: uuid */
+      id: string;
+      number: string;
+      productName: string;
+      serialNumber: string;
+      /** Format: date */
+      warrantyEndsOn: string;
+      /** Format: date */
+      warrantyStartsOn: string;
     };
     PriceListDto: {
       active: boolean;
@@ -9401,6 +9665,19 @@ export interface components {
       deliveryTerms?: string;
       expectedVersion: number;
       paymentTermsDays?: number;
+    };
+    UpsertCustomerPaymentTermsDto: {
+      /** @example 2000.0000 */
+      creditLimitBgn: string;
+      expectedVersion?: number;
+      onAccountEnabled: boolean;
+      paymentTermsDays: number;
+      /** @enum {string} */
+      status: 'active' | 'suspended';
+      /** Format: date */
+      validFrom: string;
+      /** Format: date */
+      validTo?: string;
     };
     VerifyAccountRecoveryTotpRequestDto: {
       /** @example 123456 */
@@ -12105,6 +12382,187 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['FinanceCashVoucherDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  FinanceCustomerAccountsController_list: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CustomerPaymentAccountDto'][];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  FinanceCustomerAccountsController_account: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        customerPartnerId: unknown;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CustomerPaymentAccountDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  FinanceCustomerAccountsController_upsertTerms: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path: {
+        customerPartnerId: unknown;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['UpsertCustomerPaymentTermsDto'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CustomerPaymentAccountDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  FinanceCustomerAccountsController_createAdvance: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['CreateCustomerAdvanceDto'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CustomerAdvanceDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  FinanceCustomerAccountsController_referenceData: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CustomerPaymentAccountReferenceDataDto'];
         };
       };
       /** @description The endpoint request limit was exceeded. */
@@ -16099,6 +16557,41 @@ export interface operations {
       };
     };
   };
+  PosController_customerPaymentOptions: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        customerPartnerId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PosCustomerPaymentOptionsDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
   PosController_authorizeDiscount: {
     parameters: {
       query?: never;
@@ -16672,6 +17165,80 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['PosSaleDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  PosController_createInvoiceDraft: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['FinancialDocumentDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  PosController_warrantyCardPdf: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        cardId: string;
+        saleId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Printable warranty card for a serialised POS sale. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/pdf': string;
         };
       };
       /** @description The endpoint request limit was exceeded. */

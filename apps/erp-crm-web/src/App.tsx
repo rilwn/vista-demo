@@ -14,6 +14,7 @@ import { CrmAfterSalesPage } from './pages/CrmAfterSalesPage';
 import { CrmPipelinePage } from './pages/CrmPipelinePage';
 import { CrmTimelinePage } from './pages/CrmTimelinePage';
 import { type FinanceView, FinancePage } from './pages/FinancePage';
+import { FinanceCustomerAccountsPage } from './pages/FinanceCustomerAccountsPage';
 import { FinanceBankPage } from './pages/FinanceBankPage';
 import { FinanceCashPage } from './pages/FinanceCashPage';
 import { FinancePayablesPage } from './pages/FinancePayablesPage';
@@ -117,6 +118,9 @@ function pageForPath(
   }
   if (pathname === '/modules/erp.finance/cash-bank') {
     return hasPermission('erp.finance') ? <FinanceBankPage /> : <NotFoundPage />;
+  }
+  if (pathname === '/modules/erp.finance/customer-accounts') {
+    return hasPermission('erp.finance') ? <FinanceCustomerAccountsPage /> : <NotFoundPage />;
   }
   if (pathname === '/modules/erp.finance/cash') {
     return hasPermission('erp.finance') ? <FinanceCashPage /> : <NotFoundPage />;

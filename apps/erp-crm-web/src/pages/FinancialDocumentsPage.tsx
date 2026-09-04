@@ -1069,6 +1069,7 @@ function DocumentPreviewDrawer({
           </dl>
         </section>
         {document.sourceSalesInvoiceNumber ||
+        document.sourcePosSaleNumber ||
         document.sourceServiceWorkOrderNumber ||
         document.correctionOf ? (
           <section className="financial-document-preview-section">
@@ -1078,6 +1079,18 @@ function DocumentPreviewDrawer({
             {document.sourceSalesInvoiceNumber ? (
               <p>
                 Prepared from Sales draft <strong>{document.sourceSalesInvoiceNumber}</strong>.
+              </p>
+            ) : null}
+            {document.sourcePosSaleNumber ? (
+              <p>
+                Prepared from POS sale <strong>{document.sourcePosSaleNumber}</strong>
+                {document.sourceFiscalReceiptNumber ? (
+                  <>
+                    {' '}
+                    · receipt <strong>{document.sourceFiscalReceiptNumber}</strong>
+                  </>
+                ) : null}
+                .
               </p>
             ) : null}
             {document.sourceServiceWorkOrderNumber ? (

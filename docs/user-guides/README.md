@@ -224,6 +224,27 @@ before payment. The completed receipt shows points used and earned. A linked
 return restores redeemed points and reverses earned points through new history
 entries rather than changing the original activity.
 
+Finance employees use **ERP → Finance → Customer accounts** to approve dated
+on-account limits and record money received in advance. At the counter, select
+the customer and choose **Advance / account**. An advance can cover the sale or
+be combined with cash, bank card, or an approved account remainder. The POS
+checks the live balance again when the sale is completed. A linked return follows
+each original payment and restores the related advance or customer credit.
+
+After completing a customer sale, use **Prepare invoice** on the receipt to send
+the exact posted values to one linked Finance draft. Reopening the receipt from
+**Sale history** shows the same Finance number; selecting the action again does
+not create another document. A Finance employee can review it under **ERP →
+Finance → Financial documents**. This is a preparation handoff, not official
+issuance, until the approved legal numbering, signing, delivery, and fiscal rules
+are enabled.
+
+A serialised sale also lists its warranty cards on the receipt. Select **Download
+PDF** to obtain the card for the customer. The card includes the device and serial
+number, coverage dates, customer, seller, sale, and receipt references. The
+download is available only through the cashier's own sale history; approved
+physical-printer integration remains hardware work.
+
 ## Business structure
 
 Employees with `platform.organization:view` can open **Business structure** from

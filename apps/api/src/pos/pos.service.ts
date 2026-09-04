@@ -3,6 +3,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
 import type { AppEnvironment } from '@vista/config';
 import type {
+  FinancialDocument,
   CreatePosDiscountAuthorizationRequest,
   CreatePosReturnRequest,
   CreatePosSaleRequest,
@@ -13,6 +14,7 @@ import type {
   PosCatalogItem,
   PosCatalogPage,
   PosCustomerOption,
+  PosCustomerPaymentOptions,
   PosDiscountAuthorization,
   PosDiscountType,
   PosLoyaltyAccount,
@@ -23,6 +25,7 @@ import type {
   PosReturnLine,
   PosReturnPage,
   PosSale,
+  PosSaleInvoiceDocument,
   PosSaleLine,
   PosSalePayment,
   PosSalePage,
@@ -30,6 +33,7 @@ import type {
   PosTerminalContext,
   PosTrackingMode,
   PosVatTreatment,
+  PosWarrantyCardDocument,
   PricePosBasketRequest,
   UpdatePosQuickAccessRequest,
 } from '@vista/contracts';
@@ -45,6 +49,8 @@ import type {
 import { ApiErrorException } from '../common/api-error.exception.js';
 import { APP_ENVIRONMENT } from '../config/config.module.js';
 import { DatabaseService } from '../database/database.service.js';
+import { FinancialDocumentsService } from '../finance/financial-documents.service.js';
+import { renderPosWarrantyCard } from './pos-warranty-card-renderer.js';
 
 interface AssignmentRow {
   business_location_id: string;
@@ -113,6 +119,7 @@ interface SaleProductRow {
   price_list_id: string | null;
   product_code: string;
   tracking_mode: PosCatalogItem['trackingMode'];
+  unit_code: string;
   unit_price: string | null;
   vat_treatment: PosVatTreatment | null;
   warranty_months: number | null;
@@ -132,6 +139,7 @@ interface SaleRow {
   fiscal_status: PosSale['fiscalStatus'];
   gross_total: string;
   id: string;
+  invoice_document: PosSaleInvoiceDocument | null;
   loyalty_discount_total: string;
   loyalty_points_earned: number;
   loyalty_points_redeemed: number;
@@ -142,12 +150,22 @@ interface SaleRow {
   status: PosSale['status'];
   total_count?: string;
   vat_total: string;
+  warranty_cards: PosWarrantyCardDocument[];
+}
+
+export interface PosWarrantyCardContent {
+  buffer: Buffer;
+  fileName: string;
+  mediaType: 'application/pdf';
 }
 
 interface SalePaymentRow {
+  account_due_on: string | null;
   adapter: string;
+  advance_number: string | null;
   amount: string;
   change_amount: string;
+  customer_advance_id: string | null;
   id: string;
   payment_method: PosSalePayment['method'];
   provider_reference: string | null;
@@ -203,6 +221,7 @@ interface ReturnRefundRow {
   adapter: string;
   amount: string;
   id: string;
+  original_payment_id: string;
   provider_reference: string | null;
   refund_method: PosSalePayment['method'];
   return_id: string;
@@ -260,6 +279,8 @@ export class PosService {
     @Inject(APP_ENVIRONMENT) private readonly environment: AppEnvironment,
     @Inject(PasswordService) private readonly passwords: PasswordService,
     @Inject(TotpService) private readonly totp: TotpService,
+    @Inject(FinancialDocumentsService)
+    private readonly financialDocuments: FinancialDocumentsService,
   ) {}
 
   async terminalContext(authentication: AuthenticationContext): Promise<PosTerminalContext> {
@@ -615,6 +636,100 @@ export class PosService {
       ...(row.uic ? { uic: row.uic } : {}),
       ...(row.vat_number ? { vatNumber: row.vat_number } : {}),
     }));
+  }
+
+  async customerPaymentOptions(customerPartnerId: string): Promise<PosCustomerPaymentOptions> {
+    const result = await this.database.getPool().query<{
+      available_credit: string;
+      customer_name: string;
+      customer_partner_id: string;
+      on_account_available: boolean;
+      outstanding_balance: string;
+      payment_terms_days: number | null;
+    }>(
+      `WITH account_balance AS (
+         SELECT entry.customer_partner_id,
+           COALESCE(sum(CASE entry.entry_type
+             WHEN 'charge' THEN entry.amount ELSE -entry.amount END), 0) AS outstanding
+         FROM finance.customer_account_entries entry
+         WHERE entry.customer_partner_id = $1
+         GROUP BY entry.customer_partner_id
+       )
+       SELECT partner.id AS customer_partner_id, partner.display_name AS customer_name,
+         COALESCE(account_balance.outstanding, 0)::text AS outstanding_balance,
+         CASE WHEN terms.id IS NOT NULL AND terms.status = 'active'
+           AND terms.on_account_enabled
+           AND terms.valid_from <= (now() AT TIME ZONE $2)::date
+           AND (terms.valid_to IS NULL OR terms.valid_to >= (now() AT TIME ZONE $2)::date)
+           THEN greatest(terms.credit_limit_bgn - COALESCE(account_balance.outstanding, 0), 0)
+           ELSE 0 END::text AS available_credit,
+         (terms.id IS NOT NULL AND terms.status = 'active'
+           AND terms.on_account_enabled
+           AND terms.valid_from <= (now() AT TIME ZONE $2)::date
+           AND (terms.valid_to IS NULL OR terms.valid_to >= (now() AT TIME ZONE $2)::date))
+           AS on_account_available,
+         terms.payment_terms_days
+       FROM master_data.partners partner
+       JOIN master_data.partner_roles role
+         ON role.partner_id = partner.id AND role.role = 'customer'
+       LEFT JOIN sales.customer_payment_terms terms
+         ON terms.customer_partner_id = partner.id
+       LEFT JOIN account_balance ON account_balance.customer_partner_id = partner.id
+       WHERE partner.id = $1 AND partner.active`,
+      [customerPartnerId, this.environment.BUSINESS_TIMEZONE],
+    );
+    const row = result.rows[0];
+    if (!row)
+      throw new ApiErrorException(
+        'POS_CUSTOMER_NOT_AVAILABLE',
+        'The selected customer is no longer available.',
+        HttpStatus.NOT_FOUND,
+      );
+    const advances = await this.database.getPool().query<{
+      advance_number: string;
+      amount: string;
+      available_amount: string;
+      customer_partner_id: string;
+      id: string;
+      payment_method: PosCustomerPaymentOptions['advances'][number]['paymentMethod'];
+      payment_reference: string | null;
+      received_on: string;
+    }>(
+      `SELECT advance.id, advance.advance_number, advance.customer_partner_id,
+         advance.amount::text, advance.received_on::text, advance.payment_method,
+         advance.payment_reference,
+         COALESCE(sum(CASE entry.entry_type
+           WHEN 'applied' THEN -entry.amount ELSE entry.amount END), 0)::text
+           AS available_amount
+       FROM finance.customer_advances advance
+       JOIN finance.customer_advance_entries entry ON entry.advance_id = advance.id
+       WHERE advance.customer_partner_id = $1
+       GROUP BY advance.id
+       HAVING COALESCE(sum(CASE entry.entry_type
+         WHEN 'applied' THEN -entry.amount ELSE entry.amount END), 0) > 0
+       ORDER BY advance.received_on, advance.advance_number, advance.id`,
+      [customerPartnerId],
+    );
+    const mappedAdvances = advances.rows.map((advance) => ({
+      amount: advance.amount,
+      availableAmount: advance.available_amount,
+      customerPartnerId: advance.customer_partner_id,
+      id: advance.id,
+      number: advance.advance_number,
+      paymentMethod: advance.payment_method,
+      ...(advance.payment_reference ? { paymentReference: advance.payment_reference } : {}),
+      receivedOn: advance.received_on,
+    }));
+    return {
+      advanceBalance: sum(mappedAdvances.map((advance) => advance.availableAmount)),
+      advances: mappedAdvances,
+      availableCredit: fixed(units(row.available_credit)),
+      customerName: row.customer_name,
+      customerPartnerId: row.customer_partner_id,
+      onAccountAvailable: row.on_account_available,
+      outstandingBalance: fixed(units(row.outstanding_balance)),
+      ...(row.payment_terms_days === null ? {} : { paymentTermsDays: row.payment_terms_days }),
+    };
   }
 
   async priceBasket(
@@ -1026,11 +1141,14 @@ export class PosService {
         const netTotal = basketPricing.netTotal;
         const vatTotal = basketPricing.vatTotal;
         const grossTotal = basketPricing.grossTotal;
-        const payments = prepareSalePayments(
+        const payments = await prepareSalePayments(
+          client,
           normalized.payments,
           grossTotal,
+          normalized.customerPartnerId,
           terminal,
           this.environment.NODE_ENV,
+          this.environment.BUSINESS_TIMEZONE,
         );
 
         const saleId = randomUUID();
@@ -1180,12 +1298,12 @@ export class PosService {
           await client.query(
             `INSERT INTO pos.sale_lines (
                id, sale_id, product_id, product_code, product_name, quantity,
-               unit_price, vat_treatment, net_total, vat_total, gross_total,
+               unit_price, unit_code, vat_treatment, net_total, vat_total, gross_total,
                price_list_id, stock_movement_id, batch_id, category_id, category_name,
                base_net_total, automatic_discount_total, manual_discount_total,
                loyalty_discount_total, pricing_adjustments
-             ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,
-               $17,$18,$19,$20,$21)`,
+             ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,
+               $18,$19,$20,$21,$22)`,
             [
               saleLineId,
               saleId,
@@ -1194,6 +1312,7 @@ export class PosService {
               line.product.name,
               line.quantity,
               line.product.unit_price,
+              line.product.unit_code,
               line.product.vat_treatment,
               line.netTotal,
               line.vatTotal,
@@ -1300,13 +1419,14 @@ export class PosService {
         }
 
         for (const payment of payments) {
+          const paymentId = randomUUID();
           await client.query(
             `INSERT INTO pos.payments (
                id, sale_id, payment_method, amount, tendered_amount, change_amount,
-               provider_reference, adapter, status
-             ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+               provider_reference, adapter, status, customer_advance_id, account_due_on
+             ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
             [
-              randomUUID(),
+              paymentId,
               saleId,
               payment.method,
               payment.amount,
@@ -1315,8 +1435,45 @@ export class PosService {
               payment.providerReference ?? null,
               payment.adapter,
               payment.status,
+              payment.advanceId ?? null,
+              payment.accountDueOn ?? null,
             ],
           );
+          if (payment.method === 'advance')
+            await client.query(
+              `INSERT INTO finance.customer_advance_entries (
+                 id, advance_id, entry_type, amount, pos_sale_id,
+                 actor_account_id, correlation_id
+               ) VALUES ($1,$2,'applied',$3,$4,$5,$6)`,
+              [
+                randomUUID(),
+                payment.advanceId,
+                payment.amount,
+                saleId,
+                authentication.accountId,
+                metadata.correlationId,
+              ],
+            );
+          if (payment.method === 'on_account')
+            await client.query(
+              `INSERT INTO finance.customer_account_entries (
+                 id, customer_partner_id, payment_terms_id, entry_type, amount,
+                 due_on, credit_limit_bgn, payment_terms_days, pos_sale_id,
+                 actor_account_id, correlation_id
+               ) VALUES ($1,$2,$3,'charge',$4,$5,$6,$7,$8,$9,$10)`,
+              [
+                randomUUID(),
+                normalized.customerPartnerId,
+                payment.paymentTermsId,
+                payment.amount,
+                payment.accountDueOn,
+                payment.creditLimitBgn,
+                payment.paymentTermsDays,
+                saleId,
+                authentication.accountId,
+                metadata.correlationId,
+              ],
+            );
         }
         const requestDigest = digest(normalized);
         await client.query(
@@ -1388,6 +1545,94 @@ export class PosService {
       pageSize,
       total,
       totalPages: total === 0 ? 0 : Math.ceil(total / pageSize),
+    };
+  }
+
+  async createInvoiceDraft(
+    saleId: string,
+    key: string | undefined,
+    authentication: AuthenticationContext,
+    metadata: RequestSecurityMetadata,
+  ): Promise<FinancialDocument> {
+    return this.financialDocuments.createFromPosReceipt(saleId, key, authentication, metadata);
+  }
+
+  async warrantyCardContent(
+    saleId: string,
+    cardId: string,
+    authentication: AuthenticationContext,
+    metadata: RequestSecurityMetadata,
+  ): Promise<PosWarrantyCardContent> {
+    const result = await this.database.getPool().query<{
+      card_number: string;
+      customer_location_name: string;
+      customer_name: string;
+      fiscal_receipt_number: string;
+      issued_at: Date | string;
+      issuer_address: string;
+      issuer_name: string;
+      product_name: string;
+      sale_number: string;
+      serial_number: string;
+      warranty_ends_on: string;
+      warranty_starts_on: string;
+    }>(
+      `SELECT card.card_number, customer.display_name AS customer_name,
+              customer_location.name AS customer_location_name,
+              equipment.device_name AS product_name, equipment.serial_number,
+              card.warranty_starts_on::text, card.warranty_ends_on::text, card.issued_at,
+              sale.sale_number, sale.fiscal_receipt_number, entity.name AS issuer_name,
+              concat_ws(', ', location.address_line_1, nullif(location.address_line_2, ''),
+                        concat_ws(' ', nullif(location.postal_code, ''), location.city),
+                        location.country_code) AS issuer_address
+       FROM crm.warranty_cards card
+       JOIN pos.sales sale ON sale.id = card.pos_sale_id
+       JOIN organization.operators operator ON operator.id = sale.operator_id
+       JOIN master_data.partners customer ON customer.id = card.customer_partner_id
+       JOIN master_data.customer_locations customer_location
+         ON customer_location.id = card.customer_location_id
+       JOIN master_data.customer_equipment equipment ON equipment.id = card.customer_equipment_id
+       JOIN organization.cash_registers register ON register.id = sale.cash_register_id
+       JOIN organization.business_locations location ON location.id = register.business_location_id
+       JOIN organization.branches branch ON branch.id = location.branch_id
+       JOIN organization.legal_entities entity ON entity.id = branch.legal_entity_id
+       WHERE sale.id = $1 AND card.id = $2 AND operator.account_id = $3`,
+      [saleId, cardId, authentication.accountId],
+    );
+    const card = result.rows[0];
+    if (!card)
+      throw new ApiErrorException(
+        'POS_WARRANTY_CARD_NOT_FOUND',
+        'The warranty card was not found for this receipt.',
+        HttpStatus.NOT_FOUND,
+      );
+    const buffer = await renderPosWarrantyCard({
+      cardNumber: card.card_number,
+      customerLocationName: card.customer_location_name,
+      customerName: card.customer_name,
+      fiscalReceiptNumber: card.fiscal_receipt_number,
+      issuedAt: iso(card.issued_at),
+      issuerAddress: card.issuer_address,
+      issuerName: card.issuer_name,
+      productName: card.product_name,
+      saleNumber: card.sale_number,
+      serialNumber: card.serial_number,
+      warrantyEndsOn: card.warranty_ends_on,
+      warrantyStartsOn: card.warranty_starts_on,
+    });
+    await this.audit.append({
+      action: 'pos.warranty-card.downloaded',
+      actorAccountId: authentication.accountId,
+      correlationId: metadata.correlationId,
+      ...(metadata.sourceIp ? { sourceIp: metadata.sourceIp } : {}),
+      targetId: cardId,
+      targetType: 'warranty_card',
+      ...(metadata.userAgent ? { userAgent: metadata.userAgent } : {}),
+    });
+    return {
+      buffer,
+      fileName: `${card.card_number.replaceAll(/[^A-Za-z0-9._-]/gu, '-')}.pdf`,
+      mediaType: 'application/pdf',
     };
   }
 
@@ -1663,11 +1908,13 @@ export class PosService {
         for (const refund of refunds)
           await client.query(
             `INSERT INTO pos.return_refunds (
-               id, return_id, refund_method, amount, adapter, status, provider_reference
-             ) VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+               id, return_id, original_payment_id, refund_method, amount,
+               adapter, status, provider_reference
+             ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
             [
               randomUUID(),
               returnId,
+              refund.originalPaymentId,
               refund.method,
               refund.amount,
               refund.adapter,
@@ -1675,6 +1922,69 @@ export class PosService {
               refund.providerReference ?? null,
             ],
           );
+
+        for (const refund of refunds) {
+          if (refund.method === 'advance') {
+            const source = await client.query<{ id: string }>(
+              `SELECT id FROM finance.customer_advance_entries
+               WHERE advance_id = $1 AND pos_sale_id = $2 AND entry_type = 'applied'`,
+              [refund.advanceId, original.id],
+            );
+            await client.query(
+              `INSERT INTO finance.customer_advance_entries (
+                 id, advance_id, entry_type, amount, pos_sale_id, pos_return_id,
+                 source_entry_id, actor_account_id, correlation_id
+               ) VALUES ($1,$2,'restored',$3,$4,$5,$6,$7,$8)`,
+              [
+                randomUUID(),
+                refund.advanceId,
+                refund.amount,
+                original.id,
+                returnId,
+                required(source.rows[0], 'Advance application entry is missing').id,
+                authentication.accountId,
+                metadata.correlationId,
+              ],
+            );
+          }
+          if (refund.method === 'on_account') {
+            const source = await client.query<{
+              credit_limit_bgn: string;
+              due_on: string;
+              id: string;
+              payment_terms_days: number;
+              payment_terms_id: string;
+            }>(
+              `SELECT id, payment_terms_id, due_on::text, credit_limit_bgn::text,
+                 payment_terms_days
+               FROM finance.customer_account_entries
+               WHERE pos_sale_id = $1 AND entry_type = 'charge'`,
+              [original.id],
+            );
+            const charge = required(source.rows[0], 'Customer account charge is missing');
+            await client.query(
+              `INSERT INTO finance.customer_account_entries (
+                 id, customer_partner_id, payment_terms_id, entry_type, amount,
+                 due_on, credit_limit_bgn, payment_terms_days, pos_sale_id,
+                 pos_return_id, source_entry_id, actor_account_id, correlation_id
+               ) VALUES ($1,$2,$3,'return_credit',$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+              [
+                randomUUID(),
+                original.customer_partner_id,
+                charge.payment_terms_id,
+                refund.amount,
+                charge.due_on,
+                charge.credit_limit_bgn,
+                charge.payment_terms_days,
+                original.id,
+                returnId,
+                charge.id,
+                authentication.accountId,
+                metadata.correlationId,
+              ],
+            );
+          }
+        }
 
         for (const prepared of preparedLines) {
           const movementId = randomUUID();
@@ -2766,11 +3076,13 @@ const quickAccessSql = `
 const saleProductsSql = `
   SELECT product.id, product.product_code, product.name, category.id AS category_id,
     category.name AS category_name, category.tracking_mode,
+    unit.code AS unit_code,
     product.pos_vat_treatment AS vat_treatment, product.warranty_months,
     balance.average_unit_cost_bgn::text, price.id AS price_list_id, price.unit_price
   FROM master_data.products product
   JOIN master_data.product_categories category
     ON category.id = product.category_id AND category.active
+  JOIN master_data.units unit ON unit.id = product.unit_id AND unit.active
   JOIN inventory.stock_balances balance
     ON balance.product_id = product.id AND balance.warehouse_id = $2
   LEFT JOIN LATERAL (${applicablePriceSql(3)}) price ON true
@@ -2785,6 +3097,31 @@ const saleHeaderSql = `
     sale.manual_discount_total::text, sale.loyalty_discount_total::text,
     sale.loyalty_points_earned, sale.loyalty_points_redeemed,
     sale.fiscal_receipt_number, sale.fiscal_adapter, sale.completed_at,
+    (SELECT json_build_object(
+       'id', document.id,
+       'number', document.draft_number,
+       'sourceFiscalReceiptNumber', document.source_fiscal_receipt_number,
+       'status', document.status
+     )
+     FROM finance.financial_documents document
+     WHERE document.source_pos_sale_id = sale.id AND document.status = 'draft'
+     ORDER BY document.created_at DESC, document.id DESC LIMIT 1) AS invoice_document,
+    COALESCE((SELECT json_agg(json_build_object(
+       'id', card.id,
+       'number', card.card_number,
+       'customerName', customer_card.display_name,
+       'customerLocationName', customer_location.name,
+       'productName', equipment.device_name,
+       'serialNumber', equipment.serial_number,
+       'warrantyStartsOn', card.warranty_starts_on::text,
+       'warrantyEndsOn', card.warranty_ends_on::text
+     ) ORDER BY card.card_number)
+     FROM crm.warranty_cards card
+     JOIN master_data.partners customer_card ON customer_card.id = card.customer_partner_id
+     JOIN master_data.customer_locations customer_location
+       ON customer_location.id = card.customer_location_id
+     JOIN master_data.customer_equipment equipment ON equipment.id = card.customer_equipment_id
+     WHERE card.pos_sale_id = sale.id), '[]'::json) AS warranty_cards,
     COALESCE((SELECT sum(payment.tendered_amount) FROM pos.payments payment
       WHERE payment.sale_id = sale.id AND payment.payment_method = 'cash'), 0)::text
       AS cash_tendered,
@@ -2823,17 +3160,19 @@ const saleLinesSql = `
 
 const salePaymentsSql = `
   SELECT payment.id, payment.sale_id, payment.payment_method,
+    payment.customer_advance_id, advance.advance_number,
+    payment.account_due_on::text,
     payment.amount::text, COALESCE(payment.tendered_amount, payment.amount)::text
       AS tendered_amount,
     payment.change_amount::text, payment.provider_reference,
     (payment.amount - COALESCE((
       SELECT sum(refund.amount) FROM pos.returns pos_return
       JOIN pos.return_refunds refund ON refund.return_id = pos_return.id
-      WHERE pos_return.original_sale_id = payment.sale_id
-        AND refund.refund_method = payment.payment_method
+      WHERE refund.original_payment_id = payment.id
     ), 0))::text AS refundable_amount,
     payment.adapter, payment.status
   FROM pos.payments payment
+  LEFT JOIN finance.customer_advances advance ON advance.id = payment.customer_advance_id
   WHERE payment.sale_id = ANY($1::uuid[])
   ORDER BY payment.sale_id, payment.recorded_at, payment.id`;
 
@@ -2863,7 +3202,7 @@ const returnLinesSql = `
 
 const returnRefundsSql = `
   SELECT refund.id, refund.return_id, refund.refund_method, refund.amount::text,
-    refund.adapter, refund.status, refund.provider_reference
+    refund.original_payment_id, refund.adapter, refund.status, refund.provider_reference
   FROM pos.return_refunds refund
   WHERE refund.return_id = ANY($1::uuid[])
   ORDER BY refund.return_id, refund.recorded_at, refund.id`;
@@ -2881,6 +3220,7 @@ function normalizeSale(input: CreatePosSaleRequest) {
     clientTransactionId: input.clientTransactionId,
     ...(input.customerLocationId ? { customerLocationId: input.customerLocationId } : {}),
     payments: input.payments.map((payment) => ({
+      ...(payment.advanceId ? { advanceId: payment.advanceId } : {}),
       amount: decimal(payment.amount, true),
       method: payment.method,
       ...(payment.tenderedAmount ? { tenderedAmount: decimal(payment.tenderedAmount, false) } : {}),
@@ -2968,6 +3308,7 @@ function normalizeReturn(input: CreatePosReturnRequest) {
     refunds: input.refunds.map((refund) => ({
       amount: decimal(refund.amount, true),
       method: refund.method,
+      originalPaymentId: refund.originalPaymentId,
     })),
     shiftId: input.shiftId,
   };
@@ -2981,10 +3322,10 @@ async function prepareReturnRefunds(
   terminal: AssignmentRow,
   nodeEnvironment: string,
 ) {
-  if (new Set(refunds.map((refund) => refund.method)).size !== refunds.length)
+  if (new Set(refunds.map((refund) => refund.originalPaymentId)).size !== refunds.length)
     throw new ApiErrorException(
-      'POS_REFUND_METHOD_DUPLICATE',
-      'Enter each refund method only once',
+      'POS_REFUND_PAYMENT_DUPLICATE',
+      'Each original payment can be refunded only once in this return',
       HttpStatus.BAD_REQUEST,
     );
   if (units(sum(refunds.map((refund) => refund.amount))) !== units(grossTotal))
@@ -2993,25 +3334,63 @@ async function prepareReturnRefunds(
       `Refunds must equal the BGN ${plain(grossTotal)} return total`,
       HttpStatus.BAD_REQUEST,
     );
-  const available = await client.query<{
+  const selectedPayments = await client.query<{
+    account_due_on: string | null;
+    amount: string;
+    customer_advance_id: string | null;
+    id: string;
     method: PosSalePayment['method'];
-    remaining_amount: string;
   }>(
-    `SELECT payment.payment_method AS method,
-       (sum(payment.amount) - COALESCE((
-         SELECT sum(refund.amount) FROM pos.returns pos_return
-         JOIN pos.return_refunds refund ON refund.return_id = pos_return.id
-         WHERE pos_return.original_sale_id = $1
-           AND refund.refund_method = payment.payment_method
-       ), 0))::text AS remaining_amount
+    `SELECT payment.id, payment.payment_method AS method,
+       payment.customer_advance_id, payment.account_due_on::text,
+       payment.amount::text
      FROM pos.payments payment
-     WHERE payment.sale_id = $1 AND payment.payment_method IN ('cash', 'card')
-     GROUP BY payment.payment_method`,
-    [saleId],
+     WHERE payment.sale_id = $1 AND payment.id = ANY($2::uuid[])
+     ORDER BY payment.recorded_at, payment.id FOR UPDATE OF payment`,
+    [saleId, refunds.map((refund) => refund.originalPaymentId)],
+  );
+  if (selectedPayments.rowCount !== refunds.length)
+    throw new ApiErrorException(
+      'POS_REFUND_PAYMENT_NOT_FOUND',
+      'One or more original payments were not found on this sale',
+      HttpStatus.CONFLICT,
+    );
+  // Read already-posted refunds only after the payment locks are held. This
+  // gives a waiting concurrent return a fresh snapshot and prevents the same
+  // original payment from being refunded twice.
+  const refunded = await client.query<{
+    original_payment_id: string;
+    refunded_amount: string;
+  }>(
+    `SELECT original_payment_id, sum(amount)::text AS refunded_amount
+     FROM pos.return_refunds
+     WHERE original_payment_id = ANY($1::uuid[])
+     GROUP BY original_payment_id`,
+    [refunds.map((refund) => refund.originalPaymentId)],
+  );
+  const refundedByPayment = new Map(
+    refunded.rows.map((row) => [row.original_payment_id, row.refunded_amount]),
   );
   return refunds.map((refund) => {
-    const remaining = available.rows.find((row) => row.method === refund.method);
-    if (!remaining || units(refund.amount) > units(remaining.remaining_amount))
+    const originalPayment = selectedPayments.rows.find(
+      (row) => row.id === refund.originalPaymentId,
+    );
+    const remaining = originalPayment
+      ? {
+          ...originalPayment,
+          remaining_amount: subtract(
+            originalPayment.amount,
+            refundedByPayment.get(originalPayment.id) ?? '0',
+          ),
+        }
+      : undefined;
+    if (!remaining || remaining.method !== refund.method)
+      throw new ApiErrorException(
+        'POS_REFUND_PAYMENT_MISMATCH',
+        'The refund method no longer matches its original payment',
+        HttpStatus.CONFLICT,
+      );
+    if (units(refund.amount) > units(remaining.remaining_amount))
       throw new ApiErrorException(
         'POS_REFUND_METHOD_EXCEEDED',
         `The ${refund.method} refund is greater than the amount paid by that method`,
@@ -3022,6 +3401,25 @@ async function prepareReturnRefunds(
         adapter: 'cash-drawer',
         amount: refund.amount,
         method: refund.method,
+        originalPaymentId: refund.originalPaymentId,
+        status: 'completed' as const,
+      };
+    if (refund.method === 'advance')
+      return {
+        adapter: 'customer-advance',
+        advanceId: required(remaining.customer_advance_id, 'Customer advance link is missing'),
+        amount: refund.amount,
+        method: refund.method,
+        originalPaymentId: refund.originalPaymentId,
+        status: 'completed' as const,
+      };
+    if (refund.method === 'on_account')
+      return {
+        accountDueOn: required(remaining.account_due_on, 'Customer account due date is missing'),
+        adapter: 'customer-account',
+        amount: refund.amount,
+        method: refund.method,
+        originalPaymentId: refund.originalPaymentId,
         status: 'completed' as const,
       };
     if (terminal.payment_terminal_mode === 'disabled')
@@ -3046,17 +3444,21 @@ async function prepareReturnRefunds(
       adapter: 'development-card-simulator',
       amount: refund.amount,
       method: refund.method,
+      originalPaymentId: refund.originalPaymentId,
       providerReference: `SIM-REFUND-${randomUUID()}`,
       status: 'simulated' as const,
     };
   });
 }
 
-function prepareSalePayments(
+async function prepareSalePayments(
+  client: PoolClient,
   payments: ReturnType<typeof normalizeSale>['payments'],
   grossTotal: string,
+  customerPartnerId: string | undefined,
   terminal: AssignmentRow,
   nodeEnvironment: string,
+  businessTimezone: string,
 ) {
   if (new Set(payments.map((payment) => payment.method)).size !== payments.length)
     throw new ApiErrorException(
@@ -3070,7 +3472,36 @@ function prepareSalePayments(
       `Payments must equal the BGN ${plain(grossTotal)} sale total`,
       HttpStatus.BAD_REQUEST,
     );
-  return payments.map((payment) => {
+  if (
+    payments.some((payment) => payment.method === 'advance' || payment.method === 'on_account') &&
+    !customerPartnerId
+  )
+    throw new ApiErrorException(
+      'POS_CUSTOMER_PAYMENT_REQUIRES_CUSTOMER',
+      'Choose the customer before using an advance or customer account',
+      HttpStatus.BAD_REQUEST,
+    );
+  const prepared = [] as Array<{
+    accountDueOn?: string;
+    adapter: string;
+    advanceId?: string;
+    amount: string;
+    changeAmount: string;
+    creditLimitBgn?: string;
+    method: PosSalePayment['method'];
+    paymentTermsDays?: number;
+    paymentTermsId?: string;
+    providerReference?: string;
+    status: PosSalePayment['status'];
+    tenderedAmount: string | null;
+  }>;
+  for (const payment of payments) {
+    if (payment.method !== 'advance' && payment.advanceId)
+      throw new ApiErrorException(
+        'POS_ADVANCE_LINK_NOT_ALLOWED',
+        'An advance can be selected only for an advance payment',
+        HttpStatus.BAD_REQUEST,
+      );
     if (payment.method === 'cash') {
       const tenderedAmount = payment.tenderedAmount ?? payment.amount;
       if (units(tenderedAmount) < units(payment.amount))
@@ -3079,14 +3510,125 @@ function prepareSalePayments(
           `Cash received must be at least BGN ${plain(payment.amount)}`,
           HttpStatus.BAD_REQUEST,
         );
-      return {
+      prepared.push({
         adapter: 'cash-drawer',
         amount: payment.amount,
         changeAmount: subtract(tenderedAmount, payment.amount),
         method: payment.method,
         status: 'completed' as const,
         tenderedAmount,
-      };
+      });
+      continue;
+    }
+    if (payment.method === 'advance') {
+      if (!payment.advanceId)
+        throw new ApiErrorException(
+          'POS_ADVANCE_REQUIRED',
+          'Choose the customer advance to use',
+          HttpStatus.BAD_REQUEST,
+        );
+      if (payment.tenderedAmount)
+        throw new ApiErrorException(
+          'POS_ADVANCE_TENDER_NOT_ALLOWED',
+          'Cash received is not used with a customer advance',
+          HttpStatus.BAD_REQUEST,
+        );
+      const advance = await client.query<{
+        customer_partner_id: string;
+        id: string;
+      }>(
+        `SELECT id, customer_partner_id FROM finance.customer_advances
+         WHERE id = $1 FOR UPDATE`,
+        [payment.advanceId],
+      );
+      if (advance.rows[0]?.customer_partner_id !== customerPartnerId)
+        throw new ApiErrorException(
+          'POS_ADVANCE_NOT_AVAILABLE',
+          'The selected advance is not available for this customer',
+          HttpStatus.CONFLICT,
+        );
+      const balance = await client.query<{ available_amount: string }>(
+        `SELECT COALESCE(sum(CASE entry.entry_type
+           WHEN 'applied' THEN -entry.amount ELSE entry.amount END), 0)::text
+           AS available_amount
+         FROM finance.customer_advance_entries entry WHERE entry.advance_id = $1`,
+        [payment.advanceId],
+      );
+      if (units(balance.rows[0]?.available_amount ?? '0') < units(payment.amount))
+        throw new ApiErrorException(
+          'POS_ADVANCE_BALANCE_EXCEEDED',
+          'The advance balance is smaller than the amount entered',
+          HttpStatus.CONFLICT,
+        );
+      prepared.push({
+        adapter: 'customer-advance',
+        advanceId: payment.advanceId,
+        amount: payment.amount,
+        changeAmount: '0.0000',
+        method: payment.method,
+        status: 'completed',
+        tenderedAmount: null,
+      });
+      continue;
+    }
+    if (payment.method === 'on_account') {
+      if (payment.tenderedAmount)
+        throw new ApiErrorException(
+          'POS_ACCOUNT_TENDER_NOT_ALLOWED',
+          'Cash received is not used with a customer-account payment',
+          HttpStatus.BAD_REQUEST,
+        );
+      const terms = await client.query<{
+        credit_limit_bgn: string;
+        due_on: string;
+        id: string;
+        outstanding_balance: string;
+        payment_terms_days: number;
+      }>(
+        `SELECT terms.id, terms.credit_limit_bgn::text, terms.payment_terms_days,
+           ((now() AT TIME ZONE $2)::date + terms.payment_terms_days)::text AS due_on,
+           COALESCE((SELECT sum(CASE entry.entry_type
+             WHEN 'charge' THEN entry.amount ELSE -entry.amount END)
+             FROM finance.customer_account_entries entry
+             WHERE entry.customer_partner_id = terms.customer_partner_id), 0)::text
+             AS outstanding_balance
+         FROM sales.customer_payment_terms terms
+         WHERE terms.customer_partner_id = $1 AND terms.status = 'active'
+           AND terms.on_account_enabled
+           AND terms.valid_from <= (now() AT TIME ZONE $2)::date
+           AND (terms.valid_to IS NULL OR terms.valid_to >= (now() AT TIME ZONE $2)::date)
+         FOR UPDATE OF terms`,
+        [customerPartnerId, businessTimezone],
+      );
+      const account = terms.rows[0];
+      if (!account)
+        throw new ApiErrorException(
+          'POS_ACCOUNT_NOT_AVAILABLE',
+          'On-account payment is not available for this customer',
+          HttpStatus.CONFLICT,
+        );
+      if (
+        units(account.outstanding_balance) + units(payment.amount) >
+        units(account.credit_limit_bgn)
+      )
+        throw new ApiErrorException(
+          'POS_ACCOUNT_CREDIT_EXCEEDED',
+          'This sale would exceed the customer’s available credit',
+          HttpStatus.CONFLICT,
+        );
+      prepared.push({
+        accountDueOn: account.due_on,
+        adapter: 'customer-account',
+        amount: payment.amount,
+        changeAmount: '0.0000',
+        creditLimitBgn: account.credit_limit_bgn,
+        method: payment.method,
+        paymentTermsDays: account.payment_terms_days,
+        paymentTermsId: account.id,
+        status: 'completed',
+        tenderedAmount: null,
+      });
+      continue;
     }
     if (payment.tenderedAmount && units(payment.tenderedAmount) !== units(payment.amount))
       throw new ApiErrorException(
@@ -3112,7 +3654,7 @@ function prepareSalePayments(
         'The development card simulator cannot be used in production',
         HttpStatus.FORBIDDEN,
       );
-    return {
+    prepared.push({
       adapter: 'development-card-simulator',
       amount: payment.amount,
       changeAmount: '0.0000',
@@ -3120,8 +3662,9 @@ function prepareSalePayments(
       providerReference: `SIM-CARD-${randomUUID()}`,
       status: 'simulated' as const,
       tenderedAmount: null,
-    };
-  });
+    });
+  }
+  return prepared;
 }
 
 function mapShift(row: ShiftRow): PosShift {
@@ -3183,6 +3726,7 @@ function mapSale(row: SaleRow, lines: PosSaleLine[], payments: PosSalePayment[])
     fiscalStatus: row.fiscal_status,
     grossTotal: row.gross_total,
     id: row.id,
+    ...(row.invoice_document ? { invoiceDocument: row.invoice_document } : {}),
     lines,
     loyaltyDiscountTotal: row.loyalty_discount_total,
     loyaltyPointsEarned: row.loyalty_points_earned,
@@ -3194,6 +3738,7 @@ function mapSale(row: SaleRow, lines: PosSaleLine[], payments: PosSalePayment[])
     shiftId: row.shift_id,
     status: row.status,
     vatTotal: row.vat_total,
+    warrantyCards: row.warranty_cards,
   };
 }
 
@@ -3224,7 +3769,10 @@ function mapSaleLine(row: SaleLineRow): PosSaleLine {
 
 function mapSalePayment(row: SalePaymentRow): PosSalePayment {
   return {
+    ...(row.account_due_on ? { accountDueOn: row.account_due_on } : {}),
     adapter: row.adapter,
+    ...(row.customer_advance_id ? { advanceId: row.customer_advance_id } : {}),
+    ...(row.advance_number ? { advanceNumber: row.advance_number } : {}),
     amount: row.amount,
     changeAmount: row.change_amount,
     id: row.id,
@@ -3285,6 +3833,7 @@ function mapReturnRefund(row: ReturnRefundRow): PosReturn['refunds'][number] {
     amount: row.amount,
     id: row.id,
     method: row.refund_method,
+    originalPaymentId: row.original_payment_id,
     ...(row.provider_reference ? { providerReference: row.provider_reference } : {}),
     status: row.status,
   };

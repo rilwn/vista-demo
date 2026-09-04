@@ -5,11 +5,13 @@ import type {
   CreatePosReturnRequest,
   CreatePosSaleRequest,
   EnrolPosLoyaltyRequest,
+  FinancialDocument,
   ClosePosShiftRequest,
   OpenPosShiftRequest,
   PosBasketPricing,
   PosCatalogPage,
   PosCustomerOption,
+  PosCustomerPaymentOptions,
   PosDiscountAuthorization,
   PosLoyaltyAccount,
   PosLoyaltyLedger,
@@ -107,6 +109,18 @@ export function getPosCustomers(token: string, search?: string): Promise<PosCust
     posApiClient.GET('/api/v1/pos/customers', {
       headers: authorizationHeaders(token),
       params: { query: search ? { search } : {} },
+    }),
+  );
+}
+
+export function getPosCustomerPaymentOptions(
+  token: string,
+  customerPartnerId: string,
+): Promise<PosCustomerPaymentOptions> {
+  return unwrapApiResponse(
+    posApiClient.GET('/api/v1/pos/customers/{customerPartnerId}/payment-options', {
+      headers: authorizationHeaders(token),
+      params: { path: { customerPartnerId } },
     }),
   );
 }
@@ -314,4 +328,42 @@ export function getPosSales(token: string): Promise<PosSalePage> {
       params: { query: { page: 1, pageSize: 50 } },
     }),
   );
+}
+
+export function createPosInvoiceDraft(
+  token: string,
+  saleId: string,
+  idempotencyKey: string,
+): Promise<FinancialDocument> {
+  return unwrapApiResponse(
+    posApiClient.POST('/api/v1/pos/sales/{id}/invoice-draft', {
+      headers: authorizationHeaders(token),
+      params: {
+        header: { 'Idempotency-Key': idempotencyKey },
+        path: { id: saleId },
+      },
+    }),
+  );
+}
+
+export async function downloadPosWarrantyCard(
+  token: string,
+  saleId: string,
+  cardId: string,
+): Promise<Blob> {
+  const response = await fetch(
+    `${apiV1BaseUrl}/pos/sales/${encodeURIComponent(saleId)}/warranty-cards/${encodeURIComponent(cardId)}/pdf`,
+    { headers: authorizationHeaders(token) },
+  );
+  if (!response.ok) {
+    const body = (await response.json().catch(() => undefined)) as ApiErrorResponse | undefined;
+    throw new ApiClientError(
+      body?.error.message ?? 'The warranty card could not be downloaded.',
+      body?.error.code ?? 'POS_WARRANTY_CARD_DOWNLOAD_FAILED',
+      response.status,
+      body?.error.correlationId,
+      body?.error.details,
+    );
+  }
+  return response.blob();
 }

@@ -44,6 +44,22 @@ POS does not keep a competing master-data store.
     points ledger. Completed sales add earned points and optional redemption
     entries. Partial and full returns add proportional reversal/restoration
     entries; posted activity is never edited or deleted.
+14. Finance maintains dated customer credit terms and received advances on the
+    shared customer record. Checkout can use an advance alone or combine it with
+    cash, card, or an approved on-account remainder. Locked rows prevent
+    concurrent sales from exceeding the available balance.
+15. Customer-account charges, advance applications, and their linked return
+    credits or restorations are append-only. Each refund points to the exact
+    original payment so the subledger and receipt remain reconcilable.
+16. A customer sale can prepare one linked Finance invoice draft from the
+    completed receipt. The draft preserves the posted product, unit, quantity,
+    discount, VAT, currency, customer, location, register, operator, sale, and
+    fiscal-receipt snapshots. Concurrent or repeated requests return the same
+    document.
+17. A serialised sale creates its warranty records in the sale transaction. The
+    receipt presents each card and provides an authorization-scoped printable
+    PDF with the customer, covered device, serial number, sale date, coverage
+    dates, issuer, and receipt references.
 
 ## Counter interface
 
@@ -71,6 +87,11 @@ completed gross BGN and values one point as a BGN 0.01 pre-VAT discount. These
 rates are stored program data and must be replaced with the POS-003-approved
 production policy before rollout.
 
+On-account terms use the configured Sofia business date. Each posted charge
+retains its due date, approved credit limit, and payment-term days, so later term
+changes never rewrite a sale. Advance and account balances are derived from
+immutable entries rather than stored as mutable totals.
+
 ## Fiscal boundary
 
 Local development uses explicit receipt, reversal, and card-payment simulators
@@ -83,3 +104,8 @@ implementation or acceptance.
 Development X and Z reports include simulated fiscal totals. They are operational
 cashier reports for testing and must not be represented as certified fiscal-device
 reports until the approved H-18 adapter and target hardware pass acceptance.
+
+POS receipt invoice preparation ends at a Finance draft until the approved legal
+issuance, numbering, signing, delivery, and H-18 rules are implemented. Warranty
+cards are printable PDFs; direct transport to an approved physical printer remains
+part of the target-hardware work.

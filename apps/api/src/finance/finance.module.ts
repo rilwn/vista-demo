@@ -6,6 +6,8 @@ import { FinanceBankController } from './finance-bank.controller.js';
 import { FinanceBankService } from './finance-bank.service.js';
 import { FinanceCashController } from './finance-cash.controller.js';
 import { FinanceCashService } from './finance-cash.service.js';
+import { FinanceCustomerAccountsController } from './finance-customer-accounts.controller.js';
+import { FinanceCustomerAccountsService } from './finance-customer-accounts.service.js';
 import { FinanceController } from './finance.controller.js';
 import { FinancePayablesController } from './finance-payables.controller.js';
 import { FinancePayablesService } from './finance-payables.service.js';
@@ -19,6 +21,7 @@ import { FinancialDocumentsService } from './financial-documents.service.js';
   controllers: [
     FinanceBankController,
     FinanceCashController,
+    FinanceCustomerAccountsController,
     FinanceController,
     FinancePayablesController,
     FinanceReportsController,
@@ -27,6 +30,7 @@ import { FinancialDocumentsService } from './financial-documents.service.js';
   exports: [
     FinanceBankService,
     FinanceCashService,
+    FinanceCustomerAccountsService,
     FinancePayablesService,
     FinanceReportsService,
     FinanceService,
@@ -36,6 +40,7 @@ import { FinancialDocumentsService } from './financial-documents.service.js';
   providers: [
     FinanceBankService,
     FinanceCashService,
+    FinanceCustomerAccountsService,
     FinancePayablesService,
     FinanceReportsService,
     FinanceService,

@@ -1,54 +1,55 @@
-# Test POS offers, discounts, and rewards
+# Test a POS invoice and warranty card
 
-Run `npm run dev`. It now applies migrations and prepares local accounts
-automatically. Use the password already set in `DEV_FIXTURES_PASSWORD`.
+Start the project with `npm run dev`. It applies migrations and prepares the
+enabled development fixtures automatically. Use the password stored in
+`DEV_FIXTURES_PASSWORD`.
 
-## 1. Review the counter offers
+## 1. Complete a customer device sale
 
-1. Open ERP/CRM and sign in as `sales@vista.local`.
-2. From the sidebar choose **ERP → Sales**.
-3. Open **Prices & promotions**, then choose **POS offers**.
+1. Open **Vista POS** and sign in as `pos.operator@vista.local`.
+2. Choose **Shifts**. If there is no open shift, select **Open shift**, enter
+   `100.00` for **Opening cash**, and open it.
+3. Choose **Sell**.
+4. Select **Customer** → search `Alfa Market` → choose **Alfa Market Demo Ltd.**
+   → keep **Central Store** → select **Use customer**.
+5. Add **Demo Electronic Scale S1** and choose one of its available serial
+   numbers. If none is available, use **Demo Fuel Module M1**.
+6. Choose **Bank card**, then select **Complete sale**.
 
-Expected: **Two adapters save 10%** and **Print care bundle** appear as running
-offers. **Add POS offer** opens a fitted, scrollable panel with dates, priority,
-discount, and qualifying products. Close it with **Back** without saving.
+Expected: the receipt opens with its sale number, fiscal receipt number, payment,
+and one warranty card showing the device and serial number.
 
-## 2. Apply an offer and protected discount
+## 2. Download the card and prepare the invoice
 
-1. Open Vista POS and sign in as `pos.operator@vista.local`.
-2. Choose **Shifts**. If the counter is closed, choose **Open cashier shift**,
-   enter `100.00`, and open it. Return to **Sell**.
-3. Add **Demo 12 V Power Adapter**, then use its **+** button so the quantity is
-   `2`.
+1. On the receipt, select **Download PDF** under **Warranty cards**.
+2. Open the downloaded file.
 
-Expected: the basket shows **Two adapters save 10%**, **Offers −10.00 BGN**, and
-**Total due 108.00 BGN**.
+Expected: it is a readable one-page warranty card with Vista Service, the
+customer, device, serial number, sale date, coverage dates, sale number, and
+receipt number.
 
-4. Choose **Add customer**, search `Alfa Market`, select **Alfa Market Demo
-   Ltd.**, keep **Central Store**, and choose **Use customer**.
-5. Choose **Manual discount**. Keep **Percentage** and `10`, use reason
-   `Customer care discount`, approver `manager@vista.local`, and the same local
-   fixture password. Leave the authentication code empty and choose **Approve
-   discount**.
+3. Return to the receipt and select **Prepare invoice**.
 
-Expected: the basket says **Manual discount approved**, names **Vista Demo
-Manager**, and shows **Manual discount −9.00 BGN**. Do not change the basket
-after approval; a change intentionally clears it.
+Expected: the receipt shows one Finance document number and confirms that the
+draft is ready for review.
 
-## 3. Redeem, earn, and verify points
+4. Close the receipt, choose **Sale history**, and open the same row with **View
+   receipt**.
 
-1. Confirm the selected customer starts with `300 reward points`.
-2. Enter `100` in **Points to use**.
+Expected: the same Finance number remains and the prepare action is no longer
+shown. A second invoice is not created.
 
-Expected: **Rewards −1.00 BGN** and **Total due 96.00 BGN**.
+## 3. Review the linked Finance draft
 
-3. Keep **Cash**, enter `100.00` in **Cash received**, and choose **Complete
-   sale**.
+1. Sign out of Vista POS.
+2. Open **ERP/CRM** and sign in as `finance@vista.local`.
+3. From the sidebar choose **ERP → Finance**.
+4. Under **Choose an area**, open **Financial documents**.
+5. Find the newest invoice for **Alfa Market Demo Ltd.** and select **Preview**.
 
-Expected: the receipt shows `96.00 BGN`, change `4.00 BGN`, `100` points used,
-and `96` points earned.
+Expected: the preview shows **POS sale** and **Fiscal receipt** references. Its
+product, quantity, VAT, and total match the completed POS receipt exactly.
 
-4. Close the receipt, add one adapter, and choose the customer's reward row.
-
-Expected: the balance is `296 points`. The history keeps separate opening,
-redeemed, and earned entries with a running balance; no earlier entry is changed.
+This workflow prepares a Finance draft. Official invoice issuance and certified
+fiscal-device printing remain disabled until the approved legal and hardware
+rules are available.

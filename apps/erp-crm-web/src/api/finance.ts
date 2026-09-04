@@ -3,6 +3,7 @@ import type {
   CancelFinanceCustomerDocumentRequest,
   CancelFinanceCashVoucherRequest,
   CreateFinanceCustomerDocumentRequest,
+  CreateCustomerAdvanceRequest,
   CreateFinanceBankStatementRequest,
   CreateFinanceCashVoucherRequest,
   CreateFinancePaymentRequest,
@@ -14,6 +15,10 @@ import type {
   FinanceCashVoucher,
   FinanceCashVoucherPage,
   FinanceCustomerDocument,
+  CustomerAdvance,
+  CustomerPaymentAccount,
+  CustomerPaymentAccountReferenceData,
+  UpsertCustomerPaymentTermsRequest,
   FinancialDocument,
   FinancialDocumentPage,
   FinancialDocumentReferenceData,
@@ -57,6 +62,56 @@ import {
   idempotencyParameters,
   unwrapApiResponse,
 } from './client';
+
+export function getCustomerPaymentAccountReferenceData(
+  token: string,
+): Promise<CustomerPaymentAccountReferenceData> {
+  return unwrapApiResponse(
+    apiClient.GET('/api/v1/finance/customer-accounts/reference-data', {
+      headers: authorizationHeaders(token),
+    }),
+  );
+}
+
+export function listCustomerPaymentAccounts(token: string): Promise<CustomerPaymentAccount[]> {
+  return unwrapApiResponse(
+    apiClient.GET('/api/v1/finance/customer-accounts', {
+      headers: authorizationHeaders(token),
+    }),
+  );
+}
+
+export function updateCustomerPaymentTerms(
+  token: string,
+  customerPartnerId: string,
+  key: string,
+  input: UpsertCustomerPaymentTermsRequest,
+): Promise<CustomerPaymentAccount> {
+  return unwrapApiResponse(
+    apiClient.PUT('/api/v1/finance/customer-accounts/{customerPartnerId}/terms', {
+      body: input,
+      headers: authorizationHeaders(token),
+      params: {
+        header: idempotencyParameters(key).header,
+        path: { customerPartnerId },
+      },
+    }),
+  );
+}
+
+export function createCustomerAdvance(
+  token: string,
+  key: string,
+  input: CreateCustomerAdvanceRequest,
+): Promise<CustomerAdvance> {
+  return unwrapApiResponse(
+    apiClient.POST('/api/v1/finance/customer-accounts/advances', {
+      body: input,
+      headers: authorizationHeaders(token),
+      params: { header: idempotencyParameters(key).header },
+    }),
+  );
+}
 
 export function getFinanceReferenceData(token: string): Promise<FinanceReferenceData> {
   return unwrapApiResponse(

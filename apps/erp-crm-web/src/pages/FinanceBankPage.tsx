@@ -207,6 +207,13 @@ export function FinanceTabs() {
       <Link
         className={({ isActive }) => (isActive ? 'is-active' : undefined)}
         end
+        to="/modules/erp.finance/customer-accounts"
+      >
+        Customer accounts
+      </Link>
+      <Link
+        className={({ isActive }) => (isActive ? 'is-active' : undefined)}
+        end
         to="/modules/erp.finance/payables"
       >
         Supplier payables

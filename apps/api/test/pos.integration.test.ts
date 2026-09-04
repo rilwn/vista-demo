@@ -7,9 +7,13 @@ import type { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import type { AppEnvironment } from '@vista/config';
 import type {
+  CustomerAdvance,
+  CustomerPaymentAccount,
+  FinancialDocument,
   PosCatalogPage,
   PosBasketPricing,
   PosCustomerOption,
+  PosCustomerPaymentOptions,
   PosDiscountAuthorization,
   PosLoyaltyLedger,
   PosCommercialRule,
@@ -68,13 +72,9 @@ describe.skipIf(!runInfrastructureTests)('POS split payment and linked return li
       new URL('../src/database/migrations', import.meta.url),
     );
     const applied = await migrateUp(database, migrationDirectory);
-    expect(applied).toContain('0055_pos_loyalty_ledger_immutability');
-    expect(await migrateDown(database, migrationDirectory)).toBe(
-      '0055_pos_loyalty_ledger_immutability',
-    );
-    expect(await migrateUp(database, migrationDirectory)).toContain(
-      '0055_pos_loyalty_ledger_immutability',
-    );
+    expect(applied).toContain('0057_pos_receipt_documents');
+    expect(await migrateDown(database, migrationDirectory)).toBe('0057_pos_receipt_documents');
+    expect(await migrateUp(database, migrationDirectory)).toContain('0057_pos_receipt_documents');
 
     Object.assign(process.env, {
       BUSINESS_TIMEZONE: 'Europe/Sofia',
@@ -155,6 +155,11 @@ describe.skipIf(!runInfrastructureTests)('POS split payment and linked return li
       .set('authorization', `Bearer ${viewerToken}`)
       .set('idempotency-key', `denied-return-${runId}`)
       .send({})
+      .expect(403);
+    await request(application.getHttpServer())
+      .post(`/api/v1/pos/sales/${randomUUID()}/invoice-draft`)
+      .set('authorization', `Bearer ${viewerToken}`)
+      .set('idempotency-key', `denied-pos-invoice-${runId}`)
       .expect(403);
   });
 
@@ -362,6 +367,8 @@ describe.skipIf(!runInfrastructureTests)('POS split payment and linked return li
     expect(await stockQuantity()).toBe(beforeStock - 2);
 
     const saleLine = sale.lines[0];
+    const cashPayment = sale.payments.find((payment) => payment.method === 'cash');
+    const cardPayment = sale.payments.find((payment) => payment.method === 'card');
     const firstReturnPayload = {
       lines: [
         {
@@ -373,8 +380,8 @@ describe.skipIf(!runInfrastructureTests)('POS split payment and linked return li
       originalSaleId: sale.id,
       reason: 'Customer changed their order',
       refunds: [
-        { amount: '27.00', method: 'cash' },
-        { amount: '27.00', method: 'card' },
+        { amount: '27.00', method: 'cash', originalPaymentId: cashPayment?.id },
+        { amount: '27.00', method: 'card', originalPaymentId: cardPayment?.id },
       ],
       shiftId: opening.id,
     };
@@ -543,7 +550,13 @@ describe.skipIf(!runInfrastructureTests)('POS split payment and linked return li
         ],
         originalSaleId: commercialSale.id,
         reason: 'Customer cancelled the discounted purchase',
-        refunds: [{ amount: '52.80', method: 'cash' }],
+        refunds: [
+          {
+            amount: '52.80',
+            method: 'cash',
+            originalPaymentId: commercialSale.payments[0]?.id,
+          },
+        ],
         shiftId: opening.id,
       },
     );
@@ -568,6 +581,211 @@ describe.skipIf(!runInfrastructureTests)('POS split payment and linked return li
         [ledgerAfterReturn.account.id],
       ),
     ).rejects.toThrow('Loyalty ledger entries are append-only');
+
+    const customerId = fixtureId('partner:alfa');
+    const accounts = await get<CustomerPaymentAccount[]>(
+      application,
+      '/api/v1/finance/customer-accounts',
+      managerToken,
+    );
+    const initialAccount = accounts.find((account) => account.customerPartnerId === customerId);
+    expect(initialAccount).toMatchObject({
+      advanceBalance: '80.0000',
+      availableCredit: '2000.0000',
+      outstandingBalance: '0.0000',
+    });
+    const creditAccount = await put<CustomerPaymentAccount>(
+      application,
+      `/api/v1/finance/customer-accounts/${customerId}/terms`,
+      managerToken,
+      `set-customer-credit-${runId}`,
+      {
+        creditLimitBgn: '70.00',
+        expectedVersion: initialAccount?.terms?.version,
+        onAccountEnabled: true,
+        paymentTermsDays: 14,
+        status: 'active',
+        validFrom: '2026-01-01',
+        validTo: '2030-12-31',
+      },
+    );
+    expect(creditAccount).toMatchObject({
+      availableCredit: '70.0000',
+      terms: { creditLimitBgn: '70.0000', paymentTermsDays: 14, version: 2 },
+    });
+
+    const accountSalePayload = () => ({
+      clientTransactionId: randomUUID(),
+      customerLocationId: fixtureId('customer-location:alfa-store'),
+      customerPartnerId: customerId,
+      lines: [{ productId: product?.id, quantity: '1' }],
+      payments: [{ amount: '60.00', method: 'on_account' }],
+      shiftId: opening.id,
+    });
+    const concurrentSales = await Promise.allSettled([
+      post<PosSale>(
+        application,
+        '/api/v1/pos/sales',
+        posToken,
+        `account-sale-a-${runId}`,
+        accountSalePayload(),
+      ),
+      post<PosSale>(
+        application,
+        '/api/v1/pos/sales',
+        posToken,
+        `account-sale-b-${runId}`,
+        accountSalePayload(),
+      ),
+    ]);
+    const acceptedAccountSales = concurrentSales.filter(
+      (result): result is PromiseFulfilledResult<PosSale> => result.status === 'fulfilled',
+    );
+    expect(acceptedAccountSales).toHaveLength(1);
+    expect(concurrentSales.filter((result) => result.status === 'rejected')).toHaveLength(1);
+    const accountSale = acceptedAccountSales[0]!.value;
+    const accountPayment = accountSale.payments.find((payment) => payment.method === 'on_account');
+    expect(accountPayment).toMatchObject({
+      adapter: 'customer-account',
+      amount: '60.0000',
+    });
+    expect(accountPayment?.accountDueOn).toMatch(/^\d{4}-\d{2}-\d{2}$/u);
+    const optionsWithBalance = await get<PosCustomerPaymentOptions>(
+      application,
+      `/api/v1/pos/customers/${customerId}/payment-options`,
+      posToken,
+    );
+    expect(optionsWithBalance).toMatchObject({
+      availableCredit: '10.0000',
+      onAccountAvailable: true,
+      outstandingBalance: '60.0000',
+      paymentTermsDays: 14,
+    });
+    await post<PosReturn>(application, '/api/v1/pos/returns', posToken, `account-return-${runId}`, {
+      lines: [
+        {
+          disposition: 'restock',
+          originalSaleLineId: accountSale.lines[0]?.id,
+          quantity: '1',
+        },
+      ],
+      originalSaleId: accountSale.id,
+      reason: 'Customer cancelled the account purchase',
+      refunds: [
+        {
+          amount: '60.00',
+          method: 'on_account',
+          originalPaymentId: accountPayment?.id,
+        },
+      ],
+      shiftId: opening.id,
+    });
+
+    const recordedAdvance = await post<CustomerAdvance>(
+      application,
+      '/api/v1/finance/customer-accounts/advances',
+      managerToken,
+      `record-customer-advance-${runId}`,
+      {
+        amount: '30.00',
+        customerPartnerId: customerId,
+        paymentMethod: 'bank_transfer',
+        paymentReference: `TEST-ADV-${runId.slice(0, 8)}`,
+        receivedOn: '2026-09-04',
+      },
+    );
+    expect(recordedAdvance).toMatchObject({
+      amount: '30.0000',
+      availableAmount: '30.0000',
+    });
+    expect(recordedAdvance.number).toMatch(/^ADV-\d{4}-/u);
+    const customerSale = await post<PosSale>(
+      application,
+      '/api/v1/pos/sales',
+      posToken,
+      `customer-payment-sale-${runId}`,
+      {
+        clientTransactionId: randomUUID(),
+        customerLocationId: fixtureId('customer-location:alfa-store'),
+        customerPartnerId: customerId,
+        lines: [{ productId: product?.id, quantity: '1' }],
+        payments: [
+          { advanceId: recordedAdvance.id, amount: '30.00', method: 'advance' },
+          { amount: '30.00', method: 'on_account' },
+        ],
+        shiftId: opening.id,
+      },
+    );
+    const advancePayment = customerSale.payments.find((payment) => payment.method === 'advance');
+    const remainderPayment = customerSale.payments.find(
+      (payment) => payment.method === 'on_account',
+    );
+    expect(customerSale.payments).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          advanceId: recordedAdvance.id,
+          advanceNumber: recordedAdvance.number,
+          amount: '30.0000',
+          method: 'advance',
+        }),
+        expect.objectContaining({ amount: '30.0000', method: 'on_account' }),
+      ]),
+    );
+    await post<PosReturn>(
+      application,
+      '/api/v1/pos/returns',
+      posToken,
+      `customer-payment-return-${runId}`,
+      {
+        lines: [
+          {
+            disposition: 'restock',
+            originalSaleLineId: customerSale.lines[0]?.id,
+            quantity: '1',
+          },
+        ],
+        originalSaleId: customerSale.id,
+        reason: 'Customer returned the advance purchase',
+        refunds: [
+          {
+            amount: '30.00',
+            method: 'advance',
+            originalPaymentId: advancePayment?.id,
+          },
+          {
+            amount: '30.00',
+            method: 'on_account',
+            originalPaymentId: remainderPayment?.id,
+          },
+        ],
+        shiftId: opening.id,
+      },
+    );
+    const restoredAccount = await get<CustomerPaymentAccount>(
+      application,
+      `/api/v1/finance/customer-accounts/${customerId}`,
+      managerToken,
+    );
+    expect(restoredAccount).toMatchObject({
+      advanceBalance: '110.0000',
+      availableCredit: '70.0000',
+      outstandingBalance: '0.0000',
+    });
+    expect(restoredAccount.entries.map((entry) => entry.entryType)).toEqual(
+      expect.arrayContaining(['charge', 'return_credit']),
+    );
+    await expect(
+      database.query(
+        `UPDATE finance.customer_advance_entries SET amount = amount + 1
+         WHERE advance_id = $1`,
+        [recordedAdvance.id],
+      ),
+    ).rejects.toThrow('Customer account and advance ledger entries are append-only');
+    await expect(
+      database.query(`DELETE FROM finance.customer_account_entries WHERE pos_sale_id = $1`, [
+        customerSale.id,
+      ]),
+    ).rejects.toThrow('Customer account and advance ledger entries are append-only');
 
     const serialCatalog = await get<PosCatalogPage>(
       application,
@@ -607,6 +825,59 @@ describe.skipIf(!runInfrastructureTests)('POS split payment and linked return li
       grossTotal: '720.0000',
     });
     expect(serialSale.lines[0]?.serialNumbers).toEqual([serialNumber]);
+    expect(serialSale.warrantyCards).toEqual([
+      expect.objectContaining({
+        customerName: 'Alfa Market Demo Ltd.',
+        productName: 'Demo Fiscal Register X1',
+        serialNumber,
+      }),
+    ]);
+
+    const [invoice, concurrentInvoice] = await Promise.all([
+      post<FinancialDocument>(
+        application,
+        `/api/v1/pos/sales/${serialSale.id}/invoice-draft`,
+        posToken,
+        `pos-receipt-invoice-a-${runId}`,
+        {},
+      ),
+      post<FinancialDocument>(
+        application,
+        `/api/v1/pos/sales/${serialSale.id}/invoice-draft`,
+        posToken,
+        `pos-receipt-invoice-b-${runId}`,
+        {},
+      ),
+    ]);
+    expect(concurrentInvoice.id).toBe(invoice.id);
+    expect(invoice).toMatchObject({
+      bgnGrossTotal: '720.0000',
+      customerPartnerId: fixtureId('partner:alfa'),
+      documentType: 'invoice',
+      grossTotal: '720.0000',
+      sourceFiscalReceiptNumber: serialSale.fiscalReceiptNumber,
+      sourcePosSaleId: serialSale.id,
+      sourcePosSaleNumber: serialSale.saleNumber,
+      status: 'draft',
+    });
+    expect(invoice.lines[0]).toMatchObject({
+      grossTotal: '720.0000',
+      productId: serialProduct?.id,
+      quantity: '1.0000',
+      unitCode: 'PCS',
+      vatAmount: '120.0000',
+    });
+    const card = serialSale.warrantyCards[0];
+    const warrantyPdf = await request(application.getHttpServer())
+      .get(`/api/v1/pos/sales/${serialSale.id}/warranty-cards/${card?.id}/pdf`)
+      .set('authorization', `Bearer ${posToken}`)
+      .expect(200)
+      .expect('content-type', /application\/pdf/u);
+    expect(
+      Buffer.from(warrantyPdf.body as Uint8Array)
+        .subarray(0, 5)
+        .toString('ascii'),
+    ).toBe('%PDF-');
 
     const serviceReturn = await post<PosReturn>(
       application,
@@ -624,7 +895,13 @@ describe.skipIf(!runInfrastructureTests)('POS split payment and linked return li
         ],
         originalSaleId: serialSale.id,
         reason: 'Device requires inspection',
-        refunds: [{ amount: '720.00', method: 'card' }],
+        refunds: [
+          {
+            amount: '720.00',
+            method: 'card',
+            originalPaymentId: serialSale.payments[0]?.id,
+          },
+        ],
         shiftId: opening.id,
       },
     );
@@ -667,6 +944,10 @@ describe.skipIf(!runInfrastructureTests)('POS split payment and linked return li
       '0.0000',
       '0.0000',
     ]);
+    expect(sales.items.find((item) => item.id === serialSale.id)?.invoiceDocument).toMatchObject({
+      id: invoice.id,
+      sourceFiscalReceiptNumber: serialSale.fiscalReceiptNumber,
+    });
 
     const returns = await get<PosReturnPage>(application, '/api/v1/pos/returns', posToken);
     expect(returns.items.filter((item) => item.originalSaleId === sale.id)).toHaveLength(2);
@@ -707,23 +988,25 @@ describe.skipIf(!runInfrastructureTests)('POS split payment and linked return li
       posToken,
     );
     expect(overview.totals).toMatchObject({
-      grossReturnsBgn: '880.8000',
-      grossSalesBgn: '880.8000',
+      grossReturnsBgn: '1000.8000',
+      grossSalesBgn: '1000.8000',
       netRevenueBgn: '0.0000',
-      returnCount: 4,
-      saleCount: 3,
+      returnCount: 6,
+      saleCount: 5,
     });
     expect(overview.products.find((item) => item.productCode === 'DEV-ADAPTER-12V')).toMatchObject({
-      grossReturnsBgn: '160.8000',
-      grossSalesBgn: '160.8000',
+      grossReturnsBgn: '280.8000',
+      grossSalesBgn: '280.8000',
       netRevenueBgn: '0.0000',
-      quantityReturned: '3.0000',
-      quantitySold: '3.0000',
+      quantityReturned: '5.0000',
+      quantitySold: '5.0000',
     });
     expect(overview.payments).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ method: 'cash', netBgn: '0.0000' }),
         expect.objectContaining({ method: 'card', netBgn: '0.0000' }),
+        expect.objectContaining({ method: 'advance', netBgn: '0.0000' }),
+        expect.objectContaining({ method: 'on_account', netBgn: '0.0000' }),
       ]),
     );
     const definitions = await get<PosReportDefinition[]>(

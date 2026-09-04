@@ -3,9 +3,11 @@ import type {
   PosBasketPricing,
   PosCustomerLocationOption,
   PosCustomerOption,
+  PosCustomerPaymentOptions,
   PosDiscountAuthorization,
   PosDiscountType,
   PosLoyaltyLedger,
+  PosPaymentMethod,
   PosQuickAccess,
   PosRegisterOption,
   PosReturn,
@@ -22,16 +24,19 @@ import { ApiClientError } from './api/client';
 import {
   authorizePosDiscount,
   completePosSale,
+  createPosInvoiceDraft,
   createPosReturn,
   closePosShift,
   enrolPosLoyalty,
   getPosCatalog,
   getPosCustomers,
+  getPosCustomerPaymentOptions,
   getPosQuickAccess,
   getPosLoyaltyLedger,
   getPosReturns,
   getPosSales,
   getPosTerminalContext,
+  downloadPosWarrantyCard,
   openPosShift,
   pricePosBasket,
   updatePosQuickAccess,
@@ -294,7 +299,7 @@ export function PosTerminal({
           ) : screen === 'reports' ? (
             <PosReports onNotice={setNotice} token={token} />
           ) : (
-            <SaleHistory token={token} />
+            <SaleHistory onNotice={setNotice} token={token} />
           )}
         </main>
       </div>
@@ -343,6 +348,13 @@ function SellScreen({
   const [loyaltyPoints, setLoyaltyPoints] = useState('0');
   const [manualDiscount, setManualDiscount] = useState<ApprovedManualDiscount>();
   const [paymentMode, setPaymentMode] = useState<PaymentMode>('cash');
+  const [paymentOptions, setPaymentOptions] = useState<PosCustomerPaymentOptions>();
+  const [paymentOptionsError, setPaymentOptionsError] = useState<string>();
+  const [paymentOptionsLoading, setPaymentOptionsLoading] = useState(false);
+  const [customerAdvanceId, setCustomerAdvanceId] = useState('');
+  const [customerAdvanceAmount, setCustomerAdvanceAmount] = useState('');
+  const [customerRemainderMethod, setCustomerRemainderMethod] =
+    useState<CustomerRemainderMethod>('on_account');
   const [paying, setPaying] = useState(false);
   const [pricing, setPricing] = useState<PosBasketPricing>();
   const [pricingError, setPricingError] = useState<string>();
@@ -389,6 +401,38 @@ function SellScreen({
   }, [customer, onNotice, refreshKey, shift, token]);
 
   useEffect(() => {
+    if (!customer) {
+      setPaymentOptions(undefined);
+      setPaymentOptionsError(undefined);
+      setPaymentOptionsLoading(false);
+      setCustomerAdvanceId('');
+      setCustomerAdvanceAmount('');
+      return;
+    }
+    let active = true;
+    setPaymentOptionsLoading(true);
+    setPaymentOptionsError(undefined);
+    void getPosCustomerPaymentOptions(token, customer.customer.id)
+      .then((options) => {
+        if (!active) return;
+        setPaymentOptions(options);
+        setCustomerAdvanceId(options.advances[0]?.id ?? '');
+        setCustomerAdvanceAmount('');
+        setCustomerRemainderMethod(options.onAccountAvailable ? 'on_account' : 'cash');
+      })
+      .catch((error) => {
+        if (active) {
+          setPaymentOptions(undefined);
+          setPaymentOptionsError(messageFor(error));
+        }
+      })
+      .finally(() => active && setPaymentOptionsLoading(false));
+    return () => {
+      active = false;
+    };
+  }, [customer, refreshKey, token]);
+
+  useEffect(() => {
     if (!shift || !basket.length) {
       setPricing(undefined);
       setPricingError(undefined);
@@ -431,9 +475,30 @@ function SellScreen({
         vat: Number(pricing.vatTotal),
       }
     : localTotals;
-  const cashPortion = paymentMode === 'cash' ? totals.gross : Number(splitCash || 0);
+  const selectedAdvance = paymentOptions?.advances.find(
+    (advance) => advance.id === customerAdvanceId,
+  );
+  const advancePortion =
+    paymentMode === 'customer'
+      ? Math.min(totals.gross, Math.max(0, Number(customerAdvanceAmount || 0)))
+      : 0;
+  const customerRemainder = Math.max(0, totals.gross - advancePortion);
+  const cashPortion =
+    paymentMode === 'cash'
+      ? totals.gross
+      : paymentMode === 'split'
+        ? Number(splitCash || 0)
+        : paymentMode === 'customer' && customerRemainderMethod === 'cash'
+          ? customerRemainder
+          : 0;
   const cardPortion =
-    paymentMode === 'card' ? totals.gross : Math.max(0, totals.gross - cashPortion);
+    paymentMode === 'card'
+      ? totals.gross
+      : paymentMode === 'split'
+        ? Math.max(0, totals.gross - cashPortion)
+        : paymentMode === 'customer' && customerRemainderMethod === 'card'
+          ? customerRemainder
+          : 0;
   const cashChange = Math.max(0, Number(cashTendered || 0) - cashPortion);
   const blockingIssue =
     basketIssue(
@@ -444,6 +509,13 @@ function SellScreen({
       splitCash,
       totals.gross,
       register?.paymentTerminalMode === 'simulator' || register?.paymentTerminalMode === 'hardware',
+      paymentOptions,
+      paymentOptionsLoading,
+      paymentOptionsError,
+      selectedAdvance,
+      advancePortion,
+      customerRemainder,
+      customerRemainderMethod,
     ) ?? (pricingLoading ? 'Checking offers…' : pricingError);
 
   function changed(next: BasketLine[]) {
@@ -452,6 +524,7 @@ function SellScreen({
     setTransactionId(crypto.randomUUID());
     setCashTendered('');
     setSplitCash('');
+    setCustomerAdvanceAmount('');
   }
 
   function addItem(item: PosCatalogItem) {
@@ -508,14 +581,43 @@ function SellScreen({
                 ]
               : paymentMode === 'card'
                 ? [{ amount: totals.gross.toFixed(4), method: 'card' }]
-                : [
-                    {
-                      amount: cashPortion.toFixed(4),
-                      method: 'cash',
-                      tenderedAmount: Number(cashTendered).toFixed(4),
-                    },
-                    { amount: cardPortion.toFixed(4), method: 'card' },
-                  ],
+                : paymentMode === 'split'
+                  ? [
+                      {
+                        amount: cashPortion.toFixed(4),
+                        method: 'cash',
+                        tenderedAmount: Number(cashTendered).toFixed(4),
+                      },
+                      { amount: cardPortion.toFixed(4), method: 'card' },
+                    ]
+                  : [
+                      ...(advancePortion > 0 && selectedAdvance
+                        ? [
+                            {
+                              advanceId: selectedAdvance.id,
+                              amount: advancePortion.toFixed(4),
+                              method: 'advance' as const,
+                            },
+                          ]
+                        : []),
+                      ...(customerRemainder > 0
+                        ? [
+                            customerRemainderMethod === 'cash'
+                              ? {
+                                  amount: customerRemainder.toFixed(4),
+                                  method: 'cash' as const,
+                                  tenderedAmount: Number(cashTendered).toFixed(4),
+                                }
+                              : {
+                                  amount: customerRemainder.toFixed(4),
+                                  method:
+                                    customerRemainderMethod === 'card'
+                                      ? ('card' as const)
+                                      : ('on_account' as const),
+                                },
+                          ]
+                        : []),
+                    ],
           shiftId: shift.id,
         },
         transactionId,
@@ -524,6 +626,7 @@ function SellScreen({
       setBasket([]);
       setCashTendered('');
       setSplitCash('');
+      setCustomerAdvanceAmount('');
       setLoyaltyPoints('0');
       setManualDiscount(undefined);
       setPricing(undefined);
@@ -700,212 +803,369 @@ function SellScreen({
           </button>
         </header>
 
-        <div className="pos-basket-lines">
-          {basket.length ? (
-            basket.map((line) => (
-              <BasketRow
-                key={line.item.id}
-                line={line}
-                onChange={(next) =>
-                  changed(basket.map((item) => (item.item.id === line.item.id ? next : item)))
-                }
-                onRemove={() => changed(basket.filter((item) => item.item.id !== line.item.id))}
-                {...(pricing?.lines.find((item) => item.productId === line.item.id)
-                  ? {
-                      pricedLine: pricing.lines.find((item) => item.productId === line.item.id)!,
-                    }
-                  : {})}
-              />
-            ))
-          ) : (
-            <div className="pos-basket-empty">
-              <span aria-hidden="true">0</span>
-              <p>No items in this sale</p>
-              <small>Choose a product from the counter catalog to begin.</small>
-            </div>
-          )}
-        </div>
+        <div
+          aria-label="Sale details and payment"
+          className="pos-basket-scroll"
+          role="region"
+          tabIndex={0}
+        >
+          <div className="pos-basket-lines">
+            {basket.length ? (
+              basket.map((line) => (
+                <BasketRow
+                  key={line.item.id}
+                  line={line}
+                  onChange={(next) =>
+                    changed(basket.map((item) => (item.item.id === line.item.id ? next : item)))
+                  }
+                  onRemove={() => changed(basket.filter((item) => item.item.id !== line.item.id))}
+                  {...(pricing?.lines.find((item) => item.productId === line.item.id)
+                    ? {
+                        pricedLine: pricing.lines.find((item) => item.productId === line.item.id)!,
+                      }
+                    : {})}
+                />
+              ))
+            ) : (
+              <div className="pos-basket-empty">
+                <span aria-hidden="true">0</span>
+                <p>No items in this sale</p>
+                <small>Choose a product from the counter catalog to begin.</small>
+              </div>
+            )}
+          </div>
 
-        {basket.length ? (
-          <section className="pos-commercial-controls" aria-label="Offers and rewards">
-            <div className="pos-commercial-heading">
-              <span>Offers & rewards</span>
-              {pricingLoading ? <small>Checking…</small> : null}
-            </div>
-            <button
-              className={manualDiscount ? 'is-applied' : undefined}
-              onClick={() => setDiscountDialogOpen(true)}
-              type="button"
-            >
-              <PosIcon name="discount" />
-              <span>
-                <strong>{manualDiscount ? 'Manual discount approved' : 'Manual discount'}</strong>
-                <small>
-                  {manualDiscount
-                    ? `${discountLabel(manualDiscount.authorization)} · ${manualDiscount.authorization.approverName}`
-                    : 'Requires approval from another employee'}
-                </small>
-              </span>
-              <PosIcon name="chevron" />
-            </button>
-            {customer ? (
+          {basket.length ? (
+            <section className="pos-commercial-controls" aria-label="Offers and rewards">
+              <div className="pos-commercial-heading">
+                <span>Offers & rewards</span>
+                {pricingLoading ? <small>Checking…</small> : null}
+              </div>
               <button
-                className={customer.customer.loyalty ? 'is-applied' : undefined}
-                onClick={() => {
-                  setLoyaltyLedger(undefined);
-                  setLoyaltyDialogOpen(true);
-                  if (customer.customer.loyalty)
-                    void getPosLoyaltyLedger(token, customer.customer.id)
-                      .then(setLoyaltyLedger)
-                      .catch((error) => onNotice({ kind: 'error', text: messageFor(error) }));
-                }}
+                className={manualDiscount ? 'is-applied' : undefined}
+                onClick={() => setDiscountDialogOpen(true)}
                 type="button"
               >
-                <PosIcon name="loyalty" />
+                <PosIcon name="discount" />
                 <span>
-                  <strong>
-                    {customer.customer.loyalty
-                      ? `${customer.customer.loyalty.balance} reward points`
-                      : 'Join Vista Rewards'}
-                  </strong>
+                  <strong>{manualDiscount ? 'Manual discount approved' : 'Manual discount'}</strong>
                   <small>
-                    {customer.customer.loyalty
-                      ? customer.customer.loyalty.cardNumber
-                      : 'Create a loyalty card for this customer'}
+                    {manualDiscount
+                      ? `${discountLabel(manualDiscount.authorization)} · ${manualDiscount.authorization.approverName}`
+                      : 'Requires approval from another employee'}
                   </small>
                 </span>
                 <PosIcon name="chevron" />
               </button>
-            ) : (
-              <p>Choose a customer to use rewards.</p>
-            )}
-            {customer?.customer.loyalty?.status === 'active' &&
-            customer.customer.loyalty.balance > 0 ? (
-              <label className="pos-points-entry">
-                <span>Points to use</span>
-                <input
-                  max={customer.customer.loyalty.balance}
-                  min="0"
-                  onChange={(event) => {
-                    setLoyaltyPoints(event.target.value);
+              {customer ? (
+                <button
+                  className={customer.customer.loyalty ? 'is-applied' : undefined}
+                  onClick={() => {
+                    setLoyaltyLedger(undefined);
+                    setLoyaltyDialogOpen(true);
+                    if (customer.customer.loyalty)
+                      void getPosLoyaltyLedger(token, customer.customer.id)
+                        .then(setLoyaltyLedger)
+                        .catch((error) => onNotice({ kind: 'error', text: messageFor(error) }));
+                  }}
+                  type="button"
+                >
+                  <PosIcon name="loyalty" />
+                  <span>
+                    <strong>
+                      {customer.customer.loyalty
+                        ? `${customer.customer.loyalty.balance} reward points`
+                        : 'Join Vista Rewards'}
+                    </strong>
+                    <small>
+                      {customer.customer.loyalty
+                        ? customer.customer.loyalty.cardNumber
+                        : 'Create a loyalty card for this customer'}
+                    </small>
+                  </span>
+                  <PosIcon name="chevron" />
+                </button>
+              ) : (
+                <p>Choose a customer to use rewards.</p>
+              )}
+              {customer?.customer.loyalty?.status === 'active' &&
+              customer.customer.loyalty.balance > 0 ? (
+                <label className="pos-points-entry">
+                  <span>Points to use</span>
+                  <input
+                    max={customer.customer.loyalty.balance}
+                    min="0"
+                    onChange={(event) => {
+                      setLoyaltyPoints(event.target.value);
+                      setTransactionId(crypto.randomUUID());
+                    }}
+                    step="1"
+                    type="number"
+                    value={loyaltyPoints}
+                  />
+                </label>
+              ) : null}
+              {pricingError ? <p className="is-error">{pricingError}</p> : null}
+            </section>
+          ) : null}
+
+          <div className="pos-totals">
+            {pricing && Number(pricing.automaticDiscountTotal) > 0 ? (
+              <div className="is-discount">
+                <span>Offers</span>
+                <strong>−{money(Number(pricing.automaticDiscountTotal))}</strong>
+              </div>
+            ) : null}
+            {pricing && Number(pricing.manualDiscountTotal) > 0 ? (
+              <div className="is-discount">
+                <span>Manual discount</span>
+                <strong>−{money(Number(pricing.manualDiscountTotal))}</strong>
+              </div>
+            ) : null}
+            {pricing && Number(pricing.loyaltyDiscountTotal) > 0 ? (
+              <div className="is-discount">
+                <span>Rewards</span>
+                <strong>−{money(Number(pricing.loyaltyDiscountTotal))}</strong>
+              </div>
+            ) : null}
+            <div>
+              <span>Net</span>
+              <strong>{money(totals.net)}</strong>
+            </div>
+            <div>
+              <span>VAT</span>
+              <strong>{money(totals.vat)}</strong>
+            </div>
+            <div className="pos-total">
+              <span>Total due</span>
+              <strong>{money(totals.gross)}</strong>
+            </div>
+          </div>
+
+          <section className="pos-payment-entry" aria-label="Payment method">
+            <span>Payment method</span>
+            <div className="pos-payment-methods">
+              {(['cash', 'card', 'split', 'customer'] as const).map((method) => (
+                <button
+                  aria-pressed={paymentMode === method}
+                  className={paymentMode === method ? 'is-active' : undefined}
+                  disabled={
+                    (method === 'card' || method === 'split') &&
+                    register?.paymentTerminalMode === 'disabled'
+                  }
+                  key={method}
+                  onClick={() => {
+                    setPaymentMode(method);
+                    setCashTendered('');
+                    setSplitCash('');
+                    if (method === 'customer') {
+                      const advance = paymentOptions?.advances[0];
+                      setCustomerAdvanceId(advance?.id ?? '');
+                      setCustomerAdvanceAmount(
+                        advance
+                          ? Math.min(totals.gross, Number(advance.availableAmount)).toFixed(2)
+                          : '0.00',
+                      );
+                      setCustomerRemainderMethod(
+                        paymentOptions?.onAccountAvailable ? 'on_account' : 'cash',
+                      );
+                    }
                     setTransactionId(crypto.randomUUID());
                   }}
-                  step="1"
-                  type="number"
-                  value={loyaltyPoints}
-                />
-              </label>
+                  type="button"
+                >
+                  {method === 'cash'
+                    ? 'Cash'
+                    : method === 'card'
+                      ? 'Bank card'
+                      : method === 'split'
+                        ? 'Split'
+                        : 'Advance / account'}
+                </button>
+              ))}
+            </div>
+            {paymentMode === 'split' ? (
+              <MoneyEntry
+                id="split-cash-portion"
+                label="Cash portion"
+                max={totals.gross}
+                onChange={setSplitCash}
+                value={splitCash}
+              />
             ) : null}
-            {pricingError ? <p className="is-error">{pricingError}</p> : null}
-          </section>
-        ) : null}
-
-        <div className="pos-totals">
-          {pricing && Number(pricing.automaticDiscountTotal) > 0 ? (
-            <div className="is-discount">
-              <span>Offers</span>
-              <strong>−{money(Number(pricing.automaticDiscountTotal))}</strong>
-            </div>
-          ) : null}
-          {pricing && Number(pricing.manualDiscountTotal) > 0 ? (
-            <div className="is-discount">
-              <span>Manual discount</span>
-              <strong>−{money(Number(pricing.manualDiscountTotal))}</strong>
-            </div>
-          ) : null}
-          {pricing && Number(pricing.loyaltyDiscountTotal) > 0 ? (
-            <div className="is-discount">
-              <span>Rewards</span>
-              <strong>−{money(Number(pricing.loyaltyDiscountTotal))}</strong>
-            </div>
-          ) : null}
-          <div>
-            <span>Net</span>
-            <strong>{money(totals.net)}</strong>
-          </div>
-          <div>
-            <span>VAT</span>
-            <strong>{money(totals.vat)}</strong>
-          </div>
-          <div className="pos-total">
-            <span>Total due</span>
-            <strong>{money(totals.gross)}</strong>
-          </div>
-        </div>
-
-        <section className="pos-payment-entry" aria-label="Payment method">
-          <span>Payment method</span>
-          <div className="pos-payment-methods">
-            {(['cash', 'card', 'split'] as const).map((method) => (
-              <button
-                aria-pressed={paymentMode === method}
-                className={paymentMode === method ? 'is-active' : undefined}
-                disabled={method !== 'cash' && register?.paymentTerminalMode === 'disabled'}
-                key={method}
-                onClick={() => {
-                  setPaymentMode(method);
-                  setCashTendered('');
-                  setSplitCash('');
-                  setTransactionId(crypto.randomUUID());
-                }}
-                type="button"
-              >
-                {method === 'cash' ? 'Cash' : method === 'card' ? 'Bank card' : 'Split'}
-              </button>
-            ))}
-          </div>
-          {paymentMode === 'split' ? (
-            <MoneyEntry
-              id="split-cash-portion"
-              label="Cash portion"
-              max={totals.gross}
-              onChange={setSplitCash}
-              value={splitCash}
-            />
-          ) : null}
-          {paymentMode !== 'card' ? (
-            <MoneyEntry
-              id="cash-tendered"
-              label="Cash received"
-              onChange={setCashTendered}
-              value={cashTendered}
-            />
-          ) : (
-            <div className="pos-card-authorisation">
-              <span className="pos-status-dot is-ready" />
-              <p>
-                <strong>
-                  {register?.paymentTerminalMode === 'simulator'
-                    ? 'Test card terminal'
-                    : (register?.paymentTerminalLabel ?? 'Card terminal')}
-                </strong>
-                <small>{money(cardPortion)} will be authorised at checkout.</small>
+            {paymentMode === 'customer' ? (
+              <div className="pos-customer-payment">
+                {!customer ? (
+                  <div className="pos-customer-payment-empty">
+                    <strong>Choose a customer</strong>
+                    <span>Customer advances and approved credit will then appear here.</span>
+                    <button onClick={() => setCustomerPickerOpen(true)} type="button">
+                      Choose customer
+                    </button>
+                  </div>
+                ) : paymentOptionsLoading ? (
+                  <p className="pos-customer-payment-state">Checking customer balances…</p>
+                ) : paymentOptionsError ? (
+                  <p className="pos-customer-payment-state is-error">{paymentOptionsError}</p>
+                ) : paymentOptions ? (
+                  <>
+                    <div className="pos-customer-balance-strip">
+                      <div>
+                        <span>Advance available</span>
+                        <strong>{money(Number(paymentOptions.advanceBalance))}</strong>
+                      </div>
+                      <div>
+                        <span>Credit available</span>
+                        <strong>{money(Number(paymentOptions.availableCredit))}</strong>
+                      </div>
+                    </div>
+                    {paymentOptions.advances.length ? (
+                      <div className="pos-customer-advance-fields">
+                        <label>
+                          <span>Advance</span>
+                          <select
+                            onChange={(event) => {
+                              const id = event.target.value;
+                              const advance = paymentOptions.advances.find(
+                                (item) => item.id === id,
+                              );
+                              setCustomerAdvanceId(id);
+                              setCustomerAdvanceAmount(
+                                advance
+                                  ? Math.min(totals.gross, Number(advance.availableAmount)).toFixed(
+                                      2,
+                                    )
+                                  : '0.00',
+                              );
+                              setTransactionId(crypto.randomUUID());
+                            }}
+                            value={customerAdvanceId}
+                          >
+                            {paymentOptions.advances.map((advance) => (
+                              <option key={advance.id} value={advance.id}>
+                                {advance.number} · {money(Number(advance.availableAmount))}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <MoneyEntry
+                          id="customer-advance-amount"
+                          label="Use from advance"
+                          max={Math.min(
+                            totals.gross,
+                            Number(selectedAdvance?.availableAmount ?? 0),
+                          )}
+                          onChange={(value) => {
+                            setCustomerAdvanceAmount(value);
+                            setTransactionId(crypto.randomUUID());
+                          }}
+                          value={customerAdvanceAmount}
+                        />
+                      </div>
+                    ) : (
+                      <p className="pos-customer-payment-state">No unused advance is available.</p>
+                    )}
+                    {customerRemainder > 0 ? (
+                      <fieldset className="pos-remainder-methods">
+                        <legend>Pay remaining {money(customerRemainder)} by</legend>
+                        <div>
+                          {(['cash', 'card', 'on_account'] as const).map((method) => (
+                            <button
+                              aria-pressed={customerRemainderMethod === method}
+                              className={
+                                customerRemainderMethod === method ? 'is-active' : undefined
+                              }
+                              disabled={
+                                (method === 'card' &&
+                                  register?.paymentTerminalMode === 'disabled') ||
+                                (method === 'on_account' &&
+                                  (!paymentOptions.onAccountAvailable ||
+                                    Number(paymentOptions.availableCredit) < customerRemainder))
+                              }
+                              key={method}
+                              onClick={() => {
+                                setCustomerRemainderMethod(method);
+                                setCashTendered('');
+                                setTransactionId(crypto.randomUUID());
+                              }}
+                              type="button"
+                            >
+                              {method === 'cash'
+                                ? 'Cash'
+                                : method === 'card'
+                                  ? 'Bank card'
+                                  : 'On account'}
+                            </button>
+                          ))}
+                        </div>
+                        {customerRemainderMethod === 'on_account' &&
+                        paymentOptions.paymentTermsDays !== undefined ? (
+                          <small>
+                            Due in {paymentOptions.paymentTermsDays} days · Current balance{' '}
+                            {money(Number(paymentOptions.outstandingBalance))}
+                          </small>
+                        ) : null}
+                      </fieldset>
+                    ) : (
+                      <div className="pos-advance-covers-total">
+                        <PosIcon name="check" /> The advance covers the full sale.
+                      </div>
+                    )}
+                  </>
+                ) : null}
+              </div>
+            ) : null}
+            {paymentMode === 'cash' ||
+            paymentMode === 'split' ||
+            (paymentMode === 'customer' &&
+              customerRemainder > 0 &&
+              customerRemainderMethod === 'cash') ? (
+              <MoneyEntry
+                id="cash-tendered"
+                label="Cash received"
+                onChange={setCashTendered}
+                value={cashTendered}
+              />
+            ) : paymentMode === 'card' ||
+              (paymentMode === 'customer' &&
+                customerRemainder > 0 &&
+                customerRemainderMethod === 'card') ? (
+              <div className="pos-card-authorisation">
+                <span className="pos-status-dot is-ready" />
+                <p>
+                  <strong>
+                    {register?.paymentTerminalMode === 'simulator'
+                      ? 'Test card terminal'
+                      : (register?.paymentTerminalLabel ?? 'Card terminal')}
+                  </strong>
+                  <small>{money(cardPortion)} will be authorised at checkout.</small>
+                </p>
+              </div>
+            ) : null}
+            {paymentMode === 'split' ? (
+              <div className="pos-split-summary">
+                <span>Card portion</span>
+                <strong>{money(cardPortion)}</strong>
+              </div>
+            ) : null}
+            {cashPortion > 0 ? (
+              <p className="pos-change-line">
+                Change <strong>{money(cashChange)}</strong>
               </p>
-            </div>
-          )}
-          {paymentMode === 'split' ? (
-            <div className="pos-split-summary">
-              <span>Card portion</span>
-              <strong>{money(cardPortion)}</strong>
-            </div>
-          ) : null}
-          {paymentMode !== 'card' ? (
-            <p className="pos-change-line">
-              Change <strong>{money(cashChange)}</strong>
-            </p>
-          ) : null}
-        </section>
-        <button
-          className="pos-pay-button"
-          disabled={Boolean(blockingIssue) || paying}
-          onClick={() => void pay()}
-          type="button"
-        >
-          {paying ? 'Completing sale…' : `Complete sale · ${money(totals.gross)}`}
-        </button>
-        <p className="pos-basket-disclaimer">
-          {blockingIssue ?? `${paymentLabel(paymentMode)} payment is ready.`}
-        </p>
+            ) : null}
+          </section>
+          <button
+            className="pos-pay-button"
+            disabled={Boolean(blockingIssue) || paying}
+            onClick={() => void pay()}
+            type="button"
+          >
+            {paying ? 'Completing sale…' : `Complete sale · ${money(totals.gross)}`}
+          </button>
+          <p className="pos-basket-disclaimer">
+            {blockingIssue ?? `${paymentLabel(paymentMode)} payment is ready.`}
+          </p>
+        </div>
       </aside>
 
       {customerPickerOpen ? (
@@ -954,7 +1214,17 @@ function SellScreen({
           token={token}
         />
       ) : null}
-      {receipt ? <ReceiptDialog onClose={() => setReceipt(undefined)} sale={receipt} /> : null}
+      {receipt ? (
+        <ReceiptDialog
+          closeLabel="Start next sale"
+          completed
+          onClose={() => setReceipt(undefined)}
+          onNotice={onNotice}
+          onSaleUpdated={setReceipt}
+          sale={receipt}
+          token={token}
+        />
+      ) : null}
       {quickEditorOpen && shift ? (
         <QuickAccessDialog
           {...(customer ? { customerPartnerId: customer.customer.id } : {})}
@@ -982,7 +1252,8 @@ interface BasketLine {
 interface ApprovedManualDiscount {
   authorization: PosDiscountAuthorization;
 }
-type PaymentMode = 'card' | 'cash' | 'split';
+type PaymentMode = 'card' | 'cash' | 'customer' | 'split';
+type CustomerRemainderMethod = 'card' | 'cash' | 'on_account';
 interface CustomerSelection {
   customer: PosCustomerOption;
   location?: PosCustomerLocationOption;
@@ -1687,7 +1958,65 @@ function LoyaltyDialog({
   );
 }
 
-function ReceiptDialog({ onClose, sale }: { onClose: () => void; sale: PosSale }) {
+function ReceiptDialog({
+  closeLabel = 'Back',
+  completed = false,
+  onClose,
+  onNotice,
+  onSaleUpdated,
+  sale,
+  token,
+}: {
+  closeLabel?: string;
+  completed?: boolean;
+  onClose: () => void;
+  onNotice: (notice: Notice) => void;
+  onSaleUpdated: (sale: PosSale) => void;
+  sale: PosSale;
+  token: string;
+}) {
+  const [invoiceBusy, setInvoiceBusy] = useState(false);
+  const [downloadingCardId, setDownloadingCardId] = useState<string>();
+
+  async function prepareInvoice() {
+    setInvoiceBusy(true);
+    try {
+      const document = await createPosInvoiceDraft(token, sale.id, crypto.randomUUID());
+      onSaleUpdated({
+        ...sale,
+        invoiceDocument: {
+          id: document.id,
+          number: document.number,
+          sourceFiscalReceiptNumber: document.sourceFiscalReceiptNumber ?? sale.fiscalReceiptNumber,
+          status: document.status,
+        },
+      });
+      onNotice({ kind: 'success', text: `${document.number} is ready for Finance review.` });
+    } catch (caught) {
+      onNotice({ kind: 'error', text: messageFor(caught) });
+    } finally {
+      setInvoiceBusy(false);
+    }
+  }
+
+  async function downloadCard(card: PosSale['warrantyCards'][number]) {
+    setDownloadingCardId(card.id);
+    try {
+      const blob = await downloadPosWarrantyCard(token, sale.id, card.id);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${card.number}.pdf`;
+      link.click();
+      URL.revokeObjectURL(url);
+      onNotice({ kind: 'success', text: `${card.number} downloaded.` });
+    } catch (caught) {
+      onNotice({ kind: 'error', text: messageFor(caught) });
+    } finally {
+      setDownloadingCardId(undefined);
+    }
+  }
+
   return (
     <div className="pos-dialog-layer" role="presentation">
       <section
@@ -1698,7 +2027,7 @@ function ReceiptDialog({ onClose, sale }: { onClose: () => void; sale: PosSale }
       >
         <header>
           <div>
-            <p>Sale complete</p>
+            <p>{completed ? 'Sale complete' : 'Receipt details'}</p>
             <h2 id="receipt-title">{sale.fiscalReceiptNumber}</h2>
           </div>
           <span className="pos-receipt-check">✓</span>
@@ -1738,7 +2067,7 @@ function ReceiptDialog({ onClose, sale }: { onClose: () => void; sale: PosSale }
             ) : null}
             {sale.payments.map((payment) => (
               <div key={payment.id}>
-                <dt>{payment.method === 'cash' ? 'Cash' : 'Bank card'}</dt>
+                <dt>{paymentLabel(payment.method)}</dt>
                 <dd>{money(Number(payment.amount))}</dd>
               </div>
             ))}
@@ -1749,10 +2078,72 @@ function ReceiptDialog({ onClose, sale }: { onClose: () => void; sale: PosSale }
               </div>
             ) : null}
           </dl>
+          <section className="pos-receipt-documents" aria-label="Receipt documents">
+            <header>
+              <div>
+                <strong>Invoice</strong>
+                <small>Prepared from this receipt with the same customer, VAT, and totals.</small>
+              </div>
+              {sale.invoiceDocument ? <span className="is-ready">Ready</span> : null}
+            </header>
+            {sale.invoiceDocument ? (
+              <div className="pos-receipt-document-ready">
+                <div>
+                  <small>Finance document</small>
+                  <strong>{sale.invoiceDocument.number}</strong>
+                </div>
+                <span>Linked to {sale.invoiceDocument.sourceFiscalReceiptNumber}</span>
+              </div>
+            ) : sale.customerPartnerId ? (
+              <button
+                className="pos-secondary-button"
+                disabled={invoiceBusy}
+                onClick={() => void prepareInvoice()}
+                type="button"
+              >
+                {invoiceBusy ? 'Preparing…' : 'Prepare invoice'}
+              </button>
+            ) : (
+              <p className="pos-receipt-document-note">
+                Select a customer before completing a sale when an invoice is required.
+              </p>
+            )}
+          </section>
+          {sale.warrantyCards.length ? (
+            <section className="pos-receipt-documents" aria-label="Warranty cards">
+              <header>
+                <div>
+                  <strong>Warranty cards</strong>
+                  <small>One card is generated for each covered serial number.</small>
+                </div>
+                <span className="is-ready">{sale.warrantyCards.length}</span>
+              </header>
+              <div className="pos-receipt-warranty-list">
+                {sale.warrantyCards.map((card) => (
+                  <article key={card.id}>
+                    <div>
+                      <strong>{card.productName}</strong>
+                      <small>
+                        {card.serialNumber} · to {shortDate(card.warrantyEndsOn)}
+                      </small>
+                    </div>
+                    <button
+                      className="pos-secondary-button"
+                      disabled={downloadingCardId === card.id}
+                      onClick={() => void downloadCard(card)}
+                      type="button"
+                    >
+                      {downloadingCardId === card.id ? 'Downloading…' : 'Download PDF'}
+                    </button>
+                  </article>
+                ))}
+              </div>
+            </section>
+          ) : null}
         </div>
         <footer>
           <button className="pos-primary-button" onClick={onClose} type="button">
-            Start next sale
+            {closeLabel}
           </button>
         </footer>
       </section>
@@ -2227,6 +2618,7 @@ function ReturnDialog({
           refunds: refunds.map((refund) => ({
             amount: refund.amount.toFixed(4),
             method: refund.method,
+            originalPaymentId: refund.originalPaymentId,
           })),
           shiftId: shift.id,
         },
@@ -2382,8 +2774,8 @@ function ReturnDialog({
             </label>
             <div className="pos-refund-summary">
               {refunds.map((refund) => (
-                <div key={refund.method}>
-                  <span>{refund.method === 'cash' ? 'Cash refund' : 'Card refund'}</span>
+                <div key={refund.originalPaymentId}>
+                  <span>{paymentLabel(refund.method)} refund</span>
                   <strong>{money(refund.amount)}</strong>
                 </div>
               ))}
@@ -2442,7 +2834,7 @@ function ReturnReceiptDialog({ item, onClose }: { item: PosReturn; onClose: () =
             </div>
             {item.refunds.map((refund) => (
               <div key={refund.id}>
-                <dt>{refund.method === 'cash' ? 'Cash refund' : 'Card refund'}</dt>
+                <dt>{paymentLabel(refund.method)} refund</dt>
                 <dd>{money(Number(refund.amount))}</dd>
               </div>
             ))}
@@ -2462,10 +2854,11 @@ function ReturnReceiptDialog({ item, onClose }: { item: PosReturn; onClose: () =
   );
 }
 
-function SaleHistory({ token }: { token: string }) {
+function SaleHistory({ onNotice, token }: { onNotice: (notice: Notice) => void; token: string }) {
   const [error, setError] = useState<string>();
   const [loading, setLoading] = useState(true);
   const [sales, setSales] = useState<PosSale[]>([]);
+  const [selected, setSelected] = useState<PosSale>();
 
   useEffect(() => {
     void getPosSales(token)
@@ -2515,9 +2908,28 @@ function SaleHistory({ token }: { token: string }) {
               </small>
               <strong>{money(Number(sale.grossTotal))}</strong>
             </div>
+            <button
+              className="pos-secondary-button pos-sale-history-view"
+              onClick={() => setSelected(sale)}
+              type="button"
+            >
+              View receipt
+            </button>
           </article>
         ))}
       </div>
+      {selected ? (
+        <ReceiptDialog
+          onClose={() => setSelected(undefined)}
+          onNotice={onNotice}
+          onSaleUpdated={(updated) => {
+            setSelected(updated);
+            setSales((current) => current.map((sale) => (sale.id === updated.id ? updated : sale)));
+          }}
+          sale={selected}
+          token={token}
+        />
+      ) : null}
     </div>
   );
 }
@@ -2580,6 +2992,7 @@ function PageLoading() {
 }
 
 type PosIconName =
+  | 'check'
   | 'chevron'
   | 'close'
   | 'customers'
@@ -2616,6 +3029,7 @@ function PosIcon({ name }: { name: PosIconName }) {
 }
 
 const posIconPaths: Record<PosIconName, ReactNode> = {
+  check: <path d="m5 12 4 4L19 6" />,
   chevron: <path d="m8 10 4 4 4-4" />,
   close: <path d="m6 6 12 12M18 6 6 18" />,
   customers: (
@@ -2799,6 +3213,13 @@ function basketIssue(
   splitCash: string,
   gross: number,
   cardAvailable: boolean,
+  paymentOptions: PosCustomerPaymentOptions | undefined,
+  paymentOptionsLoading: boolean,
+  paymentOptionsError: string | undefined,
+  selectedAdvance: PosCustomerPaymentOptions['advances'][number] | undefined,
+  advancePortion: number,
+  customerRemainder: number,
+  customerRemainderMethod: CustomerRemainderMethod,
 ) {
   if (!lines.length) return 'Add at least one product.';
   const serial = lines.find((line) => line.item.trackingMode === 'serial');
@@ -2807,20 +3228,52 @@ function basketIssue(
     return 'Choose the customer and receiving location for serialised equipment.';
   const batch = lines.find((line) => line.item.trackingMode === 'batch' && !line.batchId);
   if (batch) return `Choose the batch for ${batch.item.name}.`;
-  if (paymentMode !== 'cash' && !cardAvailable)
-    return 'Card payment is not available on this register.';
+  const needsCard =
+    paymentMode === 'card' ||
+    paymentMode === 'split' ||
+    (paymentMode === 'customer' && customerRemainder > 0 && customerRemainderMethod === 'card');
+  if (needsCard && !cardAvailable) return 'Card payment is not available on this register.';
   if (
     paymentMode === 'split' &&
     (!splitCash || Number(splitCash) <= 0 || Number(splitCash) >= gross)
   )
     return 'Enter a cash portion smaller than the total.';
-  const cashDue = paymentMode === 'cash' ? gross : paymentMode === 'split' ? Number(splitCash) : 0;
+  if (paymentMode === 'customer') {
+    if (!customer) return 'Choose a customer for an advance or on-account payment.';
+    if (paymentOptionsLoading) return 'Checking the customer account…';
+    if (paymentOptionsError) return paymentOptionsError;
+    if (!paymentOptions) return 'The customer account is unavailable.';
+    if (!Number.isFinite(advancePortion)) return 'Enter a valid advance amount.';
+    if (advancePortion > 0 && !selectedAdvance) return 'Choose the advance to use.';
+    if (advancePortion > Number(selectedAdvance?.availableAmount ?? 0))
+      return 'The amount is higher than the available advance.';
+    if (
+      customerRemainder > 0 &&
+      customerRemainderMethod === 'on_account' &&
+      (!paymentOptions.onAccountAvailable ||
+        customerRemainder > Number(paymentOptions.availableCredit))
+    )
+      return 'This customer does not have enough approved credit.';
+  }
+  const cashDue =
+    paymentMode === 'cash'
+      ? gross
+      : paymentMode === 'split'
+        ? Number(splitCash)
+        : paymentMode === 'customer' && customerRemainderMethod === 'cash'
+          ? customerRemainder
+          : 0;
   if (cashDue > 0 && (!cashTendered || Number(cashTendered) < cashDue))
     return `Enter at least ${money(cashDue)} in cash.`;
   return undefined;
 }
-function paymentLabel(method: 'card' | 'cash' | 'split') {
-  return method === 'cash' ? 'Cash' : method === 'card' ? 'Bank card' : 'Split';
+function paymentLabel(method: PaymentMode | PosPaymentMethod) {
+  if (method === 'cash') return 'Cash';
+  if (method === 'card') return 'Bank card';
+  if (method === 'advance') return 'Customer advance';
+  if (method === 'on_account') return 'On account';
+  if (method === 'customer') return 'Advance / account';
+  return 'Split';
 }
 function saleStatusLabel(status: PosSale['status']) {
   if (status === 'returned') return 'Fully returned';
@@ -2841,11 +3294,15 @@ function returnLineGross(line: PosSale['lines'][number], selectedQuantity: numbe
 }
 function allocateRefunds(sale: PosSale, total: number) {
   let unallocated = Math.round(total * 10000) / 10000;
-  const refunds: Array<{ amount: number; method: 'card' | 'cash' }> = [];
+  const refunds: Array<{
+    amount: number;
+    method: PosPaymentMethod;
+    originalPaymentId: string;
+  }> = [];
   for (const payment of sale.payments) {
     const available = Number(payment.refundableAmount);
     const amount = Math.min(available, unallocated);
-    if (amount > 0) refunds.push({ amount, method: payment.method });
+    if (amount > 0) refunds.push({ amount, method: payment.method, originalPaymentId: payment.id });
     unallocated = Math.round((unallocated - amount) * 10000) / 10000;
   }
   return unallocated <= 0.00005 ? refunds : [];
@@ -2867,6 +3324,14 @@ function dateTime(value: string) {
   return new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium', timeStyle: 'short' }).format(
     new Date(value),
   );
+}
+
+function shortDate(value: string) {
+  return new Intl.DateTimeFormat('en-GB', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  }).format(new Date(`${value}T00:00:00`));
 }
 function messageFor(error: unknown) {
   if (error instanceof ApiClientError) return error.message;
