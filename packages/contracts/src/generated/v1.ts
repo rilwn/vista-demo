@@ -1316,6 +1316,22 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/finance/saved-reports': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['SavedFinanceReportsController_list'];
+    put?: never;
+    post: operations['SavedFinanceReportsController_save'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/finance/summary': {
     parameters: {
       query?: never;
@@ -2038,6 +2054,22 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/operations/overview': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['OperationsOverviewController_overview'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/organization/branches/{branchId}/locations': {
     parameters: {
       query?: never;
@@ -2686,6 +2718,22 @@ export interface paths {
       cookie?: never;
     };
     get: operations['PosController_warrantyCardPdf'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/pos/sales/by-transaction/{transactionId}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['PosController_saleByTransaction'];
     put?: never;
     post?: never;
     delete?: never;
@@ -4450,6 +4498,7 @@ export interface components {
       paymentReference?: string;
     };
     CreateFinanceReportExportDto: {
+      columns?: string[];
       /** Format: date */
       dateFrom?: string;
       /** Format: date */
@@ -6317,6 +6366,12 @@ export interface components {
       invoiceDrafts: components['schemas']['FinanceInvoiceDraftReferenceDto'][];
     };
     FinanceReportDefinitionDto: {
+      columns?: {
+        key: string;
+        label: string;
+        /** @enum {string} */
+        type: 'date' | 'money' | 'number' | 'text';
+      }[];
       description: string;
       formats: ('csv' | 'xlsx' | 'pdf')[];
       /** @enum {string} */
@@ -7308,6 +7363,19 @@ export interface components {
       referenceId: string;
       /** Format: uuid */
       warehouseId: string;
+    };
+    OperationsOverviewDto: {
+      activeServiceRequests?: number;
+      /** Format: date */
+      asOf: string;
+      /** Format: date */
+      dateFrom: string;
+      /** Format: date */
+      dateTo: string;
+      expiringWarranties?: number;
+      overdueReceivablesBgn?: string;
+      recordedRevenueBgn?: string;
+      warrantyDays: number;
     };
     OrganizationMemberDto: {
       /** Format: uuid */
@@ -8510,6 +8578,33 @@ export interface components {
       /** Format: uuid */
       warehouseId: string;
       warehouseName: string;
+    };
+    SavedFinanceReportDto: {
+      columns?: string[];
+      /** Format: date */
+      dateFrom?: string;
+      /** Format: date */
+      dateTo?: string;
+      /** @enum {string} */
+      definitionKey:
+        | 'finance.receivables-aging'
+        | 'finance.supplier-payables-aging'
+        | 'finance.customer-turnover'
+        | 'finance.supplier-turnover'
+        | 'finance.sales-journal'
+        | 'finance.purchase-journal'
+        | 'finance.vat-review';
+      /** @enum {string} */
+      format: 'csv' | 'xlsx' | 'pdf';
+      /** Format: uuid */
+      id: string;
+      name: string;
+    };
+    SavedFinanceReportPageDto: {
+      items: components['schemas']['SavedFinanceReportDto'][];
+      page: number;
+      total: number;
+      totalPages: number;
     };
     SecurityAccountDto: {
       /** Format: uuid */
@@ -13324,6 +13419,79 @@ export interface operations {
       };
     };
   };
+  SavedFinanceReportsController_list: {
+    parameters: {
+      query?: {
+        page?: number;
+        pageSize?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SavedFinanceReportPageDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  SavedFinanceReportsController_save: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['SavedFinanceReportDto'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SavedFinanceReportDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
   FinanceController_summary: {
     parameters: {
       query?: never;
@@ -15492,6 +15660,43 @@ export interface operations {
       };
     };
   };
+  OperationsOverviewController_overview: {
+    parameters: {
+      query: {
+        dateFrom: string;
+        dateTo: string;
+        warrantyDays?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['OperationsOverviewDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
   OrganizationController_createLocation: {
     parameters: {
       query?: never;
@@ -17239,6 +17444,41 @@ export interface operations {
         };
         content: {
           'application/pdf': string;
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  PosController_saleByTransaction: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        transactionId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PosSaleDto'];
         };
       };
       /** @description The endpoint request limit was exceeded. */

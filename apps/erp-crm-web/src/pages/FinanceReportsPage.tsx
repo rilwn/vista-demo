@@ -13,8 +13,11 @@ import type {
   FinanceTurnoverReport,
   FinanceVatReviewReport,
   ReportExportFormat,
+  SavedFinanceReport,
 } from '@vista/contracts';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { listSavedFinanceReports, saveFinanceReport } from '../api/report-workspace';
+import './report-workspace.css';
 
 import { ApiClientError } from '../api/client';
 import {
@@ -77,8 +80,8 @@ export function FinanceReportsPage() {
       <FinanceTabs />
 
       <InlineAlert tone="info">
-        Sales, purchase, and VAT views are preparation reports. Final filing and accounting exports
-        remain unavailable until the approved formats and tax decisions are recorded.
+        These are review reports, not official accounting or VAT filing documents. Sales values
+        include prepared documents.
       </InlineAlert>
 
       <div aria-label="Finance report" className="finance-report-switch" role="tablist">
@@ -179,6 +182,15 @@ function ReportExportPanel({
   token: string;
 }) {
   const [definitions, setDefinitions] = useState<FinanceReportDefinition[]>([]);
+  const { hasPermission } = useAuth();
+  const canCreate = hasPermission('erp.finance', 'create');
+  const [savedReports, setSavedReports] = useState<SavedFinanceReport[]>([]);
+  const [savedPage, setSavedPage] = useState(1);
+  const [savedPages, setSavedPages] = useState(0);
+  const [reportName, setReportName] = useState('');
+  const [columns, setColumns] = useState<string[] | undefined>();
+  const saveRequest = useRef<{ body: string; id: string } | null>(null);
+  const exportRequest = useRef<{ body: string; id: string } | null>(null);
   const [exports, setExports] = useState<FinanceReportExport[]>([]);
   const [definitionKey, setDefinitionKey] = useState<FinanceReportDefinitionKey>(defaultDefinition);
   const [format, setFormat] = useState<ReportExportFormat>('xlsx');
@@ -192,13 +204,59 @@ function ReportExportPanel({
   const definition = definitions.find((item) => item.key === definitionKey);
 
   const load = useCallback(async () => {
-    const [available, recent] = await Promise.all([
+    const [available, recent, saved] = await Promise.all([
       getFinanceReportDefinitions(token),
       listFinanceReportExports(token),
+      listSavedFinanceReports(token, savedPage),
     ]);
     setDefinitions(available);
     setExports(recent.items);
-  }, [token]);
+    setSavedReports(saved.items);
+    setSavedPages(saved.totalPages);
+  }, [token, savedPage]);
+
+  function chooseSaved(report: SavedFinanceReport) {
+    setDefinitionKey(report.definitionKey);
+    setColumns(report.columns);
+    setFormat(report.format);
+    setReportName(report.name);
+    if (report.dateFrom) setDateFrom(report.dateFrom);
+    if (report.dateTo) setDateTo(report.dateTo);
+    setError(null);
+  }
+
+  async function saveView() {
+    if (!definition || !reportName.trim()) return;
+    setBusy(true);
+    setError(null);
+    const configuration = {
+      name: reportName.trim(),
+      definitionKey,
+      format,
+      ...(columns ? { columns } : {}),
+      ...(definition.requiresDateRange ? { dateFrom, dateTo } : {}),
+    };
+    const body = JSON.stringify(configuration);
+    if (saveRequest.current?.body !== body) saveRequest.current = { body, id: crypto.randomUUID() };
+    try {
+      const created = await saveFinanceReport(token, {
+        ...configuration,
+        id: saveRequest.current.id,
+      });
+      setSavedReports((items) => [created, ...items.filter((item) => item.id !== created.id)]);
+      setMessage('Report saved. You can open it again from My saved reports.');
+      setSavedPage(1);
+      const saved = await listSavedFinanceReports(token).catch(() => null);
+      if (saved) {
+        setSavedReports(saved.items);
+        setSavedPages(saved.totalPages);
+      }
+    } catch (caught) {
+      setError(errorMessage(caught, 'The report could not be saved.'));
+    } finally {
+      setBusy(false);
+    }
+  }
 
   useEffect(() => {
     let active = true;
@@ -230,13 +288,19 @@ function ReportExportPanel({
     setMessage(null);
     try {
       const input: CreateFinanceReportExportRequest = {
+        ...(columns ? { columns } : {}),
         definitionKey,
         format,
         ...(definition.requiresDateRange ? { dateFrom, dateTo } : {}),
       };
-      await createFinanceReportExport(token, crypto.randomUUID(), input);
-      const recent = await listFinanceReportExports(token);
-      setExports(recent.items);
+      const body = JSON.stringify(input);
+      if (exportRequest.current?.body !== body)
+        exportRequest.current = { body, id: crypto.randomUUID() };
+      const created = await createFinanceReportExport(token, exportRequest.current.id, input);
+      exportRequest.current = null;
+      setExports((items) => [created, ...items.filter((item) => item.id !== created.id)]);
+      const recent = await listFinanceReportExports(token).catch(() => null);
+      if (recent) setExports(recent.items);
       setMessage('Your report is being prepared. It will appear below when it is ready.');
     } catch (caught) {
       setError(errorMessage(caught, 'The report could not be prepared.'));
@@ -332,12 +396,57 @@ function ReportExportPanel({
           {!loading ? (
             <section className="report-export-form" aria-label="Report options">
               <div className="report-export-field">
+                <label htmlFor="saved-finance-report">My saved reports</label>
+                <select
+                  id="saved-finance-report"
+                  value=""
+                  disabled={busy}
+                  onChange={(event) => {
+                    const report = savedReports.find((item) => item.id === event.target.value);
+                    if (report) chooseSaved(report);
+                  }}
+                >
+                  <option value="">
+                    {savedReports.length ? 'Open a saved report' : 'No saved reports yet'}
+                  </option>
+                  {savedReports.map((report) => (
+                    <option key={report.id} value={report.id}>
+                      {report.name}
+                    </option>
+                  ))}
+                </select>
+                {savedPages > 1 ? (
+                  <div className="report-view-paging">
+                    <Button
+                      variant="secondary"
+                      disabled={busy || savedPage <= 1}
+                      onClick={() => setSavedPage((page) => page - 1)}
+                    >
+                      Previous
+                    </Button>
+                    <span>
+                      Page {savedPage} of {savedPages}
+                    </span>
+                    <Button
+                      variant="secondary"
+                      disabled={busy || savedPage >= savedPages}
+                      onClick={() => setSavedPage((page) => page + 1)}
+                    >
+                      Next
+                    </Button>
+                  </div>
+                ) : null}
+              </div>
+              <div className="report-export-field">
                 <label htmlFor="finance-report-export-definition">Report</label>
                 <select
                   id="finance-report-export-definition"
-                  onChange={(event) =>
-                    setDefinitionKey(event.target.value as FinanceReportDefinitionKey)
-                  }
+                  disabled={busy}
+                  onChange={(event) => {
+                    setDefinitionKey(event.target.value as FinanceReportDefinitionKey);
+                    setColumns(undefined);
+                    setReportName('');
+                  }}
                   value={definitionKey}
                 >
                   {definitions.map((item) => (
@@ -349,7 +458,37 @@ function ReportExportPanel({
                 <small>{definition?.description}</small>
               </div>
 
-              <fieldset>
+              {definition?.columns?.length ? (
+                <fieldset className="report-view-fields" disabled={busy}>
+                  <legend>Fields to include</legend>
+                  <div className="report-view-field-grid">
+                    {definition.columns.map((column) => (
+                      <label key={column.key}>
+                        <input
+                          type="checkbox"
+                          checked={!columns || columns.includes(column.key)}
+                          onChange={(event) => {
+                            const selected = new Set(
+                              columns ?? definition.columns?.map((item) => item.key),
+                            );
+                            if (event.target.checked) selected.add(column.key);
+                            else selected.delete(column.key);
+                            setColumns(
+                              definition.columns
+                                ?.filter((item) => selected.has(item.key))
+                                .map((item) => item.key),
+                            );
+                          }}
+                        />
+                        <span>{column.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                  {columns?.length === 0 ? <small>Choose at least one field.</small> : null}
+                </fieldset>
+              ) : null}
+
+              <fieldset disabled={busy}>
                 <legend>File type</legend>
                 <div className="report-export-format-grid">
                   {(definition?.formats ?? ['xlsx', 'csv', 'pdf']).map((item) => (
@@ -373,6 +512,7 @@ function ReportExportPanel({
                   <label>
                     <span>From</span>
                     <input
+                      disabled={busy}
                       onChange={(event) => setDateFrom(event.target.value)}
                       type="date"
                       value={dateFrom}
@@ -381,6 +521,7 @@ function ReportExportPanel({
                   <label>
                     <span>To</span>
                     <input
+                      disabled={busy}
                       onChange={(event) => setDateTo(event.target.value)}
                       type="date"
                       value={dateTo}
@@ -392,6 +533,27 @@ function ReportExportPanel({
                   <Icon name="check" size={15} /> Uses today’s open balances
                 </p>
               )}
+              {canCreate ? (
+                <div className="report-view-save">
+                  <label htmlFor="report-view-name">Save these options</label>
+                  <input
+                    id="report-view-name"
+                    value={reportName}
+                    maxLength={100}
+                    placeholder="e.g. September supplier balances"
+                    disabled={busy}
+                    onChange={(event) => setReportName(event.target.value)}
+                  />
+                  <Button
+                    variant="secondary"
+                    disabled={busy || !reportName.trim() || !validDates || columns?.length === 0}
+                    onClick={() => void saveView()}
+                  >
+                    Save as new report
+                  </Button>
+                  <small>Saved to your account. Saving different options creates a new copy.</small>
+                </div>
+              ) : null}
             </section>
           ) : null}
 
@@ -401,7 +563,15 @@ function ReportExportPanel({
                 <h3>Recent exports</h3>
                 <p>Only reports requested from your account are shown.</p>
               </div>
-              <button disabled={loading} onClick={() => void load()} type="button">
+              <button
+                disabled={loading || busy}
+                onClick={() =>
+                  void load().catch((caught) =>
+                    setError(errorMessage(caught, 'Reports could not be refreshed.')),
+                  )
+                }
+                type="button"
+              >
                 Refresh
               </button>
             </header>
@@ -437,7 +607,7 @@ function ReportExportPanel({
                     >
                       Download
                     </Button>
-                  ) : report.status === 'failed' ? (
+                  ) : report.status === 'failed' && canCreate ? (
                     <Button disabled={busy} onClick={() => void retry(report)} variant="secondary">
                       Try again
                     </Button>
@@ -446,20 +616,19 @@ function ReportExportPanel({
               ))}
             </div>
           </section>
-
-          <div className="security-drawer-actions report-export-actions">
-            <Button
-              busy={busy}
-              disabled={loading || !definition || !validDates}
-              onClick={() => void createExport()}
-            >
-              Prepare export
-            </Button>
-            <Button disabled={busy} onClick={onBack} variant="secondary">
-              Close
-            </Button>
-          </div>
         </div>
+        <footer className="security-drawer-actions report-export-actions">
+          <Button
+            busy={busy}
+            disabled={loading || !definition || !validDates || columns?.length === 0 || !canCreate}
+            onClick={() => void createExport()}
+          >
+            Prepare export
+          </Button>
+          <Button disabled={busy} onClick={onBack} variant="secondary">
+            Close
+          </Button>
+        </footer>
       </aside>
     </div>
   );

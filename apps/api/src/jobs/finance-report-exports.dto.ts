@@ -1,6 +1,19 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsDateString, IsIn, IsInt, IsOptional, Max, Min } from 'class-validator';
+import {
+  ArrayMaxSize,
+  ArrayMinSize,
+  ArrayUnique,
+  IsArray,
+  IsString,
+  IsDateString,
+  IsIn,
+  IsInt,
+  IsOptional,
+  Matches,
+  Max,
+  Min,
+} from 'class-validator';
 import {
   financeReportDefinitionKeys,
   reportExportFormats,
@@ -12,14 +25,25 @@ import {
 } from '@vista/contracts';
 
 export class CreateFinanceReportExportDto implements CreateFinanceReportExportRequest {
+  @ApiPropertyOptional({ type: [String], minItems: 1, maxItems: 30 })
+  @IsOptional()
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(30)
+  @ArrayUnique()
+  @IsString({ each: true })
+  columns?: string[];
+
   @ApiPropertyOptional({ format: 'date', type: String })
   @IsOptional()
-  @IsDateString()
+  @IsDateString({ strict: true })
+  @Matches(/^\d{4}-\d{2}-\d{2}$/u)
   dateFrom?: string;
 
   @ApiPropertyOptional({ format: 'date', type: String })
   @IsOptional()
-  @IsDateString()
+  @IsDateString({ strict: true })
+  @Matches(/^\d{4}-\d{2}-\d{2}$/u)
   dateTo?: string;
 
   @ApiProperty({ enum: financeReportDefinitionKeys })
@@ -47,6 +71,19 @@ export class FinanceReportExportPageQueryDto {
 }
 
 export class FinanceReportDefinitionDto implements FinanceReportDefinition {
+  @ApiPropertyOptional({
+    type: 'array',
+    items: {
+      type: 'object',
+      required: ['key', 'label', 'type'],
+      properties: {
+        key: { type: 'string' },
+        label: { type: 'string' },
+        type: { type: 'string', enum: ['date', 'money', 'number', 'text'] },
+      },
+    },
+  })
+  columns?: NonNullable<FinanceReportDefinition['columns']>;
   @ApiProperty({ type: String }) description!: string;
   @ApiProperty({ enum: reportExportFormats, isArray: true })
   formats!: FinanceReportDefinition['formats'];

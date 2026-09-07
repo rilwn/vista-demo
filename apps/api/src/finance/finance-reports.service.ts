@@ -477,6 +477,33 @@ export class FinanceReportsService {
   }
 }
 
+export function financeReportColumns(key: FinanceReportDefinitionKey): FinanceReportExportColumn[] {
+  if (key.endsWith('-aging')) return agingExportColumns;
+  if (key.endsWith('-turnover')) return turnoverExportColumns;
+  if (key.endsWith('-journal')) return journalExportColumns;
+  if (key === 'finance.vat-review') return vatReviewExportColumns;
+  throw new ApiErrorException('REPORT_NOT_FOUND', 'This report is not available.', 404);
+}
+
+export function selectReportColumns(
+  data: FinanceReportExportData,
+  keys: string[],
+): FinanceReportExportData {
+  const columns = keys.map((key) => data.columns.find((column) => column.key === key));
+  if (!keys.length || new Set(keys).size !== keys.length || columns.some((column) => !column)) {
+    throw new ApiErrorException(
+      'REPORT_COLUMNS_INVALID',
+      'Choose at least one available field, without duplicates.',
+      400,
+    );
+  }
+  return {
+    ...data,
+    columns: columns as FinanceReportExportColumn[],
+    rows: data.rows.map((row) => Object.fromEntries(keys.map((key) => [key, row[key] ?? '']))),
+  };
+}
+
 const agingExportColumns: FinanceReportExportColumn[] = [
   { key: 'number', label: 'Document', type: 'text' },
   { key: 'sourceNumber', label: 'Source document', type: 'text' },

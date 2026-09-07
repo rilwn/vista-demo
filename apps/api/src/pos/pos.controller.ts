@@ -7,6 +7,7 @@ import {
   HttpStatus,
   Inject,
   Param,
+  ParseUUIDPipe,
   Post,
   Put,
   Query,
@@ -258,6 +259,18 @@ export class PosController {
     @Req() request: AuthenticatedRequest,
   ): Promise<PosSalePageDto> {
     return this.pos.sales(query.page ?? 1, query.pageSize ?? 25, request.authentication);
+  }
+
+  @Get('sales/by-transaction/:transactionId')
+  @RateLimitPolicy('read')
+  @RequirePermissions({ action: 'view', module: 'pos' })
+  @ApiOkResponse({ type: PosSaleDto })
+  @ApiParam({ format: 'uuid', name: 'transactionId', type: String })
+  saleByTransaction(
+    @Param('transactionId', new ParseUUIDPipe()) transactionId: string,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<PosSaleDto> {
+    return this.pos.saleByTransaction(transactionId, request.authentication);
   }
 
   @Post('sales/:id/invoice-draft')

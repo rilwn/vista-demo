@@ -1548,6 +1548,31 @@ export class PosService {
     };
   }
 
+  async saleByTransaction(
+    transactionId: string,
+    authentication: AuthenticationContext,
+  ): Promise<PosSale> {
+    const client = await this.database.getPool().connect();
+    try {
+      const result = await client.query<{ id: string }>(
+        `SELECT sale.id FROM pos.sales sale
+         JOIN organization.operators operator ON operator.id = sale.operator_id
+         WHERE sale.client_transaction_id = $1 AND operator.account_id = $2`,
+        [transactionId, authentication.accountId],
+      );
+      const row = result.rows[0];
+      if (!row)
+        throw new ApiErrorException(
+          'POS_SALE_NOT_FOUND',
+          'No completed sale was found for this checkout.',
+          HttpStatus.NOT_FOUND,
+        );
+      return await this.sale(client, row.id);
+    } finally {
+      client.release();
+    }
+  }
+
   async createInvoiceDraft(
     saleId: string,
     key: string | undefined,

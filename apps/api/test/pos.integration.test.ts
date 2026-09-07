@@ -73,8 +73,8 @@ describe.skipIf(!runInfrastructureTests)('POS split payment and linked return li
     );
     const applied = await migrateUp(database, migrationDirectory);
     expect(applied).toContain('0057_pos_receipt_documents');
-    expect(await migrateDown(database, migrationDirectory)).toBe('0057_pos_receipt_documents');
-    expect(await migrateUp(database, migrationDirectory)).toContain('0057_pos_receipt_documents');
+    expect(await migrateDown(database, migrationDirectory)).toBe(applied.at(-1));
+    expect(await migrateUp(database, migrationDirectory)).toEqual([applied.at(-1)]);
 
     Object.assign(process.env, {
       BUSINESS_TIMEZONE: 'Europe/Sofia',
@@ -364,6 +364,21 @@ describe.skipIf(!runInfrastructureTests)('POS split payment and linked return li
       salePayload,
     );
     expect(replayedSale.id).toBe(sale.id);
+    const lookupPath = `/api/v1/pos/sales/by-transaction/${salePayload.clientTransactionId}`;
+    expect((await get<PosSale>(application, lookupPath, posToken)).id).toBe(sale.id);
+    await request(application.getHttpServer()).get(lookupPath).expect(401);
+    await request(application.getHttpServer())
+      .get(lookupPath)
+      .set('Authorization', `Bearer ${managerToken}`)
+      .expect(403);
+    await request(application.getHttpServer())
+      .get('/api/v1/pos/sales/by-transaction/not-a-uuid')
+      .set('Authorization', `Bearer ${posToken}`)
+      .expect(400);
+    await request(application.getHttpServer())
+      .get(`/api/v1/pos/sales/by-transaction/${randomUUID()}`)
+      .set('Authorization', `Bearer ${posToken}`)
+      .expect(404);
     expect(await stockQuantity()).toBe(beforeStock - 2);
 
     const saleLine = sale.lines[0];
@@ -1037,6 +1052,7 @@ describe.skipIf(!runInfrastructureTests)('POS split payment and linked return li
       { closingCashBgn: '100.00', version: opening.version },
     );
     expect(closed).toMatchObject({ closingCashBgn: '100.0000', status: 'closed' });
+    expect((await get<PosSale>(application, lookupPath, posToken)).id).toBe(sale.id);
     const zReport = await reports.exportData('pos.z-report', { shiftId: opening.id });
     expect(zReport.rows[0]).toMatchObject({
       closingCashBgn: '100.0000',

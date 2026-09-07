@@ -1,12 +1,18 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { IDBFactory, IDBKeyRange } from 'fake-indexeddb';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { App } from './App';
+import { TestCheckoutChannel } from './test-checkout-channel';
+import { saveCheckout, readCheckoutHistory, clearCheckout } from './checkout-store';
 
 afterEach(cleanup);
 
 describe('POS application', () => {
   beforeEach(() => {
+    vi.stubGlobal('indexedDB', new IDBFactory());
+    vi.stubGlobal('IDBKeyRange', IDBKeyRange);
+    vi.stubGlobal('BroadcastChannel', TestCheckoutChannel);
     window.history.replaceState(null, '', '/');
     localStorage.clear();
     sessionStorage.clear();
@@ -41,10 +47,40 @@ describe('POS application', () => {
       ['Sale history', 'Sale history'],
       ['Shifts', 'Cashier shift'],
       ['Reports', 'Reports'],
+      ['Recovery', 'Checkout recovery'],
     ] as const) {
       fireEvent.click(screen.getByRole('link', { name: navigationLabel }));
       expect(await screen.findByRole('heading', { name: heading })).toBeTruthy();
     }
+  });
+
+  it('opens a confirmed receipt from recovery history without posting another sale', async () => {
+    const fetchMock = installApiMock({ lookupSale: true });
+    const transactionId = '86a47c28-7521-4a81-aafd-c04d92363230';
+    await saveCheckout({
+      accountId: posContext.accountId,
+      savedAt: new Date().toISOString(),
+      request: {
+        clientTransactionId: transactionId,
+        shiftId: shift.id,
+        lines: [{ productId: catalogItem.id, quantity: '1.0000' }],
+        payments: [{ amount: '60.0000', method: 'cash' }],
+      },
+    });
+    await clearCheckout(posContext.accountId, transactionId, {
+      kind: 'confirmed',
+      saleNumber: sale.saleNumber,
+    });
+    window.history.replaceState(null, '', '/checkouts');
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: 'View receipt' }));
+    await screen.findByRole('heading', { name: sale.fiscalReceiptNumber });
+    expect(
+      fetchMock.mock.calls.some(([input, init]) => {
+        const method = init?.method ?? (input instanceof Request ? input.method : 'GET');
+        return method === 'POST';
+      }),
+    ).toBe(false);
   });
 
   it('opens a POS route directly after a browser reload', async () => {
@@ -55,6 +91,53 @@ describe('POS application', () => {
     expect(await screen.findByRole('heading', { name: 'Reports' })).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Reports' }).getAttribute('aria-current')).toBe('page');
     expect(window.location.pathname).toBe('/reports');
+  });
+
+  it('keeps recovery visible across routes, blocks shift closure and opens the recovered receipt', async () => {
+    installApiMock();
+    const app = render(<App />);
+    await screen.findByRole('heading', { name: 'New sale' });
+    fireEvent.click(screen.getByRole('link', { name: 'Shifts' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Open cashier shift' }));
+    await screen.findByRole('heading', { name: 'New sale' });
+    await saveCheckout({
+      accountId: posContext.accountId,
+      savedAt: new Date().toISOString(),
+      request: {
+        clientTransactionId: '86a47c28-7521-4a81-aafd-c04d92363230',
+        shiftId: shift.id,
+        lines: [{ productId: catalogItem.id, quantity: '1.0000' }],
+        payments: [{ amount: '60.0000', method: 'cash', tenderedAmount: '100.0000' }],
+      },
+    });
+    await screen.findByRole('button', { name: '1 checkout pending' });
+    fireEvent.click(screen.getByRole('link', { name: 'Shifts' }));
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: 'Close cashier shift' }).hasAttribute('disabled'),
+      ).toBe(true),
+    );
+    fireEvent.click(screen.getByRole('link', { name: 'Reports' }));
+    expect(await screen.findByRole('button', { name: '1 checkout pending' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('link', { name: 'Recovery' }));
+    expect(await screen.findByText('Checkout saved')).toBeTruthy();
+    expect(window.location.pathname).toBe('/checkouts');
+    app.unmount();
+    render(<App />);
+    await screen.findByRole('heading', { name: 'Checkout recovery' });
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: 'Retry saved checkout' }).hasAttribute('disabled'),
+      ).toBe(false),
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Retry saved checkout' }));
+    await screen.findByRole('heading', { name: sale.fiscalReceiptNumber });
+    expect((await readCheckoutHistory(posContext.accountId)).map((event) => event.kind)).toEqual([
+      'confirmed',
+      'retry',
+      'saved',
+    ]);
+    expect(await screen.findByRole('button', { name: 'No pending checkouts' })).toBeTruthy();
   });
 
   it('prepares a Finance invoice from a customer receipt in sale history', async () => {
@@ -122,6 +205,11 @@ describe('POS application', () => {
       (await screen.findAllByRole('button', { name: /Demo 12 V Power Adapter/u }))[0]!,
     );
     fireEvent.change(screen.getByLabelText('Cash received'), { target: { value: '100' } });
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: /Complete sale · 60.00 BGN/u }).hasAttribute('disabled'),
+      ).toBe(false),
+    );
     fireEvent.click(screen.getByRole('button', { name: /Complete sale · 60.00 BGN/u }));
 
     expect(await screen.findByRole('heading', { name: sale.fiscalReceiptNumber })).toBeTruthy();
@@ -143,6 +231,11 @@ describe('POS application', () => {
 
     expect(screen.getByText('Card portion').nextElementSibling?.textContent).toBe('40.00 BGN');
     expect(screen.getAllByText('10.00 BGN').length).toBeGreaterThanOrEqual(2);
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: /Complete sale · 60.00 BGN/u }).hasAttribute('disabled'),
+      ).toBe(false),
+    );
     fireEvent.click(screen.getByRole('button', { name: /Complete sale · 60.00 BGN/u }));
     expect(await screen.findByRole('heading', { name: sale.fiscalReceiptNumber })).toBeTruthy();
   });
@@ -316,7 +409,7 @@ describe('POS application', () => {
   });
 });
 
-function installApiMock() {
+function installApiMock({ lookupSale = false } = {}) {
   let shiftOpen = false;
   const mock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(
@@ -425,6 +518,13 @@ function installApiMock() {
     if (/\/pos\/sales\/[^/]+\/invoice-draft$/u.test(url.pathname) && method === 'POST')
       return jsonResponse(posInvoice, 201);
     if (url.pathname.endsWith('/pos/sales') && method === 'POST') return jsonResponse(sale, 201);
+    if (url.pathname.includes('/pos/sales/by-transaction/'))
+      if (lookupSale) return jsonResponse(sale);
+    if (url.pathname.includes('/pos/sales/by-transaction/'))
+      return jsonResponse(
+        { error: { code: 'POS_SALE_NOT_FOUND', message: 'No completed sale found' } },
+        404,
+      );
     if (url.pathname.endsWith('/pos/sales'))
       return jsonResponse({ items: [sale], page: 1, pageSize: 50, total: 1, totalPages: 1 });
     if (url.pathname.endsWith('/pos/returns') && method === 'POST')

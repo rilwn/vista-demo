@@ -1,4 +1,6 @@
 import { Module } from '@nestjs/common';
+import { SavedFinanceReportsController } from './saved-finance-reports.controller.js';
+import { SavedFinanceReportsService } from './saved-finance-reports.service.js';
 
 import { AuditModule } from '../audit/audit.module.js';
 import { DatabaseModule } from '../database/database.module.js';
@@ -23,6 +25,7 @@ import { ServiceReportExportsController } from './service-report-exports.control
 
 @Module({
   controllers: [
+    SavedFinanceReportsController,
     CrmReportExportsController,
     FinanceReportExportsController,
     JobsController,
@@ -41,6 +44,7 @@ import { ServiceReportExportsController } from './service-report-exports.control
     ServiceOperationsModule,
   ],
   providers: [
+    SavedFinanceReportsService,
     FinanceReportExportDispatcherService,
     FinanceReportExportsService,
     JobHandlerRegistry,

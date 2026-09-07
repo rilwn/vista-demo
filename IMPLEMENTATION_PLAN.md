@@ -1,6 +1,6 @@
 # Vista Integrated Information System — Remaining Implementation Plan
 
-Status date: 2026-09-04
+Status date: 2026-09-07
 Project: `BG16RFPR001-1.012-1324-C01`
 
 [`AGENTS.md`](AGENTS.md) is authoritative. This file contains only unfinished
@@ -105,10 +105,10 @@ concurrency; no production topology or tracking rule is inferred.
   period-close cash controls, accounting posting, and provider-backed email
   delivery for payment reminders.
 - Approve and complete official sales/purchase journal and VAT filing outputs
-  from the operational review foundation; deliver structured accounting exports,
-  user-configurable controlled report definitions, and the required revenue,
-  Service, warranty, and receivables dashboard KPIs. Extend asynchronous exports
-  to every required module report.
+  from the operational review foundation; deliver structured accounting exports
+  and posted-accounting revenue once official issuance is approved. Extend saved,
+  field-selectable report views beyond Finance, dashboard configuration, and
+  asynchronous exports to every remaining required module report.
 - Connect the approved Econt and Speedy booking, label, tracking, return,
   retry, and reconciliation adapters. Keep both providers unavailable until
   INT-002 supplies the selected products, credentials, environments, and
@@ -158,12 +158,12 @@ and target-hardware acceptance pass.
 
 **Remaining**
 
-- Deliver durable local transaction storage, stable client transaction IDs,
-  outbound queueing, reconnect synchronization, idempotent server handling,
-  reconciliation UI, and visible offline/unsynchronized state.
+- Extend interrupted-checkout recovery into an offline sale queue: cached
+  catalog/customer access, offline application loading, automatic outbound
+  synchronization, and server-backed reconciliation across devices.
 - Deliver approved conflict behavior for price, stock, customers, serials,
   promotions, numbering, and fiscal operation, with retry and reconciliation
-  audit trails.
+  audit trails beyond the browser-local recovery history.
 
 **Depends on:** stable online POS behavior, POS-002, and target fiscal hardware.
 

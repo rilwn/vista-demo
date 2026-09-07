@@ -12,6 +12,7 @@ import {
   Query,
   Req,
   Res,
+  ValidationPipe,
 } from '@nestjs/common';
 import {
   ApiAcceptedResponse,
@@ -88,7 +89,15 @@ export class FinanceReportExportsController {
   @ApiBody({ type: CreateFinanceReportExportDto })
   @ApiHeader({ name: 'Idempotency-Key', required: true })
   create(
-    @Body() input: CreateFinanceReportExportDto,
+    @Body(
+      new ValidationPipe({
+        expectedType: CreateFinanceReportExportDto,
+        transform: true,
+        whitelist: true,
+        forbidNonWhitelisted: true,
+      }),
+    )
+    input: CreateFinanceReportExportDto,
     @Headers('idempotency-key') key: string | undefined,
     @Req() request: AuthenticatedRequest,
   ): Promise<FinanceReportExportDto> {

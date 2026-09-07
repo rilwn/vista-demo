@@ -1,4 +1,5 @@
 import { InlineAlert } from '@vista/ui';
+import { OperationsOverview } from './OperationsOverview';
 
 import { useAuth } from '../auth/AuthProvider';
 import { Icon } from '../components/Icon';
@@ -11,7 +12,6 @@ export function HomePage() {
   if (!session) return null;
 
   const modules = allModuleItems.filter((module) => hasPermission(module.key));
-  const permissions = session.context.permissions;
   const firstName = session.context.displayName.trim().split(/\s+/u)[0] ?? '';
 
   return (
@@ -26,22 +26,16 @@ export function HomePage() {
         </div>
       </header>
 
-      <section className="summary-grid" aria-label="Account overview">
-        <SummaryCard detail={messages.home.moduleCard} icon="home" value={String(modules.length)} />
-        <SummaryCard
-          detail={messages.home.accessCard}
-          icon="key"
-          value={String(permissions.length)}
-        />
-        <SummaryCard
-          detail={messages.home.protectionCard}
-          icon="shield"
-          value={
-            session.context.twoFactorVerified ? messages.home.twoFactor : messages.home.passwordOnly
+      {hasPermission('erp.finance') ||
+      hasPermission('crm') ||
+      hasPermission('erp.service', 'approve') ? (
+        <OperationsOverview
+          token={session.sessionToken}
+          warrantyPath={
+            hasPermission('crm') ? '/modules/crm/customer-care' : '/modules/erp.service/care'
           }
-          wideValue
         />
-      </section>
+      ) : null}
 
       <section className="content-panel">
         <div className="panel-heading">
@@ -53,7 +47,7 @@ export function HomePage() {
         {modules.length > 0 ? (
           <div className="module-card-grid">
             {modules.map((module) => (
-              <Link className="module-card" key={module.key} to={module.path}>
+              <Link className="module-card" key={module.path} to={module.path}>
                 <span className="module-card-icon">
                   <Icon name={module.icon} />
                 </span>
@@ -72,29 +66,5 @@ export function HomePage() {
         )}
       </section>
     </div>
-  );
-}
-
-function SummaryCard({
-  detail,
-  icon,
-  value,
-  wideValue = false,
-}: {
-  detail: string;
-  icon: Parameters<typeof Icon>[0]['name'];
-  value: string;
-  wideValue?: boolean;
-}) {
-  return (
-    <article className="summary-card">
-      <span className="summary-card-icon">
-        <Icon name={icon} />
-      </span>
-      <div>
-        <strong className={wideValue ? 'is-text' : undefined}>{value}</strong>
-        <span>{detail}</span>
-      </div>
-    </article>
   );
 }

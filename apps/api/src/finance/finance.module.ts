@@ -1,4 +1,6 @@
 import { Module } from '@nestjs/common';
+import { OperationsOverviewController } from './operations-overview.controller.js';
+import { OperationsOverviewService } from './operations-overview.service.js';
 
 import { AuditModule } from '../audit/audit.module.js';
 import { DatabaseModule } from '../database/database.module.js';
@@ -19,6 +21,7 @@ import { FinancialDocumentsService } from './financial-documents.service.js';
 
 @Module({
   controllers: [
+    OperationsOverviewController,
     FinanceBankController,
     FinanceCashController,
     FinanceCustomerAccountsController,
@@ -38,6 +41,7 @@ import { FinancialDocumentsService } from './financial-documents.service.js';
   ],
   imports: [AuditModule, DatabaseModule],
   providers: [
+    OperationsOverviewService,
     FinanceBankService,
     FinanceCashService,
     FinanceCustomerAccountsService,

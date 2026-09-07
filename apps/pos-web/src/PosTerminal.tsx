@@ -23,7 +23,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ApiClientError } from './api/client';
 import {
   authorizePosDiscount,
-  completePosSale,
   createPosInvoiceDraft,
   createPosReturn,
   closePosShift,
@@ -42,19 +41,25 @@ import {
   updatePosQuickAccess,
 } from './api/pos';
 import { PosReports } from './PosReports';
+import { CheckoutRecovery } from './CheckoutRecovery';
+import { submitDurableCheckout } from './checkout-recovery';
+import { readCheckout } from './checkout-store';
+import { CheckoutHistory } from './CheckoutHistory';
 
-type PosScreen = 'reports' | 'returns' | 'sales' | 'sell' | 'shifts';
+type PosScreen = 'reports' | 'returns' | 'sales' | 'sell' | 'shifts' | 'checkouts';
 type Notice = { kind: 'error' | 'info' | 'success'; text: string };
 
 const screenLabels: Record<PosScreen, string> = {
+  checkouts: 'Recovery',
   reports: 'Reports',
   returns: 'Returns',
   sales: 'Sale history',
   sell: 'Sell',
   shifts: 'Shifts',
 };
-const screenOrder: PosScreen[] = ['sell', 'returns', 'sales', 'shifts', 'reports'];
+const screenOrder: PosScreen[] = ['sell', 'returns', 'sales', 'shifts', 'reports', 'checkouts'];
 const screenPaths: Record<PosScreen, string> = {
+  checkouts: '/checkouts',
   reports: '/reports',
   returns: '/returns',
   sales: '/sales',
@@ -95,9 +100,26 @@ export function PosTerminal({
   const [notice, setNotice] = useState<Notice>();
   const [screen, setScreen] = useState<PosScreen>(() => screenForPath(window.location.pathname));
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
+  const [online, setOnline] = useState(navigator.onLine);
+  const [checkoutBlocked, setCheckoutBlocked] = useState(true);
+  const [pendingCount, setPendingCount] = useState<number>();
+  const [checkoutInFlight, setCheckoutInFlight] = useState(false);
+  const [recoveredReceipt, setRecoveredReceipt] = useState<PosSale>();
+  const [saleRevision, setSaleRevision] = useState(0);
+  const [recoveryContainer, setRecoveryContainer] = useState<HTMLElement | null>(null);
   const [soundEnabled, setSoundEnabled] = useState(() => readSoundPreference(accountId));
   const accountMenu = useRef<HTMLDivElement>(null);
   const navigation = useActiveItemVisibility<HTMLElement>(screen);
+
+  useEffect(() => {
+    const update = () => setOnline(navigator.onLine);
+    window.addEventListener('online', update);
+    window.addEventListener('offline', update);
+    return () => {
+      window.removeEventListener('online', update);
+      window.removeEventListener('offline', update);
+    };
+  }, []);
 
   const navigate = useCallback((next: PosScreen, replace = false) => {
     const path = screenPaths[next];
@@ -274,6 +296,10 @@ export function PosTerminal({
             <PageLoading />
           ) : screen === 'sell' ? (
             <SellScreen
+              key={saleRevision}
+              checkoutBlocked={checkoutBlocked}
+              onCheckoutBusy={setCheckoutInFlight}
+              accountId={accountId}
               onNavigate={navigate}
               onNotice={setNotice}
               register={activeRegister}
@@ -290,11 +316,21 @@ export function PosTerminal({
             />
           ) : screen === 'shifts' ? (
             <ShiftScreen
+              accountId={accountId}
+              checkoutBlocked={checkoutBlocked || checkoutInFlight}
               context={context}
               onNavigate={navigate}
               onNotice={setNotice}
               onOpened={refreshContext}
               token={token}
+            />
+          ) : screen === 'checkouts' ? (
+            <CheckoutHistory
+              onRecoveryContainer={setRecoveryContainer}
+              accountId={accountId}
+              token={token}
+              onBack={() => navigate('sell')}
+              onReceipt={setRecoveredReceipt}
             />
           ) : screen === 'reports' ? (
             <PosReports onNotice={setNotice} token={token} />
@@ -304,7 +340,43 @@ export function PosTerminal({
         </main>
       </div>
 
+      <CheckoutRecovery
+        container={recoveryContainer}
+        accountId={accountId}
+        token={token}
+        refresh={saleRevision}
+        paused={checkoutInFlight}
+        onBlocked={setCheckoutBlocked}
+        onPending={setPendingCount}
+        onRecovered={(sale) => {
+          setRecoveredReceipt(sale);
+          setSaleRevision((value) => value + 1);
+          void refreshContext();
+          setNotice({
+            kind: 'success',
+            text: `${sale.saleNumber} confirmed. No second sale was created.`,
+          });
+        }}
+      />
+      {recoveredReceipt ? (
+        <ReceiptDialog
+          sale={recoveredReceipt}
+          token={token}
+          onClose={() => setRecoveredReceipt(undefined)}
+          onNotice={setNotice}
+          onSaleUpdated={setRecoveredReceipt}
+        />
+      ) : null}
+
       <footer className="pos-footer">
+        <button className="pos-recovery-status" type="button" onClick={() => navigate('checkouts')}>
+          <i className={pendingCount === 0 ? 'is-ready' : 'is-warning'} />
+          {pendingCount === undefined
+            ? 'Checking saved checkouts'
+            : pendingCount
+              ? '1 checkout pending'
+              : 'No pending checkouts'}
+        </button>
         <span>
           <i className={shift ? 'is-ready' : 'is-warning'} />
           {shift ? `${shift.warehouseName} connected` : 'Open a shift to use stock'}
@@ -314,8 +386,8 @@ export function PosTerminal({
           {simulator ? 'Test receipt mode' : 'Fiscal device unavailable'}
         </span>
         <span>
-          <i className="is-ready" />
-          Online sales connected
+          <i className={online ? 'is-ready' : 'is-warning'} />
+          {online ? 'Network available' : 'Offline · reconnect to complete sales'}
         </span>
       </footer>
     </div>
@@ -323,12 +395,18 @@ export function PosTerminal({
 }
 
 function SellScreen({
+  accountId,
+  checkoutBlocked,
+  onCheckoutBusy,
   onNavigate,
   onNotice,
   register,
   shift,
   token,
 }: {
+  accountId: string;
+  checkoutBlocked: boolean;
+  onCheckoutBusy: (busy: boolean) => void;
   onNavigate: (screen: PosScreen) => void;
   onNotice: (notice: Notice) => void;
   register: PosRegisterOption | undefined;
@@ -501,6 +579,7 @@ function SellScreen({
           : 0;
   const cashChange = Math.max(0, Number(cashTendered || 0) - cashPortion);
   const blockingIssue =
+    (checkoutBlocked ? 'Confirm the saved checkout before completing another sale.' : undefined) ??
     basketIssue(
       basket,
       customer,
@@ -516,7 +595,8 @@ function SellScreen({
       advancePortion,
       customerRemainder,
       customerRemainderMethod,
-    ) ?? (pricingLoading ? 'Checking offers…' : pricingError);
+    ) ??
+    (pricingLoading ? 'Checking offers…' : pricingError);
 
   function changed(next: BasketLine[]) {
     setBasket(next);
@@ -552,76 +632,73 @@ function SellScreen({
   async function pay() {
     if (!shift || blockingIssue) return;
     setPaying(true);
+    onCheckoutBusy(true);
     try {
-      const sale = await completePosSale(
-        token,
-        {
-          clientTransactionId: transactionId,
-          ...(customer?.location ? { customerLocationId: customer.location.id } : {}),
-          ...(customer ? { customerPartnerId: customer.customer.id } : {}),
-          lines: saleLinesFor(basket),
-          loyaltyPointsToRedeem: pricing?.loyaltyPointsRedeemed ?? 0,
-          ...(manualDiscount
-            ? {
-                manualDiscount: {
-                  authorizationId: manualDiscount.authorization.id,
-                  discountType: manualDiscount.authorization.discountType,
-                  discountValue: manualDiscount.authorization.discountValue,
+      const sale = await submitDurableCheckout(accountId, token, {
+        clientTransactionId: transactionId,
+        ...(customer?.location ? { customerLocationId: customer.location.id } : {}),
+        ...(customer ? { customerPartnerId: customer.customer.id } : {}),
+        lines: saleLinesFor(basket),
+        loyaltyPointsToRedeem: pricing?.loyaltyPointsRedeemed ?? 0,
+        ...(manualDiscount
+          ? {
+              manualDiscount: {
+                authorizationId: manualDiscount.authorization.id,
+                discountType: manualDiscount.authorization.discountType,
+                discountValue: manualDiscount.authorization.discountValue,
+              },
+            }
+          : {}),
+        payments:
+          paymentMode === 'cash'
+            ? [
+                {
+                  amount: totals.gross.toFixed(4),
+                  method: 'cash',
+                  tenderedAmount: Number(cashTendered).toFixed(4),
                 },
-              }
-            : {}),
-          payments:
-            paymentMode === 'cash'
-              ? [
-                  {
-                    amount: totals.gross.toFixed(4),
-                    method: 'cash',
-                    tenderedAmount: Number(cashTendered).toFixed(4),
-                  },
-                ]
-              : paymentMode === 'card'
-                ? [{ amount: totals.gross.toFixed(4), method: 'card' }]
-                : paymentMode === 'split'
-                  ? [
-                      {
-                        amount: cashPortion.toFixed(4),
-                        method: 'cash',
-                        tenderedAmount: Number(cashTendered).toFixed(4),
-                      },
-                      { amount: cardPortion.toFixed(4), method: 'card' },
-                    ]
-                  : [
-                      ...(advancePortion > 0 && selectedAdvance
-                        ? [
-                            {
-                              advanceId: selectedAdvance.id,
-                              amount: advancePortion.toFixed(4),
-                              method: 'advance' as const,
-                            },
-                          ]
-                        : []),
-                      ...(customerRemainder > 0
-                        ? [
-                            customerRemainderMethod === 'cash'
-                              ? {
-                                  amount: customerRemainder.toFixed(4),
-                                  method: 'cash' as const,
-                                  tenderedAmount: Number(cashTendered).toFixed(4),
-                                }
-                              : {
-                                  amount: customerRemainder.toFixed(4),
-                                  method:
-                                    customerRemainderMethod === 'card'
-                                      ? ('card' as const)
-                                      : ('on_account' as const),
-                                },
-                          ]
-                        : []),
-                    ],
-          shiftId: shift.id,
-        },
-        transactionId,
-      );
+              ]
+            : paymentMode === 'card'
+              ? [{ amount: totals.gross.toFixed(4), method: 'card' }]
+              : paymentMode === 'split'
+                ? [
+                    {
+                      amount: cashPortion.toFixed(4),
+                      method: 'cash',
+                      tenderedAmount: Number(cashTendered).toFixed(4),
+                    },
+                    { amount: cardPortion.toFixed(4), method: 'card' },
+                  ]
+                : [
+                    ...(advancePortion > 0 && selectedAdvance
+                      ? [
+                          {
+                            advanceId: selectedAdvance.id,
+                            amount: advancePortion.toFixed(4),
+                            method: 'advance' as const,
+                          },
+                        ]
+                      : []),
+                    ...(customerRemainder > 0
+                      ? [
+                          customerRemainderMethod === 'cash'
+                            ? {
+                                amount: customerRemainder.toFixed(4),
+                                method: 'cash' as const,
+                                tenderedAmount: Number(cashTendered).toFixed(4),
+                              }
+                            : {
+                                amount: customerRemainder.toFixed(4),
+                                method:
+                                  customerRemainderMethod === 'card'
+                                    ? ('card' as const)
+                                    : ('on_account' as const),
+                              },
+                        ]
+                      : []),
+                  ],
+        shiftId: shift.id,
+      });
       setReceipt(sale);
       setBasket([]);
       setCashTendered('');
@@ -653,12 +730,17 @@ function SellScreen({
       onNotice({ kind: 'error', text: messageFor(error) });
     } finally {
       setPaying(false);
+      onCheckoutBusy(false);
     }
   }
 
   return (
     <div className="pos-sale-layout">
-      <section className="pos-catalog-panel" aria-labelledby="sale-title">
+      <section
+        className="pos-catalog-panel"
+        aria-labelledby="sale-title"
+        inert={checkoutBlocked || paying}
+      >
         <header className="pos-page-heading">
           <div>
             <p>Point of sale</p>
@@ -791,7 +873,11 @@ function SellScreen({
         </section>
       </section>
 
-      <aside className="pos-basket" aria-label="Current sale basket">
+      <aside
+        className="pos-basket"
+        aria-label="Current sale basket"
+        inert={checkoutBlocked || paying}
+      >
         <header className="pos-basket-header">
           <div>
             <p>Current sale</p>
@@ -2152,12 +2238,16 @@ function ReceiptDialog({
 }
 
 function ShiftScreen({
+  accountId,
+  checkoutBlocked,
   context,
   onNavigate,
   onNotice,
   onOpened,
   token,
 }: {
+  accountId: string;
+  checkoutBlocked: boolean;
   context: PosTerminalContext | undefined;
   onNavigate: (screen: PosScreen) => void;
   onNotice: (notice: Notice) => void;
@@ -2191,9 +2281,11 @@ function ShiftScreen({
   }
 
   async function close() {
-    if (!current || Number(closingCash) < 0) return;
+    if (!current || checkoutBlocked || Number(closingCash) < 0) return;
     setClosing(true);
     try {
+      if (await readCheckout(accountId))
+        throw new Error('Confirm the saved checkout before closing this shift.');
       await closePosShift(
         token,
         current.id,
@@ -2274,12 +2366,15 @@ function ShiftScreen({
               </p>
               <button
                 className="pos-secondary-button"
-                disabled={closing || Number(closingCash) < 0}
+                disabled={closing || checkoutBlocked || Number(closingCash) < 0}
                 onClick={() => void close()}
                 type="button"
               >
                 {closing ? 'Closing shift…' : 'Close cashier shift'}
               </button>
+              {checkoutBlocked ? (
+                <p>Confirm the saved checkout in Recovery before closing this shift.</p>
+              ) : null}
             </div>
           </div>
         </section>
@@ -2992,6 +3087,7 @@ function PageLoading() {
 }
 
 type PosIconName =
+  | 'recovery'
   | 'check'
   | 'chevron'
   | 'close'
@@ -3029,6 +3125,12 @@ function PosIcon({ name }: { name: PosIconName }) {
 }
 
 const posIconPaths: Record<PosIconName, ReactNode> = {
+  recovery: (
+    <>
+      <path d="M3 11a9 9 0 1 1 2.5 7M3 4v7h7" />
+      <path d="M12 7v5l3 2" />
+    </>
+  ),
   check: <path d="m5 12 4 4L19 6" />,
   chevron: <path d="m8 10 4 4 4-4" />,
   close: <path d="m6 6 12 12M18 6 6 18" />,
@@ -3151,6 +3253,7 @@ function scheduleNoticeNotes(audio: AudioContext, kind: Exclude<Notice['kind'], 
 }
 
 function screenIcon(screen: PosScreen): PosIconName {
+  if (screen === 'checkouts') return 'recovery';
   if (screen === 'reports') return 'reports';
   if (screen === 'returns') return 'returns';
   if (screen === 'sales') return 'sales';

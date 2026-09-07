@@ -11,6 +11,7 @@ import type {
   FinanceJournalReport,
   FinanceReportDefinition,
   FinanceReportExport,
+  SavedFinanceReport,
   FinanceBankStatement,
   FinanceCashVoucher,
   FinanceSupplierOffset,
@@ -249,7 +250,7 @@ describe('ERP and CRM authenticated workspace', () => {
     expect(screen.getAllByText(moduleMessages['erp.warehouse'].label).length).toBeGreaterThan(0);
     expect(screen.getAllByText(moduleMessages.crm.label).length).toBeGreaterThan(0);
     expect(screen.queryByText(moduleMessages['erp.finance'].label)).toBeNull();
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls.filter(([url]) => String(url).includes('/auth/'))).toHaveLength(2);
 
     const currentAccountRequest = fetchMock.mock.calls[1]?.[1] as RequestInit;
     expect(new Headers(currentAccountRequest.headers).get('Authorization')).toBe(
@@ -347,8 +348,14 @@ describe('ERP and CRM authenticated workspace', () => {
     expect(screen.getByLabelText<HTMLInputElement>(messages.auth.totpLabel).value).toBe('123456');
     fireEvent.submit(screen.getByRole('button', { name: messages.auth.verify }).closest('form')!);
 
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
-    expect((await screen.findAllByText(messages.home.twoFactor)).length).toBeGreaterThan(0);
+    await waitFor(() =>
+      expect(fetchMock.mock.calls.filter(([url]) => String(url).includes('/auth/'))).toHaveLength(
+        3,
+      ),
+    );
+    expect(
+      await screen.findByRole('heading', { name: `${messages.home.title}, Mila.` }),
+    ).toBeTruthy();
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
       '/api/v1/auth/login',
@@ -376,7 +383,7 @@ describe('ERP and CRM authenticated workspace', () => {
     expect(
       await screen.findByRole('heading', { name: `${messages.home.title}, Mila.` }),
     ).toBeTruthy();
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls.filter(([url]) => String(url).includes('/auth/'))).toHaveLength(1);
     expect(fetchMock.mock.calls[0]?.[0]).toBe('/api/v1/auth/me');
   });
 
@@ -3357,6 +3364,11 @@ describe('ERP and CRM authenticated workspace', () => {
       },
       {
         description: 'Supplier document turnover for a selected period.',
+        columns: [
+          { key: 'partnerName', label: 'Partner', type: 'text' },
+          { key: 'grossBgnTotal', label: 'Gross BGN', type: 'money' },
+          { key: 'outstandingBgnTotal', label: 'Outstanding BGN', type: 'money' },
+        ],
         formats: ['csv', 'xlsx', 'pdf'],
         key: 'finance.supplier-turnover',
         name: 'Supplier turnover',
@@ -3398,8 +3410,18 @@ describe('ERP and CRM authenticated workspace', () => {
       status: 'completed',
     };
     let exportRequested = false;
+    const savedReports: SavedFinanceReport[] = [];
     const fetchMock = vi.fn((input: string, options?: RequestInit) => {
       if (input.endsWith('/auth/me')) return Promise.resolve(jsonResponse(financeContext));
+      if (input.includes('/finance/saved-reports?'))
+        return Promise.resolve(
+          jsonResponse({ items: savedReports, total: savedReports.length, page: 1, totalPages: 1 }),
+        );
+      if (input.endsWith('/finance/saved-reports') && options?.method === 'POST') {
+        const saved = JSON.parse(options.body as string) as SavedFinanceReport;
+        savedReports.push(saved);
+        return Promise.resolve(jsonResponse(saved, 201));
+      }
       if (input.endsWith('/finance/report-exports/definitions'))
         return Promise.resolve(jsonResponse(definitions));
       if (input.includes('/finance/report-exports?'))
@@ -3462,6 +3484,15 @@ describe('ERP and CRM authenticated workspace', () => {
     expect(within(exportDialog).getByLabelText<HTMLSelectElement>('Report').value).toBe(
       'finance.supplier-turnover',
     );
+    fireEvent.click(await within(exportDialog).findByRole('checkbox', { name: 'Outstanding BGN' }));
+    fireEvent.change(within(exportDialog).getByLabelText('Save these options'), {
+      target: { value: 'Supplier totals' },
+    });
+    fireEvent.click(within(exportDialog).getByRole('button', { name: 'Save as new report' }));
+    expect(
+      await within(exportDialog).findByRole('option', { name: 'Supplier totals' }),
+    ).toBeTruthy();
+    expect(savedReports[0]?.columns).toEqual(['partnerName', 'grossBgnTotal']);
     fireEvent.click(within(exportDialog).getByRole('button', { name: 'Prepare export' }));
     expect(await within(exportDialog).findByText('Ready')).toBeTruthy();
     expect(within(exportDialog).getAllByText('Supplier turnover').length).toBeGreaterThan(1);
@@ -3476,6 +3507,21 @@ describe('ERP and CRM authenticated workspace', () => {
     ).toBe(true);
 
     fireEvent.click(within(exportDialog).getByRole('button', { name: 'Close' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Export report' }));
+    const reopened = await screen.findByRole('dialog', { name: 'Export report' });
+    await within(reopened).findByRole('option', { name: 'Supplier totals' });
+    fireEvent.change(within(reopened).getByLabelText('My saved reports'), {
+      target: { value: savedReports[0]!.id },
+    });
+    expect(
+      within(reopened).getByRole<HTMLInputElement>('checkbox', { name: 'Outstanding BGN' }).checked,
+    ).toBe(false);
+    fireEvent.click(within(reopened).getByRole('checkbox', { name: 'Partner' }));
+    fireEvent.click(within(reopened).getByRole('checkbox', { name: 'Gross BGN' }));
+    expect(
+      within(reopened).getByRole<HTMLButtonElement>('button', { name: 'Prepare export' }).disabled,
+    ).toBe(true);
+    fireEvent.click(within(reopened).getByRole('button', { name: 'Close' }));
     fireEvent.click(screen.getByRole('tab', { name: 'Document journals' }));
     expect(await screen.findByText('DINV-VR-2026-000014')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Purchases' }));

@@ -34,6 +34,7 @@ import type {
   FinanceTurnoverReport,
   FinanceVatReviewReport,
   NotificationPage,
+  OperationsOverview,
   ServiceEquipmentHistory,
   ServiceReferenceData,
   ServiceRequest,
@@ -121,8 +122,8 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
       new URL('../src/database/migrations', import.meta.url),
     );
     await migrateUp(database, migrationDirectory);
-    expect(await migrateDown(database, migrationDirectory)).toBe('0052_pos_payments_returns');
-    expect(await migrateUp(database, migrationDirectory)).toContain('0052_pos_payments_returns');
+    expect(await migrateDown(database, migrationDirectory)).toBe('0058_saved_finance_reports');
+    expect(await migrateUp(database, migrationDirectory)).toContain('0058_saved_finance_reports');
 
     Object.assign(process.env, {
       BUSINESS_TIMEZONE: 'Europe/Sofia',
@@ -207,6 +208,61 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
       await adminDatabase.query(`DROP DATABASE IF EXISTS ${databaseName}`);
       await adminDatabase.end();
     }
+  });
+
+  it('saves private report options safely and rejects unapproved fields and periods', async () => {
+    const saved = {
+      id: randomUUID(),
+      name: 'Monthly suppliers',
+      definitionKey: 'finance.supplier-turnover',
+      dateFrom: '2026-09-01',
+      dateTo: '2026-09-30',
+      format: 'csv',
+      columns: ['partnerName', 'grossBgnTotal'],
+    };
+    const endpoint = '/api/v1/finance/saved-reports';
+    await request(application.getHttpServer()).post(endpoint).send(saved).expect(401);
+    await request(application.getHttpServer())
+      .post(endpoint)
+      .set('authorization', `Bearer ${viewerToken}`)
+      .send(saved)
+      .expect(403);
+    const send = (body: object) =>
+      request(application.getHttpServer())
+        .post(endpoint)
+        .set('authorization', `Bearer ${token}`)
+        .send(body);
+    const responses = await Promise.all([send(saved), send(saved)]);
+    expect(responses.map((response) => response.status)).toEqual([201, 201]);
+    expect(responses[0]?.body).toEqual(saved);
+    await send({ ...saved, name: 'Different request' }).expect(409);
+    for (const invalid of [
+      { columns: [] },
+      { columns: ['partnerName', 'partnerName'] },
+      { columns: ['password_hash'] },
+      { dateFrom: '2026-02-30' },
+      { dateFrom: '2026-10-01' },
+      { dateTo: undefined },
+      { dateFrom: '2026-09-01T00:00:00Z' },
+      { name: '  ' },
+      { sql: 'SELECT * FROM identity.user_accounts' },
+    ])
+      await send({ ...saved, id: randomUUID(), ...invalid }).expect(400);
+    const owner = await request(application.getHttpServer())
+      .get(endpoint)
+      .set('authorization', `Bearer ${token}`)
+      .expect(200);
+    expect(owner.body.items).toEqual([saved]);
+    const other = await request(application.getHttpServer())
+      .get(endpoint)
+      .set('authorization', `Bearer ${viewerToken}`)
+      .expect(200);
+    expect(other.body.total).toBe(0);
+    const evidence = await database.query<{ count: number }>(
+      "SELECT count(*)::integer AS count FROM audit.events WHERE target_id=$1 AND action='report.view.created'",
+      [saved.id],
+    );
+    expect(evidence.rows[0]?.count).toBe(1);
   });
 
   it('protects sales commands and exposes ERP-owned customer, product, and stock choices', async () => {
@@ -1155,6 +1211,47 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
       .expect('content-type', /csv/u)
       .expect(200);
     expect(downloadedVatReport.text).toContain('Recorded input VAT');
+
+    const selectedInput = {
+      dateFrom: turnoverDateFrom,
+      dateTo: dueDate,
+      definitionKey: 'finance.supplier-turnover',
+      format: 'csv',
+      columns: ['partnerName', 'grossBgnTotal'],
+    };
+    const selectedResponse = await request(application.getHttpServer())
+      .post('/api/v1/finance/report-exports')
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', `selected-${runId}`)
+      .send(selectedInput)
+      .expect(202);
+    const selected = selectedResponse.body as FinanceReportExport;
+    const selectedJob = {
+      ...reportJob,
+      idempotencyKey: `finance-report-export:${selected.id}`,
+      jobId: `selected-${runId}`,
+      payload: { exportId: selected.id },
+    };
+    await handlers.execute(selectedJob);
+    await handlers.execute(selectedJob);
+    const selectedFile = await request(application.getHttpServer())
+      .get(`/api/v1/finance/report-exports/${selected.id}/content`)
+      .set('authorization', `Bearer ${token}`)
+      .expect(200);
+    expect(selectedFile.text).toContain('Partner,Gross BGN');
+    expect(selectedFile.text).not.toContain('Outstanding BGN');
+    await request(application.getHttpServer())
+      .post('/api/v1/finance/report-exports')
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', `selected-${runId}`)
+      .send({ ...selectedInput, columns: ['partnerName'] })
+      .expect(409);
+    await request(application.getHttpServer())
+      .post('/api/v1/finance/report-exports')
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', `invalid-selected-${runId}`)
+      .send({ ...selectedInput, columns: ['not_a_report_field'] })
+      .expect(400);
 
     const financeJob = {
       attemptNumber: 1,
@@ -3007,6 +3104,82 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
     });
     expect(Number(evidence.rows[0]?.audit_count)).toBeGreaterThanOrEqual(5);
     expect(Number(evidence.rows[0]?.outbox_count)).toBeGreaterThanOrEqual(5);
+  });
+
+  it('reconciles dashboard values with source records and omits unauthorized metrics', async () => {
+    const path =
+      '/api/v1/operations/overview?dateFrom=2026-01-01&dateTo=2099-12-31&warrantyDays=30';
+    await request(application.getHttpServer()).get(path).expect(401);
+    const response = await request(application.getHttpServer())
+      .get(path)
+      .set('authorization', `Bearer ${token}`)
+      .expect(200);
+    const summary = response.body as OperationsOverview;
+    const expected = await database.query<{
+      revenue: string;
+      overdue: string;
+      service: number;
+      warranties: number;
+    }>(
+      `SELECT
+        (SELECT coalesce(sum(CASE WHEN document_type='credit_note' THEN -bgn_net_total ELSE bgn_net_total END),0)::text
+         FROM finance.financial_documents WHERE status <> 'cancelled' AND document_type IN ('invoice','credit_note','debit_note')
+         AND issue_date BETWEEN '2026-01-01' AND '2099-12-31') AS revenue,
+        (SELECT coalesce(sum(round(outstanding_total * exchange_rate,4)),0)::text
+         FROM finance.customer_documents WHERE review_state='pending_finance_review' AND outstanding_total>0 AND due_date<$1::date) AS overdue,
+        (SELECT count(*)::integer FROM service.requests WHERE status IN ('new','scheduled','in_progress')) AS service,
+        (SELECT count(*)::integer FROM master_data.customer_equipment WHERE active
+         AND warranty_end_date BETWEEN $1::date AND $1::date+30) AS warranties`,
+      [summary.asOf],
+    );
+    expect(summary).toMatchObject({
+      recordedRevenueBgn: expected.rows[0]?.revenue,
+      overdueReceivablesBgn: expected.rows[0]?.overdue,
+      activeServiceRequests: expected.rows[0]?.service,
+      expiringWarranties: expected.rows[0]?.warranties,
+    });
+    const restricted = await request(application.getHttpServer())
+      .get(path)
+      .set('authorization', `Bearer ${viewerToken}`)
+      .expect(200);
+    expect(restricted.body.activeServiceRequests).toBeUndefined();
+    expect(restricted.body.expiringWarranties).toBeUndefined();
+    expect(restricted.body.recordedRevenueBgn).toBe(summary.recordedRevenueBgn);
+    const crmEmail = `dashboard-crm-${runId}@example.invalid`;
+    const crmAccount = await createAccount(
+      database,
+      crmEmail,
+      await application.get(PasswordService).hash(password),
+    );
+    await grantCrmPermissions(database, crmAccount, ['view']);
+    const crmToken = await login(application, crmEmail);
+    const crmOnly = await request(application.getHttpServer())
+      .get(path)
+      .set('authorization', `Bearer ${crmToken}`)
+      .expect(200);
+    expect(crmOnly.body.recordedRevenueBgn).toBeUndefined();
+    expect(crmOnly.body.overdueReceivablesBgn).toBeUndefined();
+    expect(crmOnly.body.activeServiceRequests).toBeUndefined();
+    expect(crmOnly.body.expiringWarranties).toBe(summary.expiringWarranties);
+    await request(application.getHttpServer())
+      .get('/api/v1/finance/saved-reports')
+      .set('authorization', `Bearer ${crmToken}`)
+      .expect(403);
+    const empty = await request(application.getHttpServer())
+      .get('/api/v1/operations/overview?dateFrom=2100-01-01&dateTo=2100-01-01')
+      .set('authorization', `Bearer ${token}`)
+      .expect(200);
+    expect(Number(empty.body.recordedRevenueBgn)).toBe(0);
+    for (const query of [
+      'dateFrom=2026-02-30&dateTo=2026-03-01',
+      'dateFrom=2026-09-30&dateTo=2026-09-01',
+      'dateFrom=2026-09-01&dateTo=2026-09-30&warrantyDays=0',
+    ]) {
+      await request(application.getHttpServer())
+        .get(`/api/v1/operations/overview?${query}`)
+        .set('authorization', `Bearer ${token}`)
+        .expect(400);
+    }
   });
 
   it('summarizes Service work and prepares access-controlled report exports without mixing Finance files', async () => {

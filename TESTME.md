@@ -1,55 +1,51 @@
-# Test a POS invoice and warranty card
+# Test saved reports and the Overview
 
-Start the project with `npm run dev`. It applies migrations and prepares the
-enabled development fixtures automatically. Use the password stored in
-`DEV_FIXTURES_PASSWORD`.
+Run `npm run dev` from the project folder (restart it if already running).
+This applies the new migration. Open **Vista Operations** at
+[localhost:5173](http://localhost:5173/) and sign in as **manager@vista.local**
+using your existing `DEV_FIXTURES_PASSWORD`. No new sale or payment is needed.
 
-## 1. Complete a customer device sale
+## 1. Save and reuse a report
 
-1. Open **Vista POS** and sign in as `pos.operator@vista.local`.
-2. Choose **Shifts**. If there is no open shift, select **Open shift**, enter
-   `100.00` for **Opening cash**, and open it.
-3. Choose **Sell**.
-4. Select **Customer** → search `Alfa Market` → choose **Alfa Market Demo Ltd.**
-   → keep **Central Store** → select **Use customer**.
-5. Add **Demo Electronic Scale S1** and choose one of its available serial
-   numbers. If none is available, use **Demo Fuel Module M1**.
-6. Choose **Bank card**, then select **Complete sale**.
+1. From the sidebar choose **ERP → Finance**, then **Finance reports**.
+2. Select **Export report**. Choose **Report: Supplier turnover**.
+3. Enter **From: 2026-01-01**, **To: 2026-12-31**.
+4. Under **Fields to include**, keep only **Partner** and **Gross BGN** checked.
+5. Choose **Excel**. In **Save these options**, enter `2026 supplier totals`.
+   Select **Save as new report**.
+6. Select **Close**, reopen **Export report**, then choose **2026 supplier totals**
+   from **My saved reports**.
 
-Expected: the receipt opens with its sale number, fiscal receipt number, payment,
-and one warranty card showing the device and serial number.
+Expected: your report, dates, two selected fields and Excel format are restored.
+The panel scrolls while its header and full-width bottom buttons stay visible.
 
-## 2. Download the card and prepare the invoice
+## 2. Download all three formats
 
-1. On the receipt, select **Download PDF** under **Warranty cards**.
-2. Open the downloaded file.
+1. Select **Prepare export**. In **Recent exports**, wait for **Ready**, then
+   select **Download**. If needed, use **Refresh**.
+2. Open the Excel file: its data table must contain only **Partner** and
+   **Gross BGN**. Your existing supplier invoices determine the rows and totals;
+   no rows is valid if none fall within this period.
+3. Select **CSV → Prepare export → Download** when Ready.
+4. Repeat with **PDF**. The same two fields and values should appear in all
+   three files if no source records changed between exports.
+5. Uncheck both remaining fields: **Prepare export** must be disabled.
+   Select **Close** without saving another copy.
 
-Expected: it is a readable one-page warranty card with Vista Service, the
-customer, device, serial number, sale date, coverage dates, sale number, and
-receipt number.
+## 3. Review the Overview
 
-3. Return to the receipt and select **Prepare invoice**.
+1. Choose **Overview** in the sidebar.
+2. Set **Revenue from: 2026-01-01**, **Revenue to: 2026-12-31**, and
+   **Warranties ending within: 30 days**. Select **Apply**.
+3. Check the four cards: **Recorded revenue**, **Active Service requests**,
+   **Warranties ending soon**, and **Overdue receivables**.
+4. Use **Review Finance reports**, then the sidebar **Overview** to return.
 
-Expected: the receipt shows one Finance document number and confirms that the
-draft is ready for review.
+Expected: the link opens Finance reports, not a 404. Revenue uses your chosen
+period; Service, warranty and overdue figures describe the current date.
+**Recorded revenue includes prepared invoices and notes; it is not posted
+accounting revenue.** Zero values are valid.
 
-4. Close the receipt, choose **Sale history**, and open the same row with **View
-   receipt**.
-
-Expected: the same Finance number remains and the prepare action is no longer
-shown. A second invoice is not created.
-
-## 3. Review the linked Finance draft
-
-1. Sign out of Vista POS.
-2. Open **ERP/CRM** and sign in as `finance@vista.local`.
-3. From the sidebar choose **ERP → Finance**.
-4. Under **Choose an area**, open **Financial documents**.
-5. Find the newest invoice for **Alfa Market Demo Ltd.** and select **Preview**.
-
-Expected: the preview shows **POS sale** and **Fiscal receipt** references. Its
-product, quantity, VAT, and total match the completed POS receipt exactly.
-
-This workflow prepares a Finance draft. Official invoice issuance and certified
-fiscal-device printing remain disabled until the approved legal and hardware
-rules are available.
+Optional role check: sign out through the top-right account menu and sign in as
+**finance@vista.local**. The Overview must not show global Service or warranty
+counts, and the manager’s saved reports must not appear in this account.

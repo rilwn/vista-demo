@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { FinanceReportExportData } from '../finance/finance-reports.service.js';
 import { renderFinanceReport } from './finance-report-renderer.js';
+import { selectReportColumns } from '../finance/finance-reports.service.js';
 
 const report: FinanceReportExportData = {
   columns: [
@@ -20,6 +21,21 @@ const report: FinanceReportExportData = {
 };
 
 describe('Finance report renderer', () => {
+  it.each(['csv', 'xlsx', 'pdf'] as const)('renders a selected-field %s report', async (format) => {
+    const selected = selectReportColumns(report, ['amount']);
+    const output = await renderFinanceReport(format, selected);
+    expect(output.buffer.length).toBeGreaterThan(0);
+    if (format === 'csv') {
+      expect(output.buffer.toString('utf8')).toContain('Outstanding BGN');
+      expect(output.buffer.toString('utf8')).not.toContain('Алфа Маркет');
+    }
+    if (format === 'xlsx') {
+      const workbook = new ExcelJS.Workbook();
+      await workbook.xlsx.load(Uint8Array.from(output.buffer).buffer);
+      expect(workbook.worksheets[0]?.getCell('A7').value).toBe(60);
+      expect(workbook.worksheets[0]?.getCell('B7').value).toBeNull();
+    }
+  });
   it('creates an Excel-safe UTF-8 CSV export', async () => {
     const output = await renderFinanceReport('csv', report);
     const content = output.buffer.toString('utf8');

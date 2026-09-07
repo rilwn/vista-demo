@@ -2482,6 +2482,7 @@ export const financeReportDefinitionKeys = [
 export type FinanceReportDefinitionKey = (typeof financeReportDefinitionKeys)[number];
 
 export interface FinanceReportDefinition {
+  columns?: { key: string; label: string; type: 'date' | 'money' | 'number' | 'text' }[];
   description: string;
   formats: ReportExportFormat[];
   key: FinanceReportDefinitionKey;
@@ -2490,10 +2491,27 @@ export interface FinanceReportDefinition {
 }
 
 export interface CreateFinanceReportExportRequest {
+  columns?: string[];
   dateFrom?: string;
   dateTo?: string;
   definitionKey: FinanceReportDefinitionKey;
   format: ReportExportFormat;
+}
+
+export interface SavedFinanceReport extends CreateFinanceReportExportRequest {
+  id: string;
+  name: string;
+}
+
+export interface OperationsOverview {
+  asOf: string;
+  dateFrom: string;
+  dateTo: string;
+  recordedRevenueBgn?: string;
+  overdueReceivablesBgn?: string;
+  activeServiceRequests?: number;
+  expiringWarranties?: number;
+  warrantyDays: number;
 }
 
 export interface FinanceReportExport {

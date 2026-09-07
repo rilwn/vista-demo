@@ -292,6 +292,7 @@ export function completePosSale(
   return unwrapApiResponse(
     posApiClient.POST('/api/v1/pos/sales', {
       body: input,
+      signal: AbortSignal.timeout(30000),
       headers: authorizationHeaders(token),
       params: { header: { 'Idempotency-Key': idempotencyKey } },
     }),
@@ -327,6 +328,27 @@ export function getPosSales(token: string): Promise<PosSalePage> {
       headers: authorizationHeaders(token),
       params: { query: { page: 1, pageSize: 50 } },
     }),
+  );
+}
+
+export async function findPosCheckout(
+  token: string,
+  transactionId: string,
+): Promise<PosSale | undefined> {
+  const response = await fetch(
+    `${apiV1BaseUrl}/pos/sales/by-transaction/${encodeURIComponent(transactionId)}`,
+    {
+      headers: authorizationHeaders(token),
+      signal: AbortSignal.timeout(10000),
+    },
+  );
+  if (response.ok) return (await response.json()) as PosSale;
+  const body = (await response.json().catch(() => undefined)) as ApiErrorResponse | undefined;
+  if (response.status === 404 && body?.error.code === 'POS_SALE_NOT_FOUND') return undefined;
+  throw new ApiClientError(
+    body?.error.message ?? 'Unable to check this sale. Reconnect and try again.',
+    body?.error.code ?? 'UNAVAILABLE',
+    response.status,
   );
 }
 

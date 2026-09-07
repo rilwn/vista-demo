@@ -31,7 +31,11 @@ import type {
 import { ApiErrorException } from '../common/api-error.exception.js';
 import { CrmAnalyticsService } from '../crm/crm-analytics.service.js';
 import { DatabaseService } from '../database/database.service.js';
-import { FinanceReportsService } from '../finance/finance-reports.service.js';
+import {
+  FinanceReportsService,
+  financeReportColumns,
+  selectReportColumns,
+} from '../finance/finance-reports.service.js';
 import { StructuredLogger } from '../logging/structured-logger.service.js';
 import { PosReportsService } from '../pos/pos-reports.service.js';
 import { ServiceReportsService } from '../service/service-reports.service.js';
@@ -61,6 +65,7 @@ interface AnyReportExportPage {
   totalPages: number;
 }
 interface ReportExportRequest {
+  columns?: string[];
   businessLocationId?: string;
   cashRegisterId?: string;
   dateFrom?: string;
@@ -91,6 +96,7 @@ interface ExportRow extends DefinitionRow {
   export_format: ReportExportFormat;
   file_name: string | null;
   filters: {
+    columns?: string[];
     asOf?: string;
     businessLocationId?: string;
     cashRegisterId?: string;
@@ -137,7 +143,10 @@ export class FinanceReportExportsService {
        WHERE is_active = true AND definition_key LIKE 'finance.%'
        ORDER BY name, definition_key`,
     );
-    return result.rows.map(mapDefinition) as FinanceReportDefinition[];
+    return result.rows.map((row) => ({
+      ...mapDefinition(row),
+      columns: financeReportColumns(row.definition_key as FinanceReportDefinitionKey),
+    })) as FinanceReportDefinition[];
   }
 
   async serviceDefinitions(): Promise<ServiceReportDefinition[]> {
@@ -297,7 +306,12 @@ export class FinanceReportExportsService {
         HttpStatus.BAD_REQUEST,
       );
     }
-    const filters = reportFilters(input, definition.definition_key);
+    const filters = {
+      ...reportFilters(input, definition.definition_key),
+      ...(input.columns
+        ? { columns: validateFinanceColumns(definition.definition_key, input.columns) }
+        : {}),
+    };
     const requestHash = createHash('sha256')
       .update(
         JSON.stringify({
@@ -609,7 +623,10 @@ export class FinanceReportExportsService {
                 existing.definition_key as FinanceReportDefinitionKey,
                 existing.filters,
               );
-      const rendered = await renderFinanceReport(existing.export_format, data);
+      const rendered = await renderFinanceReport(
+        existing.export_format,
+        existing.filters.columns ? selectReportColumns(data, existing.filters.columns) : data,
+      );
       const checksum = createHash('sha256').update(rendered.buffer).digest('hex');
       const fileName = exportFileName(
         existing.definition_key,
@@ -797,7 +814,7 @@ function mapExport(row: ExportRow): AnyReportExport {
   };
 }
 
-function reportFilters(
+export function reportFilters(
   input: ReportExportRequest,
   definitionKey: ReportDefinitionKey,
 ): Record<string, string> {
@@ -859,6 +876,27 @@ function reportFilters(
     dateTo: input.dateTo,
     ...(input.operatorId ? { operatorId: input.operatorId } : {}),
   };
+}
+
+export function validateFinanceColumns(key: ReportDefinitionKey, columns: string[]): string[] {
+  if (!key.startsWith('finance.')) {
+    throw new ApiErrorException(
+      'REPORT_COLUMNS_INVALID',
+      'Field selection is not available for this report.',
+      400,
+    );
+  }
+  selectReportColumns(
+    {
+      columns: financeReportColumns(key as FinanceReportDefinitionKey),
+      criteria: [],
+      generatedAt: '',
+      rows: [],
+      title: '',
+    },
+    columns,
+  );
+  return [...columns];
 }
 
 function validIdempotencyKey(value: string | undefined): string {
