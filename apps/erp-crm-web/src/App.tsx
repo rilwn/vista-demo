@@ -172,6 +172,15 @@ function pageForPath(
     return hasPermission('crm') ? <CrmAnalyticsPage /> : <NotFoundPage />;
   }
   const workflow = findWorkflowPage(pathname);
+  const reportingHub = /^\/modules\/reports\/(report-library|scheduled-exports|dashboards)$/u.exec(
+    pathname,
+  );
+  if (reportingHub?.[1])
+    return hasPermission('reports') ? (
+      <ReportingHubPage view={reportingHub[1] as ReportingHubView} />
+    ) : (
+      <NotFoundPage />
+    );
   const erpReports = /^\/modules\/erp\.(procurement|warehouse|sales|logistics)\/reports$/u.exec(
     pathname,
   );
@@ -222,4 +231,5 @@ function FullPageLoader() {
   );
 }
 import { ErpReportsPage } from './pages/ErpReportsPage';
+import { ReportingHubPage, type ReportingHubView } from './pages/ReportingHubPage';
 import type { ErpReportScope } from '@vista/contracts';

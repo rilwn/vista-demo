@@ -3110,6 +3110,182 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/reporting/context': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['ReportingHubController_context'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/reporting/dashboards/{scope}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['ReportingHubController_preferences'];
+    put: operations['ReportingHubController_savePreferences'];
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/reporting/definitions': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['ReportingHubController_definitions'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/reporting/exports/{scope}/{id}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['ReportingHubController_exportStatus'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/reporting/exports/{scope}/{id}/content': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['ReportingHubController_download'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/reporting/exports/{scope}/{id}/retry': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['ReportingHubController_retry'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/reporting/schedules': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['ReportingHubController_schedules'];
+    put?: never;
+    post: operations['ReportingHubController_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/reporting/schedules/{id}/runs': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['ReportingHubController_runs'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/reporting/schedules/{id}/state': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put: operations['ReportingHubController_state'];
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/reporting/views': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['ReportingHubController_views'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/reporting/views/{scope}/{id}/export': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['ReportingHubController_exportView'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/sales/customer-groups': {
     parameters: {
       query?: never;
@@ -7267,6 +7443,77 @@ export interface components {
       vatNumber?: string;
       version: number;
     };
+    LibraryConfigurationDto: {
+      /** Format: uuid */
+      businessLocationId?: string;
+      /** Format: uuid */
+      cashRegisterId?: string;
+      columns?: string[];
+      /** Format: date */
+      dateFrom?: string;
+      /** Format: date */
+      dateTo?: string;
+      definitionKey: string;
+      /** @enum {string} */
+      format: 'csv' | 'xlsx' | 'pdf';
+      /** Format: uuid */
+      operatorId?: string;
+      search?: string;
+      /** Format: uuid */
+      shiftId?: string;
+    };
+    LibraryDefinitionDto: {
+      canCreate: boolean;
+      columns?: {
+        key: string;
+        label: string;
+        /** @enum {string} */
+        type: 'date' | 'money' | 'number' | 'text';
+      }[];
+      description: string;
+      formats: string[];
+      key: string;
+      name: string;
+      requiresDateRange: boolean;
+      /** @enum {string} */
+      scope:
+        'finance' | 'procurement' | 'warehouse' | 'sales' | 'logistics' | 'service' | 'crm' | 'pos';
+    };
+    LibraryExportDto: {
+      attemptCount: number;
+      /** Format: date-time */
+      completedAt?: string;
+      /** Format: date-time */
+      createdAt: string;
+      definitionKey: string;
+      errorCode?: string;
+      fileName?: string;
+      /** @enum {string} */
+      format: 'csv' | 'xlsx' | 'pdf';
+      /** Format: uuid */
+      id: string;
+      name: string;
+      rowCount?: number;
+      sizeBytes?: number;
+      /** @enum {string} */
+      status: 'queued' | 'processing' | 'completed' | 'failed';
+    };
+    LibraryViewDto: {
+      canCreate: boolean;
+      configuration: components['schemas']['LibraryConfigurationDto'];
+      /** Format: uuid */
+      id: string;
+      name: string;
+      /** @enum {string} */
+      scope:
+        'finance' | 'procurement' | 'warehouse' | 'sales' | 'logistics' | 'service' | 'crm' | 'pos';
+    };
+    LibraryViewPageDto: {
+      items: components['schemas']['LibraryViewDto'][];
+      page: number;
+      total: number;
+      totalPages: number;
+    };
     LinkCrmOpportunityQuotationDto: {
       expectedVersion: number;
       /** Format: uuid */
@@ -8638,9 +8885,74 @@ export interface components {
       /** Format: uuid */
       warehouseId: string;
     };
+    ReportDashboardPreferencesDto: {
+      hiddenCards: string[];
+      version: number;
+    };
     ReportLogisticsDeliveryExceptionDto: {
       expectedVersion: number;
       reason: string;
+    };
+    ReportRunDto: {
+      export: components['schemas']['LibraryExportDto'];
+      /** Format: uuid */
+      id: string;
+      /** Format: date-time */
+      scheduledFor: string;
+    };
+    ReportRunPageDto: {
+      items: components['schemas']['ReportRunDto'][];
+      page: number;
+      total: number;
+      totalPages: number;
+    };
+    ReportScheduleDto: {
+      /** @enum {string} */
+      cadence: 'daily' | 'weekly' | 'monthly';
+      enabled: boolean;
+      errorCode?: string;
+      /** @example 2026-09-09T09:00 */
+      firstRunLocal: string;
+      /** Format: uuid */
+      id: string;
+      name: string;
+      /** Format: date-time */
+      nextRunAt: string;
+      /** @enum {string} */
+      period: 'saved_dates' | 'previous_day' | 'previous_7_days' | 'previous_month' | 'current';
+      /** @enum {string} */
+      scope:
+        'finance' | 'procurement' | 'warehouse' | 'sales' | 'logistics' | 'service' | 'crm' | 'pos';
+      timezone: string;
+      version: number;
+      /** Format: uuid */
+      viewId: string;
+    };
+    ReportScheduleInputDto: {
+      /** @enum {string} */
+      cadence: 'daily' | 'weekly' | 'monthly';
+      /** @example 2026-09-09T09:00 */
+      firstRunLocal: string;
+      /** Format: uuid */
+      id: string;
+      name: string;
+      /** @enum {string} */
+      period: 'saved_dates' | 'previous_day' | 'previous_7_days' | 'previous_month' | 'current';
+      /** @enum {string} */
+      scope:
+        'finance' | 'procurement' | 'warehouse' | 'sales' | 'logistics' | 'service' | 'crm' | 'pos';
+      /** Format: uuid */
+      viewId: string;
+    };
+    ReportSchedulePageDto: {
+      items: components['schemas']['ReportScheduleDto'][];
+      page: number;
+      total: number;
+      totalPages: number;
+    };
+    ReportScheduleStateDto: {
+      enabled: boolean;
+      version: number;
     };
     ReturnStockDto: {
       /** Format: uuid */
@@ -19014,6 +19326,514 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['SupplierEvaluationDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  ReportingHubController_context: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': {
+            timezone: string;
+          };
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  ReportingHubController_preferences: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        scope: 'finance' | 'service' | 'crm' | 'pos';
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ReportDashboardPreferencesDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  ReportingHubController_savePreferences: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        scope: 'finance' | 'service' | 'crm' | 'pos';
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ReportDashboardPreferencesDto'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ReportDashboardPreferencesDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  ReportingHubController_definitions: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['LibraryDefinitionDto'][];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  ReportingHubController_exportStatus: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: unknown;
+        scope:
+          | 'finance'
+          | 'procurement'
+          | 'warehouse'
+          | 'sales'
+          | 'logistics'
+          | 'service'
+          | 'crm'
+          | 'pos';
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['LibraryExportDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  ReportingHubController_download: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: unknown;
+        scope:
+          | 'finance'
+          | 'procurement'
+          | 'warehouse'
+          | 'sales'
+          | 'logistics'
+          | 'service'
+          | 'crm'
+          | 'pos';
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/pdf': string;
+          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': string;
+          'text/csv': string;
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  ReportingHubController_retry: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: unknown;
+        scope:
+          | 'finance'
+          | 'procurement'
+          | 'warehouse'
+          | 'sales'
+          | 'logistics'
+          | 'service'
+          | 'crm'
+          | 'pos';
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['LibraryExportDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  ReportingHubController_schedules: {
+    parameters: {
+      query?: {
+        page?: number;
+        pageSize?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ReportSchedulePageDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  ReportingHubController_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ReportScheduleInputDto'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ReportScheduleDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  ReportingHubController_runs: {
+    parameters: {
+      query?: {
+        page?: number;
+        pageSize?: number;
+      };
+      header?: never;
+      path: {
+        id: unknown;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ReportRunPageDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  ReportingHubController_state: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: unknown;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ReportScheduleStateDto'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ReportScheduleDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  ReportingHubController_views: {
+    parameters: {
+      query?: {
+        page?: number;
+        pageSize?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['LibraryViewPageDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  ReportingHubController_exportView: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path: {
+        id: unknown;
+        scope:
+          | 'finance'
+          | 'procurement'
+          | 'warehouse'
+          | 'sales'
+          | 'logistics'
+          | 'service'
+          | 'crm'
+          | 'pos';
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['LibraryExportDto'];
         };
       };
       /** @description The endpoint request limit was exceeded. */

@@ -1,6 +1,8 @@
 import type { ErpReportDefinitionKey, ErpReportDefinition, ErpReportScope } from '@vista/contracts';
 import { erpReportColumns, erpReportDefinitions } from './erp-report-definitions.js';
 import { ErpReportDataService } from './erp-report-data.service.js';
+import { canReport } from './reporting-access.js';
+import type { Permission } from '@vista/auth';
 import { createHash, randomUUID } from 'node:crypto';
 
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
@@ -25,6 +27,7 @@ import type {
   ServiceReportExportPage,
 } from '@vista/contracts';
 import { UnrecoverableError } from 'bullmq';
+import type { PoolClient } from 'pg';
 
 import { AuditService } from '../audit/audit.service.js';
 import type {
@@ -319,9 +322,10 @@ export class FinanceReportExportsService {
     auth: AuthenticationContext,
     metadata: RequestSecurityMetadata,
     scope: ReportScope,
+    transaction?: PoolClient,
   ): Promise<AnyReportExport> {
     const idempotencyKey = validIdempotencyKey(key);
-    const definition = await this.definition(input.definitionKey, scope);
+    const definition = await this.definition(input.definitionKey, scope, transaction);
     if (!definition.available_formats.includes(input.format)) {
       throw new ApiErrorException(
         'REPORT_EXPORT_FORMAT_NOT_AVAILABLE',
@@ -345,11 +349,11 @@ export class FinanceReportExportsService {
       )
       .digest('hex');
     const id = randomUUID();
-    const client = await this.database.getPool().connect();
+    const client = transaction ?? (await this.database.getPool().connect());
     let exportId: string = id;
     let shouldDispatch = true;
     try {
-      await client.query('BEGIN');
+      if (!transaction) await client.query('BEGIN');
       const inserted = await client.query<{ id: string }>(
         `INSERT INTO reporting.export_jobs (
            id, report_definition_id, requested_by, export_format, filters,
@@ -407,16 +411,29 @@ export class FinanceReportExportsService {
           client,
         );
       }
-      await client.query('COMMIT');
+      if (!transaction) await client.query('COMMIT');
     } catch (error) {
-      await client.query('ROLLBACK');
+      if (!transaction) await client.query('ROLLBACK');
       throw error;
     } finally {
-      client.release();
+      if (!transaction) client.release();
     }
 
+    if (transaction)
+      return mapExport(
+        (await transaction.query<ExportRow>(`${exportSelect()} WHERE export.id = $1`, [exportId]))
+          .rows[0]!,
+      );
     if (shouldDispatch) await this.dispatch(exportId);
     return mapExport(await this.ownedExportRow(exportId, auth.accountId, scope));
+  }
+
+  async getForScope(
+    id: string,
+    auth: AuthenticationContext,
+    scope: ReportScope,
+  ): Promise<AnyReportExport> {
+    return mapExport(await this.ownedExportRow(id, auth.accountId, scope));
   }
 
   async retry(
@@ -627,6 +644,33 @@ export class FinanceReportExportsService {
       [exportId],
     );
     try {
+      const scheduled = await this.database
+        .getPool()
+        .query('SELECT id FROM reporting.report_schedule_runs WHERE export_id=$1', [exportId]);
+      if (scheduled.rowCount) {
+        const active = await this.database
+          .getPool()
+          .query(
+            'SELECT id FROM reporting.report_definitions WHERE definition_key=$1 AND is_active',
+            [existing.definition_key],
+          );
+        if (!active.rowCount)
+          throw new UnrecoverableError('This scheduled report is no longer available');
+        const permissions = await this.database
+          .getPool()
+          .query<Permission>(
+            `SELECT DISTINCT p.module,p.action FROM identity.user_accounts a JOIN identity.employees e ON e.id=a.employee_id AND e.active JOIN iam.account_roles ar ON ar.account_id=a.id JOIN iam.role_permissions rp ON rp.role_id=ar.role_id JOIN iam.permissions p ON p.id=rp.permission_id WHERE a.id=$1 AND a.status='active' AND (a.locked_until IS NULL OR a.locked_until<=now())`,
+            [existing.requested_by],
+          );
+        if (
+          !canReport(
+            { permissions: permissions.rows },
+            existing.definition_key.split('.')[0] as ReportScope,
+            true,
+          )
+        )
+          throw new UnrecoverableError('Scheduled report access is no longer available');
+      }
       const data = erpReportDefinitions().some((d) => d.key === existing.definition_key)
         ? await this.erpReports.exportData(
             existing.definition_key as ErpReportDefinitionKey,
@@ -703,6 +747,17 @@ export class FinanceReportExportsService {
           },
           client,
         );
+        await client.query(
+          `INSERT INTO notifications.messages(recipient_account_id,channel,template_key,template_version,payload,idempotency_key)
+          SELECT $1,'in_system','report.export.ready',1,$2,$3 WHERE EXISTS(SELECT 1 FROM reporting.report_schedule_runs WHERE export_id=$4)
+          ON CONFLICT(idempotency_key) DO NOTHING`,
+          [
+            existing.requested_by,
+            { reportName: existing.name, exportId, scope: existing.definition_key.split('.')[0] },
+            'report-ready:' + exportId,
+            exportId,
+          ],
+        );
         await client.query('COMMIT');
       } catch (error) {
         await client.query('ROLLBACK');
@@ -716,7 +771,11 @@ export class FinanceReportExportsService {
         `UPDATE reporting.export_jobs
          SET status = $2, error_code = $3, updated_at = now()
          WHERE id = $1 AND status <> 'completed'`,
-        [exportId, context.retryAllowed ? 'queued' : 'failed', exportErrorCode(error)],
+        [
+          exportId,
+          context.retryAllowed && !(error instanceof UnrecoverableError) ? 'queued' : 'failed',
+          exportErrorCode(error),
+        ],
       );
       throw error;
     }
@@ -748,8 +807,12 @@ export class FinanceReportExportsService {
     }
   }
 
-  private async definition(key: ReportDefinitionKey, scope: ReportScope): Promise<DefinitionRow> {
-    const result = await this.database.getPool().query<DefinitionRow>(
+  private async definition(
+    key: ReportDefinitionKey,
+    scope: ReportScope,
+    transaction?: PoolClient,
+  ): Promise<DefinitionRow> {
+    const result = await (transaction ?? this.database.getPool()).query<DefinitionRow>(
       `SELECT id, definition_key, name, description, implementation_key, available_formats
        FROM reporting.report_definitions
        WHERE definition_key = $1 AND definition_key LIKE $2 AND is_active = true`,

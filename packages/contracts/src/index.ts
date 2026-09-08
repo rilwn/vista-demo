@@ -5045,3 +5045,4 @@ export interface SerialTraceability {
   status: 'available' | 'issued' | 'missing';
 }
 export * from './erp-reports.js';
+export * from './reporting-hub.js';

@@ -1087,10 +1087,10 @@ select.vista-searchable-multi-select {
 }
 
 .vista-auth-page--pos {
-  --vista-accent: #ad7629;
-  --vista-accent-strong: #8a5b1f;
-  --vista-accent-soft: #f6ead8;
-  --vista-focus: #a66c24;
+  --vista-accent: #347355;
+  --vista-accent-strong: #255f43;
+  --vista-accent-soft: #e4eee7;
+  --vista-focus: #2f7b57;
 
   grid-template-columns: minmax(25rem, 0.84fr) minmax(30rem, 1.16fr);
 }
@@ -1118,10 +1118,10 @@ select.vista-searchable-multi-select {
 }
 
 .vista-auth-page--recovery {
-  --vista-accent: #4f728d;
-  --vista-accent-strong: #345b78;
-  --vista-accent-soft: #e4edf3;
-  --vista-focus: #426a87;
+  --vista-accent: #347355;
+  --vista-accent-strong: #255f43;
+  --vista-accent-soft: #e4eee7;
+  --vista-focus: #2f7b57;
 }
 
 .vista-auth-page--recovery .vista-auth-context {
@@ -1463,11 +1463,11 @@ select.vista-searchable-multi-select {
 }
 
 .vista-auth-page--pos {
-  --vista-auth-accent: #8b642a;
+  --vista-auth-accent: #27633f;
 }
 
 .vista-auth-page--recovery {
-  --vista-auth-accent: #426a87;
+  --vista-auth-accent: #27633f;
 }
 
 .vista-auth-page .vista-auth-context {
@@ -1648,17 +1648,17 @@ select.vista-searchable-multi-select {
 }
 
 .vista-auth-page--pos {
-  --vista-auth-canvas: #eee9df;
-  --vista-auth-glow: 174 121 42;
-  --vista-auth-accent: #8b5e20;
-  --vista-auth-accent-soft: #f4ead9;
+  --vista-auth-canvas: #e7eee8;
+  --vista-auth-glow: 72 121 82;
+  --vista-auth-accent: #27633f;
+  --vista-auth-accent-soft: #e5f0e8;
 }
 
 .vista-auth-page--recovery {
-  --vista-auth-canvas: #e5edf1;
-  --vista-auth-glow: 65 119 148;
-  --vista-auth-accent: #356a87;
-  --vista-auth-accent-soft: #e2edf2;
+  --vista-auth-canvas: #e7eee8;
+  --vista-auth-glow: 72 121 82;
+  --vista-auth-accent: #27633f;
+  --vista-auth-accent-soft: #e5f0e8;
 }
 
 .vista-auth-page .vista-auth-context {
@@ -1833,6 +1833,8 @@ select.vista-searchable-multi-select {
 .vista-auth-page .vista-auth-form .vista-button--primary:hover:not(:disabled),
 .vista-auth-page--pos .vista-auth-form .vista-button--primary:hover:not(:disabled),
 .vista-auth-page--recovery .vista-auth-form .vista-button--primary:hover:not(:disabled) {
+  border-color: var(--vista-auth-accent);
+  background: var(--vista-auth-accent);
   filter: brightness(0.88);
 }
 
@@ -1873,4 +1875,66 @@ select.vista-searchable-multi-select {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+}
+/* User-owned report summary layouts. */
+.vista-dashboard-cards {
+  min-width: 0;
+  display: grid;
+  gap: 12px;
+}
+.vista-dashboard-cards > details {
+  border: 1px solid var(--vista-line);
+  border-radius: 8px;
+  background: var(--vista-surface);
+}
+.vista-dashboard-cards > details > summary {
+  padding: 10px 14px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+}
+.vista-dashboard-options {
+  padding: 0 14px 14px;
+  display: grid;
+  gap: 12px;
+}
+.vista-dashboard-options p {
+  margin: 0;
+  font-size: 12px;
+  color: var(--vista-muted);
+}
+.vista-dashboard-options fieldset {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 20px;
+}
+.vista-dashboard-options fieldset label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+.vista-dashboard-options input[type='checkbox'] {
+  width: 16px;
+  height: 16px;
+  min-height: 16px;
+  margin: 0;
+  padding: 0;
+  flex: 0 0 16px;
+  accent-color: var(--vista-accent-strong);
+}
+.vista-dashboard-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.vista-dashboard-empty {
+  font-size: 12px;
+  color: var(--vista-muted);
+}
+.vista-dashboard-cards > div {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 160px), 1fr));
 }

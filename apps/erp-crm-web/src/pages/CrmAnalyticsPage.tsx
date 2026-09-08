@@ -1,3 +1,5 @@
+import { DashboardCards } from '@vista/ui';
+import { apiV1BaseUrl } from '../api/client';
 import { Button, InlineAlert, Toast } from '@vista/ui';
 import type {
   CreateCrmReportExportRequest,
@@ -168,7 +170,12 @@ export function CrmAnalyticsPage() {
 
       {loading ? <AnalyticsState title="Loading customer analytics" /> : null}
       {!loading && report ? (
-        <AnalyticsContent dimension={dimension} onDimensionChange={setDimension} report={report} />
+        <AnalyticsContent
+          token={token}
+          dimension={dimension}
+          onDimensionChange={setDimension}
+          report={report}
+        />
       ) : null}
 
       {exportOpen ? (
@@ -184,10 +191,12 @@ export function CrmAnalyticsPage() {
 }
 
 function AnalyticsContent({
+  token,
   dimension,
   onDimensionChange,
   report,
 }: {
+  token: string;
   dimension: CrmAnalyticsRevenueDimension;
   onDimensionChange: (value: CrmAnalyticsRevenueDimension) => void;
   report: CrmAnalyticsOverview;
@@ -195,7 +204,19 @@ function AnalyticsContent({
   const revenue = report.revenue.filter((item) => item.dimension === dimension);
   return (
     <>
-      <section aria-label="Customer summary" className="crm-analytics-kpis">
+      <DashboardCards
+        scope="crm"
+        token={token}
+        apiBaseUrl={apiV1BaseUrl}
+        labels={[
+          'Customer retention',
+          'Average transaction',
+          'Purchases per customer',
+          'Observed customer value',
+          'Recorded net revenue',
+        ]}
+        className="crm-analytics-kpis"
+      >
         <AnalyticsMetric
           comparison={comparison(
             report.customerMetrics.retentionPercent,
@@ -234,7 +255,7 @@ function AnalyticsContent({
           supporting={`${report.customerMetrics.activeCustomers} active customers`}
           value={money(report.totalNetRevenueBgn)}
         />
-      </section>
+      </DashboardCards>
 
       <div className="crm-analytics-primary-grid">
         <section className="crm-analytics-card crm-pipeline-analysis">

@@ -73,6 +73,7 @@ import { configureHttpApplication } from '../src/common/http-application.js';
 import { APP_ENVIRONMENT } from '../src/config/config.module.js';
 import { migrateDown, migrateUp } from '../src/database/migration-runner.js';
 import { JobHandlerRegistry } from '../src/jobs/job-handler-registry.service.js';
+import { ReportingHubService } from '../src/jobs/reporting-hub.service.js';
 import { NotificationDispatcherService } from '../src/notifications/notification-dispatcher.service.js';
 import { ObjectStorageService } from '../src/storage/object-storage.service.js';
 
@@ -124,8 +125,8 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
       new URL('../src/database/migrations', import.meta.url),
     );
     await migrateUp(database, migrationDirectory);
-    expect(await migrateDown(database, migrationDirectory)).toBe('0063_erp_operational_reports');
-    expect(await migrateUp(database, migrationDirectory)).toContain('0063_erp_operational_reports');
+    expect(await migrateDown(database, migrationDirectory)).toBe('0064_reporting_hub');
+    expect(await migrateUp(database, migrationDirectory)).toContain('0064_reporting_hub');
 
     Object.assign(process.env, {
       // This suite deliberately sends many invalid/replayed reporting commands.
@@ -4162,6 +4163,225 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
       visitFrequencyMonths: 3,
     };
   }
+  it('schedules private saved reports atomically, delivers once, and persists private dashboard layouts', async () => {
+    const email = `hub-${runId}@example.invalid`;
+    const creatorAccountId = await createAccount(
+      database,
+      email,
+      await application.get(PasswordService).hash(password),
+    );
+    await grantFinancePermissions(database, creatorAccountId, ['view', 'create']);
+    const token = await login(application, email);
+    const saved = {
+      id: randomUUID(),
+      name: 'Scheduled supplier review',
+      definitionKey: 'finance.supplier-turnover',
+      dateFrom: '2026-09-01',
+      dateTo: '2026-09-30',
+      format: 'csv',
+      columns: ['partnerName', 'grossBgnTotal'],
+    };
+    const auth = { authorization: `Bearer ${token}` };
+    const server = application.getHttpServer() as Parameters<typeof request>[0];
+    await request(server).post('/api/v1/finance/saved-reports').set(auth).send(saved).expect(201);
+    const library = await request(server).get('/api/v1/reporting/views').set(auth).expect(200);
+    expect(library.body.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: saved.id, scope: 'finance', canCreate: true }),
+      ]),
+    );
+    const other = await request(server)
+      .get('/api/v1/reporting/views')
+      .set('authorization', `Bearer ${viewerToken}`)
+      .expect(200);
+    expect((other.body as { items: { id: string }[] }).items.some((v) => v.id === saved.id)).toBe(
+      false,
+    );
+    const time = await database.query<{ local: string }>(
+      `SELECT to_char((now()-interval '2 minutes') AT TIME ZONE 'Europe/Sofia','YYYY-MM-DD"T"HH24:MI') local`,
+    );
+    const input = {
+      id: randomUUID(),
+      viewId: saved.id,
+      scope: 'finance',
+      name: 'Daily supplier review',
+      cadence: 'daily',
+      period: 'previous_day',
+      firstRunLocal: time.rows[0]!.local,
+    };
+    const send = () => request(server).post('/api/v1/reporting/schedules').set(auth).send(input);
+    const [first, replay] = await Promise.all([send(), send()]);
+    expect(first.status).toBe(201);
+    expect(replay.body).toEqual(first.body);
+    await request(server)
+      .post('/api/v1/reporting/schedules')
+      .set(auth)
+      .send({ ...input, name: 'Changed' })
+      .expect(409);
+    await request(server)
+      .post('/api/v1/reporting/schedules')
+      .set('authorization', `Bearer ${viewerToken}`)
+      .send({ ...input, id: randomUUID() })
+      .expect(403);
+    const scheduler = application.get(ReportingHubService);
+    await Promise.all([scheduler.dispatchDue(), scheduler.dispatchDue()]);
+    const history = await request(server)
+      .get(`/api/v1/reporting/schedules/${input.id}/runs`)
+      .set(auth)
+      .expect(200);
+    expect(history.body.total).toBe(1);
+    const exportId = history.body.items[0].export.id as string;
+    const filters = await database.query<{ filters: { dateFrom: string; dateTo: string } }>(
+      'SELECT filters FROM reporting.export_jobs WHERE id=$1',
+      [exportId],
+    );
+    const dates = await database.query<{ day: string }>(
+      `SELECT (($1::timestamp)::date-1)::text AS "day"`,
+      [input.firstRunLocal],
+    );
+    expect(filters.rows[0]!.filters).toMatchObject({
+      dateFrom: dates.rows[0]!.day,
+      dateTo: dates.rows[0]!.day,
+    });
+    const job = {
+      attemptNumber: 1,
+      correlationId: randomUUID(),
+      enqueuedAt: new Date().toISOString(),
+      idempotencyKey: `hub:${exportId}`,
+      jobId: randomUUID(),
+      maxAttempts: 5,
+      name: 'report.generate',
+      payload: { exportId },
+      retryAllowed: true,
+    } as const;
+    await application.get(JobHandlerRegistry).execute(job);
+    await application.get(JobHandlerRegistry).execute({ ...job, attemptNumber: 2 });
+    await request(server)
+      .get(`/api/v1/reporting/exports/finance/${exportId}/content`)
+      .set(auth)
+      .expect(200);
+    await request(server)
+      .get(`/api/v1/reporting/schedules/${input.id}/runs`)
+      .set('authorization', `Bearer ${viewerToken}`)
+      .expect(404);
+    expect(
+      (
+        await database.query('SELECT id FROM notifications.messages WHERE idempotency_key=$1', [
+          `report-ready:${exportId}`,
+        ])
+      ).rowCount,
+    ).toBe(1);
+    const paused = await request(server)
+      .put(`/api/v1/reporting/schedules/${input.id}/state`)
+      .set(auth)
+      .send({ enabled: false, version: 0 })
+      .expect(200);
+    expect(paused.body.enabled).toBe(false);
+    await request(server)
+      .put(`/api/v1/reporting/schedules/${input.id}/state`)
+      .set(auth)
+      .send({ enabled: true, version: 0 })
+      .expect(409);
+    await request(server)
+      .put(`/api/v1/reporting/schedules/${input.id}/state`)
+      .set(auth)
+      .send({ enabled: true, version: (paused.body as { version: number }).version })
+      .expect(200);
+    const secondInput = { ...input, id: randomUUID(), name: 'Queued permission check' };
+    await request(server)
+      .post('/api/v1/reporting/schedules')
+      .set(auth)
+      .send(secondInput)
+      .expect(201);
+    await scheduler.dispatchDue();
+    const queued = (
+      await database.query<{ export_id: string }>(
+        'SELECT export_id FROM reporting.report_schedule_runs WHERE schedule_id=$1',
+        [secondInput.id],
+      )
+    ).rows[0]!.export_id;
+    // A schedule loses execution authority as soon as the underlying permission is revoked.
+    await database.query(
+      "UPDATE reporting.report_schedules SET next_run_at=now()-interval '1 minute' WHERE id=$1",
+      [input.id],
+    );
+    await database.query(
+      `DELETE FROM iam.role_permissions rp USING iam.permissions p,iam.account_roles ar WHERE rp.permission_id=p.id AND rp.role_id=ar.role_id AND ar.account_id=$1 AND p.module='erp.finance' AND p.action='create'`,
+      [creatorAccountId],
+    );
+    await scheduler.dispatchDue();
+    await expect(
+      application.get(JobHandlerRegistry).execute({
+        ...job,
+        jobId: randomUUID(),
+        idempotencyKey: `hub:${queued}`,
+        payload: { exportId: queued },
+      }),
+    ).rejects.toThrow();
+    expect(
+      (
+        await database.query<{ status: string }>(
+          'SELECT status FROM reporting.export_jobs WHERE id=$1',
+          [queued],
+        )
+      ).rows[0]!.status,
+    ).toBe('failed');
+    expect(
+      (
+        await database.query(
+          'SELECT enabled,error_code FROM reporting.report_schedules WHERE id=$1',
+          [input.id],
+        )
+      ).rows[0],
+    ).toEqual({ enabled: false, error_code: 'REPORT_ACCESS_CHANGED' });
+    await grantFinancePermissions(database, creatorAccountId, ['create']);
+    // A permanently invalid saved configuration must not starve other due schedules.
+    const invalidInput = { ...input, id: randomUUID(), name: 'Retired field check' };
+    await request(server)
+      .post('/api/v1/reporting/schedules')
+      .set(auth)
+      .send(invalidInput)
+      .expect(201);
+    await database.query(
+      `UPDATE reporting.report_schedules SET configuration=jsonb_set(configuration,'{columns}','["retiredField"]'::jsonb) WHERE id=$1`,
+      [invalidInput.id],
+    );
+    await scheduler.dispatchDue();
+    expect(
+      (
+        await database.query<{ error_code: string }>(
+          'SELECT error_code FROM reporting.report_schedules WHERE id=$1',
+          [invalidInput.id],
+        )
+      ).rows[0]!.error_code,
+    ).toBe('REPORT_CONFIGURATION_CHANGED');
+    const pref = '/api/v1/reporting/dashboards/finance';
+    await request(server)
+      .put(pref)
+      .set(auth)
+      .send({ hiddenCards: ['unknown'], version: 0 })
+      .expect(400);
+    const layout = await request(server)
+      .put(pref)
+      .set(auth)
+      .send({ hiddenCards: ['total'], version: 0 })
+      .expect(200);
+    expect(layout.body).toEqual({ hiddenCards: ['total'], version: 1 });
+    await request(server)
+      .put(pref)
+      .set(auth)
+      .send({ hiddenCards: ['current'], version: 0 })
+      .expect(409);
+    expect(
+      (await request(server).get(pref).set('authorization', `Bearer ${viewerToken}`).expect(200))
+        .body.hiddenCards,
+    ).toEqual([]);
+    await request(server).put(pref).set(auth).send({ hiddenCards: [], version: 1 }).expect(200);
+    const anchors = await database.query<{ feb: string; mar: string; dst: string }>(
+      `SELECT ('2027-01-31 09:00'::timestamp+interval '1 month')::date::text feb,('2027-01-31 09:00'::timestamp+2*interval '1 month')::date::text mar, (('2027-03-27 09:00'::timestamp+interval '1 day') AT TIME ZONE 'Europe/Sofia') AT TIME ZONE 'UTC' AS dst`,
+    );
+    expect(anchors.rows[0]).toMatchObject({ feb: '2027-02-28', mar: '2027-03-31' });
+  });
 });
 
 async function createAccount(pool: Pool, email: string, passwordHash: string) {

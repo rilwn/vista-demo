@@ -1,4 +1,6 @@
 import { Module } from '@nestjs/common';
+import { ReportingHubService } from './reporting-hub.service.js';
+import { ReportingHubController } from './reporting-hub.controller.js';
 import { ErpReportExportsController } from './erp-report-exports.controller.js';
 import { ErpReportDataService } from './erp-report-data.service.js';
 import { SavedErpReportsService } from './saved-erp-reports.service.js';
@@ -34,6 +36,7 @@ import { ServiceReportExportsController } from './service-report-exports.control
 
 @Module({
   controllers: [
+    ReportingHubController,
     ErpReportExportsController,
     SavedPosReportsController,
     SavedCrmReportsController,
@@ -57,6 +60,7 @@ import { ServiceReportExportsController } from './service-report-exports.control
     ServiceOperationsModule,
   ],
   providers: [
+    ReportingHubService,
     ErpReportDataService,
     SavedErpReportsService,
     SavedPosReportsService,

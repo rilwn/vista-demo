@@ -1,71 +1,56 @@
-# Check the updated ERP reports
+# Test the report library and schedules
 
-Keep `npm run dev` running. Open ERP/CRM at
-[localhost:5173](http://localhost:5173/) and sign in as **manager@vista.local**
-with your existing `DEV_FIXTURES_PASSWORD`. No new transactions are required.
+## Appearance checks
 
-## 1. Save a report in each module
+1. Open POS at http://localhost:5174. If signed in, sign out through the account
+   menu. The sign-in button should be green, including when hovered.
+2. Open Recovery at http://localhost:5175 and sign in with your existing backup
+   account. The sidebar should be light. Choose **Policies** in the topbar area
+   selector, then **Overview** in the sidebar. Both controls should stay in sync.
+3. In Operations at http://localhost:5173, open **ERP → Finance** from the
+   sidebar. The page title and icon should be compact, with readable description
+   text. Narrow the window: headings should wrap without horizontal overflow.
 
-For each row below, choose **ERP → [Module]** in the sidebar, then **Reports**
-under **Choose an area**. Choose the named report from **Report**.
+## Report setup
 
-| Module      | Report                    | Keep these fields                                  | Report name        |
-| ----------- | ------------------------- | -------------------------------------------------- | ------------------ |
-| Procurement | Purchase order comparison | Supplier, Product                                  | Procurement review |
-| Warehouse   | Stock and valuation       | Warehouse, Product, On hand                        | Stock review       |
-| Sales       | Quotations and orders     | Quotation, Customer, Total including VAT, Currency | Sales review       |
-| Logistics   | Deliveries                | Delivery, Customer, Status                         | Delivery review    |
+Restart with `npm run dev` to apply the new migration. No manual seed command is needed.
+Open ERP/CRM at http://localhost:5173 and sign in as **manager@vista.local** with
+your existing development password.
 
-1. For Procurement, Sales and Logistics, set **From: 2026-01-01** and
-   **To: 2026-12-31**. Stock and valuation has no date fields because it shows
-   current stock.
-2. Leave **Search report values** empty and select **Apply**.
-3. Open **Customize view**. Uncheck the fields not listed above.
-4. Enter the sample **Report name**, choose **File type: Excel** beside
-   **Prepare export**, then select
-   **Save as new report**. Expect **Your report view is saved.**
+## 1. Save and download a report
 
-Rows reflect your existing records. If a report has no records, the empty
-message is valid and its exported table will contain headers only.
+1. Sidebar: **ERP → Warehouse → Reports**. Select **Stock and valuation**.
+2. Leave the search empty and select **Apply**. Open **Customize view**.
+3. Keep the selected fields. Enter **Daily stock review** in **Report name**,
+   choose **CSV** in **File type**, then **Save as new report**.
+4. Sidebar: **Reports → Report library**. Find **Daily stock review** under
+   **My saved views**, then **Review saved view → Prepare export · CSV**.
+5. When it says **Ready**, select **Download**. The file contains the selected
+   stock columns. An empty warehouse may produce headings without data rows.
 
-## 2. Reopen and export each saved view
+## 2. Schedule it
 
-1. Select **Overview** in the sidebar, then return through the same module's
-   **Reports** area.
-2. Open **Customize view** and choose your report under
-   **My saved reports**. Confirm the report, dates, fields and Excel return.
-3. Select **Prepare export**. Under **Recent exports**, wait for **Ready**,
-   then select **Download**. Use **Refresh** if needed.
-4. Open the file. The table should contain only your selected fields, for all
-   matching records, not just the visible page.
-5. Choose **CSV**, prepare and download it. Repeat with **PDF**.
-   The values should match if the underlying records did not change.
+1. In the same saved-view panel, select **Schedule this view**.
+2. Name: **Daily stock download**. Repeat: **Daily**. Reporting period:
+   **Current records**. Keep the suggested **First run**, which is about two
+   minutes ahead in the timezone shown below the field. Select **Create schedule**.
+3. Select **Scheduled exports**, then **Run history** beside your schedule.
+   After the chosen time, one run appears and changes from **Queued/Preparing**
+   to **Ready**. Select **Download**. The history refreshes automatically.
+4. Select **Back**, then **Pause** beside the schedule. It should say **Paused**.
+   Leave it paused after testing to avoid unwanted daily files.
 
-## 3. Check the other report choices
+The notification bell also shows **Your scheduled report is ready** after
+processing. Files stay in your account; no email is sent. **Resume** catches up
+occurrences missed while paused. Current-stock reports use stock at execution
+time, not historical stock.
 
-Use **Report** to open the remaining choices in each module:
+## 3. Save your dashboard layout
 
-- Procurement: **Supplier claims**.
-- Warehouse: **Stock movements**, **Replenishment**.
-- Sales: **Shipments**.
-- Logistics: **Returns and repairs**, **Route plans**.
-
-For reports with dates, use the same 2026 range and select **Apply**.
-Replenishment uses current settings and has no date fields. Open
-**About this report** to see what each report includes.
-
-Enter **NO-MATCH-TEST-2026** in Search report values and select **Apply**.
-Expect **No records match these filters.** Clear it and apply again.
-Uncheck every field: **Save as new report** and **Prepare export** must be
-disabled. Recheck a field before continuing.
-
-## 4. Check the layout
-
-On each module's Reports page:
-
-- There is one Back link, one highlighted Reports tab, and aligned filter fields.
-- Resize the window. The table scrolls within its card; the page does not spill sideways.
-- Dates and quantities are readable. Under **Order reference** or **Claim reference**,
-  select the clipboard button and paste into a text editor to check the full reference.
-  Document numbers such as quotations remain visible. Exported references remain unchanged.
-- Open and close **Customize view**. The export controls stay available beside the record count.
+1. Sidebar: **Customers & CRM → Analytics**. Open **Customize cards**.
+2. Uncheck **Average transaction**, then **Save layout**. That card disappears.
+3. Reload the page. It stays hidden. Open **Customize cards → Show all → Save layout**
+   to restore it.
+4. The same control is available in **ERP → Service → Reports**, **ERP → Finance →
+   Finance reports → Aging & balances**, and **Vista POS → Reports** using your
+   POS operator account. Preferences affect only the signed-in account.

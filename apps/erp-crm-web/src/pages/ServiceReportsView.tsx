@@ -1,3 +1,5 @@
+import { DashboardCards } from '@vista/ui';
+import { apiV1BaseUrl } from '../api/client';
 import { Button, InlineAlert, Toast } from '@vista/ui';
 import type {
   CreateServiceReportExportRequest,
@@ -99,7 +101,7 @@ export function ServiceReportsView({ canExport, token }: { canExport: boolean; t
       ) : null}
 
       {loading ? <ServiceReportState title="Loading Service reports" /> : null}
-      {!loading && overview ? <ServiceReportContent report={overview} /> : null}
+      {!loading && overview ? <ServiceReportContent report={overview} token={token} /> : null}
 
       {exportOpen ? (
         <ServiceReportExportPanel
@@ -113,10 +115,16 @@ export function ServiceReportsView({ canExport, token }: { canExport: boolean; t
   );
 }
 
-function ServiceReportContent({ report }: { report: ServiceReportOverview }) {
+function ServiceReportContent({ report, token }: { report: ServiceReportOverview; token: string }) {
   return (
     <>
-      <div aria-label="Service summary" className="service-report-summary">
+      <DashboardCards
+        scope="service"
+        token={token}
+        apiBaseUrl={apiV1BaseUrl}
+        labels={['Requests', 'Open', 'Completed', 'Recorded time', 'Service value']}
+        className="service-report-summary"
+      >
         <ReportMetric label="Requests" value={report.totals.totalRequests.toLocaleString()} />
         <ReportMetric
           label="Open"
@@ -126,7 +134,7 @@ function ServiceReportContent({ report }: { report: ServiceReportOverview }) {
         <ReportMetric label="Completed" value={report.totals.completedRequests.toLocaleString()} />
         <ReportMetric label="Recorded time" value={durationLabel(report.totals.laborMinutes)} />
         <ReportMetric label="Service value" value={money(report.totals.totalCostBgn)} />
-      </div>
+      </DashboardCards>
 
       <div className="service-report-grid">
         <section className="service-report-card">

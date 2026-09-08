@@ -335,7 +335,9 @@ function SidebarLink({
       end={end}
       to={to}
     >
-      <Icon name={icon} />
+      <span className="sidebar-menu-icon" aria-hidden="true">
+        <Icon name={icon} size={18} />
+      </span>
       <span>{label}</span>
     </Link>
   );

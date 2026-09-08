@@ -147,7 +147,7 @@ function enhanceSelect(select: HTMLSelectElement): EnhancedSelect {
   select.tabIndex = -1;
   shell.append(input, toggle);
   select.insertAdjacentElement('afterend', shell);
-  document.body.append(listbox);
+  (select.closest('dialog') ?? document.body).append(listbox);
 
   function options() {
     return Array.from(select.options).filter(

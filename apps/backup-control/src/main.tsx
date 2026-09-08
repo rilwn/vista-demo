@@ -4,6 +4,7 @@ import { createRoot } from 'react-dom/client';
 import '@vista/ui/styles.css';
 
 import './styles.css';
+import './workspace-theme.css';
 
 import { App } from './App';
 

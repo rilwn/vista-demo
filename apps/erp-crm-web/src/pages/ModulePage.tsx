@@ -39,7 +39,6 @@ export function ModulePage({ moduleKey }: { moduleKey: string }) {
           <Icon name={navigation.icon} size={22} />
         </span>
         <div>
-          <p className="page-eyebrow">{messages.module.eyebrow}</p>
           <h1>{module.label}</h1>
           <p>{module.description}</p>
         </div>

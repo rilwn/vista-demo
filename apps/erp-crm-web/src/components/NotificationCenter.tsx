@@ -128,6 +128,7 @@ export function NotificationCenter() {
 }
 
 function notificationTitle(notification: NotificationMessage): string {
+  if (notification.templateKey === 'report.export.ready') return 'Your scheduled report is ready';
   if (notification.templateKey === 'inventory.low_stock') return 'Low stock needs attention';
   if (notification.templateKey === 'finance.payment.upcoming') return 'Payment is due soon';
   if (notification.templateKey === 'finance.payment.overdue') return 'Payment is overdue';
@@ -141,6 +142,8 @@ function notificationTitle(notification: NotificationMessage): string {
 }
 
 function notificationDetail(notification: NotificationMessage): string {
+  if (notification.templateKey === 'report.export.ready')
+    return `${value(notification.payload, 'reportName')}. Open Reports → Scheduled exports to download it.`;
   if (notification.templateKey === 'inventory.low_stock') {
     const available = value(notification.payload, 'availableQuantity');
     const minimum = value(notification.payload, 'minimumQuantity');

@@ -7,6 +7,22 @@ report definitions described below.
 
 ## ERP report presentation
 
+The Operations shell uses a light navigation rail with distinct hover, active and
+keyboard-focus states. `layout/workspace-theme.css` shares a 64px header token
+between the sidebar brand and topbar, preserving navigation structure, widths,
+responsive opening and permissions. The profile footer follows the light palette.
+Menu icons sit in compact 30px softly bordered tiles, with an 18px glyph and
+subtle hover/active treatments. Decorative wrappers remain hidden from assistive
+technology so link names and navigation behavior stay unchanged.
+Operations page headers use compact titles and icon tiles while allowing
+descriptions and actions to wrap. Recovery shares the light shell treatment and
+provides an area selector linked to its existing navigation. Unavailable backup
+actions remain disabled. POS and Recovery sign-in use the project green accent,
+including button hover and input focus states.
+Browser checks with fixture authentication covered 1440px, 1024px and 390px
+viewports, horizontal overflow, desktop header alignment and POS button colors.
+Component tests cover navigation regression and Recovery area selection.
+
 Procurement, Warehouse, Sales and Logistics use one report workspace with a
 single module navigation rail. The dashboard owns the Back link. The selected
 tab stays visible when the navigation rail overflows.
@@ -239,6 +255,54 @@ This presentation change does not alter API requests, calculations or permission
   coverage; rendered visual re-verification remains outstanding because no browser
   automation surface was available in that development session.
 
-Remaining report authoring outside Finance, report scheduling, dashboard layout
-configuration, official revenue accounting and other module-specific reporting
-remain in the implementation plan.
+Official revenue accounting, approved email delivery and Backup reporting remain
+in the implementation plan.
+
+## Shared library, schedules and module cards
+
+Migration `0064_reporting_hub` adds a SQL union over existing private saved views,
+not a second catalogue or copy of operational data. Reporting lists accessible
+definitions by module and account-owned saved views. Exports reuse the existing
+column allowlists, filters, renderer, worker and integrity-checked downloads.
+POS links use `VITE_POS_APP_URL`; development otherwise uses the current host on
+port 5174. Production must set the public POS origin. Missing/invalid addresses
+show instructions instead of broken links. The Reporting shell retains its view
+grant; APIs separately enforce each underlying module's reporting permissions.
+
+Schedules copy the selected view's configuration, owner and business timezone.
+Daily, weekly and monthly runs can use saved dates or complete previous-day,
+seven-day or calendar-month windows when applicable. Dateless reports use current
+records at execution, including catch-up runs, not historical stock snapshots.
+To change settings, create a new schedule and pause the old one.
+
+The first local time anchors recurrence. Monthly dates clamp without losing the
+original day (31 January, 28 February, 31 March). PostgreSQL timezone rules handle
+DST gaps/overlaps using standard-time interpretation. Changing the environment
+timezone does not alter existing schedules. Missed occurrences, including paused
+ones, catch up oldest first, at most 25 per dispatcher pass. Pausing does not
+cancel already queued exports. No email recipients or delivery rules are assumed.
+
+Row locks with `SKIP LOCKED` and a unique schedule/time pair prevent duplicate
+runs. Export creation, run linkage, audit and next-run advancement commit in one
+transaction. A crash before commit rolls everything back; after commit the
+existing dispatcher recovers the queued export. Stable save keys survive lost
+responses. Invalid retired configurations pause for review; transient failures
+retry without advancing. Schedule failure does not stop queued export dispatch.
+
+Account status and domain permissions are checked both when creating an
+occurrence and when generating its file. Global Service reports require approval,
+not ordinary technician view. Access changes pause affected schedules; worker
+denials mark the export failed rather than leaving it queued. Completion inserts
+one queued in-system notification in the same transaction. Downloads require
+ownership and current domain view access; retry reuses the existing export.
+
+Finance aging, Service summary, CRM analytics and POS report summary cards have
+private persistent visibility preferences. This does not change calculations,
+table data, exports or authorization. Only reviewed keys are accepted. Conflicting
+stale saves return 409; all-hidden layouts retain the customization control.
+
+Evidence: `ReportingHubPage.test.tsx`, `reporting-access.test.ts`, Sales/Finance
+and POS integration suites, existing report component suites and generated API
+contracts. Chromium fixture checks at 1440, 1024 and 390 pixels verify edge-fitted
+panels, searchable choices within the dialog, long-history scrolling and footer
+alignment. Production providers and hardware remain outside these checks.

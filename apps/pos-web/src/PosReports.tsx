@@ -1,3 +1,5 @@
+import { DashboardCards } from '@vista/ui';
+import { apiV1BaseUrl } from './api/client';
 import type {
   PosReportDefinition,
   PosReportDefinitionKey,
@@ -347,12 +349,18 @@ export function PosReports({
         </div>
       ) : (
         <>
-          <section className="pos-report-kpis" aria-label="Report summary">
+          <DashboardCards
+            scope="pos"
+            token={token}
+            apiBaseUrl={apiV1BaseUrl}
+            labels={['Net revenue', 'Completed sales', 'Returns', 'Average sale']}
+            className="pos-report-kpis"
+          >
             <ReportKpi label="Net revenue" value={money(overview.totals.netRevenueBgn)} />
             <ReportKpi label="Completed sales" value={String(overview.totals.saleCount)} />
             <ReportKpi label="Returns" value={money(overview.totals.grossReturnsBgn)} />
             <ReportKpi label="Average sale" value={money(overview.totals.averageSaleBgn)} />
-          </section>
+          </DashboardCards>
 
           <section className="pos-report-card">
             <div className="pos-report-card-head">

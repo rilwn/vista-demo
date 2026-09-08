@@ -55,6 +55,33 @@ describe('backup-control application shell', () => {
     expect(sessionStorage.getItem('vista.backup-control.session.v1')).toBeNull();
   });
 
+  it('opens an area from the topbar and keeps its navigation state in sync', async () => {
+    render(<App />);
+    await screen.findByRole('heading', { name: 'Backup operations' });
+    fireEvent.change(screen.getByLabelText(messages.chooseArea), { target: { value: 'policies' } });
+    expect(screen.getByRole('heading', { name: 'Policies & schedules' })).toBeTruthy();
+    expect(
+      screen.getByRole('button', { name: 'Policies & schedules' }).getAttribute('aria-current'),
+    ).toBe('page');
+    fireEvent.click(screen.getByRole('button', { name: 'Sources & inventory' }));
+    expect(screen.getByLabelText<HTMLSelectElement>(messages.chooseArea).value).toBe('sources');
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Add source' }).disabled).toBe(
+      true,
+    );
+  });
+
+  it('retains sign-out after changing the selected area', async () => {
+    render(<App />);
+    await screen.findByRole('heading', { name: 'Backup operations' });
+    fireEvent.click(screen.getByRole('button', { name: 'DR tests' }));
+    expect(screen.getByRole('heading', { name: 'Disaster recovery tests' })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Sign out' }));
+
+    expect(await screen.findByRole('heading', { name: 'Open recovery centre' })).toBeTruthy();
+    expect(sessionStorage.getItem('vista.backup-control.session.v1')).toBeNull();
+  });
+
   it('signs an employee into Backup Control only after the backend returns backup access', async () => {
     sessionStorage.clear();
     const fetchMock = vi

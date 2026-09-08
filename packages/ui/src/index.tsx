@@ -544,3 +544,4 @@ function errorCode(error: unknown): string | undefined {
   const code = error.code;
   return typeof code === 'string' ? code : undefined;
 }
+export { DashboardCards } from './dashboard-cards.js';

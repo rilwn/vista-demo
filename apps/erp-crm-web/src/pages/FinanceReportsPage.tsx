@@ -1,4 +1,6 @@
 import { Button, InlineAlert, Toast } from '@vista/ui';
+import { DashboardCards } from '@vista/ui';
+import { apiV1BaseUrl } from '../api/client';
 import type {
   CreateFinanceReportExportRequest,
   FinanceAgingKind,
@@ -729,6 +731,7 @@ function AgingView({
 }
 
 function AgingSummary({ report }: { report: FinanceAgingReport }) {
+  const { session } = useAuth();
   const metrics = [
     ['Total open', report.totals.total],
     ['Not due', report.totals.current],
@@ -738,14 +741,20 @@ function AgingSummary({ report }: { report: FinanceAgingReport }) {
     ['Over 90 days', report.totals.over90],
   ];
   return (
-    <div aria-label="Aging totals" className="finance-aging-summary">
+    <DashboardCards
+      scope="finance"
+      token={session?.sessionToken ?? ''}
+      apiBaseUrl={apiV1BaseUrl}
+      labels={metrics.map(([label]) => label ?? '')}
+      className="finance-aging-summary"
+    >
       {metrics.map(([label, value], index) => (
         <div className={index === 0 ? 'is-total' : undefined} key={label}>
           <span>{label}</span>
           <strong>{formatMoney(value ?? '0')}</strong>
         </div>
       ))}
-    </div>
+    </DashboardCards>
   );
 }
 

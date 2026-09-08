@@ -106,9 +106,8 @@ concurrency; no production topology or tracking rule is inferred.
   delivery for payment reminders.
 - Approve and complete official sales/purchase journal and VAT filing outputs
   from the operational review foundation; deliver structured accounting exports
-  and posted-accounting revenue once official issuance is approved. Complete
-  remaining module dashboard configuration and the shared report-library and
-  scheduled-delivery screens where required.
+  and posted-accounting revenue once official issuance is approved. Enable
+  approved production email delivery for scheduled reports.
 - Connect the approved Econt and Speedy booking, label, tracking, return,
   retry, and reconciliation adapters. Keep both providers unavailable until
   INT-002 supplies the selected products, credentials, environments, and

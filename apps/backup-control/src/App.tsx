@@ -166,7 +166,9 @@ function BackupConsole({
               }}
               type="button"
             >
-              <BackupIcon name={screenIcon(item)} />
+              <span className="backup-menu-icon" aria-hidden="true">
+                <BackupIcon name={screenIcon(item)} />
+              </span>
               {screens[item].label}
             </button>
           ))}
@@ -178,10 +180,20 @@ function BackupConsole({
       </aside>
       <main className="backup-main">
         <header className="backup-topbar">
-          <div className="backup-topbar-context">
-            <span>Vista Service · Vratsa</span>
-            <strong>Backup & recovery</strong>
-          </div>
+          <label className="backup-area-picker">
+            <span>{messages.chooseArea}</span>
+            <select
+              aria-label={messages.chooseArea}
+              value={screen}
+              onChange={(event) => setScreen(event.target.value as BackupScreen)}
+            >
+              {screenOrder.map((item) => (
+                <option key={item} value={item}>
+                  {screens[item].label}
+                </option>
+              ))}
+            </select>
+          </label>
           <div className="backup-topbar-actions">
             <span>
               <i className="backup-risk-dot" /> Setup incomplete
@@ -194,7 +206,6 @@ function BackupConsole({
         </header>
         <section className="backup-page-heading">
           <div>
-            <p>{active.label}</p>
             <h1>{active.title}</h1>
             <span>{active.description}</span>
           </div>

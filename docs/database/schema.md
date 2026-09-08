@@ -529,3 +529,13 @@ posted sale values; later product, price, tax, or unit changes cannot silently
 rewrite them. The same sale response exposes its transactionally generated
 warranty cards, whose printable content is rendered on demand rather than
 stored as an unauthorised duplicate file.
+
+Migration `0064_reporting_hub` adds `reporting.library_views` as an owner-scoped
+union of the five existing saved-view tables. `report_schedules` stores immutable
+configuration/timezone/recurrence anchors, the next occurrence, enabled state and
+an optimistic revision. `report_schedule_runs` uniquely links a schedule and due
+instant to an existing export job. `dashboard_preferences` stores reviewed
+hidden-card keys and revisions by account and module. No business transaction or
+KPI source is duplicated. Rollback drops this scheduling/preference metadata and
+the union view; existing saved views, export jobs and audit evidence remain.
+Back up schedule configuration before any rollback.
