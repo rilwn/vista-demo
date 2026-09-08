@@ -83,26 +83,49 @@ beforeEach(() => {
   reports = [];
 });
 describe('ERP reporting workspace', () => {
+  it('keeps UUIDs compact, copies their full value and offers a fallback on failure', async () => {
+    setup('procurement');
+    const id = '98765432-1234-4567-89ab-123456789abc';
+    vi.mocked(api.preview).mockResolvedValue({
+      columns: [
+        { key: 'reference', label: 'Reference', type: 'text' },
+        { key: 'quantity', label: 'Quantity', type: 'number' },
+        { key: 'status', label: 'Status', type: 'text' },
+      ],
+      rows: [{ reference: id, quantity: '1234.2500', status: 'Partially_received' }],
+      page: 1,
+      total: 1,
+      totalPages: 1,
+      generatedAt: '2026-09-08T10:00:00Z',
+    });
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    vi.stubGlobal('navigator', { clipboard: { writeText } });
+    mount('procurement');
+    const button = await screen.findByRole('button', { name: 'Copy reference' });
+    expect(screen.queryByText(id)).toBeNull();
+    expect(screen.getByText('1,234.25')).toBeTruthy();
+    expect(screen.getByText('Partially received')).toBeTruthy();
+    fireEvent.click(button);
+    await screen.findByText('Copied');
+    expect(writeText).toHaveBeenCalledWith(id);
+    writeText.mockRejectedValueOnce(new Error('Denied'));
+    fireEvent.click(button);
+    await screen.findByText('Could not copy. Select the reference below.');
+    expect(screen.getByText(id)).toBeTruthy();
+  });
   it.each(['procurement', 'warehouse', 'sales', 'logistics'] as const)(
     'saves, restores and exports applied %s filters',
     async (scope) => {
       setup(scope);
       mount(scope);
       await screen.findByText('TEST-001');
-      expect(
-        screen
-          .getByRole('link', {
-            name:
-              'Back to ' +
-              {
-                procurement: 'Procurement',
-                warehouse: 'Warehouse',
-                sales: 'Sales',
-                logistics: 'Logistics',
-              }[scope],
-          })
-          .getAttribute('href'),
-      ).toBe('/modules/erp.' + scope);
+      expect(screen.getByRole('link', { name: 'Reports' }).classList.contains('is-active')).toBe(
+        true,
+      );
+      expect(screen.getByRole('link', { name: 'Reports' }).getAttribute('aria-current')).toBe(
+        'page',
+      );
+      expect(screen.queryByRole('link', { name: /Back to/ })).toBeNull();
       if (scope !== 'warehouse') {
         fireEvent.change(screen.getByLabelText('From'), { target: { value: '2026-01-01' } });
         fireEvent.change(screen.getByLabelText('To'), { target: { value: '2026-12-31' } });
@@ -112,7 +135,7 @@ describe('ERP reporting workspace', () => {
       });
       fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
       await screen.findByText('TEST-001');
-      fireEvent.click(screen.getByText('Saved views & export fields'));
+      fireEvent.click(screen.getByText('Customize view'));
       fireEvent.click(screen.getByRole('checkbox', { name: 'Status' }));
       fireEvent.change(screen.getByLabelText('Report name'), {
         target: { value: 'Monthly review' },
@@ -136,7 +159,7 @@ describe('ERP reporting workspace', () => {
       cleanup();
       mount(scope);
       await screen.findByText('TEST-001');
-      fireEvent.click(screen.getByText('Saved views & export fields'));
+      fireEvent.click(screen.getByText('Customize view'));
       fireEvent.change(screen.getByLabelText('My saved reports'), {
         target: { value: reports[0]!.id },
       });
@@ -179,7 +202,7 @@ describe('ERP reporting workspace', () => {
       .mockImplementation((_t, _s, input) => Promise.resolve(input));
     mount('sales');
     await screen.findByText('TEST-001');
-    fireEvent.click(screen.getByText('Saved views & export fields'));
+    fireEvent.click(screen.getByText('Customize view'));
     fireEvent.change(screen.getByLabelText('Report name'), { target: { value: 'Retry review' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save as new report' }));
     await screen.findByText(
@@ -206,7 +229,7 @@ describe('ERP reporting workspace', () => {
     await screen.findByText('The report could not be loaded. Try again.');
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
     await screen.findByText('TEST-001');
-    fireEvent.click(screen.getByText('Saved views & export fields'));
+    fireEvent.click(screen.getByText('Customize view'));
     expect(screen.queryByRole('button', { name: 'Prepare export' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Save as new report' })).toBeNull();
     expect(screen.queryByLabelText('From')).toBeNull();

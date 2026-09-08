@@ -1,6 +1,6 @@
-# Test the remaining ERP reports
+# Check the updated ERP reports
 
-Restart with `npm run dev` to apply the migration. Open ERP/CRM at
+Keep `npm run dev` running. Open ERP/CRM at
 [localhost:5173](http://localhost:5173/) and sign in as **manager@vista.local**
 with your existing `DEV_FIXTURES_PASSWORD`. No new transactions are required.
 
@@ -20,8 +20,9 @@ under **Choose an area**. Choose the named report from **Report**.
    **To: 2026-12-31**. Stock and valuation has no date fields because it shows
    current stock.
 2. Leave **Search report values** empty and select **Apply**.
-3. Open **Saved views & export fields**. Uncheck the fields not listed above.
-4. Enter the sample **Report name**, choose **File type: Excel**, then select
+3. Open **Customize view**. Uncheck the fields not listed above.
+4. Enter the sample **Report name**, choose **File type: Excel** beside
+   **Prepare export**, then select
    **Save as new report**. Expect **Your report view is saved.**
 
 Rows reflect your existing records. If a report has no records, the empty
@@ -31,7 +32,7 @@ message is valid and its exported table will contain headers only.
 
 1. Select **Overview** in the sidebar, then return through the same module's
    **Reports** area.
-2. Open **Saved views & export fields** and choose your report under
+2. Open **Customize view** and choose your report under
    **My saved reports**. Confirm the report, dates, fields and Excel return.
 3. Select **Prepare export**. Under **Recent exports**, wait for **Ready**,
    then select **Download**. Use **Refresh** if needed.
@@ -50,10 +51,21 @@ Use **Report** to open the remaining choices in each module:
 - Logistics: **Returns and repairs**, **Route plans**.
 
 For reports with dates, use the same 2026 range and select **Apply**.
-Replenishment uses current settings and has no date fields. Read the short
-description below the filters for what each report includes.
+Replenishment uses current settings and has no date fields. Open
+**About this report** to see what each report includes.
 
 Enter **NO-MATCH-TEST-2026** in Search report values and select **Apply**.
 Expect **No records match these filters.** Clear it and apply again.
 Uncheck every field: **Save as new report** and **Prepare export** must be
 disabled. Recheck a field before continuing.
+
+## 4. Check the layout
+
+On each module's Reports page:
+
+- There is one Back link, one highlighted Reports tab, and aligned filter fields.
+- Resize the window. The table scrolls within its card; the page does not spill sideways.
+- Dates and quantities are readable. Under **Order reference** or **Claim reference**,
+  select the clipboard button and paste into a text editor to check the full reference.
+  Document numbers such as quotations remain visible. Exported references remain unchanged.
+- Open and close **Customize view**. The export controls stay available beside the record count.

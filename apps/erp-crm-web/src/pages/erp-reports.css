@@ -1,60 +1,126 @@
-.erp-report-back {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 16px;
-  font-size: 13px;
+.erp-reports {
+  gap: 16px;
 }
-.erp-report-back svg {
-  transform: rotate(180deg);
+.erp-reports .workflow-tabs {
+  padding: 5px;
+  border: 1px solid var(--vista-line);
+  border-radius: 10px;
+  background: var(--vista-surface);
+  scrollbar-width: thin;
 }
-.erp-reports .content-panel {
-  padding: 18px;
+.erp-reports .workflow-tabs a {
+  min-height: 36px;
+  padding: 7px 12px;
+}
+.erp-reports .workflow-tabs a.is-active {
+  background: var(--vista-accent-soft);
+  color: var(--vista-accent-strong);
+  border-color: var(--vista-line-strong);
+}
+.erp-reports .erp-report-workspace,
+.erp-reports .erp-report-recent {
+  padding: 0;
   min-width: 0;
+  box-shadow: none;
+}
+.erp-report-controls {
+  padding: 20px;
 }
 .erp-report-controls form {
-  display: flex;
-  gap: 12px;
-  align-items: end;
-  flex-wrap: wrap;
-}
-.erp-report-filter {
   display: grid;
+  grid-template-columns:
+    minmax(210px, 1.6fr) repeat(2, minmax(145px, 0.85fr)) minmax(160px, 1.2fr)
+    auto;
+  align-items: end;
+  gap: 12px;
+}
+.erp-report-controls form:not(:has(input[type='date'])) {
+  grid-template-columns: minmax(210px, 1fr) minmax(180px, 1fr) auto;
+}
+.erp-reports .erp-report-filter {
+  display: grid;
+  align-content: start;
   gap: 6px;
   min-width: 0;
-  flex: 1 1 160px;
 }
-.erp-report-filter label {
+.erp-reports .erp-report-filter label {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 18px;
+}
+.erp-reports .erp-report-filter input,
+.erp-reports .erp-report-filter select {
+  width: 100%;
+  min-width: 0;
+  height: 40px;
+  min-height: 40px;
+  margin: 0;
+  font-size: 13px;
+  padding: 8px 11px;
+  border: 1px solid var(--vista-line-strong);
+  border-radius: 8px;
+  color: var(--vista-ink);
+  background: var(--vista-surface);
+}
+.erp-reports .erp-report-filter input:focus-visible {
+  outline: 2px solid var(--vista-accent-soft);
+  outline-offset: 2px;
+  border-color: var(--vista-accent-strong);
+}
+.erp-reports .erp-report-filter .vista-search-select {
+  padding-right: 36px;
+  box-shadow: none;
+}
+body:has(.erp-reports) .vista-search-select-option {
+  min-height: 36px;
+  font-size: 13px;
+}
+.erp-reports .vista-button {
+  min-height: 40px;
+  margin: 0;
+  padding: 8px 14px;
+  font-size: 12px;
+  line-height: 20px;
+  white-space: nowrap;
+}
+.erp-report-options {
+  border-block: 1px solid var(--vista-line);
+  background: var(--vista-surface-muted);
+}
+.erp-report-options > summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  list-style: none;
+  cursor: pointer;
+  padding: 12px 20px;
   font-size: 12px;
   font-weight: 600;
 }
-.erp-report-filter input,
-.erp-report-filter select {
-  width: 100%;
-  min-width: 0;
-  min-height: 40px;
+.erp-report-options > summary::-webkit-details-marker {
+  display: none;
 }
-.erp-report-note {
-  margin: 14px 0 0;
+.erp-report-options > summary > span {
+  margin-left: auto;
+  font-weight: 400;
   color: var(--vista-muted);
-  font-size: 13px;
-  line-height: 1.5;
 }
-.erp-report-options summary {
-  cursor: pointer;
-  font-size: 13px;
-  font-weight: 600;
-  width: fit-content;
+.erp-report-options[open] > summary > svg:last-child {
+  transform: rotate(180deg);
 }
 .erp-report-options-body {
   display: grid;
-  gap: 16px;
-  margin-top: 16px;
+  gap: 18px;
+  padding: 4px 20px 20px;
+}
+.erp-report-options-body > .erp-report-filter {
+  max-width: 420px;
 }
 .erp-report-options fieldset {
   border: 0;
-  margin: 0;
   padding: 0;
+  margin: 0;
   min-width: 0;
 }
 .erp-report-options legend {
@@ -64,34 +130,40 @@
 }
 .erp-report-fields {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr));
-  gap: 8px 16px;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 210px), 1fr));
+  gap: 6px 16px;
 }
-.erp-report-fields label {
+.erp-reports .erp-report-fields label {
   display: flex;
   align-items: center;
+  justify-content: flex-start;
   gap: 8px;
   min-height: 32px;
-  font-size: 13px;
+  margin: 0;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.4;
 }
-.erp-report-fields input[type='checkbox'] {
+.erp-reports .erp-report-fields input[type='checkbox'] {
   width: 16px;
   height: 16px;
+  min-height: 16px;
   flex: 0 0 16px;
   margin: 0;
+  padding: 0;
+  border-radius: 4px;
+  accent-color: var(--vista-accent-strong);
 }
 .erp-report-options-row {
   display: flex;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-.erp-report-actions {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
+  align-items: end;
   gap: 10px;
+  max-width: 600px;
+  flex-wrap: wrap;
 }
-.erp-report-actions span,
+.erp-report-options-row > .erp-report-filter {
+  flex: 1;
+}
 .erp-report-options small {
   font-size: 12px;
   color: var(--vista-muted);
@@ -100,87 +172,312 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 12px;
-  margin-bottom: 14px;
+  gap: 16px;
+  padding: 16px 20px;
   flex-wrap: wrap;
 }
 .erp-report-result-heading h2 {
-  font-size: 16px;
   margin: 0;
+  font-size: 14px;
+  font-weight: 650;
 }
-.erp-report-result-heading p,
-.erp-report-result-heading span {
-  font-size: 12px;
+.erp-report-result-heading p {
+  margin: 4px 0 0;
   color: var(--vista-muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.erp-report-export-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.erp-report-export-actions .erp-report-filter {
+  width: 100px;
+}
+.erp-report-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 .erp-report-table-scroll {
   overflow: auto;
   max-height: 60vh;
-  margin-bottom: 16px;
-  border: 1px solid var(--vista-line);
-  border-radius: 8px;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--vista-line-strong) transparent;
+  border-block: 1px solid var(--vista-line);
 }
 .erp-report-table-scroll table {
   width: 100%;
-  border-collapse: collapse;
-  font-size: 13px;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 12px;
+  line-height: 1.5;
 }
 .erp-report-table-scroll td,
 .erp-report-table-scroll th {
-  padding: 12px;
+  padding: 12px 16px;
   border-bottom: 1px solid var(--vista-line);
   text-align: left;
-  min-width: 110px;
-  max-width: 360px;
-  overflow-wrap: anywhere;
+  vertical-align: middle;
+  min-width: 105px;
+  max-width: 300px;
 }
 .erp-report-table-scroll th {
   position: sticky;
   top: 0;
+  z-index: 1;
+  background: var(--vista-surface-muted);
+  color: var(--vista-muted);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.erp-report-table-scroll tbody tr:last-child td {
+  border-bottom: 0;
+}
+.erp-report-table-scroll tbody tr:hover {
+  background: var(--vista-surface-muted);
+}
+.erp-report-table-scroll [data-type='number'],
+.erp-report-table-scroll [data-type='money'] {
+  text-align: right;
+}
+.erp-report-number {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.erp-report-table-scroll time {
+  white-space: nowrap;
+}
+.erp-report-text {
+  display: block;
+  min-width: 90px;
+  max-width: 300px;
+  overflow-wrap: anywhere;
+}
+.erp-report-missing {
+  color: var(--vista-muted);
+}
+.erp-report-status {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  border-radius: 6px;
+  padding: 3px 8px;
+  background: var(--vista-surface-muted);
+  color: var(--vista-muted);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.erp-report-status.is-completed {
+  color: var(--vista-accent-strong);
+  background: var(--vista-accent-soft);
+}
+.erp-report-status.is-failed {
+  color: var(--vista-danger);
+  background: var(--vista-danger-soft);
+}
+.erp-report-reference {
+  display: grid;
+  gap: 5px;
+  font-size: 11px;
+}
+.erp-report-reference button {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 4px 8px;
+  border: 1px solid var(--vista-line);
+  border-radius: 6px;
   background: var(--vista-surface);
-  font-size: 12px;
+  color: var(--vista-muted);
+  cursor: pointer;
+  font: inherit;
 }
-.erp-report-recent ul {
-  list-style: none;
-  padding: 0;
-  margin: 0;
+.erp-report-reference button:hover {
+  color: var(--vista-accent-strong);
+  border-color: var(--vista-line-strong);
 }
-.erp-report-recent li {
+.erp-report-reference code {
+  display: block;
+  max-width: 200px;
+  user-select: all;
+  overflow-wrap: anywhere;
+}
+.erp-report-actions {
   display: flex;
   align-items: center;
-  gap: 14px;
-  padding: 12px 0;
-  border-top: 1px solid var(--vista-line);
+  gap: 10px;
   flex-wrap: wrap;
+  font-size: 12px;
 }
-.erp-report-recent li > div {
-  flex: 1 1 200px;
-  min-width: 0;
-  display: grid;
-  gap: 4px;
+.erp-report-pagination {
+  justify-content: flex-end;
+  padding: 14px 20px;
 }
-.erp-report-recent strong {
-  font-size: 13px;
-}
-.erp-report-recent small,
-.erp-report-recent li > span {
+.erp-report-about {
+  padding: 12px 20px;
   font-size: 12px;
   color: var(--vista-muted);
 }
-.erp-report-options summary:focus-visible,
-.erp-report-table-scroll:focus-visible {
-  outline: 2px solid var(--vista-ink);
-  outline-offset: 4px;
+.erp-report-about summary {
+  cursor: pointer;
+  width: fit-content;
 }
-@media (max-width: 600px) {
-  .erp-reports .content-panel {
+.erp-report-about p {
+  max-width: 760px;
+  line-height: 1.6;
+  margin: 10px 0 0;
+}
+.erp-report-empty {
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 10px;
+  padding: 42px 20px;
+  min-height: 170px;
+  margin: 0;
+  font-size: 13px;
+  color: var(--vista-muted);
+  text-align: center;
+}
+.erp-report-empty strong {
+  color: var(--vista-ink);
+  font-weight: 600;
+}
+.erp-report-empty span {
+  font-size: 12px;
+}
+.erp-report-notice {
+  margin: 0;
+  padding: 0 20px 12px;
+  font-size: 12px;
+  color: var(--vista-accent-strong);
+}
+.erp-report-recent ul {
+  list-style: none;
+  margin: 0;
+  padding: 0 20px;
+}
+.erp-report-recent li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 0;
+  border-top: 1px solid var(--vista-line);
+}
+.erp-report-recent li > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+.erp-report-recent strong {
+  font-size: 12px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.erp-report-recent small {
+  font-size: 11px;
+  color: var(--vista-muted);
+}
+.erp-report-recent > p {
+  margin: 0;
+  padding: 0 20px 20px;
+  font-size: 12px;
+  color: var(--vista-muted);
+}
+.erp-report-recent > .erp-report-actions {
+  padding: 14px 20px;
+}
+.erp-reports summary:focus-visible,
+.erp-report-table-scroll:focus-visible,
+.erp-report-reference button:focus-visible {
+  outline: 2px solid var(--vista-accent-strong);
+  outline-offset: 3px;
+}
+@media (max-width: 1200px) {
+  .erp-report-controls form {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+  .erp-report-controls form > .erp-report-filter {
+    grid-column: span 2;
+  }
+  .erp-report-controls form > .erp-report-filter:has(#erp-report-search) {
+    grid-column: 1 / -2;
+  }
+  .erp-report-controls form > .vista-button {
+    justify-self: stretch;
+  }
+  .erp-report-controls form:not(:has(input[type='date'])) > .erp-report-filter {
+    grid-column: auto;
+  }
+  .erp-report-controls
+    form:not(:has(input[type='date']))
+    > .erp-report-filter:has(#erp-report-search) {
+    grid-column: auto;
+  }
+}
+@media (max-width: 640px) {
+  .erp-report-controls {
     padding: 14px;
   }
-  .erp-report-controls form > .erp-report-filter:first-child {
+  .erp-report-controls form,
+  .erp-report-controls form:not(:has(input[type='date'])) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .erp-report-controls form > .erp-report-filter {
+    grid-column: span 1;
+  }
+  .erp-report-controls form > .erp-report-filter:first-child,
+  .erp-report-controls form:not(:has(input[type='date'])) > .erp-report-filter,
+  .erp-report-controls form > .erp-report-filter:has(#erp-report-search) {
+    grid-column: 1 / -1;
+  }
+  .erp-report-controls
+    form:not(:has(input[type='date']))
+    > .erp-report-filter:has(#erp-report-search) {
+    grid-column: 1 / -1;
+  }
+  .erp-report-controls form > .vista-button {
+    grid-column: 1 / -1;
+    justify-self: stretch;
+  }
+  .erp-report-result-heading {
+    padding: 14px;
+  }
+  .erp-report-export-actions {
+    flex: 1 1 100%;
+  }
+  .erp-report-export-actions .erp-report-filter {
+    flex: 1;
+  }
+  .erp-report-options > summary {
+    padding-inline: 14px;
+  }
+  .erp-report-options-body {
+    padding-inline: 14px;
+  }
+  .erp-report-options-row .erp-report-filter {
     flex-basis: 100%;
   }
-  .erp-report-actions .vista-button {
-    flex: 1 1 auto;
+  .erp-report-recent li {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 10px;
+  }
+  .erp-report-recent li > div {
+    grid-column: 1 / -1;
+  }
+  .erp-report-recent li > .vista-button {
+    justify-self: end;
   }
 }
 .sales-report-link {

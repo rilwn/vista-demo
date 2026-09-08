@@ -7,6 +7,7 @@ export type IconName =
   | 'check'
   | 'chevron'
   | 'close'
+  | 'copy'
   | 'customers'
   | 'finance'
   | 'home'
@@ -65,6 +66,12 @@ const paths: Record<IconName, React.ReactNode> = {
   check: <path d="m5 12 4 4L19 6" />,
   chevron: <path d="m8 10 4 4 4-4" />,
   close: <path d="m6 6 12 12M18 6 6 18" />,
+  copy: (
+    <>
+      <rect x="8" y="8" width="12" height="13" rx="2" />
+      <path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3" />
+    </>
+  ),
   customers: (
     <>
       <path d="M16 20v-1.5A3.5 3.5 0 0 0 12.5 15h-5A3.5 3.5 0 0 0 4 18.5V20" />

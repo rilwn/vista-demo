@@ -9,7 +9,10 @@ Evidence: `erp-report-columns.test.ts`, `ErpReportsPage.test.tsx`,
 `sales.integration.test.ts`, generated OpenAPI and `report-workspace.md`.
 Official accounting, remaining dashboard configuration, shared report-library
 and configured scheduled-delivery screens remain separate pending work.
-Live browser visual verification was unavailable for this increment.
+The follow-up report presentation review covers active navigation, a single Back
+link, compact defaults, aligned controls, readable dates/decimals, and UUID copy
+actions. Evidence: `erp-report-display.test.ts`, `ErpReportsPage.test.tsx`, and
+Chromium fixture-based layout checks at desktop, tablet and narrow widths.
 
 Overview configuration (AGENTS §§6.7, 11, 17): `0062_overview_preferences`, the
 Overview preferences PUT API and `OverviewPreferences.tsx` provide private saved

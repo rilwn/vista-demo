@@ -5,6 +5,27 @@ accounting issuance, VAT filing or arbitrary SQL. Saved views use only the
 reviewed Finance, Procurement, Warehouse, Sales, Logistics, Service, CRM and POS
 report definitions described below.
 
+## ERP report presentation
+
+Procurement, Warehouse, Sales and Logistics use one report workspace with a
+single module navigation rail. The dashboard owns the Back link. The selected
+tab stays visible when the navigation rail overflows.
+
+New views start with a focused column selection. Customize view retains access
+to every column; existing saved selections are restored unchanged. Export
+controls remain visible outside customization, and export the selected columns
+with applied filters. Report definitions and calculations are unchanged.
+
+Table quantities use lossless decimal-string formatting, monetary values retain
+at least two decimal places, and dates use a readable day/month/year format.
+UUID values use a labelled clipboard action with success feedback and a
+selectable fallback when clipboard access fails. Actual document numbers remain
+visible. APIs and exported files retain the original full references and values.
+
+Validation includes component tests for private views, exports, copy failure,
+active tabs and formatting; Chromium layout checks use the real component and
+styles with fixture data at 1440, 1024 and 390 pixels.
+
 ## Overview card preferences
 
 Overview → Customize overview lists only metrics returned for the signed-in role.
