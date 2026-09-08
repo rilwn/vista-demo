@@ -1623,7 +1623,7 @@ select.vista-searchable-multi-select {
   }
 }
 
-/* Premium access card on one uninterrupted product canvas. */
+/* Shared sign-in surface: light canvas, clear hierarchy and quiet depth. */
 .vista-auth-page {
   --vista-auth-canvas: #e7eee8;
   --vista-auth-glow: 72 121 82;
@@ -1641,7 +1641,7 @@ select.vista-searchable-multi-select {
   position: fixed;
   z-index: 0;
   inset: 0.75rem;
-  border: 1px solid rgb(39 99 63 / 9%);
+  border: 1px solid rgb(39 99 63 / 6%);
   border-radius: 1.15rem;
   content: '';
   pointer-events: none;
@@ -1692,22 +1692,23 @@ select.vista-searchable-multi-select {
 }
 
 .vista-auth-page .vista-auth-panel-inner {
-  width: min(100%, 23rem);
+  --auth-card-padding: 1.85rem;
+  width: min(100%, 25rem);
   margin: 0;
-  padding: 1.55rem;
-  border: 1px solid rgb(255 255 255 / 94%);
+  padding: var(--auth-card-padding);
+  border: 1px solid #dce5dc;
   border-radius: 1.05rem;
-  background: rgb(250 251 247 / 97%);
+  background: #fdfefb;
   box-shadow:
-    0 2.4rem 5.5rem rgb(var(--vista-auth-glow) / 15%),
-    0 0.15rem 0.5rem rgb(31 48 37 / 8%),
+    0 1.5rem 4rem rgb(var(--vista-auth-glow) / 10%),
+    0 0.15rem 0.5rem rgb(31 48 37 / 4%),
     inset 0 1px rgb(255 255 255 / 90%);
   backdrop-filter: blur(18px);
 }
 
 .vista-auth-page .vista-auth-panel-inner::before {
   top: 0;
-  right: 1.55rem;
+  right: 1.85rem;
   left: auto;
   width: 2.8rem;
   height: 0.2rem;
@@ -1720,7 +1721,8 @@ select.vista-searchable-multi-select {
   min-width: 0;
   align-items: center;
   gap: 0.72rem;
-  padding-bottom: 1.15rem;
+  margin-inline: calc(-1 * var(--auth-card-padding));
+  padding: 0 var(--auth-card-padding) 1.15rem;
   border-bottom: 1px solid #dde2dc;
 }
 
@@ -1731,9 +1733,10 @@ select.vista-searchable-multi-select {
   flex: 0 0 auto;
   place-items: center;
   margin: 0;
+  border: 1px solid #d7e4d9;
   border-radius: 0.72rem;
   color: var(--vista-auth-accent);
-  background: var(--vista-auth-accent-soft);
+  background: linear-gradient(145deg, #f8fbf6, var(--vista-auth-accent-soft));
 }
 
 .vista-auth-card-context .vista-auth-product-icon svg {
@@ -1748,19 +1751,17 @@ select.vista-searchable-multi-select {
 }
 
 .vista-auth-card-context small {
-  color: #748078;
-  font-size: 0.58rem;
+  color: #5d6b62;
+  font-size: 0.625rem;
   font-weight: 720;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
 .vista-auth-card-context strong {
-  overflow: hidden;
   color: #223029;
-  font-size: 0.82rem;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  font-size: 0.875rem;
+  overflow-wrap: anywhere;
 }
 
 .vista-auth-card-context em {
@@ -1777,8 +1778,9 @@ select.vista-searchable-multi-select {
 .vista-auth-page .vista-auth-panel h2 {
   max-width: none;
   margin-top: 1.4rem;
-  font-size: 1.65rem;
-  letter-spacing: -0.04em;
+  font-size: 1.5rem;
+  letter-spacing: -0.03em;
+  line-height: 1.25;
 }
 
 .vista-auth-page .vista-auth-panel-inner > p:not(.vista-eyebrow) {
@@ -1789,20 +1791,20 @@ select.vista-searchable-multi-select {
 }
 
 .vista-auth-page .vista-auth-form {
-  gap: 0.78rem;
+  gap: 1rem;
   margin-top: 1.25rem;
 }
 
 .vista-auth-page .vista-auth-form .vista-field > label {
   color: #445149;
-  font-size: 0.68rem;
+  font-size: 0.75rem;
 }
 
 .vista-auth-page .vista-auth-form .vista-field-input {
   min-height: 2.8rem;
   border-radius: 0.58rem;
-  background: #f0f3ef;
-  box-shadow: inset 0 0 0 1px #c8d0c9;
+  background: #f7f9f5;
+  box-shadow: inset 0 0 0 1px #cbd5cb;
 }
 
 .vista-auth-page .vista-auth-form .vista-field-input:hover:not(:disabled) {
@@ -1819,7 +1821,7 @@ select.vista-searchable-multi-select {
 .vista-auth-page .vista-auth-form .vista-button {
   min-height: 2.75rem;
   border-radius: 0.58rem;
-  font-size: 0.74rem;
+  font-size: 0.8rem;
 }
 
 .vista-auth-page .vista-auth-form .vista-button--primary,
@@ -1827,7 +1829,7 @@ select.vista-searchable-multi-select {
 .vista-auth-page--recovery .vista-auth-form .vista-button--primary {
   border-color: var(--vista-auth-accent);
   background: var(--vista-auth-accent);
-  box-shadow: 0 0.55rem 1.15rem color-mix(in srgb, var(--vista-auth-accent) 22%, transparent);
+  box-shadow: 0 2px 4px color-mix(in srgb, var(--vista-auth-accent) 14%, transparent);
 }
 
 .vista-auth-page .vista-auth-form .vista-button--primary:hover:not(:disabled),
@@ -1839,11 +1841,17 @@ select.vista-searchable-multi-select {
 }
 
 .vista-auth-page .vista-auth-support {
+  display: block;
+  margin-inline: calc(-1 * var(--auth-card-padding));
+  margin-bottom: calc(-1 * var(--auth-card-padding));
   margin-top: 1.15rem;
-  padding-top: 0.9rem;
+  padding: 1rem var(--auth-card-padding);
   border-top: 1px solid #e0e4df;
-  color: #78837c;
-  font-size: 0.62rem;
+  border-radius: 0 0 1rem 1rem;
+  background: #f5f8f2;
+  color: #5d6b62;
+  font-size: 0.7rem;
+  line-height: 1.5;
 }
 
 @media (max-width: 560px) {
@@ -1861,7 +1869,7 @@ select.vista-searchable-multi-select {
   }
 
   .vista-auth-page .vista-auth-panel-inner {
-    padding: 1.3rem;
+    --auth-card-padding: 1.3rem;
     border-radius: 0.92rem;
   }
 }

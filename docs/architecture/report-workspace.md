@@ -19,6 +19,15 @@ descriptions and actions to wrap. Recovery shares the light shell treatment and
 provides an area selector linked to its existing navigation. Unavailable backup
 actions remain disabled. POS and Recovery sign-in use the project green accent,
 including button hover and input focus states.
+The POS/Recovery shared sign-in component and the separate Operations login
+stylesheet use a 400px maximum card width, readable labels, restrained shadows
+and wrapping product names. Header and footer dividers span the card's inner
+width, with inset content and a flush, softly tinted footer. Browser checks of
+all three actual login pages at 1440px, 390px and 320px verified divider alignment
+and no horizontal overflow. This is a presentation-only refinement; credentials,
+password visibility and MFA behavior are unchanged.
+Operations account recovery inherits the sign-in palette, including its canvas,
+buttons, focus rings and status icons; it has no separate blue theme.
 Browser checks with fixture authentication covered 1440px, 1024px and 390px
 viewports, horizontal overflow, desktop header alignment and POS button colors.
 Component tests cover navigation regression and Recovery area selection.

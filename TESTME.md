@@ -4,6 +4,12 @@
 
 1. Open POS at http://localhost:5174. If signed in, sign out through the account
    menu. The sign-in button should be green, including when hovered.
+   All three apps use the refined light sign-in card, with header and footer
+   dividers reaching both card edges. Check **Show/Hide** beside
+   Password, then sign in as usual. If prompted, enter your authenticator code.
+   On Operations sign-in, select **Use a recovery code**. The recovery page
+   should retain the same light green palette. Do not reset your password just
+   to check its appearance.
 2. Open Recovery at http://localhost:5175 and sign in with your existing backup
    account. The sidebar should be light. Choose **Policies** in the topbar area
    selector, then **Overview** in the sidebar. Both controls should stay in sync.

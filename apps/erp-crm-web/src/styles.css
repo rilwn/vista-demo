@@ -28358,7 +28358,7 @@ body .login-page .login-support {
   vector-effect: non-scaling-stroke;
 }
 
-/* Premium staff access card on one uninterrupted Vista canvas. */
+/* Staff sign-in follows the shared light access-card treatment. */
 body .login-page {
   --login-canvas: #e7eee8;
   --login-glow: 72 121 82;
@@ -28370,13 +28370,6 @@ body .login-page {
     radial-gradient(circle at 18% 8%, rgb(255 255 255 / 86%), transparent 33rem),
     radial-gradient(circle at 88% 92%, rgb(var(--login-glow) / 15%), transparent 29rem),
     var(--login-canvas);
-}
-
-body .recovery-page {
-  --login-canvas: #e5edf1;
-  --login-glow: 65 119 148;
-  --login-accent: #356a87;
-  --login-accent-soft: #e2edf2;
 }
 
 body .login-page::before {
@@ -28424,15 +28417,16 @@ body .login-page .login-form-pane::after {
 }
 
 body .login-page .login-form-wrap {
-  width: min(100%, 23rem);
+  --auth-card-padding: 1.85rem;
+  width: min(100%, 25rem);
   margin: 0;
-  padding: 1.55rem;
-  border: 1px solid rgb(255 255 255 / 94%);
+  padding: var(--auth-card-padding);
+  border: 1px solid #dce5dc;
   border-radius: 1.05rem;
-  background: rgb(250 251 247 / 97%);
+  background: #fdfefb;
   box-shadow:
-    0 2.4rem 5.5rem rgb(var(--login-glow) / 15%),
-    0 0.15rem 0.5rem rgb(31 48 37 / 8%),
+    0 1.5rem 4rem rgb(var(--login-glow) / 10%),
+    0 0.15rem 0.5rem rgb(31 48 37 / 4%),
     inset 0 1px rgb(255 255 255 / 90%);
   backdrop-filter: blur(18px);
 }
@@ -28443,7 +28437,7 @@ body .login-page .recovery-form-wrap {
 
 body .login-page .login-form-wrap::before {
   top: 0;
-  right: 1.55rem;
+  right: 1.85rem;
   left: auto;
   width: 2.8rem;
   height: 0.2rem;
@@ -28456,7 +28450,8 @@ body .login-page .login-form-wrap::before {
   min-width: 0;
   align-items: center;
   gap: 0.72rem;
-  padding-bottom: 1.15rem;
+  margin-inline: calc(-1 * var(--auth-card-padding));
+  padding: 0 var(--auth-card-padding) 1.15rem;
   border-bottom: 1px solid #dde2dc;
 }
 
@@ -28467,9 +28462,10 @@ body .login-page .login-form-wrap::before {
   flex: 0 0 auto;
   place-items: center;
   margin: 0;
+  border: 1px solid #d7e4d9;
   border-radius: 0.72rem;
   color: var(--login-accent);
-  background: var(--login-accent-soft);
+  background: linear-gradient(145deg, #f8fbf6, var(--login-accent-soft));
 }
 
 .login-card-context .login-product-icon .app-icon {
@@ -28484,19 +28480,17 @@ body .login-page .login-form-wrap::before {
 }
 
 .login-card-context small {
-  color: #748078;
-  font-size: 0.58rem;
+  color: #5d6b62;
+  font-size: 0.625rem;
   font-weight: 720;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
 .login-card-context strong {
-  overflow: hidden;
   color: #223029;
-  font-size: 0.82rem;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  font-size: 0.875rem;
+  overflow-wrap: anywhere;
 }
 
 .login-card-context em {
@@ -28513,8 +28507,9 @@ body .login-page .login-form-wrap::before {
 body .login-page .login-form-wrap h2 {
   max-width: none;
   margin-top: 1.4rem;
-  font-size: 1.65rem;
-  letter-spacing: -0.04em;
+  font-size: 1.5rem;
+  letter-spacing: -0.03em;
+  line-height: 1.25;
 }
 
 body .login-page .login-form-subtitle {
@@ -28525,20 +28520,20 @@ body .login-page .login-form-subtitle {
 }
 
 body .login-page .login-form {
-  gap: 0.78rem;
+  gap: 1rem;
   margin-top: 1.25rem;
 }
 
 body .login-page .login-form .vista-field > label {
   color: #445149;
-  font-size: 0.68rem;
+  font-size: 0.75rem;
 }
 
 body .login-page .login-form .vista-field-input {
   min-height: 2.8rem;
   border-radius: 0.58rem;
-  background: #f0f3ef;
-  box-shadow: inset 0 0 0 1px #c8d0c9;
+  background: #f7f9f5;
+  box-shadow: inset 0 0 0 1px #cbd5cb;
 }
 
 body .login-page .login-form .vista-field-input:hover:not(:disabled) {
@@ -28556,22 +28551,28 @@ body .login-page .login-form .vista-button,
 body .login-page .recovery-sign-in {
   min-height: 2.75rem;
   border-radius: 0.58rem;
-  font-size: 0.74rem;
+  font-size: 0.8rem;
 }
 
 body .login-page .login-form .vista-button--primary,
 body .login-page .recovery-sign-in {
   border-color: var(--login-accent);
   background: var(--login-accent);
-  box-shadow: 0 0.55rem 1.15rem color-mix(in srgb, var(--login-accent) 22%, transparent);
+  box-shadow: 0 2px 4px color-mix(in srgb, var(--login-accent) 14%, transparent);
 }
 
 body .login-page .login-support {
+  display: block;
+  margin-inline: calc(-1 * var(--auth-card-padding));
+  margin-bottom: calc(-1 * var(--auth-card-padding));
   margin-top: 1.15rem;
-  padding-top: 0.9rem;
+  padding: 1rem var(--auth-card-padding);
   border-top: 1px solid #e0e4df;
-  color: #78837c;
-  font-size: 0.62rem;
+  border-radius: 0 0 1rem 1rem;
+  background: #f5f8f2;
+  color: #5d6b62;
+  font-size: 0.7rem;
+  line-height: 1.5;
 }
 
 body .login-page .recovery-status-mark {
@@ -28594,7 +28595,7 @@ body .login-page .recovery-status-mark {
   }
 
   body .login-page .login-form-wrap {
-    padding: 1.3rem;
+    --auth-card-padding: 1.3rem;
     border-radius: 0.92rem;
   }
 }
