@@ -1,9 +1,19 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsDateString, IsIn } from 'class-validator';
 import {
-  crmReportDefinitionKeys,
+  ArrayMaxSize,
+  ArrayMinSize,
+  ArrayUnique,
+  IsArray,
+  IsString,
+  IsOptional,
+  Matches,
+  IsDateString,
+  IsIn,
+} from 'class-validator';
+import {
   reportExportFormats,
   reportExportStatuses,
+  crmReportDefinitionKeys,
   type CreateCrmReportExportRequest,
   type CrmReportDefinition,
   type CrmReportExport,
@@ -11,12 +21,23 @@ import {
 } from '@vista/contracts';
 
 export class CreateCrmReportExportDto implements CreateCrmReportExportRequest {
+  @ApiPropertyOptional({ type: [String], minItems: 1, maxItems: 30 })
+  @IsOptional()
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(30)
+  @ArrayUnique()
+  @IsString({ each: true })
+  columns?: string[];
+
   @ApiProperty({ format: 'date', type: String })
   @IsDateString({ strict: true })
+  @Matches(/^\d{4}-\d{2}-\d{2}$/u)
   dateFrom!: string;
 
   @ApiProperty({ format: 'date', type: String })
   @IsDateString({ strict: true })
+  @Matches(/^\d{4}-\d{2}-\d{2}$/u)
   dateTo!: string;
 
   @ApiProperty({ enum: crmReportDefinitionKeys })
@@ -29,6 +50,19 @@ export class CreateCrmReportExportDto implements CreateCrmReportExportRequest {
 }
 
 export class CrmReportDefinitionDto implements CrmReportDefinition {
+  @ApiPropertyOptional({
+    type: 'array',
+    items: {
+      type: 'object',
+      required: ['key', 'label', 'type'],
+      properties: {
+        key: { type: 'string' },
+        label: { type: 'string' },
+        type: { type: 'string', enum: ['date', 'money', 'number', 'text'] },
+      },
+    },
+  })
+  columns?: CrmReportDefinition['columns'];
   @ApiProperty({ type: String }) description!: string;
   @ApiProperty({ enum: reportExportFormats, isArray: true })
   formats!: CrmReportDefinition['formats'];

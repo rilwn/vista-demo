@@ -9,6 +9,7 @@ import type {
   CrmReportDefinitionKey,
   CrmReportExport,
   ReportExportFormat,
+  SavedCrmReport,
 } from '@vista/contracts';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
@@ -24,6 +25,9 @@ import {
 import { useAuth } from '../auth/AuthProvider';
 import { Icon } from '../components/Icon';
 import { CrmTabs } from './CrmTicketsPage';
+import { listSavedCrmReports, saveCrmReport } from '../api/report-workspace';
+import { savedReportMessages as savedText } from './saved-report.messages';
+import './report-workspace.css';
 
 type Period = { dateFrom: string; dateTo: string };
 type PeriodPreset = '30-days' | '90-days' | 'year';
@@ -485,7 +489,7 @@ function CalculationNotes({
   );
 }
 
-function CrmReportExportPanel({
+export function CrmReportExportPanel({
   dateFrom: initialDateFrom,
   dateTo: initialDateTo,
   onBack,
@@ -497,6 +501,13 @@ function CrmReportExportPanel({
   token: string;
 }) {
   const [definitions, setDefinitions] = useState<CrmReportDefinition[]>([]);
+  const [savedReports, setSavedReports] = useState<SavedCrmReport[]>([]);
+  const [savedPage, setSavedPage] = useState(1);
+  const [savedPages, setSavedPages] = useState(0);
+  const [reportName, setReportName] = useState('');
+  const [columns, setColumns] = useState<string[] | undefined>();
+  const saveRequest = useRef<{ body: string; id: string } | null>(null);
+  const exportRequest = useRef<{ body: string; id: string } | null>(null);
   const [exports, setExports] = useState<CrmReportExport[]>([]);
   const [definitionKey, setDefinitionKey] = useState<CrmReportDefinitionKey>('crm.customer-value');
   const [format, setFormat] = useState<ReportExportFormat>('xlsx');
@@ -516,13 +527,62 @@ function CrmReportExportPanel({
   }, [busy]);
 
   const load = useCallback(async () => {
-    const [available, recent] = await Promise.all([
+    const [available, recent, saved] = await Promise.all([
       getCrmReportDefinitions(token),
       listCrmReportExports(token),
+      listSavedCrmReports(token, savedPage),
     ]);
     setDefinitions(available);
     setExports(recent.items);
-  }, [token]);
+    setSavedReports(saved.items);
+    setSavedPages(saved.totalPages);
+  }, [token, savedPage]);
+
+  function chooseSaved(report: SavedCrmReport) {
+    setDefinitionKey(report.definitionKey);
+    setColumns(report.columns);
+    setFormat(report.format);
+    setDateFrom(report.dateFrom);
+    setDateTo(report.dateTo);
+    setReportName(report.name);
+    setError(null);
+  }
+
+  async function saveView() {
+    if (busyRef.current || !definition || !reportName.trim()) return;
+    busyRef.current = true;
+    setBusy(true);
+    setError(null);
+    const configuration = {
+      name: reportName.trim(),
+      definitionKey,
+      format,
+      dateFrom,
+      dateTo,
+      ...(columns ? { columns } : {}),
+    };
+    const body = JSON.stringify(configuration);
+    if (saveRequest.current?.body !== body) saveRequest.current = { body, id: crypto.randomUUID() };
+    try {
+      const created = await saveCrmReport(token, {
+        ...configuration,
+        id: saveRequest.current.id,
+      });
+      setSavedReports((items) => [created, ...items.filter((item) => item.id !== created.id)]);
+      setMessage(savedText.success);
+      setSavedPage(1);
+      const saved = await listSavedCrmReports(token).catch(() => null);
+      if (saved) {
+        setSavedReports(saved.items);
+        setSavedPages(saved.totalPages);
+      }
+    } catch (caught) {
+      setError(errorMessage(caught, savedText.failure));
+    } finally {
+      busyRef.current = false;
+      setBusy(false);
+    }
+  }
 
   useEffect(() => {
     let active = true;
@@ -565,7 +625,11 @@ function CrmReportExportPanel({
       }
       if (event.key !== 'Tab') return;
       const items = focusable();
-      if (!items.length) return;
+      if (!items.length) {
+        event.preventDefault();
+        panel.focus();
+        return;
+      }
       const first = items[0]!;
       const last = items.at(-1)!;
       if (event.shiftKey && document.activeElement === first) {
@@ -583,18 +647,30 @@ function CrmReportExportPanel({
     };
   }, [onBack]);
 
-  async function prepare() {
+  async function createExport() {
+    if (busyRef.current) return;
+    busyRef.current = true;
     setBusy(true);
     setError(null);
     setMessage(null);
     try {
-      const input: CreateCrmReportExportRequest = { dateFrom, dateTo, definitionKey, format };
-      await createCrmReportExport(token, crypto.randomUUID(), input);
+      const input: CreateCrmReportExportRequest = {
+        dateFrom,
+        dateTo,
+        definitionKey,
+        format,
+        ...(columns ? { columns } : {}),
+      };
+      const body = JSON.stringify(input);
+      if (exportRequest.current?.body !== body)
+        exportRequest.current = { body, id: crypto.randomUUID() };
+      await createCrmReportExport(token, exportRequest.current.id, input);
       setExports((await listCrmReportExports(token)).items);
-      setMessage('Your report is being prepared. It will appear below when it is ready.');
+      setMessage('Your report is being prepared and will appear below when it is ready.');
     } catch (caught) {
       setError(errorMessage(caught, 'The report could not be prepared.'));
     } finally {
+      busyRef.current = false;
       setBusy(false);
     }
   }
@@ -634,7 +710,7 @@ function CrmReportExportPanel({
   return (
     <div className="security-drawer-layer">
       <button
-        aria-label="Back to CRM analytics"
+        aria-label="Back to CRM reports"
         className="security-drawer-scrim"
         disabled={busy}
         onClick={onBack}
@@ -669,7 +745,9 @@ function CrmReportExportPanel({
           </button>
           <div>
             <h2 id="crm-export-title">Export CRM report</h2>
-            <p>Choose the analysis and file type. You can continue working while it is prepared.</p>
+            <p>
+              Choose a report, period, and file type. You can continue working while it is prepared.
+            </p>
           </div>
         </header>
         <div className="security-drawer-body report-export-drawer-body">
@@ -683,12 +761,54 @@ function CrmReportExportPanel({
           {!loading ? (
             <section aria-label="Report options" className="report-export-form">
               <div className="report-export-field">
+                <label htmlFor="saved-crm-report">{savedText.saved}</label>
+                <select
+                  id="saved-crm-report"
+                  disabled={busy}
+                  value=""
+                  onChange={(event) => {
+                    const report = savedReports.find((item) => item.id === event.target.value);
+                    if (report) chooseSaved(report);
+                  }}
+                >
+                  <option value="">{savedReports.length ? savedText.open : savedText.empty}</option>
+                  {savedReports.map((report) => (
+                    <option key={report.id} value={report.id}>
+                      {report.name}
+                    </option>
+                  ))}
+                </select>
+                {savedPages > 1 ? (
+                  <div className="report-view-paging">
+                    <Button
+                      disabled={busy || savedPage <= 1}
+                      onClick={() => setSavedPage((page) => page - 1)}
+                      variant="secondary"
+                    >
+                      {savedText.previous}
+                    </Button>
+                    <span>
+                      {savedPage} / {savedPages}
+                    </span>
+                    <Button
+                      disabled={busy || savedPage >= savedPages}
+                      onClick={() => setSavedPage((page) => page + 1)}
+                      variant="secondary"
+                    >
+                      {savedText.next}
+                    </Button>
+                  </div>
+                ) : null}
+              </div>
+              <div className="report-export-field">
                 <label htmlFor="crm-report-export-definition">Report</label>
                 <select
                   id="crm-report-export-definition"
-                  onChange={(event) =>
-                    setDefinitionKey(event.target.value as CrmReportDefinitionKey)
-                  }
+                  disabled={busy}
+                  onChange={(event) => {
+                    setDefinitionKey(event.target.value as CrmReportDefinitionKey);
+                    setColumns(undefined);
+                  }}
                   value={definitionKey}
                 >
                   {definitions.map((item) => (
@@ -699,6 +819,35 @@ function CrmReportExportPanel({
                 </select>
                 <small>{definition?.description}</small>
               </div>
+              {definition?.columns?.length ? (
+                <fieldset disabled={busy} className="report-view-fields">
+                  <legend>{savedText.fields}</legend>
+                  <div className="report-view-field-grid">
+                    {definition.columns.map((column) => (
+                      <label key={column.key}>
+                        <input
+                          type="checkbox"
+                          checked={!columns || columns.includes(column.key)}
+                          onChange={(event) => {
+                            const selected = new Set(
+                              columns ?? definition.columns?.map((item) => item.key),
+                            );
+                            if (event.target.checked) selected.add(column.key);
+                            else selected.delete(column.key);
+                            setColumns(
+                              definition.columns
+                                ?.filter((item) => selected.has(item.key))
+                                .map((item) => item.key),
+                            );
+                          }}
+                        />
+                        <span>{column.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                  {columns?.length === 0 ? <small>{savedText.chooseField}</small> : null}
+                </fieldset>
+              ) : null}
               <fieldset>
                 <legend>File type</legend>
                 <div className="report-export-format-grid">
@@ -706,6 +855,7 @@ function CrmReportExportPanel({
                     <label className={format === item ? 'is-selected' : undefined} key={item}>
                       <input
                         checked={format === item}
+                        disabled={busy}
                         name="crm-report-format"
                         onChange={() => setFormat(item)}
                         type="radio"
@@ -721,8 +871,8 @@ function CrmReportExportPanel({
                 <label>
                   <span>From</span>
                   <input
-                    max={dateTo}
                     onChange={(event) => setDateFrom(event.target.value)}
+                    disabled={busy}
                     type="date"
                     value={dateFrom}
                   />
@@ -730,12 +880,40 @@ function CrmReportExportPanel({
                 <label>
                   <span>To</span>
                   <input
-                    min={dateFrom}
                     onChange={(event) => setDateTo(event.target.value)}
+                    disabled={busy}
                     type="date"
                     value={dateTo}
                   />
                 </label>
+              </div>
+              <div className="report-export-field report-view-save">
+                {!dateFrom || !dateTo || dateFrom > dateTo ? (
+                  <small role="status">{savedText.invalidPeriod}</small>
+                ) : null}
+                <label htmlFor="crm-report-name">{savedText.name}</label>
+                <input
+                  id="crm-report-name"
+                  maxLength={100}
+                  disabled={busy}
+                  value={reportName}
+                  onChange={(event) => setReportName(event.target.value)}
+                />
+                <Button
+                  disabled={
+                    busy ||
+                    !definition ||
+                    !reportName.trim() ||
+                    !dateFrom ||
+                    !dateTo ||
+                    dateFrom > dateTo ||
+                    columns?.length === 0
+                  }
+                  onClick={() => void saveView()}
+                  variant="secondary"
+                >
+                  {savedText.save}
+                </Button>
               </div>
             </section>
           ) : null}
@@ -745,7 +923,15 @@ function CrmReportExportPanel({
                 <h3>Recent exports</h3>
                 <p>Only reports requested from your account are shown.</p>
               </div>
-              <button disabled={loading} onClick={() => void load()} type="button">
+              <button
+                disabled={loading || busy}
+                onClick={() =>
+                  void load().catch((caught) =>
+                    setError(errorMessage(caught, 'Reports could not be loaded.')),
+                  )
+                }
+                type="button"
+              >
                 Refresh
               </button>
             </header>
@@ -790,19 +976,26 @@ function CrmReportExportPanel({
               ))}
             </div>
           </section>
-          <div className="security-drawer-actions report-export-actions">
-            <Button
-              busy={busy}
-              disabled={loading || !definition || !dateFrom || !dateTo || dateFrom > dateTo}
-              onClick={() => void prepare()}
-            >
-              Prepare export
-            </Button>
-            <Button disabled={busy} onClick={onBack} variant="secondary">
-              Close
-            </Button>
-          </div>
         </div>
+        <footer className="security-drawer-actions report-export-actions">
+          <Button
+            busy={busy}
+            disabled={
+              loading ||
+              !definition ||
+              !dateFrom ||
+              !dateTo ||
+              dateFrom > dateTo ||
+              columns?.length === 0
+            }
+            onClick={() => void createExport()}
+          >
+            Prepare export
+          </Button>
+          <Button disabled={busy} onClick={onBack} variant="secondary">
+            Close
+          </Button>
+        </footer>
       </aside>
     </div>
   );

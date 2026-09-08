@@ -2,10 +2,9 @@ import { InlineAlert } from '@vista/ui';
 import { OperationsOverview } from './OperationsOverview';
 
 import { useAuth } from '../auth/AuthProvider';
-import { Icon } from '../components/Icon';
+import { WorkAreaCards } from '../components/WorkAreaCards';
 import { allModuleItems } from '../navigation';
 import { messages } from '../messages';
-import { Link } from '../routing/Router';
 
 export function HomePage() {
   const { hasPermission, session } = useAuth();
@@ -37,28 +36,14 @@ export function HomePage() {
         />
       ) : null}
 
-      <section className="content-panel">
+      <section className="content-panel work-area-panel">
         <div className="panel-heading">
           <div>
             <h2>{messages.home.areasTitle}</h2>
-            <p>{messages.home.areasSubtitle}</p>
           </div>
         </div>
         {modules.length > 0 ? (
-          <div className="module-card-grid">
-            {modules.map((module) => (
-              <Link className="module-card" key={module.path} to={module.path}>
-                <span className="module-card-icon">
-                  <Icon name={module.icon} />
-                </span>
-                <span className="module-card-copy">
-                  <strong>{module.label}</strong>
-                  <small>{module.description}</small>
-                </span>
-                <Icon name="arrow" />
-              </Link>
-            ))}
-          </div>
+          <WorkAreaCards items={modules} title={messages.home.areasTitle} />
         ) : (
           <InlineAlert title="Access not assigned" tone="warning">
             {messages.home.noModules}

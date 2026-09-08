@@ -1,26 +1,37 @@
 import { useAuth } from '../auth/AuthProvider';
 import { Icon } from '../components/Icon';
+import { WorkAreaCards, type WorkAreaItem } from '../components/WorkAreaCards';
 import { allModuleItems, type ModuleKey } from '../navigation';
 import { messages, moduleMessages } from '../messages';
-import { Link, Navigate } from '../routing/Router';
+import { Navigate } from '../routing/Router';
 import { pagesForModule, workflowPath } from './workflow-pages';
+import { workAreaMessages } from './work-area.messages';
 
 export function ModulePage({ moduleKey }: { moduleKey: string }) {
   const { hasPermission } = useAuth();
   const module = moduleMessages[moduleKey as ModuleKey];
   const navigation = allModuleItems.find((item) => item.key === moduleKey);
-
   if (!module || !navigation || !hasPermission(navigation.key)) {
     return <Navigate replace to="/not-found" />;
   }
-
   const pages = pagesForModule(moduleKey).filter(
     (page) =>
       moduleKey !== 'erp.service' ||
       page.slug !== 'reports' ||
       hasPermission('erp.service', 'approve'),
   );
-
+  const items: WorkAreaItem[] = [
+    ...(moduleKey === 'crm' ? [workAreaMessages.partners] : []),
+    ...(moduleKey === 'erp.warehouse'
+      ? [workAreaMessages.catalog, workAreaMessages.categories]
+      : []),
+    ...pages.map((page) => ({
+      path: workflowPath(page),
+      label: page.title,
+      description: page.description,
+      icon: page.icon,
+    })),
+  ];
   return (
     <div className="page-stack">
       <header className="page-header module-page-header">
@@ -33,64 +44,12 @@ export function ModulePage({ moduleKey }: { moduleKey: string }) {
           <p>{module.description}</p>
         </div>
       </header>
-      <section className="content-panel workflow-hub">
+      <section className="content-panel work-area-panel">
         <div className="panel-heading">
-          <div>
-            <h2>Choose an area</h2>
-            <p>Open a section to view its records and actions.</p>
-          </div>
+          <h2>{workAreaMessages.title}</h2>
         </div>
-        {pages.length > 0 ? (
-          <div className="workflow-hub-grid">
-            {moduleKey === 'crm' ? (
-              <Link className="workflow-hub-card" to="/partners">
-                <span className="module-card-icon">
-                  <Icon name="customers" />
-                </span>
-                <span>
-                  <strong>Partner registry</strong>
-                  <small>Manage customers, suppliers, contacts, locations, and equipment.</small>
-                </span>
-                <Icon name="arrow" />
-              </Link>
-            ) : null}
-            {moduleKey === 'erp.warehouse' ? (
-              <Link className="workflow-hub-card" to="/catalog">
-                <span className="module-card-icon">
-                  <Icon name="warehouse" />
-                </span>
-                <span>
-                  <strong>Product catalog</strong>
-                  <small>Manage products, units, barcodes, and tracking rules.</small>
-                </span>
-                <Icon name="arrow" />
-              </Link>
-            ) : null}
-            {moduleKey === 'erp.warehouse' ? (
-              <Link className="workflow-hub-card" to="/catalog/categories">
-                <span className="module-card-icon">
-                  <Icon name="warehouse" />
-                </span>
-                <span>
-                  <strong>Product categories</strong>
-                  <small>Organise products and set serial, batch, or expiry tracking.</small>
-                </span>
-                <Icon name="arrow" />
-              </Link>
-            ) : null}
-            {pages.map((page) => (
-              <Link className="workflow-hub-card" key={page.slug} to={workflowPath(page)}>
-                <span className="module-card-icon">
-                  <Icon name={page.icon} />
-                </span>
-                <span>
-                  <strong>{page.title}</strong>
-                  <small>{page.description}</small>
-                </span>
-                <Icon name="arrow" />
-              </Link>
-            ))}
-          </div>
+        {items.length > 0 ? (
+          <WorkAreaCards items={items} title={workAreaMessages.title} />
         ) : (
           <div className="module-empty-state">
             <span className="empty-state-rule" aria-hidden="true" />

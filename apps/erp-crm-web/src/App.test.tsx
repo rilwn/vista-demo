@@ -6180,6 +6180,8 @@ describe('ERP and CRM authenticated workspace', () => {
         return Promise.resolve(jsonResponse(overview));
       if (input.endsWith('/service/report-exports/definitions'))
         return Promise.resolve(jsonResponse(definitions));
+      if (input.includes('/service/saved-reports?'))
+        return Promise.resolve(jsonResponse({ items: [], page: 1, total: 0, totalPages: 0 }));
       if (input.includes('/service/report-exports?'))
         return Promise.resolve(
           jsonResponse({ items: [], page: 1, pageSize: 20, total: 0, totalPages: 0 }),
@@ -6513,6 +6515,8 @@ describe('ERP and CRM authenticated workspace', () => {
       if (input.endsWith('/crm/report-exports/definitions')) {
         return Promise.resolve(jsonResponse(definitions));
       }
+      if (input.includes('/crm/saved-reports?'))
+        return Promise.resolve(jsonResponse({ items: [], page: 1, total: 0, totalPages: 0 }));
       if (input.includes('/crm/report-exports?')) {
         return Promise.resolve(
           jsonResponse({
@@ -6558,7 +6562,7 @@ describe('ERP and CRM authenticated workspace', () => {
     ).toBeTruthy();
     expect(within(dialog).getByText('Ready')).toBeTruthy();
     const body = dialog.querySelector('.report-export-drawer-body');
-    const actions = body?.querySelector(':scope > .security-drawer-actions:last-child');
+    const actions = dialog.querySelector(':scope > footer.security-drawer-actions');
     expect(body).toBeTruthy();
     expect(actions).toBeTruthy();
     expect(

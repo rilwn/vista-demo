@@ -1,3 +1,6 @@
+import type { ErpReportDefinitionKey, ErpReportDefinition, ErpReportScope } from '@vista/contracts';
+import { erpReportColumns, erpReportDefinitions } from './erp-report-definitions.js';
+import { ErpReportDataService } from './erp-report-data.service.js';
 import { createHash, randomUUID } from 'node:crypto';
 
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
@@ -29,7 +32,7 @@ import type {
   RequestSecurityMetadata,
 } from '../auth/authentication.types.js';
 import { ApiErrorException } from '../common/api-error.exception.js';
-import { CrmAnalyticsService } from '../crm/crm-analytics.service.js';
+import { CrmAnalyticsService, crmReportColumns } from '../crm/crm-analytics.service.js';
 import { DatabaseService } from '../database/database.service.js';
 import {
   FinanceReportsService,
@@ -37,8 +40,8 @@ import {
   selectReportColumns,
 } from '../finance/finance-reports.service.js';
 import { StructuredLogger } from '../logging/structured-logger.service.js';
-import { PosReportsService } from '../pos/pos-reports.service.js';
-import { ServiceReportsService } from '../service/service-reports.service.js';
+import { PosReportsService, posReportColumns } from '../pos/pos-reports.service.js';
+import { ServiceReportsService, serviceReportColumns } from '../service/service-reports.service.js';
 import { ObjectStorageService } from '../storage/object-storage.service.js';
 import type { BackgroundJobContext } from './job-handler-registry.service.js';
 import { JobQueueService } from './job-queue.service.js';
@@ -49,14 +52,20 @@ import type {
 import { renderFinanceReport } from './finance-report-renderer.js';
 
 type ReportDefinitionKey =
+  | ErpReportDefinitionKey
   | CrmReportDefinitionKey
   | FinanceReportDefinitionKey
   | PosReportDefinitionKey
   | ServiceReportDefinitionKey;
 type AnyReportDefinition =
-  CrmReportDefinition | FinanceReportDefinition | PosReportDefinition | ServiceReportDefinition;
-type AnyReportExport =
-  CrmReportExport | FinanceReportExport | PosReportExport | ServiceReportExport;
+  | ErpReportDefinition
+  | CrmReportDefinition
+  | FinanceReportDefinition
+  | PosReportDefinition
+  | ServiceReportDefinition;
+type AnyReportExport = Omit<FinanceReportExport, 'definitionKey'> & {
+  definitionKey: ReportDefinitionKey;
+};
 interface AnyReportExportPage {
   items: AnyReportExport[];
   page: number;
@@ -65,6 +74,7 @@ interface AnyReportExportPage {
   totalPages: number;
 }
 interface ReportExportRequest {
+  search?: string;
   columns?: string[];
   businessLocationId?: string;
   cashRegisterId?: string;
@@ -75,7 +85,7 @@ interface ReportExportRequest {
   operatorId?: string;
   shiftId?: string;
 }
-type ReportScope = 'crm' | 'finance' | 'pos' | 'service';
+type ReportScope = ErpReportScope | 'crm' | 'finance' | 'pos' | 'service';
 
 interface DefinitionRow {
   available_formats: ReportExportFormat[];
@@ -96,6 +106,7 @@ interface ExportRow extends DefinitionRow {
   export_format: ReportExportFormat;
   file_name: string | null;
   filters: {
+    search?: string;
     columns?: string[];
     asOf?: string;
     businessLocationId?: string;
@@ -126,6 +137,7 @@ export interface FinanceReportExportContent {
 export class FinanceReportExportsService {
   constructor(
     @Inject(DatabaseService) private readonly database: DatabaseService,
+    @Inject(ErpReportDataService) private readonly erpReports: ErpReportDataService,
     @Inject(AuditService) private readonly audit: AuditService,
     @Inject(CrmAnalyticsService) private readonly crmAnalytics: CrmAnalyticsService,
     @Inject(FinanceReportsService) private readonly reports: FinanceReportsService,
@@ -156,7 +168,10 @@ export class FinanceReportExportsService {
        WHERE is_active = true AND definition_key LIKE 'service.%'
        ORDER BY name, definition_key`,
     );
-    return result.rows.map(mapDefinition) as ServiceReportDefinition[];
+    return result.rows.map((row) => ({
+      ...mapDefinition(row),
+      columns: serviceReportColumns(row.definition_key as ServiceReportDefinitionKey),
+    })) as ServiceReportDefinition[];
   }
 
   async crmDefinitions(): Promise<CrmReportDefinition[]> {
@@ -166,7 +181,10 @@ export class FinanceReportExportsService {
        WHERE is_active = true AND definition_key LIKE 'crm.%'
        ORDER BY name, definition_key`,
     );
-    return result.rows.map(mapDefinition) as CrmReportDefinition[];
+    return result.rows.map((row) => ({
+      ...mapDefinition(row),
+      columns: crmReportColumns(row.definition_key as CrmReportDefinitionKey),
+    })) as CrmReportDefinition[];
   }
 
   async posDefinitions(): Promise<PosReportDefinition[]> {
@@ -176,7 +194,12 @@ export class FinanceReportExportsService {
        WHERE is_active = true AND definition_key LIKE 'pos.%'
        ORDER BY name, definition_key`,
     );
-    return result.rows.map(mapDefinition) as PosReportDefinition[];
+    return result.rows.map((row) => ({
+      ...mapDefinition(row),
+      ...(row.definition_key === 'pos.x-report' || row.definition_key === 'pos.z-report'
+        ? {}
+        : { columns: posReportColumns(row.definition_key as PosReportDefinitionKey) }),
+    })) as PosReportDefinition[];
   }
 
   async list(
@@ -207,7 +230,7 @@ export class FinanceReportExportsService {
     return this.listForScope(query, auth, 'pos') as Promise<PosReportExportPage>;
   }
 
-  private async listForScope(
+  async listForScope(
     query: FinanceReportExportPageQueryDto,
     auth: AuthenticationContext,
     scope: ReportScope,
@@ -290,7 +313,7 @@ export class FinanceReportExportsService {
     return this.createForScope(input, key, auth, metadata, 'pos') as Promise<PosReportExport>;
   }
 
-  private async createForScope(
+  async createForScope(
     input: ReportExportRequest,
     key: string | undefined,
     auth: AuthenticationContext,
@@ -309,7 +332,7 @@ export class FinanceReportExportsService {
     const filters = {
       ...reportFilters(input, definition.definition_key),
       ...(input.columns
-        ? { columns: validateFinanceColumns(definition.definition_key, input.columns) }
+        ? { columns: validateReportColumns(definition.definition_key, input.columns) }
         : {}),
     };
     const requestHash = createHash('sha256')
@@ -428,7 +451,7 @@ export class FinanceReportExportsService {
     return this.retryForScope(id, auth, metadata, 'pos') as Promise<PosReportExport>;
   }
 
-  private async retryForScope(
+  async retryForScope(
     id: string,
     auth: AuthenticationContext,
     metadata: RequestSecurityMetadata,
@@ -503,7 +526,7 @@ export class FinanceReportExportsService {
     return this.contentForScope(id, auth, metadata, 'pos');
   }
 
-  private async contentForScope(
+  async contentForScope(
     id: string,
     auth: AuthenticationContext,
     metadata: RequestSecurityMetadata,
@@ -604,25 +627,30 @@ export class FinanceReportExportsService {
       [exportId],
     );
     try {
-      const data = existing.definition_key.startsWith('pos.')
-        ? await this.posReports.exportData(
-            existing.definition_key as PosReportDefinitionKey,
+      const data = erpReportDefinitions().some((d) => d.key === existing.definition_key)
+        ? await this.erpReports.exportData(
+            existing.definition_key as ErpReportDefinitionKey,
             existing.filters,
           )
-        : existing.definition_key.startsWith('service.')
-          ? await this.serviceReports.exportData(
-              existing.definition_key as ServiceReportDefinitionKey,
+        : existing.definition_key.startsWith('pos.')
+          ? await this.posReports.exportData(
+              existing.definition_key as PosReportDefinitionKey,
               existing.filters,
             )
-          : existing.definition_key.startsWith('crm.')
-            ? await this.crmAnalytics.exportData(
-                existing.definition_key as CrmReportDefinitionKey,
+          : existing.definition_key.startsWith('service.')
+            ? await this.serviceReports.exportData(
+                existing.definition_key as ServiceReportDefinitionKey,
                 existing.filters,
               )
-            : await this.reports.exportData(
-                existing.definition_key as FinanceReportDefinitionKey,
-                existing.filters,
-              );
+            : existing.definition_key.startsWith('crm.')
+              ? await this.crmAnalytics.exportData(
+                  existing.definition_key as CrmReportDefinitionKey,
+                  existing.filters,
+                )
+              : await this.reports.exportData(
+                  existing.definition_key as FinanceReportDefinitionKey,
+                  existing.filters,
+                );
       const rendered = await renderFinanceReport(
         existing.export_format,
         existing.filters.columns ? selectReportColumns(data, existing.filters.columns) : data,
@@ -853,7 +881,7 @@ export function reportFilters(
         HttpStatus.BAD_REQUEST,
       );
     }
-    return {};
+    return input.search?.trim() ? { search: input.search.trim() } : {};
   }
   if (!input.dateFrom || !input.dateTo) {
     throw new ApiErrorException(
@@ -870,6 +898,7 @@ export function reportFilters(
     );
   }
   return {
+    ...(input.search?.trim() ? { search: input.search.trim() } : {}),
     ...(input.businessLocationId ? { businessLocationId: input.businessLocationId } : {}),
     ...(input.cashRegisterId ? { cashRegisterId: input.cashRegisterId } : {}),
     dateFrom: input.dateFrom,
@@ -886,9 +915,34 @@ export function validateFinanceColumns(key: ReportDefinitionKey, columns: string
       400,
     );
   }
+  return validateReportColumns(key, columns);
+}
+
+export function validateReportColumns(key: ReportDefinitionKey, columns: string[]): string[] {
+  if (
+    !key.startsWith('finance.') &&
+    !key.startsWith('service.') &&
+    !key.startsWith('crm.') &&
+    !key.startsWith('pos.') &&
+    !erpReportDefinitions().some((d) => d.key === key)
+  ) {
+    throw new ApiErrorException(
+      'REPORT_COLUMNS_INVALID',
+      'Field selection is not available for this report.',
+      400,
+    );
+  }
   selectReportColumns(
     {
-      columns: financeReportColumns(key as FinanceReportDefinitionKey),
+      columns: erpReportDefinitions().some((d) => d.key === key)
+        ? erpReportColumns(key as ErpReportDefinitionKey)
+        : key.startsWith('pos.')
+          ? posReportColumns(key as PosReportDefinitionKey)
+          : key.startsWith('crm.')
+            ? crmReportColumns(key as CrmReportDefinitionKey)
+            : key.startsWith('service.')
+              ? serviceReportColumns(key as ServiceReportDefinitionKey)
+              : financeReportColumns(key as FinanceReportDefinitionKey),
       criteria: [],
       generatedAt: '',
       rows: [],
@@ -943,6 +997,9 @@ function asIso(value: Date | string): string {
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 const dateRangeReportKeys = new Set<ReportDefinitionKey>([
+  ...erpReportDefinitions()
+    .filter((d) => d.requiresDateRange)
+    .map((d) => d.key),
   'finance.customer-turnover',
   'finance.supplier-turnover',
   'finance.sales-journal',

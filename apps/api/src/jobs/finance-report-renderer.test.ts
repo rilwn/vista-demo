@@ -21,6 +21,16 @@ const report: FinanceReportExportData = {
 };
 
 describe('Finance report renderer', () => {
+  it('preserves fractional quantities and prices in Excel numeric cells', async () => {
+    const output = await renderFinanceReport('xlsx', {
+      ...report,
+      rows: [{ partner: 'Fractional item', documentCount: '1.2500', amount: '60.00' }],
+    });
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(Uint8Array.from(output.buffer).buffer);
+    expect(workbook.worksheets[0]?.getCell('B7').value).toBe(1.25);
+    expect(workbook.worksheets[0]?.getCell('B7').numFmt).toBe('0.####');
+  });
   it.each(['csv', 'xlsx', 'pdf'] as const)('renders a selected-field %s report', async (format) => {
     const selected = selectReportColumns(report, ['amount']);
     const output = await renderFinanceReport(format, selected);
@@ -67,6 +77,7 @@ describe('Finance report renderer', () => {
 
     expect(output.mediaType).toBe('application/pdf');
     expect(output.buffer.subarray(0, 5).toString('ascii')).toBe('%PDF-');
+    expect(output.buffer.toString('latin1').match(/\/Type \/Page\b/gu)).toHaveLength(1);
     expect(output.buffer.length).toBeGreaterThan(2_000);
   });
 });

@@ -172,6 +172,15 @@ function pageForPath(
     return hasPermission('crm') ? <CrmAnalyticsPage /> : <NotFoundPage />;
   }
   const workflow = findWorkflowPage(pathname);
+  const erpReports = /^\/modules\/erp\.(procurement|warehouse|sales|logistics)\/reports$/u.exec(
+    pathname,
+  );
+  if (erpReports?.[1])
+    return hasPermission(`erp.${erpReports[1]}`) ? (
+      <ErpReportsPage scope={erpReports[1] as ErpReportScope} />
+    ) : (
+      <NotFoundPage />
+    );
   if (workflow) {
     return hasPermission(workflow.module) ? <WorkflowPage page={workflow} /> : <NotFoundPage />;
   }
@@ -212,3 +221,5 @@ function FullPageLoader() {
     </main>
   );
 }
+import { ErpReportsPage } from './pages/ErpReportsPage';
+import type { ErpReportScope } from '@vista/contracts';

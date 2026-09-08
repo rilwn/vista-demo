@@ -213,6 +213,7 @@ export function ProcurementTabs({ view }: { view: ProcurementTabView }) {
   ];
   return (
     <nav aria-label="Procurement workflow" className="workflow-tabs procurement-tabs" ref={tabList}>
+      <Link to="/modules/erp.procurement/reports">{erpReportMessages.title}</Link>
       {tabs.map(([key, label, path]) => (
         <Link aria-current={view === key ? 'page' : undefined} key={key} to={path}>
           {label}
@@ -1532,3 +1533,4 @@ function subtract(left: string, right: string) {
 function errorText(caught: unknown, fallback: string) {
   return caught instanceof ApiClientError ? caught.message : fallback;
 }
+import { erpReportMessages } from './erp-report.messages';

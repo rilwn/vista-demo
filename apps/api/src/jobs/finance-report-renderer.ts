@@ -93,7 +93,7 @@ async function renderWorkbook(data: FinanceReportExportData): Promise<Buffer> {
     row.eachCell((cell, columnIndex) => {
       const definition = data.columns[columnIndex - 1];
       if (definition?.type === 'money') cell.numFmt = '#,##0.00';
-      if (definition?.type === 'number') cell.numFmt = '0';
+      if (definition?.type === 'number') cell.numFmt = '0.####';
       cell.alignment = { vertical: 'top', wrapText: true };
     });
   }
@@ -118,7 +118,7 @@ async function renderPdf(data: FinanceReportExportData): Promise<Buffer> {
     bufferPages: true,
     layout: 'landscape',
     margin: 34,
-    size: 'A4',
+    size: data.columns.length > 9 ? 'A3' : 'A4',
   });
   document.info.Author = 'Vista Service';
   document.info.CreationDate = new Date(data.generatedAt);
@@ -144,94 +144,194 @@ async function renderPdf(data: FinanceReportExportData): Promise<Buffer> {
       .font('VistaLatin')
       .fontSize(7)
       .fillColor('#63716c')
-      .text(`Page ${index + 1} of ${range.count}`, 34, 555, {
+      .text(`Page ${index + 1} of ${range.count}`, 34, document.page.height - 45, {
         align: 'right',
-        width: 773,
+        width: document.page.width - 68,
+        lineBreak: false,
       });
   }
   document.end();
   return finished;
 }
 
-function drawPdfHeading(document: PDFKit.PDFDocument, data: FinanceReportExportData): void {
-  document.font('VistaLatinBold').fontSize(18).fillColor('#17382f').text(data.title, 34, 30);
-  document
-    .font('VistaLatin')
-    .fontSize(8)
-    .fillColor('#63716c')
-    .text(`Generated ${formatTimestamp(data.generatedAt)}`, 34, 57);
-  document
-    .fontSize(8)
-    .fillColor('#33443e')
-    .text(data.criteria.join('   •   '), 34, 73, { width: 773 });
-  document.moveTo(34, 94).lineTo(807, 94).strokeColor('#dce5e1').lineWidth(1).stroke();
+function pdfRuns(value: string, bold = false) {
+  return value
+    .split(/([\u0400-\u04ff]+)/u)
+    .filter(Boolean)
+    .map((text) => ({
+      text,
+      font: /[\u0400-\u04ff]/u.test(text)
+        ? bold
+          ? 'VistaCyrillicBold'
+          : 'VistaCyrillic'
+        : bold
+          ? 'VistaLatinBold'
+          : 'VistaLatin',
+    }));
 }
-
-function drawPdfTable(document: PDFKit.PDFDocument, data: FinanceReportExportData): void {
-  const left = 34;
-  const width = 773;
-  const rowHeight = 22;
-  const widths = pdfColumnWidths(data.columns, width);
-  let y = 106;
-
-  const header = () => {
-    document.rect(left, y, width, rowHeight).fill('#17382f');
-    let x = left;
-    data.columns.forEach((column, index) => {
-      document
-        .font('VistaLatinBold')
-        .fontSize(6.4)
-        .fillColor('#ffffff')
-        .text(column.label, x + 4, y + 7, {
-          align: column.type === 'money' || column.type === 'number' ? 'right' : 'left',
-          ellipsis: true,
-          height: rowHeight - 8,
-          width: (widths[index] ?? 0) - 8,
-        });
-      x += widths[index] ?? 0;
-    });
-    y += rowHeight;
-  };
-
-  header();
-  for (let rowIndex = 0; rowIndex < data.rows.length; rowIndex += 1) {
-    if (y + rowHeight > 544) {
-      document.addPage();
-      y = 34;
-      header();
-    }
-    if (rowIndex % 2 === 1) document.rect(left, y, width, rowHeight).fill('#f5f8f7');
-    let x = left;
-    const row = data.rows[rowIndex] ?? {};
-    data.columns.forEach((column, index) => {
-      const value = printableValue(row[column.key], column);
-      const cyrillic = /[\u0400-\u04ff]/.test(value);
-      document
-        .font(cyrillic ? 'VistaCyrillic' : 'VistaLatin')
-        .fontSize(6.4)
-        .fillColor('#263932')
-        .text(value, x + 4, y + 7, {
-          align: column.type === 'money' || column.type === 'number' ? 'right' : 'left',
-          ellipsis: true,
-          height: rowHeight - 8,
-          width: (widths[index] ?? 0) - 8,
-        });
-      x += widths[index] ?? 0;
-    });
+function pdfTextWidth(document: PDFKit.PDFDocument, value: string, size = 8, bold = false): number {
+  return pdfRuns(value, bold).reduce(
+    (width, run) => width + document.font(run.font).fontSize(size).widthOfString(run.text),
+    0,
+  );
+}
+function pdfTextLine(
+  document: PDFKit.PDFDocument,
+  value: string,
+  x: number,
+  y: number,
+  size: number,
+  color: string,
+  bold = false,
+): void {
+  for (const run of pdfRuns(value, bold)) {
     document
-      .moveTo(left, y + rowHeight)
-      .lineTo(left + width, y + rowHeight)
-      .strokeColor('#e4ebe8')
-      .stroke();
-    y += rowHeight;
+      .font(run.font)
+      .fontSize(size)
+      .fillColor(color)
+      .text(run.text, x, y, { lineBreak: false });
+    x += document.widthOfString(run.text);
   }
-  if (!data.rows.length) {
+}
+function pdfWrappedLines(
+  document: PDFKit.PDFDocument,
+  value: string,
+  width: number,
+  size = 8,
+  bold = false,
+): string[] {
+  const lines: string[] = [];
+  for (const paragraph of value.split(/\r?\n/u)) {
+    let line = '';
+    for (const word of paragraph.split(/\s+/u)) {
+      const joined = line ? line + ' ' + word : word;
+      if (pdfTextWidth(document, joined, size, bold) <= width) {
+        line = joined;
+        continue;
+      }
+      if (line) {
+        lines.push(line);
+        line = '';
+      }
+      for (const letter of word) {
+        if (line && pdfTextWidth(document, line + letter, size, bold) > width) {
+          lines.push(line);
+          line = '';
+        }
+        line += letter;
+      }
+    }
+    lines.push(line);
+  }
+  return lines;
+}
+function drawPdfHeading(document: PDFKit.PDFDocument, data: FinanceReportExportData): void {
+  const width = document.page.width - 68;
+  let y = 30;
+  for (const line of pdfWrappedLines(document, data.title, width, 18, true)) {
+    pdfTextLine(document, line, 34, y, 18, '#17382f', true);
+    y += 23;
+  }
+  y += 4;
+  pdfTextLine(document, `Generated ${formatTimestamp(data.generatedAt)}`, 34, y, 8, '#63716c');
+  y += 17;
+  for (const line of pdfWrappedLines(document, data.criteria.join('   •   '), width)) {
+    pdfTextLine(document, line, 34, y, 8, '#33443e');
+    y += 11;
+  }
+  y += 7;
+  document
+    .moveTo(34, y)
+    .lineTo(document.page.width - 34, y)
+    .strokeColor('#dce5e1')
+    .lineWidth(1)
+    .stroke();
+  document.y = y;
+}
+function drawPdfTable(document: PDFKit.PDFDocument, data: FinanceReportExportData): void {
+  const left = 34,
+    width = document.page.width - 68,
+    lineHeight = 11,
+    padding = 6;
+  const widths = pdfColumnWidths(data.columns, width);
+  let y = document.y + 12;
+  const wrap = (value: string, index: number, bold = false) => ({
+    bold,
+    lines: pdfWrappedLines(
+      document,
+      value,
+      Math.max(10, (widths[index] ?? width) - padding * 2),
+      8,
+      bold,
+    ),
+  });
+  const headings = data.columns.map((column, index) => wrap(column.label, index, true));
+  const headerHeight =
+    Math.max(...headings.map((h) => h.lines.length), 1) * lineHeight + padding * 2;
+  const header = () => {
+    document.rect(left, y, width, headerHeight).fill('#17382f');
+    let x = left;
+    headings.forEach((cell, index) => {
+      cell.lines.forEach((line, n) =>
+        pdfTextLine(document, line, x + padding, y + padding + n * lineHeight, 8, '#ffffff', true),
+      );
+      x += widths[index] ?? 0;
+    });
+    y += headerHeight;
+  };
+  const newPage = () => {
+    document.addPage();
+    y = 34;
+    header();
+  };
+  if (y + headerHeight + lineHeight + padding * 2 > document.page.height - 50) {
+    document.addPage();
+    y = 34;
+  }
+  header();
+  for (const [rowIndex, row] of data.rows.entries()) {
+    const cells = data.columns.map((column, index) =>
+      wrap(printableValue(row[column.key], column), index),
+    );
+    const count = Math.max(...cells.map((c) => c.lines.length), 1);
+    let offset = 0;
+    while (offset < count) {
+      const remaining = Math.floor((document.page.height - 50 - y - padding * 2) / lineHeight);
+      if (remaining < 1) {
+        newPage();
+        continue;
+      }
+      const take = Math.min(count - offset, remaining);
+      const height = take * lineHeight + padding * 2;
+      if (rowIndex % 2 === 1) document.rect(left, y, width, height).fill('#f5f8f7');
+      let x = left;
+      cells.forEach((cell, index) => {
+        cell.lines.slice(offset, offset + take).forEach((line, n) => {
+          const numeric =
+            data.columns[index]?.type === 'number' || data.columns[index]?.type === 'money';
+          const lineX = numeric
+            ? x + (widths[index] ?? width) - padding - pdfTextWidth(document, line)
+            : x + padding;
+          pdfTextLine(document, line, lineX, y + padding + n * lineHeight, 8, '#263932');
+        });
+        x += widths[index] ?? 0;
+      });
+      y += height;
+      offset += take;
+      document
+        .moveTo(left, y)
+        .lineTo(left + width, y)
+        .strokeColor('#e4ebe8')
+        .stroke();
+      if (offset < count) newPage();
+    }
+  }
+  if (!data.rows.length)
     document
       .font('VistaLatin')
       .fontSize(9)
       .fillColor('#63716c')
       .text('No records matched the selected report.', left, y + 14, { align: 'center', width });
-  }
 }
 
 function pdfColumnWidths(columns: FinanceReportExportColumn[], available: number): number[] {

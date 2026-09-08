@@ -244,6 +244,21 @@ export class ServiceReportsService {
   }
 }
 
+export function serviceReportColumns(
+  key: ServiceReportDefinitionKey,
+): FinanceReportExportData['columns'] {
+  switch (key) {
+    case 'service.request-register':
+      return [...requestColumns];
+    case 'service.technician-performance':
+      return [...technicianColumns];
+    case 'service.cost-summary':
+      return [...costColumns];
+    default:
+      throw new ApiErrorException('REPORT_NOT_FOUND', 'This report is not available.', 404);
+  }
+}
+
 function servicePeriod(alias: string): string {
   return `(${alias}.created_at AT TIME ZONE $3)::date BETWEEN $1::date AND $2::date`;
 }

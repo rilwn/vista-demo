@@ -8,9 +8,12 @@ import type {
   PosPaymentMethod,
   PosShiftReportRow,
   ReportExportFormat,
+  SavedPosReport,
 } from '@vista/contracts';
 import type { ReactNode } from 'react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { PosSavedReports } from './PosSavedReports';
+import { savedReportText } from './pos-saved-reports.messages';
 
 import {
   createPosReportExport,
@@ -47,9 +50,11 @@ const definitionForView: Record<ReportView, PosReportDefinitionKey> = {
 };
 
 export function PosReports({
+  canCreate = false,
   onNotice,
   token,
 }: {
+  canCreate?: boolean;
   onNotice: (notice: Notice) => void;
   token: string;
 }) {
@@ -65,6 +70,36 @@ export function PosReports({
   const [references, setReferences] = useState<PosReportReferenceData>();
   const [selectedShift, setSelectedShift] = useState<PosShiftReportRow>();
   const [view, setView] = useState<ReportView>('shifts');
+  const [columns, setColumns] = useState<string[] | undefined>();
+  const exportRequest = useRef<{ body: string; id: string } | undefined>(undefined);
+  const exportBusy = useRef(false);
+
+  function restoreSaved(report: SavedPosReport) {
+    const nextView = reportViews.find(
+      (item) => definitionForView[item.key] === report.definitionKey,
+    );
+    if (
+      !nextView ||
+      !report.dateFrom ||
+      !report.dateTo ||
+      !definitions.some((item) => item.key === report.definitionKey)
+    ) {
+      onNotice({ kind: 'error', text: savedReportText.unavailable });
+      return;
+    }
+    const filters: PosReportFilters = {
+      dateFrom: report.dateFrom,
+      dateTo: report.dateTo,
+      ...(report.businessLocationId ? { businessLocationId: report.businessLocationId } : {}),
+      ...(report.cashRegisterId ? { cashRegisterId: report.cashRegisterId } : {}),
+      ...(report.operatorId ? { operatorId: report.operatorId } : {}),
+    };
+    setView(nextView.key);
+    setColumns(report.columns);
+    setDraft(filters);
+    setApplied(filters);
+    onNotice({ kind: 'success', text: savedReportText.restored });
+  }
 
   const loadExports = useCallback(async () => {
     const page = await getPosReportExports(token);
@@ -118,23 +153,31 @@ export function PosReports({
     format: ReportExportFormat,
     shiftId?: string,
   ) {
+    if (!canCreate || exportBusy.current || (!shiftId && columns?.length === 0)) return;
+    exportBusy.current = true;
     const key = `${definitionKey}:${format}:${shiftId ?? 'period'}`;
     setExporting(key);
     try {
-      await createPosReportExport(token, {
+      const input = {
         definitionKey,
         format,
         ...(shiftId
           ? { shiftId }
           : {
               ...applied,
+              ...(columns ? { columns } : {}),
             }),
-      });
+      };
+      const body = JSON.stringify(input);
+      if (exportRequest.current?.body !== body)
+        exportRequest.current = { body, id: crypto.randomUUID() };
+      await createPosReportExport(token, input, exportRequest.current.id);
       await loadExports();
       onNotice({ kind: 'success', text: 'Report preparation started. It will be ready shortly.' });
     } catch (caught) {
       onNotice({ kind: 'error', text: messageFor(caught) });
     } finally {
+      exportBusy.current = false;
       setExporting(undefined);
     }
   }
@@ -176,7 +219,13 @@ export function PosReports({
         <div className="pos-export-buttons" aria-label="Export current report">
           {(['pdf', 'xlsx', 'csv'] as const).map((format) => (
             <button
-              disabled={!overview || exporting !== undefined}
+              disabled={
+                !canCreate ||
+                !overview ||
+                loading ||
+                exporting !== undefined ||
+                columns?.length === 0
+              }
               key={format}
               onClick={() => void requestExport(definitionForView[view], format)}
               type="button"
@@ -269,6 +318,21 @@ export function PosReports({
         </button>
       </section>
 
+      {definition ? (
+        <PosSavedReports
+          token={token}
+          definition={definition}
+          filters={applied}
+          columns={columns}
+          onColumns={setColumns}
+          onRestore={restoreSaved}
+          onExport={(format) => void requestExport(definition.key, format)}
+          canCreate={canCreate}
+          exporting={loading || exporting !== undefined}
+          onNotice={onNotice}
+        />
+      ) : null}
+
       {error ? (
         <section className="pos-report-error">
           <strong>Reports are unavailable</strong>
@@ -308,7 +372,10 @@ export function PosReports({
                   aria-selected={view === item.key}
                   className={view === item.key ? 'is-active' : undefined}
                   key={item.key}
-                  onClick={() => setView(item.key)}
+                  onClick={() => {
+                    setView(item.key);
+                    setColumns(undefined);
+                  }}
                   role="tab"
                   type="button"
                 >
@@ -322,15 +389,22 @@ export function PosReports({
       )}
 
       <RecentExports
+        canRetry={canCreate}
         exports={exports}
         onDownload={(report) => void download(report)}
-        onRefresh={() => void loadExports()}
-        onRetry={(report) => void retry(report)}
+        onRefresh={() =>
+          void loadExports().catch((caught: unknown) =>
+            onNotice({ kind: 'error', text: messageFor(caught) }),
+          )
+        }
+        onRetry={(report) => {
+          if (canCreate) void retry(report);
+        }}
       />
 
       {selectedShift ? (
         <ShiftReportDialog
-          exporting={exporting}
+          exporting={canCreate ? exporting : 'unavailable'}
           onClose={() => setSelectedShift(undefined)}
           onExport={(format) =>
             void requestExport(
@@ -649,11 +723,13 @@ function ReportValue({ label, value }: { label: string; value: string }) {
 }
 
 function RecentExports({
+  canRetry,
   exports,
   onDownload,
   onRefresh,
   onRetry,
 }: {
+  canRetry: boolean;
   exports: PosReportExport[];
   onDownload: (report: PosReportExport) => void;
   onRefresh: () => void;
@@ -690,7 +766,7 @@ function RecentExports({
                   Download
                 </button>
               ) : null}
-              {report.status === 'failed' ? (
+              {report.status === 'failed' && canRetry ? (
                 <button onClick={() => onRetry(report)} type="button">
                   Try again
                 </button>

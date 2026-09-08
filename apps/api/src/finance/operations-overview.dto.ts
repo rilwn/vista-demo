@@ -1,7 +1,37 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsDateString, IsInt, Matches, Max, Min } from 'class-validator';
-import type { OperationsOverview } from '@vista/contracts';
+import {
+  IsArray,
+  ArrayMaxSize,
+  ArrayUnique,
+  IsIn,
+  IsDateString,
+  IsInt,
+  Matches,
+  Max,
+  Min,
+} from 'class-validator';
+import {
+  overviewMetricKeys,
+  type OverviewMetricKey,
+  type OverviewPreferences,
+  type OperationsOverview,
+} from '@vista/contracts';
+
+export class OverviewPreferencesDto implements OverviewPreferences {
+  @ApiProperty({ type: [String], enum: overviewMetricKeys })
+  @IsArray()
+  @ArrayMaxSize(4)
+  @ArrayUnique()
+  @IsIn(overviewMetricKeys, { each: true })
+  hiddenCards!: OverviewMetricKey[];
+
+  @ApiProperty({ type: Number, minimum: 0 })
+  @IsInt()
+  @Min(0)
+  @Max(2147483646)
+  version!: number;
+}
 
 export class OperationsOverviewQueryDto {
   @ApiProperty({ format: 'date', type: String })
@@ -21,6 +51,7 @@ export class OperationsOverviewQueryDto {
 }
 
 export class OperationsOverviewDto implements OperationsOverview {
+  @ApiPropertyOptional({ type: OverviewPreferencesDto }) preferences?: OverviewPreferencesDto;
   @ApiProperty({ format: 'date', type: String }) asOf!: string;
   @ApiProperty({ format: 'date', type: String }) dateFrom!: string;
   @ApiProperty({ format: 'date', type: String }) dateTo!: string;

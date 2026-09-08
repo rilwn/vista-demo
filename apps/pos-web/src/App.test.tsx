@@ -83,6 +83,28 @@ describe('POS application', () => {
     ).toBe(false);
   });
 
+  it('restores a saved report tab, period, columns and format through POS navigation', async () => {
+    installApiMock({ savedReport: true });
+    render(<App />);
+    await screen.findByRole('heading', { name: 'New sale' });
+    fireEvent.click(screen.getByRole('link', { name: 'Reports' }));
+    fireEvent.click(await screen.findByText('Saved reports & export fields'));
+    await screen.findByRole('option', { name: 'Location review 2026' });
+    fireEvent.change(screen.getByLabelText('My saved reports'), {
+      target: { value: 'a2f6ec25-c68a-4eba-8904-c8d925ba08ae' },
+    });
+    await waitFor(() =>
+      expect(screen.getByRole('tab', { name: 'Locations' }).getAttribute('aria-selected')).toBe(
+        'true',
+      ),
+    );
+    expect(screen.getByLabelText('From')).toHaveProperty('value', '2026-01-01');
+    expect(screen.getByLabelText('To')).toHaveProperty('value', '2026-12-31');
+    expect(screen.getByLabelText('File type')).toHaveProperty('value', 'csv');
+    expect(screen.getByLabelText('Sales')).toHaveProperty('checked', false);
+    expect(screen.getByLabelText('Report name')).toHaveProperty('value', 'Location review 2026');
+  });
+
   it('opens a POS route directly after a browser reload', async () => {
     window.history.replaceState(null, '', '/reports');
     installApiMock();
@@ -409,7 +431,7 @@ describe('POS application', () => {
   });
 });
 
-function installApiMock({ lookupSale = false } = {}) {
+function installApiMock({ lookupSale = false, savedReport = false } = {}) {
   let shiftOpen = false;
   const mock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(
@@ -510,6 +532,25 @@ function installApiMock({ lookupSale = false } = {}) {
     if (url.pathname.endsWith('/pos/reports/overview')) return jsonResponse(reportOverview);
     if (url.pathname.endsWith('/pos/report-exports/definitions'))
       return jsonResponse(reportDefinitions);
+    if (url.pathname.endsWith('/pos/saved-reports'))
+      return jsonResponse({
+        items: savedReport
+          ? [
+              {
+                id: 'a2f6ec25-c68a-4eba-8904-c8d925ba08ae',
+                name: 'Location review 2026',
+                definitionKey: 'pos.location-sales',
+                dateFrom: '2026-01-01',
+                dateTo: '2026-12-31',
+                columns: ['location'],
+                format: 'csv',
+              },
+            ]
+          : [],
+        page: 1,
+        total: savedReport ? 1 : 0,
+        totalPages: savedReport ? 1 : 0,
+      });
     if (url.pathname.endsWith('/pos/report-exports'))
       return jsonResponse({ items: [], page: 1, pageSize: 20, total: 0, totalPages: 0 });
     if (/\/pos\/customers\/[^/]+\/payment-options$/u.test(url.pathname))
@@ -895,6 +936,10 @@ const reportDefinitions = [
     description: 'Sales, returns, and net revenue by business location.',
     formats: ['csv', 'xlsx', 'pdf'],
     key: 'pos.location-sales',
+    columns: [
+      { key: 'location', label: 'Location name', type: 'text' },
+      { key: 'saleCount', label: 'Sales', type: 'number' },
+    ],
     name: 'Location sales',
     requiresDateRange: true,
     requiresShift: false,

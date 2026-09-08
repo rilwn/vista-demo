@@ -1,6 +1,6 @@
 # Vista Integrated Information System — Remaining Implementation Plan
 
-Status date: 2026-09-07
+Status date: 2026-09-08
 Project: `BG16RFPR001-1.012-1324-C01`
 
 [`AGENTS.md`](AGENTS.md) is authoritative. This file contains only unfinished
@@ -106,9 +106,9 @@ concurrency; no production topology or tracking rule is inferred.
   delivery for payment reminders.
 - Approve and complete official sales/purchase journal and VAT filing outputs
   from the operational review foundation; deliver structured accounting exports
-  and posted-accounting revenue once official issuance is approved. Extend saved,
-  field-selectable report views beyond Finance, dashboard configuration, and
-  asynchronous exports to every remaining required module report.
+  and posted-accounting revenue once official issuance is approved. Complete
+  remaining module dashboard configuration and the shared report-library and
+  scheduled-delivery screens where required.
 - Connect the approved Econt and Speedy booking, label, tracking, return,
   retry, and reconciliation adapters. Keep both providers unavailable until
   INT-002 supplies the selected products, credentials, environments, and

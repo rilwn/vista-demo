@@ -239,6 +239,7 @@ export function LogisticsOperationsPage({ view }: { view: LogisticsOperationsVie
 function LogisticsTabs() {
   return (
     <nav aria-label="Logistics sections" className="service-tabs logistics-tabs">
+      <Link to="/modules/erp.logistics/reports">{erpReportMessages.title}</Link>
       <Link
         className={({ isActive }) => (isActive ? 'is-active' : undefined)}
         end
@@ -2058,3 +2059,4 @@ function errorMessage(caught: unknown, fallback: string) {
     ? 'Some information is missing or invalid. Review the form and try again.'
     : caught.message;
 }
+import { erpReportMessages } from './erp-report.messages';

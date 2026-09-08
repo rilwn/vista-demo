@@ -1,51 +1,59 @@
-# Test saved reports and the Overview
+# Test the remaining ERP reports
 
-Run `npm run dev` from the project folder (restart it if already running).
-This applies the new migration. Open **Vista Operations** at
+Restart with `npm run dev` to apply the migration. Open ERP/CRM at
 [localhost:5173](http://localhost:5173/) and sign in as **manager@vista.local**
-using your existing `DEV_FIXTURES_PASSWORD`. No new sale or payment is needed.
+with your existing `DEV_FIXTURES_PASSWORD`. No new transactions are required.
 
-## 1. Save and reuse a report
+## 1. Save a report in each module
 
-1. From the sidebar choose **ERP → Finance**, then **Finance reports**.
-2. Select **Export report**. Choose **Report: Supplier turnover**.
-3. Enter **From: 2026-01-01**, **To: 2026-12-31**.
-4. Under **Fields to include**, keep only **Partner** and **Gross BGN** checked.
-5. Choose **Excel**. In **Save these options**, enter `2026 supplier totals`.
-   Select **Save as new report**.
-6. Select **Close**, reopen **Export report**, then choose **2026 supplier totals**
-   from **My saved reports**.
+For each row below, choose **ERP → [Module]** in the sidebar, then **Reports**
+under **Choose an area**. Choose the named report from **Report**.
 
-Expected: your report, dates, two selected fields and Excel format are restored.
-The panel scrolls while its header and full-width bottom buttons stay visible.
+| Module      | Report                    | Keep these fields                                  | Report name        |
+| ----------- | ------------------------- | -------------------------------------------------- | ------------------ |
+| Procurement | Purchase order comparison | Supplier, Product                                  | Procurement review |
+| Warehouse   | Stock and valuation       | Warehouse, Product, On hand                        | Stock review       |
+| Sales       | Quotations and orders     | Quotation, Customer, Total including VAT, Currency | Sales review       |
+| Logistics   | Deliveries                | Delivery, Customer, Status                         | Delivery review    |
 
-## 2. Download all three formats
+1. For Procurement, Sales and Logistics, set **From: 2026-01-01** and
+   **To: 2026-12-31**. Stock and valuation has no date fields because it shows
+   current stock.
+2. Leave **Search report values** empty and select **Apply**.
+3. Open **Saved views & export fields**. Uncheck the fields not listed above.
+4. Enter the sample **Report name**, choose **File type: Excel**, then select
+   **Save as new report**. Expect **Your report view is saved.**
 
-1. Select **Prepare export**. In **Recent exports**, wait for **Ready**, then
-   select **Download**. If needed, use **Refresh**.
-2. Open the Excel file: its data table must contain only **Partner** and
-   **Gross BGN**. Your existing supplier invoices determine the rows and totals;
-   no rows is valid if none fall within this period.
-3. Select **CSV → Prepare export → Download** when Ready.
-4. Repeat with **PDF**. The same two fields and values should appear in all
-   three files if no source records changed between exports.
-5. Uncheck both remaining fields: **Prepare export** must be disabled.
-   Select **Close** without saving another copy.
+Rows reflect your existing records. If a report has no records, the empty
+message is valid and its exported table will contain headers only.
 
-## 3. Review the Overview
+## 2. Reopen and export each saved view
 
-1. Choose **Overview** in the sidebar.
-2. Set **Revenue from: 2026-01-01**, **Revenue to: 2026-12-31**, and
-   **Warranties ending within: 30 days**. Select **Apply**.
-3. Check the four cards: **Recorded revenue**, **Active Service requests**,
-   **Warranties ending soon**, and **Overdue receivables**.
-4. Use **Review Finance reports**, then the sidebar **Overview** to return.
+1. Select **Overview** in the sidebar, then return through the same module's
+   **Reports** area.
+2. Open **Saved views & export fields** and choose your report under
+   **My saved reports**. Confirm the report, dates, fields and Excel return.
+3. Select **Prepare export**. Under **Recent exports**, wait for **Ready**,
+   then select **Download**. Use **Refresh** if needed.
+4. Open the file. The table should contain only your selected fields, for all
+   matching records, not just the visible page.
+5. Choose **CSV**, prepare and download it. Repeat with **PDF**.
+   The values should match if the underlying records did not change.
 
-Expected: the link opens Finance reports, not a 404. Revenue uses your chosen
-period; Service, warranty and overdue figures describe the current date.
-**Recorded revenue includes prepared invoices and notes; it is not posted
-accounting revenue.** Zero values are valid.
+## 3. Check the other report choices
 
-Optional role check: sign out through the top-right account menu and sign in as
-**finance@vista.local**. The Overview must not show global Service or warranty
-counts, and the manager’s saved reports must not appear in this account.
+Use **Report** to open the remaining choices in each module:
+
+- Procurement: **Supplier claims**.
+- Warehouse: **Stock movements**, **Replenishment**.
+- Sales: **Shipments**.
+- Logistics: **Returns and repairs**, **Route plans**.
+
+For reports with dates, use the same 2026 range and select **Apply**.
+Replenishment uses current settings and has no date fields. Read the short
+description below the filters for what each report includes.
+
+Enter **NO-MATCH-TEST-2026** in Search report values and select **Apply**.
+Expect **No records match these filters.** Clear it and apply again.
+Uncheck every field: **Save as new report** and **Prepare export** must be
+disabled. Recheck a field before continuing.

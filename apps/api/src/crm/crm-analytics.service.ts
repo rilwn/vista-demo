@@ -780,6 +780,21 @@ SELECT dimension, key, label, document_count, net_revenue_bgn
 FROM dimension_rows
 ORDER BY dimension, net_revenue_bgn::numeric DESC, label`;
 
+export function crmReportColumns(key: CrmReportDefinitionKey): FinanceReportExportData['columns'] {
+  switch (key) {
+    case 'crm.customer-value':
+      return [...customerValueColumns];
+    case 'crm.pipeline-performance':
+      return [...pipelineColumns];
+    case 'crm.employee-performance':
+      return [...employeeColumns];
+    case 'crm.revenue-breakdown':
+      return [...revenueColumns];
+    default:
+      throw new ApiErrorException('REPORT_NOT_FOUND', 'This report is not available.', 404);
+  }
+}
+
 const customerValueColumns = [
   { key: 'period', label: 'Window', type: 'text' },
   { key: 'activeCustomers', label: 'Active customers', type: 'number' },

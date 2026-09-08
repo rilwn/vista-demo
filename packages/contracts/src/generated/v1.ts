@@ -564,6 +564,22 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/crm/saved-reports': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['SavedCrmReportsController_list'];
+    put?: never;
+    post: operations['SavedCrmReportsController_save'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/crm/tasks': {
     parameters: {
       query?: never;
@@ -734,6 +750,102 @@ export interface paths {
     get: operations['CrmTimelineController_referenceData'];
     put?: never;
     post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/erp/reports/{scope}/definitions': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['ErpReportExportsController_definitions'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/erp/reports/{scope}/exports': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['ErpReportExportsController_list'];
+    put?: never;
+    post: operations['ErpReportExportsController_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/erp/reports/{scope}/exports/{id}/content': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['ErpReportExportsController_content'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/erp/reports/{scope}/exports/{id}/retry': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['ErpReportExportsController_retry'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/erp/reports/{scope}/preview': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['ErpReportExportsController_preview'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/erp/reports/{scope}/saved': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['ErpReportExportsController_listSaved'];
+    put?: never;
+    post: operations['ErpReportExportsController_save'];
     delete?: never;
     options?: never;
     head?: never;
@@ -2070,6 +2182,22 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/operations/overview/preferences': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put: operations['OperationsOverviewController_preferences'];
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/organization/branches/{branchId}/locations': {
     parameters: {
       query?: never;
@@ -2736,6 +2864,22 @@ export interface paths {
     get: operations['PosController_saleByTransaction'];
     put?: never;
     post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/pos/saved-reports': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['SavedPosReportsController_list'];
+    put?: never;
+    post: operations['SavedPosReportsController_save'];
     delete?: never;
     options?: never;
     head?: never;
@@ -3520,6 +3664,22 @@ export interface paths {
     get?: never;
     put?: never;
     post: operations['ServiceOperationsController_cancelRequest'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/service/saved-reports': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['SavedServiceReportsController_list'];
+    put?: never;
+    post: operations['SavedServiceReportsController_save'];
     delete?: never;
     options?: never;
     head?: never;
@@ -4327,6 +4487,7 @@ export interface components {
       telephone?: string;
     };
     CreateCrmReportExportDto: {
+      columns?: string[];
       /** Format: date */
       dateFrom: string;
       /** Format: date */
@@ -4433,6 +4594,28 @@ export interface components {
       code: string;
       customerPartnerIds: string[];
       name: string;
+    };
+    CreateErpReportExportDto: {
+      columns?: string[];
+      /** Format: date */
+      dateFrom?: string;
+      /** Format: date */
+      dateTo?: string;
+      /** @enum {string} */
+      definitionKey:
+        | 'procurement.order-comparison'
+        | 'procurement.supplier-claims'
+        | 'warehouse.stock-balances'
+        | 'warehouse.movements'
+        | 'warehouse.replenishment'
+        | 'sales.quotation-register'
+        | 'sales.shipment-register'
+        | 'logistics.deliveries'
+        | 'logistics.returns'
+        | 'logistics.routes';
+      /** @enum {string} */
+      format: 'csv' | 'xlsx' | 'pdf';
+      search?: string;
     };
     CreateFinanceBankStatementDto: {
       accountIban: string;
@@ -4751,6 +4934,7 @@ export interface components {
       businessLocationId?: string;
       /** Format: uuid */
       cashRegisterId?: string;
+      columns?: string[];
       /** Format: date */
       dateFrom?: string;
       /** Format: date */
@@ -4966,6 +5150,7 @@ export interface components {
       reminderLeadDays: number;
     };
     CreateServiceReportExportDto: {
+      columns?: string[];
       /** Format: date */
       dateFrom: string;
       /** Format: date */
@@ -5470,6 +5655,12 @@ export interface components {
       telephone?: string;
     };
     CrmReportDefinitionDto: {
+      columns?: {
+        key: string;
+        label: string;
+        /** @enum {string} */
+        type: 'date' | 'money' | 'number' | 'text';
+      }[];
       description: string;
       formats: ('csv' | 'xlsx' | 'pdf')[];
       /** @enum {string} */
@@ -5983,6 +6174,82 @@ export interface components {
     EnrolPosLoyaltyDto: {
       /** Format: uuid */
       customerPartnerId: string;
+    };
+    ErpReportDefinitionDto: {
+      columns?: {
+        key: string;
+        label: string;
+        /** @enum {string} */
+        type: 'date' | 'money' | 'number' | 'text';
+      }[];
+      description: string;
+      formats: ('csv' | 'xlsx' | 'pdf')[];
+      /** @enum {string} */
+      key:
+        | 'procurement.order-comparison'
+        | 'procurement.supplier-claims'
+        | 'warehouse.stock-balances'
+        | 'warehouse.movements'
+        | 'warehouse.replenishment'
+        | 'sales.quotation-register'
+        | 'sales.shipment-register'
+        | 'logistics.deliveries'
+        | 'logistics.returns'
+        | 'logistics.routes';
+      name: string;
+      requiresDateRange: boolean;
+    };
+    ErpReportExportDto: {
+      attemptCount: number;
+      /** Format: date-time */
+      completedAt?: string;
+      /** Format: date-time */
+      createdAt: string;
+      /** @enum {string} */
+      definitionKey:
+        | 'procurement.order-comparison'
+        | 'procurement.supplier-claims'
+        | 'warehouse.stock-balances'
+        | 'warehouse.movements'
+        | 'warehouse.replenishment'
+        | 'sales.quotation-register'
+        | 'sales.shipment-register'
+        | 'logistics.deliveries'
+        | 'logistics.returns'
+        | 'logistics.routes';
+      errorCode?: string;
+      fileName?: string;
+      /** @enum {string} */
+      format: 'csv' | 'xlsx' | 'pdf';
+      /** Format: uuid */
+      id: string;
+      name: string;
+      rowCount?: number;
+      sizeBytes?: number;
+      /** @enum {string} */
+      status: 'queued' | 'processing' | 'completed' | 'failed';
+    };
+    ErpReportExportPageDto: {
+      items: components['schemas']['ErpReportExportDto'][];
+      page: number;
+      pageSize: number;
+      total: number;
+      totalPages: number;
+    };
+    ErpReportPreviewDto: {
+      columns: {
+        key: string;
+        label: string;
+        /** @enum {string} */
+        type: 'date' | 'money' | 'number' | 'text';
+      }[];
+      generatedAt: string;
+      page: number;
+      rows: {
+        [key: string]: string | number;
+      }[];
+      total: number;
+      totalPages: number;
     };
     FinanceAgingReportDto: {
       /** Format: date */
@@ -7374,6 +7641,7 @@ export interface components {
       dateTo: string;
       expiringWarranties?: number;
       overdueReceivablesBgn?: string;
+      preferences?: components['schemas']['OverviewPreferencesDto'];
       recordedRevenueBgn?: string;
       warrantyDays: number;
     };
@@ -7389,6 +7657,15 @@ export interface components {
       legalEntities: components['schemas']['LegalBusinessEntityDto'][];
       locations: components['schemas']['BusinessLocationDto'][];
       operators: components['schemas']['BusinessOperatorDto'][];
+    };
+    OverviewPreferencesDto: {
+      hiddenCards: (
+        | 'recordedRevenueBgn'
+        | 'activeServiceRequests'
+        | 'expiringWarranties'
+        | 'overdueReceivablesBgn'
+      )[];
+      version: number;
     };
     PartnerAddressDto: {
       active: boolean;
@@ -7747,6 +8024,12 @@ export interface components {
       warehouseName: string;
     };
     PosReportDefinitionDto: {
+      columns?: {
+        key: string;
+        label: string;
+        /** @enum {string} */
+        type: 'date' | 'money' | 'number' | 'text';
+      }[];
       description: string;
       formats: ('csv' | 'xlsx' | 'pdf')[];
       /** @enum {string} */
@@ -8579,6 +8862,61 @@ export interface components {
       warehouseId: string;
       warehouseName: string;
     };
+    SavedCrmReportDto: {
+      columns?: string[];
+      /** Format: date */
+      dateFrom: string;
+      /** Format: date */
+      dateTo: string;
+      /** @enum {string} */
+      definitionKey:
+        | 'crm.customer-value'
+        | 'crm.pipeline-performance'
+        | 'crm.employee-performance'
+        | 'crm.revenue-breakdown';
+      /** @enum {string} */
+      format: 'csv' | 'xlsx' | 'pdf';
+      /** Format: uuid */
+      id: string;
+      name: string;
+    };
+    SavedCrmReportPageDto: {
+      items: components['schemas']['SavedCrmReportDto'][];
+      page: number;
+      total: number;
+      totalPages: number;
+    };
+    SavedErpReportDto: {
+      columns?: string[];
+      /** Format: date */
+      dateFrom?: string;
+      /** Format: date */
+      dateTo?: string;
+      /** @enum {string} */
+      definitionKey:
+        | 'procurement.order-comparison'
+        | 'procurement.supplier-claims'
+        | 'warehouse.stock-balances'
+        | 'warehouse.movements'
+        | 'warehouse.replenishment'
+        | 'sales.quotation-register'
+        | 'sales.shipment-register'
+        | 'logistics.deliveries'
+        | 'logistics.returns'
+        | 'logistics.routes';
+      /** @enum {string} */
+      format: 'csv' | 'xlsx' | 'pdf';
+      /** Format: uuid */
+      id: string;
+      name: string;
+      search?: string;
+    };
+    SavedErpReportPageDto: {
+      items: components['schemas']['SavedErpReportDto'][];
+      page: number;
+      total: number;
+      totalPages: number;
+    };
     SavedFinanceReportDto: {
       columns?: string[];
       /** Format: date */
@@ -8602,6 +8940,64 @@ export interface components {
     };
     SavedFinanceReportPageDto: {
       items: components['schemas']['SavedFinanceReportDto'][];
+      page: number;
+      total: number;
+      totalPages: number;
+    };
+    SavedPosReportDto: {
+      /** Format: uuid */
+      businessLocationId?: string;
+      /** Format: uuid */
+      cashRegisterId?: string;
+      columns?: string[];
+      /** Format: date */
+      dateFrom?: string;
+      /** Format: date */
+      dateTo?: string;
+      /** @enum {string} */
+      definitionKey:
+        | 'pos.shift-register'
+        | 'pos.cashier-performance'
+        | 'pos.x-report'
+        | 'pos.z-report'
+        | 'pos.product-sales'
+        | 'pos.category-sales'
+        | 'pos.payment-methods'
+        | 'pos.location-sales'
+        | 'pos.location-comparison';
+      /** @enum {string} */
+      format: 'csv' | 'xlsx' | 'pdf';
+      /** Format: uuid */
+      id: string;
+      name: string;
+      /** Format: uuid */
+      operatorId?: string;
+      /** Format: uuid */
+      shiftId?: string;
+    };
+    SavedPosReportPageDto: {
+      items: components['schemas']['SavedPosReportDto'][];
+      page: number;
+      total: number;
+      totalPages: number;
+    };
+    SavedServiceReportDto: {
+      columns?: string[];
+      /** Format: date */
+      dateFrom: string;
+      /** Format: date */
+      dateTo: string;
+      /** @enum {string} */
+      definitionKey:
+        'service.request-register' | 'service.technician-performance' | 'service.cost-summary';
+      /** @enum {string} */
+      format: 'csv' | 'xlsx' | 'pdf';
+      /** Format: uuid */
+      id: string;
+      name: string;
+    };
+    SavedServiceReportPageDto: {
+      items: components['schemas']['SavedServiceReportDto'][];
       page: number;
       total: number;
       totalPages: number;
@@ -8882,6 +9278,12 @@ export interface components {
       technicians: components['schemas']['ServiceTechnicianReferenceDto'][];
     };
     ServiceReportDefinitionDto: {
+      columns?: {
+        key: string;
+        label: string;
+        /** @enum {string} */
+        type: 'date' | 'money' | 'number' | 'text';
+      }[];
       description: string;
       formats: ('csv' | 'xlsx' | 'pdf')[];
       /** @enum {string} */
@@ -11353,6 +11755,79 @@ export interface operations {
       };
     };
   };
+  SavedCrmReportsController_list: {
+    parameters: {
+      query?: {
+        page?: number;
+        pageSize?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SavedCrmReportPageDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  SavedCrmReportsController_save: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['SavedCrmReportDto'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SavedCrmReportDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
   CrmTimelineController_createTask: {
     parameters: {
       query?: never;
@@ -11791,6 +12266,322 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['CrmTimelineReferenceDataDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  ErpReportExportsController_definitions: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        scope: 'procurement' | 'warehouse' | 'sales' | 'logistics';
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ErpReportDefinitionDto'][];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  ErpReportExportsController_list: {
+    parameters: {
+      query?: {
+        page?: number;
+        pageSize?: number;
+      };
+      header?: never;
+      path: {
+        scope: 'procurement' | 'warehouse' | 'sales' | 'logistics';
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ErpReportExportPageDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  ErpReportExportsController_create: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path: {
+        scope: 'procurement' | 'warehouse' | 'sales' | 'logistics';
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['CreateErpReportExportDto'];
+      };
+    };
+    responses: {
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ErpReportExportDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  ErpReportExportsController_content: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: unknown;
+        scope: 'procurement' | 'warehouse' | 'sales' | 'logistics';
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/pdf': string;
+          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': string;
+          'text/csv': string;
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  ErpReportExportsController_retry: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: unknown;
+        scope: 'procurement' | 'warehouse' | 'sales' | 'logistics';
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ErpReportExportDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  ErpReportExportsController_preview: {
+    parameters: {
+      query: {
+        dateFrom?: string;
+        dateTo?: string;
+        definitionKey:
+          | 'procurement.order-comparison'
+          | 'procurement.supplier-claims'
+          | 'warehouse.stock-balances'
+          | 'warehouse.movements'
+          | 'warehouse.replenishment'
+          | 'sales.quotation-register'
+          | 'sales.shipment-register'
+          | 'logistics.deliveries'
+          | 'logistics.returns'
+          | 'logistics.routes';
+        page?: number;
+        search?: string;
+      };
+      header?: never;
+      path: {
+        scope: 'procurement' | 'warehouse' | 'sales' | 'logistics';
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ErpReportPreviewDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  ErpReportExportsController_listSaved: {
+    parameters: {
+      query?: {
+        page?: number;
+        pageSize?: number;
+      };
+      header?: never;
+      path: {
+        scope: 'procurement' | 'warehouse' | 'sales' | 'logistics';
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SavedErpReportPageDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  ErpReportExportsController_save: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        scope: 'procurement' | 'warehouse' | 'sales' | 'logistics';
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['SavedErpReportDto'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SavedErpReportDto'];
         };
       };
       /** @description The endpoint request limit was exceeded. */
@@ -15697,6 +16488,43 @@ export interface operations {
       };
     };
   };
+  OperationsOverviewController_preferences: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['OverviewPreferencesDto'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['OverviewPreferencesDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
   OrganizationController_createLocation: {
     parameters: {
       query?: never;
@@ -17479,6 +18307,79 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['PosSaleDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  SavedPosReportsController_list: {
+    parameters: {
+      query?: {
+        page?: number;
+        pageSize?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SavedPosReportPageDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  SavedPosReportsController_save: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['SavedPosReportDto'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SavedPosReportDto'];
         };
       };
       /** @description The endpoint request limit was exceeded. */
@@ -19708,6 +20609,79 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['ServiceRequestDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  SavedServiceReportsController_list: {
+    parameters: {
+      query?: {
+        page?: number;
+        pageSize?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SavedServiceReportPageDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  SavedServiceReportsController_save: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['SavedServiceReportDto'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SavedServiceReportDto'];
         };
       };
       /** @description The endpoint request limit was exceeded. */

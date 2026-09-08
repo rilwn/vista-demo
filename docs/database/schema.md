@@ -1,5 +1,43 @@
 # Database Schema Baseline
 
+Migration `0063_erp_operational_reports` registers ten controlled Procurement,
+Warehouse, Sales and Logistics report definitions and adds
+`reporting.saved_erp_reports`. Each saved view has an immutable UUID, account,
+module scope, name, filters/columns/format, normalized request hash and creation
+time. A scope/account index supports private pagination. Concurrent identical
+saves produce one row and audit event; changed content with the same UUID fails.
+Preview/export queries never accept caller SQL. Existing export jobs and object
+storage provide asynchronous generation and integrity-checked downloads.
+Rollback removes these definitions and saved views, but is blocked by the
+existing foreign key if any export still references a definition. It does not
+cascade-delete exports or business records.
+
+Migration `0062_overview_preferences` stores an account-owned hidden-card list and
+revision in `reporting.overview_preferences`. Writes lock the owning row, compare
+the revision and audit changes in the same transaction. Identical retries are
+no-ops; stale differing saves return 409. Rollback removes preferences only.
+
+Migration `0061_saved_pos_reports` adds private, immutable date-range POS report
+options in `reporting.saved_pos_reports`. Each UUID belongs to an account, with a
+nonblank name, normalized configuration/hash, timestamp and owner pagination index.
+Options include dates, optional location/register/cashier, columns and format.
+Save and audit insertion share a transaction with UUID replay/conflict checks.
+Rollback removes saved POS options only, not sales, shifts or export files.
+
+Migration `0060_saved_crm_reports` adds private, immutable CRM report options in
+`reporting.saved_crm_reports`, with an owning-account foreign key, nonblank name,
+JSON configuration, request hash and creation timestamp. The owner/date/id index
+supports pagination. UUID replay is checked against normalized content, and
+creation shares a transaction with its audit event. Rollback drops only saved CRM
+options, not customer records or export files.
+
+Migration `0059_saved_service_reports` adds private, immutable Service report
+configurations in `reporting.saved_service_reports`: UUID, owning account FK,
+nonblank name, JSON configuration, normalized request hash and creation timestamp.
+The owner/date/id index supports stable pagination. Saves and their audit event
+share a transaction; UUID collisions with changed content are rejected. Rollback
+drops only this saved-options table, not Service records or generated exports.
+
 PostgreSQL migrations live in `apps/api/src/database/migrations`. Applied
 migrations are checksummed in `platform.schema_migrations` and serialized with a
 PostgreSQL advisory lock.

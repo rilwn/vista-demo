@@ -55,6 +55,11 @@ function Application() {
   }
   return (
     <PosTerminal
+      canCreateReports={session.context.permissions.some(
+        (permission) =>
+          (permission.module === '*' || permission.module === 'pos') &&
+          (permission.action === '*' || permission.action === 'create'),
+      )}
       accountId={session.context.accountId}
       employeeName={session.context.displayName}
       onSignOut={authentication.logout}

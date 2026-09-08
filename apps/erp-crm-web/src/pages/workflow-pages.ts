@@ -1,4 +1,5 @@
 import type { IconName } from '../components/Icon';
+import { erpReportMessages } from './erp-report.messages';
 
 export interface WorkflowSection {
   items: string[];
@@ -75,6 +76,17 @@ const reports = (
 ) => page('reports', 'chart', slug, title, description, action, sections);
 
 export const workflowPages: WorkflowPageDefinition[] = [
+  ...(['procurement', 'warehouse', 'sales', 'logistics'] as const).map((scope) =>
+    page(
+      `erp.${scope}`,
+      'chart',
+      'reports',
+      erpReportMessages.title,
+      erpReportMessages.description,
+      erpReportMessages.export,
+      [],
+    ),
+  ),
   finance(
     'invoices',
     'Financial documents',
@@ -222,7 +234,7 @@ export const workflowPages: WorkflowPageDefinition[] = [
   finance(
     'registers',
     'Finance reports',
-    'Review balances, partner turnover, document journals, and recorded VAT from the Finance workspace.',
+    'Review balances, partner turnover, document journals, and VAT.',
     'Review reports',
     [
       {

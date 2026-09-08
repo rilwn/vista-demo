@@ -1,5 +1,15 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsDateString, IsIn } from 'class-validator';
+import {
+  ArrayMaxSize,
+  ArrayMinSize,
+  ArrayUnique,
+  IsArray,
+  IsString,
+  IsOptional,
+  Matches,
+  IsDateString,
+  IsIn,
+} from 'class-validator';
 import {
   reportExportFormats,
   reportExportStatuses,
@@ -11,12 +21,23 @@ import {
 } from '@vista/contracts';
 
 export class CreateServiceReportExportDto implements CreateServiceReportExportRequest {
+  @ApiPropertyOptional({ type: [String], minItems: 1, maxItems: 30 })
+  @IsOptional()
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(30)
+  @ArrayUnique()
+  @IsString({ each: true })
+  columns?: string[];
+
   @ApiProperty({ format: 'date', type: String })
-  @IsDateString()
+  @IsDateString({ strict: true })
+  @Matches(/^\d{4}-\d{2}-\d{2}$/u)
   dateFrom!: string;
 
   @ApiProperty({ format: 'date', type: String })
-  @IsDateString()
+  @IsDateString({ strict: true })
+  @Matches(/^\d{4}-\d{2}-\d{2}$/u)
   dateTo!: string;
 
   @ApiProperty({ enum: serviceReportDefinitionKeys })
@@ -29,6 +50,19 @@ export class CreateServiceReportExportDto implements CreateServiceReportExportRe
 }
 
 export class ServiceReportDefinitionDto implements ServiceReportDefinition {
+  @ApiPropertyOptional({
+    type: 'array',
+    items: {
+      type: 'object',
+      required: ['key', 'label', 'type'],
+      properties: {
+        key: { type: 'string' },
+        label: { type: 'string' },
+        type: { type: 'string', enum: ['date', 'money', 'number', 'text'] },
+      },
+    },
+  })
+  columns?: ServiceReportDefinition['columns'];
   @ApiProperty({ type: String }) description!: string;
   @ApiProperty({ enum: reportExportFormats, isArray: true })
   formats!: ServiceReportDefinition['formats'];

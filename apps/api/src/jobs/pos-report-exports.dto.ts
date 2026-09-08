@@ -1,5 +1,16 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsDateString, IsIn, IsOptional, IsUUID } from 'class-validator';
+import {
+  ArrayMaxSize,
+  ArrayMinSize,
+  ArrayUnique,
+  IsArray,
+  IsString,
+  Matches,
+  IsDateString,
+  IsIn,
+  IsOptional,
+  IsUUID,
+} from 'class-validator';
 import {
   posReportDefinitionKeys,
   reportExportFormats,
@@ -11,6 +22,14 @@ import {
 } from '@vista/contracts';
 
 export class CreatePosReportExportDto implements CreatePosReportExportRequest {
+  @ApiPropertyOptional({ type: [String], minItems: 1, maxItems: 30 })
+  @IsOptional()
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(30)
+  @ArrayUnique()
+  @IsString({ each: true })
+  columns?: string[];
   @ApiPropertyOptional({ format: 'uuid', type: String })
   @IsOptional()
   @IsUUID('loose')
@@ -24,11 +43,13 @@ export class CreatePosReportExportDto implements CreatePosReportExportRequest {
   @ApiPropertyOptional({ format: 'date', type: String })
   @IsOptional()
   @IsDateString({ strict: true })
+  @Matches(/^\d{4}-\d{2}-\d{2}$/u)
   dateFrom?: string;
 
   @ApiPropertyOptional({ format: 'date', type: String })
   @IsOptional()
   @IsDateString({ strict: true })
+  @Matches(/^\d{4}-\d{2}-\d{2}$/u)
   dateTo?: string;
 
   @ApiProperty({ enum: posReportDefinitionKeys })
@@ -51,6 +72,19 @@ export class CreatePosReportExportDto implements CreatePosReportExportRequest {
 }
 
 export class PosReportDefinitionDto implements PosReportDefinition {
+  @ApiPropertyOptional({
+    type: 'array',
+    items: {
+      type: 'object',
+      required: ['key', 'label', 'type'],
+      properties: {
+        key: { type: 'string' },
+        label: { type: 'string' },
+        type: { type: 'string', enum: ['date', 'money', 'number', 'text'] },
+      },
+    },
+  })
+  columns?: PosReportDefinition['columns'];
   @ApiProperty({ type: String }) description!: string;
   @ApiProperty({ enum: reportExportFormats, isArray: true })
   formats!: PosReportDefinition['formats'];

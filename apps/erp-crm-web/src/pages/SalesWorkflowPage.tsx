@@ -20,6 +20,8 @@ import {
 import { resolveSalesPrice } from '../api/sales-pricing';
 import { useAuth } from '../auth/AuthProvider';
 import { Icon } from '../components/Icon';
+import { Link } from '../routing/Router';
+import { erpReportMessages } from './erp-report.messages';
 
 export function SalesWorkflowPage() {
   const { hasPermission, session } = useAuth();
@@ -58,6 +60,10 @@ export function SalesWorkflowPage() {
         ) : null}
       </header>
 
+      <Link className="sales-report-link" to="/modules/erp.sales/reports">
+        <Icon name="chart" size={16} />
+        {erpReportMessages.title}
+      </Link>
       <WorkflowSummary workflows={data.workflows} />
       {notice ? (
         <Toast onDismiss={() => setNotice(null)} tone="success">

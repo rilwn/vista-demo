@@ -85,11 +85,13 @@ function shouldUseBrowserNavigation(event: MouseEvent<HTMLAnchorElement>): boole
 }
 
 export function PosTerminal({
+  canCreateReports = false,
   accountId,
   employeeName,
   onSignOut,
   token,
 }: {
+  canCreateReports?: boolean;
   accountId: string;
   employeeName: string;
   onSignOut: () => Promise<void>;
@@ -333,7 +335,7 @@ export function PosTerminal({
               onReceipt={setRecoveredReceipt}
             />
           ) : screen === 'reports' ? (
-            <PosReports onNotice={setNotice} token={token} />
+            <PosReports canCreate={canCreateReports} onNotice={setNotice} token={token} />
           ) : (
             <SaleHistory onNotice={setNotice} token={token} />
           )}

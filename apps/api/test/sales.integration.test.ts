@@ -7,6 +7,8 @@ import type { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import type { AppEnvironment } from '@vista/config';
 import type {
+  ErpReportDefinition,
+  ErpReportPreview,
   CustomerPriceGroup,
   PriceList,
   PromotionalCampaign,
@@ -122,10 +124,13 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
       new URL('../src/database/migrations', import.meta.url),
     );
     await migrateUp(database, migrationDirectory);
-    expect(await migrateDown(database, migrationDirectory)).toBe('0058_saved_finance_reports');
-    expect(await migrateUp(database, migrationDirectory)).toContain('0058_saved_finance_reports');
+    expect(await migrateDown(database, migrationDirectory)).toBe('0063_erp_operational_reports');
+    expect(await migrateUp(database, migrationDirectory)).toContain('0063_erp_operational_reports');
 
     Object.assign(process.env, {
+      // This suite deliberately sends many invalid/replayed reporting commands.
+      // Rate-limit enforcement has its own dedicated integration suite.
+      API_RATE_LIMIT_WRITE_MAX: '1000',
       BUSINESS_TIMEZONE: 'Europe/Sofia',
       CORS_ORIGINS: 'http://localhost:5173',
       DATABASE_URL: isolatedDatabaseUrl.toString(),
@@ -3182,6 +3187,237 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
     }
   });
 
+  it('saves private dashboard preferences with concurrent retry safety and restores defaults', async () => {
+    const path = '/api/v1/operations/overview/preferences';
+    const overviewPath = '/api/v1/operations/overview?dateFrom=2026-01-01&dateTo=2026-12-31';
+    const input = { hiddenCards: ['recordedRevenueBgn'], version: 0 };
+    await request(application.getHttpServer()).put(path).send(input).expect(401);
+    const noAccessEmail = `overview-no-access-${runId}@example.invalid`;
+    await createAccount(
+      database,
+      noAccessEmail,
+      await application.get(PasswordService).hash(password),
+    );
+    const noAccessToken = await login(application, noAccessEmail);
+    await request(application.getHttpServer())
+      .put(path)
+      .set('authorization', `Bearer ${noAccessToken}`)
+      .send(input)
+      .expect(403);
+    const saves = await Promise.all(
+      [1, 2].map(() =>
+        request(application.getHttpServer())
+          .put(path)
+          .set('authorization', `Bearer ${token}`)
+          .send(input)
+          .expect(200),
+      ),
+    );
+    expect(saves[0]!.body).toEqual({ ...input, version: 1 });
+    expect(saves[1]!.body).toEqual(saves[0]!.body);
+    const loaded = await request(application.getHttpServer())
+      .get(overviewPath)
+      .set('authorization', `Bearer ${token}`)
+      .expect(200);
+    expect(loaded.body.preferences).toEqual(saves[0]!.body);
+    const other = await request(application.getHttpServer())
+      .get(overviewPath)
+      .set('authorization', `Bearer ${viewerToken}`)
+      .expect(200);
+    expect(other.body.preferences).toEqual({ hiddenCards: [], version: 0 });
+    for (const invalid of [
+      { hiddenCards: ['invented'], version: 1 },
+      { hiddenCards: ['recordedRevenueBgn', 'recordedRevenueBgn'], version: 1 },
+      { hiddenCards: [], version: -1 },
+      { ...input, ownerAccountId: randomUUID() },
+    ]) {
+      await request(application.getHttpServer())
+        .put(path)
+        .set('authorization', `Bearer ${token}`)
+        .send(invalid)
+        .expect(400);
+    }
+    await request(application.getHttpServer())
+      .put(path)
+      .set('authorization', `Bearer ${token}`)
+      .send({ hiddenCards: [], version: 0 })
+      .expect(409);
+    const audit = await database.query<{ count: number }>(
+      "SELECT count(*)::integer AS count FROM audit.events WHERE action = 'dashboard.preferences.updated'",
+    );
+    expect(audit.rows[0]?.count).toBe(1);
+    await request(application.getHttpServer())
+      .put(path)
+      .set('authorization', `Bearer ${token}`)
+      .send({ hiddenCards: [], version: 1 })
+      .expect(200);
+    const reset = await request(application.getHttpServer())
+      .get(overviewPath)
+      .set('authorization', `Bearer ${token}`)
+      .expect(200);
+    expect(reset.body.preferences).toEqual({ hiddenCards: [], version: 2 });
+  });
+
+  it('saves private Service report options with retry safety, validation and approval controls', async () => {
+    const endpoint = '/api/v1/service/saved-reports';
+    const saved = {
+      id: randomUUID(),
+      name: 'Service visits',
+      definitionKey: 'service.technician-performance',
+      dateFrom: '2026-01-01',
+      dateTo: '2026-12-31',
+      format: 'xlsx',
+      columns: ['displayName', 'completedCount'],
+    };
+    const send = (body: object) =>
+      request(application.getHttpServer())
+        .post(endpoint)
+        .set('authorization', `Bearer ${token}`)
+        .send(body);
+    await request(application.getHttpServer()).post(endpoint).send(saved).expect(401);
+    await request(application.getHttpServer())
+      .post(endpoint)
+      .set('authorization', `Bearer ${viewerToken}`)
+      .send(saved)
+      .expect(403);
+    await request(application.getHttpServer())
+      .get(endpoint)
+      .set('authorization', `Bearer ${viewerToken}`)
+      .expect(403);
+    const replies = await Promise.all([send(saved), send(saved)]);
+    expect(replies.map((reply) => reply.status)).toEqual([201, 201]);
+    expect(replies[0]?.body).toEqual(saved);
+    await send({ ...saved, name: 'Changed' }).expect(409);
+    for (const invalid of [
+      { columns: [] },
+      { columns: ['displayName', 'displayName'] },
+      { columns: ['password_hash'] },
+      { columns: ['requestNumber'] },
+      { dateFrom: '2026-02-30' },
+      { dateFrom: '2027-01-01' },
+      { dateTo: undefined },
+      { dateFrom: '2026-01-01T00:00:00Z' },
+      { name: ' ' },
+      { definitionKey: 'finance.supplier-turnover' },
+      { sql: 'SELECT 1' },
+    ])
+      await send({ ...saved, id: randomUUID(), ...invalid }).expect(400);
+    const listed = await request(application.getHttpServer())
+      .get(endpoint)
+      .set('authorization', `Bearer ${token}`)
+      .expect(200);
+    expect(listed.body.items).toEqual([saved]);
+    const otherEmail = `service-report-reader-${runId}@example.invalid`;
+    const otherId = await createAccount(
+      database,
+      otherEmail,
+      await application.get(PasswordService).hash(password),
+    );
+    await grantServicePermissions(database, otherId, ['approve']);
+    const otherToken = await login(application, otherEmail);
+    const other = await request(application.getHttpServer())
+      .get(endpoint)
+      .set('authorization', `Bearer ${otherToken}`)
+      .expect(200);
+    expect(other.body.total).toBe(0);
+    await request(application.getHttpServer())
+      .post(endpoint)
+      .set('authorization', `Bearer ${otherToken}`)
+      .send({ ...saved, id: randomUUID() })
+      .expect(403);
+    for (const query of ['page=0', 'pageSize=101', 'ownerAccountId=anything']) {
+      await request(application.getHttpServer())
+        .get(`${endpoint}?${query}`)
+        .set('authorization', `Bearer ${token}`)
+        .expect(400);
+    }
+    const audit = await database.query<{ count: number }>(
+      "SELECT count(*)::integer AS count FROM audit.events WHERE target_id=$1 AND action='report.view.created'",
+      [saved.id],
+    );
+    expect(audit.rows[0]?.count).toBe(1);
+  });
+
+  it('saves private CRM report options with retry safety, validation and approval controls', async () => {
+    const endpoint = '/api/v1/crm/saved-reports';
+    const saved = {
+      id: randomUUID(),
+      name: 'Customer value',
+      definitionKey: 'crm.customer-value',
+      dateFrom: '2026-01-01',
+      dateTo: '2026-12-31',
+      format: 'xlsx',
+      columns: ['period', 'activeCustomers'],
+    };
+    const send = (body: object) =>
+      request(application.getHttpServer())
+        .post(endpoint)
+        .set('authorization', `Bearer ${token}`)
+        .send(body);
+    await request(application.getHttpServer()).post(endpoint).send(saved).expect(401);
+    await request(application.getHttpServer())
+      .post(endpoint)
+      .set('authorization', `Bearer ${viewerToken}`)
+      .send(saved)
+      .expect(403);
+    await request(application.getHttpServer())
+      .get(endpoint)
+      .set('authorization', `Bearer ${viewerToken}`)
+      .expect(403);
+    const replies = await Promise.all([send(saved), send(saved)]);
+    expect(replies.map((reply) => reply.status)).toEqual([201, 201]);
+    expect(replies[0]?.body).toEqual(saved);
+    await send({ ...saved, name: 'Changed' }).expect(409);
+    for (const invalid of [
+      { columns: [] },
+      { columns: ['period', 'period'] },
+      { columns: ['password_hash'] },
+      { columns: ['requestNumber'] },
+      { dateFrom: '2026-02-30' },
+      { dateFrom: '2027-01-01' },
+      { dateTo: undefined },
+      { dateFrom: '2026-01-01T00:00:00Z' },
+      { name: ' ' },
+      { definitionKey: 'finance.supplier-turnover' },
+      { sql: 'SELECT 1' },
+    ])
+      await send({ ...saved, id: randomUUID(), ...invalid }).expect(400);
+    const listed = await request(application.getHttpServer())
+      .get(endpoint)
+      .set('authorization', `Bearer ${token}`)
+      .expect(200);
+    expect(listed.body.items).toEqual([saved]);
+    const otherEmail = `crm-report-reader-${runId}@example.invalid`;
+    const otherId = await createAccount(
+      database,
+      otherEmail,
+      await application.get(PasswordService).hash(password),
+    );
+    await grantCrmPermissions(database, otherId, ['view']);
+    const otherToken = await login(application, otherEmail);
+    const other = await request(application.getHttpServer())
+      .get(endpoint)
+      .set('authorization', `Bearer ${otherToken}`)
+      .expect(200);
+    expect(other.body.total).toBe(0);
+    await request(application.getHttpServer())
+      .post(endpoint)
+      .set('authorization', `Bearer ${otherToken}`)
+      .send({ ...saved, id: randomUUID() })
+      .expect(403);
+    for (const query of ['page=0', 'pageSize=101', 'ownerAccountId=anything']) {
+      await request(application.getHttpServer())
+        .get(`${endpoint}?${query}`)
+        .set('authorization', `Bearer ${token}`)
+        .expect(400);
+    }
+    const audit = await database.query<{ count: number }>(
+      "SELECT count(*)::integer AS count FROM audit.events WHERE target_id=$1 AND action='report.view.created'",
+      [saved.id],
+    );
+    expect(audit.rows[0]?.count).toBe(1);
+  });
+
   it('summarizes Service work and prepares access-controlled report exports without mixing Finance files', async () => {
     await request(application.getHttpServer())
       .get('/api/v1/service/reports/overview?dateFrom=2026-01-01&dateTo=2099-12-31')
@@ -3219,6 +3455,7 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
       dateTo: '2099-12-31',
       definitionKey: 'service.request-register',
       format: 'csv',
+      columns: ['requestNumber', 'customerName'],
     };
     const requestedResponse = await request(application.getHttpServer())
       .post('/api/v1/service/report-exports')
@@ -3285,6 +3522,301 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
       .expect(200);
     expect(downloaded.text).toContain('Service request register');
     expect(downloaded.text).toContain('Request');
+    expect(downloaded.text).toContain('Customer');
+    expect(downloaded.text).not.toContain('Labour BGN');
+    expect(downloaded.text).not.toContain('Device and serial');
+    const stored = await database.query<{ filters: { columns: string[] } }>(
+      'SELECT filters FROM reporting.export_jobs WHERE id = $1',
+      [requested.id],
+    );
+    expect(stored.rows[0]?.filters.columns).toEqual(exportInput.columns);
+  });
+
+  it('reports across Procurement, Warehouse, Sales and Logistics with private saved views and all export formats', async () => {
+    const ownerEmail = `erp-reports-${runId}@example.invalid`;
+    const readerEmail = `erp-report-reader-${runId}@example.invalid`;
+    const owner = await createAccount(
+      database,
+      ownerEmail,
+      await application.get(PasswordService).hash(password),
+    );
+    const reader = await createAccount(
+      database,
+      readerEmail,
+      await application.get(PasswordService).hash(password),
+    );
+    for (const [accountId, actions] of [
+      [owner, ['view', 'create']],
+      [reader, ['view']],
+    ] as const) {
+      const roleId = randomUUID();
+      await database.query('INSERT INTO iam.roles (id,code,name) VALUES ($1,$2,$3)', [
+        roleId,
+        `erp-report-${roleId}`,
+        'ERP reports test',
+      ]);
+      for (const scope of ['procurement', 'warehouse', 'sales', 'logistics'])
+        for (const action of actions) {
+          const permission = await database.query<{ id: string }>(
+            'INSERT INTO iam.permissions (id,module,action) VALUES ($1,$2,$3) ON CONFLICT (module,action) DO UPDATE SET module=EXCLUDED.module RETURNING id',
+            [randomUUID(), `erp.${scope}`, action],
+          );
+          await database.query(
+            'INSERT INTO iam.role_permissions (role_id,permission_id) VALUES ($1,$2)',
+            [roleId, permission.rows[0]!.id],
+          );
+        }
+      await database.query('INSERT INTO iam.account_roles (account_id,role_id) VALUES ($1,$2)', [
+        accountId,
+        roleId,
+      ]);
+    }
+    const ownerToken = await login(application, ownerEmail),
+      readerToken = await login(application, readerEmail);
+    let totalDefinitions = 0;
+    for (const scope of ['procurement', 'warehouse', 'sales', 'logistics']) {
+      const base = `/api/v1/erp/reports/${scope}`;
+      await request(application.getHttpServer()).get(`${base}/definitions`).expect(401);
+      const definitionsResponse = await request(application.getHttpServer())
+        .get(`${base}/definitions`)
+        .set('authorization', `Bearer ${ownerToken}`)
+        .expect(200);
+      const definitions = definitionsResponse.body as ErpReportDefinition[];
+      totalDefinitions += definitions.length;
+      for (const [index, definition] of definitions.entries()) {
+        const filters = {
+          definitionKey: definition.key,
+          ...(definition.requiresDateRange ? { dateFrom: '2020-01-01', dateTo: '2100-12-31' } : {}),
+        };
+        const preview = await request(application.getHttpServer())
+          .get(`${base}/preview`)
+          .query(filters)
+          .set('authorization', `Bearer ${ownerToken}`)
+          .expect(200);
+        expect((preview.body as ErpReportPreview).columns.map((c) => c.key)).toEqual(
+          definition.columns!.map((c) => c.key),
+        );
+        expect(preview.body.rows.length).toBeLessThanOrEqual(25);
+        const empty = await request(application.getHttpServer())
+          .get(`${base}/preview`)
+          .query({ ...filters, search: 'no-such-report-value-' + runId })
+          .set('authorization', `Bearer ${ownerToken}`)
+          .expect(200);
+        expect(empty.body.total).toBe(0);
+        for (const format of index === 0 ? ['csv', 'xlsx', 'pdf'] : ['csv']) {
+          const selected = definition.columns!.slice(0, 2);
+          const input = { ...filters, columns: selected.map((c) => c.key), format };
+          const key = randomUUID();
+          const send = () =>
+            request(application.getHttpServer())
+              .post(`${base}/exports`)
+              .set('authorization', `Bearer ${ownerToken}`)
+              .set('Idempotency-Key', key)
+              .send(input);
+          const first = await send().expect(202);
+          const replay = await send().expect(202);
+          expect(replay.body.id).toBe(first.body.id);
+          await request(application.getHttpServer())
+            .post(`${base}/exports`)
+            .set('authorization', `Bearer ${readerToken}`)
+            .set('Idempotency-Key', randomUUID())
+            .send(input)
+            .expect(403);
+          const job = {
+            attemptNumber: 1,
+            correlationId: randomUUID(),
+            enqueuedAt: new Date().toISOString(),
+            idempotencyKey: `erp-report:${first.body.id}`,
+            jobId: randomUUID(),
+            maxAttempts: 5,
+            name: 'report.generate',
+            payload: { exportId: first.body.id as string },
+            retryAllowed: true,
+          } as const;
+          const handlers = application.get(JobHandlerRegistry);
+          await handlers.execute(job);
+          await expect(handlers.execute({ ...job, attemptNumber: 2 })).resolves.toMatchObject({
+            deduplicated: true,
+          });
+          await request(application.getHttpServer())
+            .get(`${base}/exports/${first.body.id}/content`)
+            .set('authorization', `Bearer ${readerToken}`)
+            .expect(404);
+          const content = await request(application.getHttpServer())
+            .get(`${base}/exports/${first.body.id}/content`)
+            .set('authorization', `Bearer ${ownerToken}`)
+            .expect(200);
+          if (format === 'csv')
+            expect(content.text.split('\r\n\r\n')[1]?.split('\r\n')[0]).toBe(
+              selected.map((c) => c.label).join(','),
+            );
+          else
+            expect(content.headers['content-type']).toContain(
+              format === 'pdf' ? 'application/pdf' : 'spreadsheetml',
+            );
+          const stored = await database.query<{ filters: { columns: string[] } }>(
+            'SELECT filters FROM reporting.export_jobs WHERE id=$1',
+            [first.body.id],
+          );
+          expect(stored.rows[0]!.filters.columns).toEqual(input.columns);
+        }
+        const saved = {
+          ...filters,
+          id: randomUUID(),
+          name: definition.name,
+          format: 'csv',
+          columns: definition.columns!.slice(0, 2).map((c) => c.key),
+        };
+        const sendSaved = () =>
+          request(application.getHttpServer())
+            .post(`${base}/saved`)
+            .set('authorization', `Bearer ${ownerToken}`)
+            .send(saved);
+        const saves = await Promise.all([sendSaved().expect(201), sendSaved().expect(201)]);
+        expect(saves[0].body).toEqual(saves[1].body);
+        await request(application.getHttpServer())
+          .post(`${base}/saved`)
+          .set('authorization', `Bearer ${ownerToken}`)
+          .send({ ...saved, name: 'Changed' })
+          .expect(409);
+        const list = await request(application.getHttpServer())
+          .get(`${base}/saved`)
+          .set('authorization', `Bearer ${readerToken}`)
+          .expect(200);
+        expect(list.body.total).toBe(0);
+        await request(application.getHttpServer())
+          .post(`${base}/saved`)
+          .set('authorization', `Bearer ${readerToken}`)
+          .send({ ...saved, id: randomUUID() })
+          .expect(403);
+        for (const invalid of [
+          { columns: ['password_hash'] },
+          { columns: [] },
+          { columns: [saved.columns[0], saved.columns[0]] },
+          { sql: 'SELECT 1' },
+          { name: ' ' },
+          { search: 'x'.repeat(121) },
+        ]) {
+          await request(application.getHttpServer())
+            .post(`${base}/saved`)
+            .set('authorization', `Bearer ${ownerToken}`)
+            .send({ ...saved, id: randomUUID(), ...invalid })
+            .expect(400);
+        }
+        if (definition.requiresDateRange) {
+          for (const dateFrom of ['2026-02-30', '2200-01-01'])
+            await request(application.getHttpServer())
+              .get(`${base}/preview`)
+              .query({ ...filters, dateFrom })
+              .set('authorization', `Bearer ${ownerToken}`)
+              .expect(400);
+        } else
+          await request(application.getHttpServer())
+            .get(`${base}/preview`)
+            .query({ ...filters, dateFrom: '2026-01-01', dateTo: '2026-12-31' })
+            .set('authorization', `Bearer ${ownerToken}`)
+            .expect(400);
+      }
+      const first = definitions[0]!;
+      await request(application.getHttpServer())
+        .get(`${base}/preview`)
+        .query({
+          definitionKey:
+            scope === 'sales' ? 'warehouse.stock-balances' : 'sales.quotation-register',
+          dateFrom: '2026-01-01',
+          dateTo: '2026-12-31',
+        })
+        .set('authorization', `Bearer ${ownerToken}`)
+        .expect(404);
+      const ownList = await request(application.getHttpServer())
+        .get(`${base}/saved?page=1&pageSize=1`)
+        .set('authorization', `Bearer ${ownerToken}`)
+        .expect(200);
+      expect(ownList.body.items).toHaveLength(1);
+      expect(ownList.body.total).toBe(definitions.length);
+      expect(first.key.startsWith(scope + '.')).toBe(true);
+    }
+    expect(totalDefinitions).toBe(10);
+    await request(application.getHttpServer())
+      .get('/api/v1/erp/reports/finance/definitions')
+      .set('authorization', `Bearer ${ownerToken}`)
+      .expect(400);
+    await request(application.getHttpServer())
+      .get('/api/v1/erp/reports/warehouse/definitions')
+      .set('authorization', `Bearer ${viewerToken}`)
+      .expect(403);
+  }, 60000);
+
+  it('exports CRM field selections through the worker with replay and download protection', async () => {
+    const base = '/api/v1/crm/report-exports';
+    const definitions = await request(application.getHttpServer())
+      .get(`${base}/definitions`)
+      .set('authorization', `Bearer ${token}`)
+      .expect(200);
+    expect(definitions.body).toHaveLength(4);
+    for (const definition of definitions.body as {
+      key: string;
+      columns: { key: string; label: string }[];
+    }[]) {
+      expect(definition.columns.length).toBeGreaterThan(1);
+      const selected = definition.columns.slice(0, 2);
+      const input = {
+        definitionKey: definition.key,
+        dateFrom: '2026-01-01',
+        dateTo: '2026-12-31',
+        columns: selected.map((column) => column.key),
+        format: 'csv',
+      };
+      const invalid = await request(application.getHttpServer())
+        .post(base)
+        .set('authorization', `Bearer ${token}`)
+        .set('idempotency-key', randomUUID())
+        .send({ ...input, columns: ['password_hash'] })
+        .expect(400);
+      expect(invalid.body.error.code).toBe('REPORT_COLUMNS_INVALID');
+      const key = randomUUID();
+      const send = () =>
+        request(application.getHttpServer())
+          .post(base)
+          .set('authorization', `Bearer ${token}`)
+          .set('idempotency-key', key)
+          .send(input);
+      const first = await send().expect(202);
+      const exportId = (first.body as { id: string }).id;
+      const replay = await send().expect(202);
+      expect(replay.body.id).toBe(first.body.id);
+      const job = {
+        attemptNumber: 1,
+        correlationId: randomUUID(),
+        enqueuedAt: new Date().toISOString(),
+        idempotencyKey: `crm-report:${first.body.id}`,
+        jobId: randomUUID(),
+        maxAttempts: 5,
+        name: 'report.generate',
+        payload: { exportId },
+        retryAllowed: true,
+      } as const;
+      const handlers = application.get(JobHandlerRegistry);
+      await handlers.execute(job);
+      await expect(handlers.execute({ ...job, attemptNumber: 2 })).resolves.toMatchObject({
+        deduplicated: true,
+      });
+      await request(application.getHttpServer())
+        .get(`${base}/${first.body.id}/content`)
+        .set('authorization', `Bearer ${viewerToken}`)
+        .expect(403);
+      const content = await request(application.getHttpServer())
+        .get(`${base}/${first.body.id}/content`)
+        .set('authorization', `Bearer ${token}`)
+        .expect(200);
+      const table = content.text.split('\r\n\r\n')[1];
+      expect(table?.split('\r\n')[0]).toBe(selected.map((column) => column.label).join(','));
+      const persisted = await database.query<{ filters: { columns: string[] } }>(
+        'SELECT filters FROM reporting.export_jobs WHERE id = $1',
+        [first.body.id],
+      );
+      expect(persisted.rows[0]?.filters.columns).toEqual(input.columns);
+    }
   });
 
   it('limits a technician without service approval to assigned work and preserves dispatcher oversight', async () => {

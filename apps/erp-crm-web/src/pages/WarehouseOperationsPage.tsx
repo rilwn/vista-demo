@@ -1623,6 +1623,7 @@ function WarehousePageFrame({
         <Link to="/modules/erp.warehouse/movements">Movements</Link>
         <Link to="/modules/erp.warehouse/stocktakes">Stocktakes</Link>
         <Link to="/modules/erp.warehouse/reservations">Reservations & trace</Link>
+        <Link to="/modules/erp.warehouse/reports">{erpReportMessages.title}</Link>
       </nav>
       {children}
     </div>
@@ -1794,3 +1795,4 @@ function money(value: string | number) {
 function shortId(value: string) {
   return value.slice(0, 8).toUpperCase();
 }
+import { erpReportMessages } from './erp-report.messages';

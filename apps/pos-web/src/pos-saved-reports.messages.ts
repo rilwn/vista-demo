@@ -1,0 +1,18 @@
+export const savedReportText = {
+  title: 'Saved reports & export fields',
+  saved: 'My saved reports',
+  open: 'Open a saved report',
+  empty: 'No saved reports yet',
+  fields: 'Fields to include in the file',
+  name: 'Report name',
+  format: 'File type',
+  save: 'Save as new report',
+  export: 'Prepare export',
+  success: 'Report saved. Open it again from My saved reports.',
+  restored: 'Saved report opened. Filters and export fields have been restored.',
+  invalid: 'Choose at least one field.',
+  previous: 'Previous',
+  next: 'Next',
+  unavailable: 'This saved report is no longer available.',
+  hint: 'Saved options use the applied filters above. The on-screen table keeps all its columns.',
+} as const;

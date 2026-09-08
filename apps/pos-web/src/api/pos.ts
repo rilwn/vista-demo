@@ -17,6 +17,7 @@ import type {
   PosLoyaltyLedger,
   PosQuickAccess,
   PosReportDefinition,
+  SavedPosReport,
   PosReportExport,
   PosReportExportPage,
   PosReportFilters,
@@ -245,12 +246,31 @@ export function getPosReportExports(token: string): Promise<PosReportExportPage>
 export function createPosReportExport(
   token: string,
   input: CreatePosReportExportRequest,
+  idempotencyKey: string = crypto.randomUUID(),
 ): Promise<PosReportExport> {
   return unwrapApiResponse(
     posApiClient.POST('/api/v1/pos/report-exports', {
       body: input,
       headers: authorizationHeaders(token),
-      params: { header: { 'Idempotency-Key': crypto.randomUUID() } },
+      params: { header: { 'Idempotency-Key': idempotencyKey } },
+    }),
+  );
+}
+
+export function listSavedPosReports(token: string, page = 1) {
+  return unwrapApiResponse(
+    posApiClient.GET('/api/v1/pos/saved-reports', {
+      headers: authorizationHeaders(token),
+      params: { query: { page, pageSize: 20 } },
+    }),
+  );
+}
+
+export function savePosReport(token: string, input: SavedPosReport): Promise<SavedPosReport> {
+  return unwrapApiResponse(
+    posApiClient.POST('/api/v1/pos/saved-reports', {
+      headers: authorizationHeaders(token),
+      body: input,
     }),
   );
 }

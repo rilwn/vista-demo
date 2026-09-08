@@ -1,8 +1,12 @@
-import { Controller, Get, Inject, Query, Req, ValidationPipe } from '@nestjs/common';
-import { ApiBearerAuth, ApiOkResponse, ApiQuery, ApiTags } from '@nestjs/swagger';
+import { Body, Controller, Get, Inject, Put, Query, Req, ValidationPipe } from '@nestjs/common';
+import { ApiBody, ApiBearerAuth, ApiOkResponse, ApiQuery, ApiTags } from '@nestjs/swagger';
 import type { AuthenticatedRequest } from '../auth/authentication.types.js';
 import { RateLimitPolicy } from '../security/rate-limit.decorator.js';
-import { OperationsOverviewDto, OperationsOverviewQueryDto } from './operations-overview.dto.js';
+import {
+  OverviewPreferencesDto,
+  OperationsOverviewDto,
+  OperationsOverviewQueryDto,
+} from './operations-overview.dto.js';
 import { OperationsOverviewService } from './operations-overview.service.js';
 
 @ApiTags('operations-overview')
@@ -12,6 +16,26 @@ export class OperationsOverviewController {
   constructor(
     @Inject(OperationsOverviewService) private readonly reports: OperationsOverviewService,
   ) {}
+  @Put('preferences')
+  @RateLimitPolicy('write')
+  @ApiBody({ type: OverviewPreferencesDto })
+  @ApiOkResponse({ type: OverviewPreferencesDto })
+  preferences(
+    @Body(
+      new ValidationPipe({
+        expectedType: OverviewPreferencesDto,
+        transform: true,
+        whitelist: true,
+        forbidNonWhitelisted: true,
+      }),
+    )
+    input: OverviewPreferencesDto,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    return this.reports.savePreferences(input, request.authentication, {
+      correlationId: request.correlationId,
+    });
+  }
   @Get()
   @RateLimitPolicy('read')
   @ApiOkResponse({ type: OperationsOverviewDto })

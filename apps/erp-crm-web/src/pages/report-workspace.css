@@ -73,67 +73,322 @@
   padding: 12px 24px max(12px, env(safe-area-inset-bottom)) !important;
   background: var(--vista-surface);
 }
-.operations-filters {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: end;
-  gap: 12px;
-  padding: 16px;
-}
-.operations-filters label {
+.operations-overview {
   display: grid;
-  gap: 6px;
-  min-width: 140px;
-  font-size: 0.75rem;
-  font-weight: 650;
+  gap: 14px;
+  min-width: 0;
 }
-.operations-filters input,
-.operations-filters select {
+.operations-overview .operations-filters {
+  display: grid;
+  grid-template-columns: minmax(140px, 1fr) minmax(140px, 1fr) minmax(185px, 1.15fr) 100px;
+  align-items: end;
+  gap: 16px;
+  margin: 0;
+  padding: 14px 16px;
+  border: 1px solid var(--vista-line);
+  border-radius: 12px;
+  background: var(--vista-surface);
+}
+.operations-filter-field {
+  display: grid;
+  grid-template-rows: auto 40px;
+  gap: 7px;
+  min-width: 0;
+}
+.operations-filter-field > label {
+  display: block;
+  margin: 0;
+  font-size: 0.7rem;
+  font-weight: 650;
+  line-height: 1.25;
+  color: var(--vista-muted);
+}
+.operations-filter-control {
+  position: relative;
+  height: 40px;
+  min-width: 0;
+}
+.operations-overview
+  .operations-filter-control
+  :is(input, select):not(.vista-search-select-native) {
   box-sizing: border-box;
   width: 100%;
-  min-height: 42px;
-  padding: 0.6rem 0.75rem;
+  height: 40px;
+  min-height: 40px;
+  margin: 0;
+  padding: 0 11px;
   border: 1px solid var(--vista-line);
-  border-radius: 8px;
-  background: var(--vista-surface);
+  border-radius: 7px;
+  background: #f8faf8;
+  box-shadow: none;
   color: var(--vista-ink);
   font: inherit;
-  font-size: 0.84rem;
-  font-weight: 450;
+  font-size: 0.8rem;
+  font-weight: 500;
+  line-height: normal;
 }
-.operations-filters input:focus-visible {
-  outline: 2px solid #216843;
+.operations-overview .operations-filter-control .vista-search-select-shell {
+  height: 40px;
+  min-height: 40px;
+  margin: 0;
+}
+.operations-overview .operations-filter-control input.vista-search-select {
+  padding-right: 38px;
+}
+.operations-overview .operations-filter-control .vista-search-select-toggle {
+  height: auto;
+}
+.operations-overview .operations-filter-control input:focus-visible {
+  outline: 2px solid #32764c;
   outline-offset: 2px;
+}
+.operations-overview .operations-filter-apply {
+  box-sizing: border-box;
+  height: 40px;
+  min-height: 40px;
+  margin: 0;
+  padding: 0 14px;
+  border-radius: 7px;
+  box-shadow: none;
+  font-size: 0.78rem;
+  line-height: 1;
 }
 .operations-metrics {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 210px), 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px;
 }
-.operations-metric {
+.operations-overview .operations-metric {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 20px;
   min-width: 0;
+  padding: 16px 18px 0;
+  border: 1px solid var(--vista-line);
+  border-radius: 12px;
+  background: var(--vista-surface);
+  box-shadow: 0 2px 4px rgb(22 43 30 / 2%);
 }
-.operations-metric strong {
-  font-size: clamp(1.4rem, 2vw, 2rem);
+.operations-metric-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 34px;
+}
+.operations-metric-heading h2 {
+  margin: 0;
+  color: #506256;
+  font-size: 0.76rem;
+  font-weight: 600;
+  line-height: 1.4;
+}
+.operations-metric-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 30px;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: #f0f5f1;
+  color: #427553;
+}
+.operations-metric-value {
+  display: block;
+  margin-top: 12px;
+  font-size: clamp(1.4rem, 2.1vw, 1.8rem);
+  font-weight: 650;
+  line-height: 1.2;
+  letter-spacing: -0.045em;
   font-variant-numeric: tabular-nums;
+  color: var(--vista-ink);
   overflow-wrap: anywhere;
 }
-.operations-metric small {
+.operations-metric-period {
+  margin: 6px 0 16px;
+  color: var(--vista-muted);
+  font-size: 0.72rem;
   line-height: 1.5;
 }
-.operations-metric a {
+.operations-overview .operations-metric-link {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 42px;
   margin-top: auto;
-  padding-top: 8px;
+  padding: 10px 0;
+  border-top: 1px solid #edf1ed;
+  text-decoration: none;
+  color: #376449;
+  font-size: 0.71rem;
+  font-weight: 600;
+  line-height: 1.35;
+}
+.operations-metric-link .app-icon {
+  flex: 0 0 auto;
+}
+.operations-metric-link:hover {
+  color: #174a2b;
+}
+.operations-metric-link:hover span {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.operations-metric-link:focus-visible {
+  outline: 2px solid #32764c;
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+.operations-context {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: start;
+  gap: 8px 20px;
+  padding: 0 2px;
+  color: var(--vista-muted);
+  font-size: 0.7rem;
+  line-height: 1.6;
+}
+.operations-context > p {
+  flex: 1 1 340px;
+  margin: 0;
+}
+.operations-calculations {
+  flex: 0 1 auto;
+}
+.operations-calculations[open] {
+  flex: 1 1 100%;
+}
+.operations-calculations summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  cursor: pointer;
+  list-style: none;
+  font-weight: 550;
+}
+.operations-calculations summary::-webkit-details-marker {
+  display: none;
+}
+.operations-calculations[open] summary .app-icon {
+  transform: rotate(180deg);
+}
+.operations-calculations dl {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+  gap: 16px;
+  margin: 10px 0 0;
+  padding: 16px;
+  border: 1px solid var(--vista-line);
+  border-radius: 10px;
+  background: var(--vista-surface);
+}
+.operations-calculations dt {
+  color: var(--vista-ink);
+  font-weight: 650;
+}
+.operations-calculations dd {
+  margin: 4px 0 0;
+}
+@media (max-width: 1250px) {
+  .operations-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 1050px) {
+  .operations-overview .operations-filters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+  .operations-overview .operations-filter-apply {
+    justify-self: end;
+    width: 100px;
+  }
+  .operations-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 @media (max-width: 480px) {
   .report-view-fields .report-view-field-grid {
     grid-template-columns: 1fr;
   }
-  .operations-filters label {
-    width: 100%;
+  .operations-overview .operations-filters {
+    padding: 12px;
+    gap: 12px 10px;
   }
+  .operations-filter-field > label {
+    font-size: 0.65rem;
+  }
+  .operations-metrics {
+    grid-template-columns: 1fr;
+  }
+  .operations-overview .operations-metric {
+    padding: 14px 16px 0;
+  }
+  .operations-metric-value {
+    font-size: 1.75rem;
+  }
+  .operations-metric-period {
+    margin-bottom: 12px;
+  }
+}
+.overview-preferences {
+  border: 1px solid var(--vista-line);
+  border-radius: 12px;
+  background: var(--vista-surface);
+  padding: 12px 16px;
+}
+.overview-preferences summary {
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  width: fit-content;
+}
+.overview-preferences summary:focus-visible {
+  outline: 2px solid var(--vista-ink);
+  outline-offset: 4px;
+}
+.overview-preferences form {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+}
+.overview-preferences fieldset {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+.overview-preferences legend {
+  font-size: 12px;
+  margin-bottom: 10px;
+}
+.overview-card-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 210px), 1fr));
+  gap: 10px;
+}
+.overview-card-options label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  min-height: 32px;
+}
+.overview-card-options input[type='checkbox'] {
+  flex: 0 0 16px;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+}
+.overview-preference-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.overview-preference-actions small {
+  font-size: 12px;
+  color: var(--vista-muted);
 }

@@ -8,6 +8,7 @@ import type {
   ServiceReportOverview,
   ServiceRequestStatus,
   ServiceType,
+  SavedServiceReport,
 } from '@vista/contracts';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
@@ -21,6 +22,9 @@ import {
   retryServiceReportExport,
 } from '../api/service';
 import { Icon } from '../components/Icon';
+import { listSavedServiceReports, saveServiceReport } from '../api/report-workspace';
+import { savedReportMessages as savedText } from './saved-report.messages';
+import './report-workspace.css';
 
 export function ServiceReportsView({ canExport, token }: { canExport: boolean; token: string }) {
   const initialPeriod = useMemo(reportPeriod, []);
@@ -251,6 +255,13 @@ function ServiceReportExportPanel({
   token: string;
 }) {
   const [definitions, setDefinitions] = useState<ServiceReportDefinition[]>([]);
+  const [savedReports, setSavedReports] = useState<SavedServiceReport[]>([]);
+  const [savedPage, setSavedPage] = useState(1);
+  const [savedPages, setSavedPages] = useState(0);
+  const [reportName, setReportName] = useState('');
+  const [columns, setColumns] = useState<string[] | undefined>();
+  const saveRequest = useRef<{ body: string; id: string } | null>(null);
+  const exportRequest = useRef<{ body: string; id: string } | null>(null);
   const [exports, setExports] = useState<ServiceReportExport[]>([]);
   const [definitionKey, setDefinitionKey] = useState<ServiceReportDefinitionKey>(
     'service.request-register',
@@ -272,13 +283,62 @@ function ServiceReportExportPanel({
   }, [busy]);
 
   const load = useCallback(async () => {
-    const [available, recent] = await Promise.all([
+    const [available, recent, saved] = await Promise.all([
       getServiceReportDefinitions(token),
       listServiceReportExports(token),
+      listSavedServiceReports(token, savedPage),
     ]);
     setDefinitions(available);
     setExports(recent.items);
-  }, [token]);
+    setSavedReports(saved.items);
+    setSavedPages(saved.totalPages);
+  }, [token, savedPage]);
+
+  function chooseSaved(report: SavedServiceReport) {
+    setDefinitionKey(report.definitionKey);
+    setColumns(report.columns);
+    setFormat(report.format);
+    setDateFrom(report.dateFrom);
+    setDateTo(report.dateTo);
+    setReportName(report.name);
+    setError(null);
+  }
+
+  async function saveView() {
+    if (busyRef.current || !definition || !reportName.trim()) return;
+    busyRef.current = true;
+    setBusy(true);
+    setError(null);
+    const configuration = {
+      name: reportName.trim(),
+      definitionKey,
+      format,
+      dateFrom,
+      dateTo,
+      ...(columns ? { columns } : {}),
+    };
+    const body = JSON.stringify(configuration);
+    if (saveRequest.current?.body !== body) saveRequest.current = { body, id: crypto.randomUUID() };
+    try {
+      const created = await saveServiceReport(token, {
+        ...configuration,
+        id: saveRequest.current.id,
+      });
+      setSavedReports((items) => [created, ...items.filter((item) => item.id !== created.id)]);
+      setMessage(savedText.success);
+      setSavedPage(1);
+      const saved = await listSavedServiceReports(token).catch(() => null);
+      if (saved) {
+        setSavedReports(saved.items);
+        setSavedPages(saved.totalPages);
+      }
+    } catch (caught) {
+      setError(errorMessage(caught, savedText.failure));
+    } finally {
+      busyRef.current = false;
+      setBusy(false);
+    }
+  }
 
   useEffect(() => {
     let active = true;
@@ -344,17 +404,29 @@ function ServiceReportExportPanel({
   }, [onBack]);
 
   async function createExport() {
+    if (busyRef.current) return;
+    busyRef.current = true;
     setBusy(true);
     setError(null);
     setMessage(null);
     try {
-      const input: CreateServiceReportExportRequest = { dateFrom, dateTo, definitionKey, format };
-      await createServiceReportExport(token, crypto.randomUUID(), input);
+      const input: CreateServiceReportExportRequest = {
+        dateFrom,
+        dateTo,
+        definitionKey,
+        format,
+        ...(columns ? { columns } : {}),
+      };
+      const body = JSON.stringify(input);
+      if (exportRequest.current?.body !== body)
+        exportRequest.current = { body, id: crypto.randomUUID() };
+      await createServiceReportExport(token, exportRequest.current.id, input);
       setExports((await listServiceReportExports(token)).items);
       setMessage('Your report is being prepared and will appear below when it is ready.');
     } catch (caught) {
       setError(errorMessage(caught, 'The report could not be prepared.'));
     } finally {
+      busyRef.current = false;
       setBusy(false);
     }
   }
@@ -445,12 +517,54 @@ function ServiceReportExportPanel({
           {!loading ? (
             <section aria-label="Report options" className="report-export-form">
               <div className="report-export-field">
+                <label htmlFor="saved-service-report">{savedText.saved}</label>
+                <select
+                  id="saved-service-report"
+                  disabled={busy}
+                  value=""
+                  onChange={(event) => {
+                    const report = savedReports.find((item) => item.id === event.target.value);
+                    if (report) chooseSaved(report);
+                  }}
+                >
+                  <option value="">{savedReports.length ? savedText.open : savedText.empty}</option>
+                  {savedReports.map((report) => (
+                    <option key={report.id} value={report.id}>
+                      {report.name}
+                    </option>
+                  ))}
+                </select>
+                {savedPages > 1 ? (
+                  <div className="report-view-paging">
+                    <Button
+                      disabled={busy || savedPage <= 1}
+                      onClick={() => setSavedPage((page) => page - 1)}
+                      variant="secondary"
+                    >
+                      {savedText.previous}
+                    </Button>
+                    <span>
+                      {savedPage} / {savedPages}
+                    </span>
+                    <Button
+                      disabled={busy || savedPage >= savedPages}
+                      onClick={() => setSavedPage((page) => page + 1)}
+                      variant="secondary"
+                    >
+                      {savedText.next}
+                    </Button>
+                  </div>
+                ) : null}
+              </div>
+              <div className="report-export-field">
                 <label htmlFor="service-report-export-definition">Report</label>
                 <select
                   id="service-report-export-definition"
-                  onChange={(event) =>
-                    setDefinitionKey(event.target.value as ServiceReportDefinitionKey)
-                  }
+                  disabled={busy}
+                  onChange={(event) => {
+                    setDefinitionKey(event.target.value as ServiceReportDefinitionKey);
+                    setColumns(undefined);
+                  }}
                   value={definitionKey}
                 >
                   {definitions.map((item) => (
@@ -461,6 +575,35 @@ function ServiceReportExportPanel({
                 </select>
                 <small>{definition?.description}</small>
               </div>
+              {definition?.columns?.length ? (
+                <fieldset disabled={busy} className="report-view-fields">
+                  <legend>{savedText.fields}</legend>
+                  <div className="report-view-field-grid">
+                    {definition.columns.map((column) => (
+                      <label key={column.key}>
+                        <input
+                          type="checkbox"
+                          checked={!columns || columns.includes(column.key)}
+                          onChange={(event) => {
+                            const selected = new Set(
+                              columns ?? definition.columns?.map((item) => item.key),
+                            );
+                            if (event.target.checked) selected.add(column.key);
+                            else selected.delete(column.key);
+                            setColumns(
+                              definition.columns
+                                ?.filter((item) => selected.has(item.key))
+                                .map((item) => item.key),
+                            );
+                          }}
+                        />
+                        <span>{column.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                  {columns?.length === 0 ? <small>{savedText.chooseField}</small> : null}
+                </fieldset>
+              ) : null}
               <fieldset>
                 <legend>File type</legend>
                 <div className="report-export-format-grid">
@@ -468,6 +611,7 @@ function ServiceReportExportPanel({
                     <label className={format === item ? 'is-selected' : undefined} key={item}>
                       <input
                         checked={format === item}
+                        disabled={busy}
                         name="service-report-format"
                         onChange={() => setFormat(item)}
                         type="radio"
@@ -484,6 +628,7 @@ function ServiceReportExportPanel({
                   <span>From</span>
                   <input
                     onChange={(event) => setDateFrom(event.target.value)}
+                    disabled={busy}
                     type="date"
                     value={dateFrom}
                   />
@@ -492,10 +637,39 @@ function ServiceReportExportPanel({
                   <span>To</span>
                   <input
                     onChange={(event) => setDateTo(event.target.value)}
+                    disabled={busy}
                     type="date"
                     value={dateTo}
                   />
                 </label>
+              </div>
+              <div className="report-export-field report-view-save">
+                {!dateFrom || !dateTo || dateFrom > dateTo ? (
+                  <small role="status">{savedText.invalidPeriod}</small>
+                ) : null}
+                <label htmlFor="service-report-name">{savedText.name}</label>
+                <input
+                  id="service-report-name"
+                  maxLength={100}
+                  disabled={busy}
+                  value={reportName}
+                  onChange={(event) => setReportName(event.target.value)}
+                />
+                <Button
+                  disabled={
+                    busy ||
+                    !definition ||
+                    !reportName.trim() ||
+                    !dateFrom ||
+                    !dateTo ||
+                    dateFrom > dateTo ||
+                    columns?.length === 0
+                  }
+                  onClick={() => void saveView()}
+                  variant="secondary"
+                >
+                  {savedText.save}
+                </Button>
               </div>
             </section>
           ) : null}
@@ -505,7 +679,15 @@ function ServiceReportExportPanel({
                 <h3>Recent exports</h3>
                 <p>Only reports requested from your account are shown.</p>
               </div>
-              <button disabled={loading} onClick={() => void load()} type="button">
+              <button
+                disabled={loading || busy}
+                onClick={() =>
+                  void load().catch((caught) =>
+                    setError(errorMessage(caught, 'Reports could not be loaded.')),
+                  )
+                }
+                type="button"
+              >
                 Refresh
               </button>
             </header>
@@ -550,19 +732,26 @@ function ServiceReportExportPanel({
               ))}
             </div>
           </section>
-          <div className="security-drawer-actions report-export-actions">
-            <Button
-              busy={busy}
-              disabled={loading || !definition || !dateFrom || !dateTo || dateFrom > dateTo}
-              onClick={() => void createExport()}
-            >
-              Prepare export
-            </Button>
-            <Button disabled={busy} onClick={onBack} variant="secondary">
-              Close
-            </Button>
-          </div>
         </div>
+        <footer className="security-drawer-actions report-export-actions">
+          <Button
+            busy={busy}
+            disabled={
+              loading ||
+              !definition ||
+              !dateFrom ||
+              !dateTo ||
+              dateFrom > dateTo ||
+              columns?.length === 0
+            }
+            onClick={() => void createExport()}
+          >
+            Prepare export
+          </Button>
+          <Button disabled={busy} onClick={onBack} variant="secondary">
+            Close
+          </Button>
+        </footer>
       </aside>
     </div>
   );

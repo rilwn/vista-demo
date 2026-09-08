@@ -1,4 +1,13 @@
 import { Module } from '@nestjs/common';
+import { ErpReportExportsController } from './erp-report-exports.controller.js';
+import { ErpReportDataService } from './erp-report-data.service.js';
+import { SavedErpReportsService } from './saved-erp-reports.service.js';
+import { SavedPosReportsController } from './saved-pos-reports.controller.js';
+import { SavedPosReportsService } from './saved-pos-reports.service.js';
+import { SavedCrmReportsController } from './saved-crm-reports.controller.js';
+import { SavedCrmReportsService } from './saved-crm-reports.service.js';
+import { SavedServiceReportsController } from './saved-service-reports.controller.js';
+import { SavedServiceReportsService } from './saved-service-reports.service.js';
 import { SavedFinanceReportsController } from './saved-finance-reports.controller.js';
 import { SavedFinanceReportsService } from './saved-finance-reports.service.js';
 
@@ -25,6 +34,10 @@ import { ServiceReportExportsController } from './service-report-exports.control
 
 @Module({
   controllers: [
+    ErpReportExportsController,
+    SavedPosReportsController,
+    SavedCrmReportsController,
+    SavedServiceReportsController,
     SavedFinanceReportsController,
     CrmReportExportsController,
     FinanceReportExportsController,
@@ -44,6 +57,11 @@ import { ServiceReportExportsController } from './service-report-exports.control
     ServiceOperationsModule,
   ],
   providers: [
+    ErpReportDataService,
+    SavedErpReportsService,
+    SavedPosReportsService,
+    SavedCrmReportsService,
+    SavedServiceReportsService,
     SavedFinanceReportsService,
     FinanceReportExportDispatcherService,
     FinanceReportExportsService,

@@ -846,6 +846,31 @@ function required<T>(value: T | undefined, message: string): T {
   return value;
 }
 
+export function posReportColumns(key: PosReportDefinitionKey): FinanceReportExportData['columns'] {
+  switch (key) {
+    case 'pos.shift-register':
+      return [...shiftColumns];
+    case 'pos.cashier-performance':
+      return [...cashierColumns];
+    case 'pos.product-sales':
+      return [...productColumns];
+    case 'pos.category-sales':
+      return [...categoryColumns];
+    case 'pos.payment-methods':
+      return [...paymentColumns];
+    case 'pos.location-sales':
+      return [...locationColumns];
+    case 'pos.location-comparison':
+      return [...locationComparisonColumns];
+    default:
+      throw new ApiErrorException(
+        'REPORT_COLUMNS_INVALID',
+        'X and Z reports include the complete shift totals.',
+        400,
+      );
+  }
+}
+
 const shiftColumns = [
   { key: 'shiftNumber', label: 'Shift', type: 'text' },
   { key: 'reportType', label: 'Report', type: 'text' },

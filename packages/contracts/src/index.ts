@@ -2503,7 +2503,20 @@ export interface SavedFinanceReport extends CreateFinanceReportExportRequest {
   name: string;
 }
 
+export const overviewMetricKeys = [
+  'recordedRevenueBgn',
+  'activeServiceRequests',
+  'expiringWarranties',
+  'overdueReceivablesBgn',
+] as const;
+export type OverviewMetricKey = (typeof overviewMetricKeys)[number];
+export interface OverviewPreferences {
+  hiddenCards: OverviewMetricKey[];
+  version: number;
+}
+
 export interface OperationsOverview {
+  preferences?: OverviewPreferences;
   asOf: string;
   dateFrom: string;
   dateTo: string;
@@ -2545,6 +2558,7 @@ export const serviceReportDefinitionKeys = [
 export type ServiceReportDefinitionKey = (typeof serviceReportDefinitionKeys)[number];
 
 export interface ServiceReportDefinition {
+  columns?: FinanceReportDefinition['columns'];
   description: string;
   formats: ReportExportFormat[];
   key: ServiceReportDefinitionKey;
@@ -2553,10 +2567,16 @@ export interface ServiceReportDefinition {
 }
 
 export interface CreateServiceReportExportRequest {
+  columns?: string[];
   dateFrom: string;
   dateTo: string;
   definitionKey: ServiceReportDefinitionKey;
   format: ReportExportFormat;
+}
+
+export interface SavedServiceReport extends CreateServiceReportExportRequest {
+  id: string;
+  name: string;
 }
 
 export interface ServiceReportExport {
@@ -2591,6 +2611,7 @@ export const crmReportDefinitionKeys = [
 export type CrmReportDefinitionKey = (typeof crmReportDefinitionKeys)[number];
 
 export interface CrmReportDefinition {
+  columns?: FinanceReportDefinition['columns'];
   description: string;
   formats: ReportExportFormat[];
   key: CrmReportDefinitionKey;
@@ -2599,10 +2620,16 @@ export interface CrmReportDefinition {
 }
 
 export interface CreateCrmReportExportRequest {
+  columns?: string[];
   dateFrom: string;
   dateTo: string;
   definitionKey: CrmReportDefinitionKey;
   format: ReportExportFormat;
+}
+
+export interface SavedCrmReport extends CreateCrmReportExportRequest {
+  id: string;
+  name: string;
 }
 
 export interface CrmReportExport {
@@ -2642,6 +2669,7 @@ export const posReportDefinitionKeys = [
 export type PosReportDefinitionKey = (typeof posReportDefinitionKeys)[number];
 
 export interface PosReportDefinition {
+  columns?: FinanceReportDefinition['columns'];
   description: string;
   formats: ReportExportFormat[];
   key: PosReportDefinitionKey;
@@ -2651,6 +2679,7 @@ export interface PosReportDefinition {
 }
 
 export interface CreatePosReportExportRequest {
+  columns?: string[];
   businessLocationId?: string;
   cashRegisterId?: string;
   dateFrom?: string;
@@ -2659,6 +2688,11 @@ export interface CreatePosReportExportRequest {
   format: ReportExportFormat;
   operatorId?: string;
   shiftId?: string;
+}
+
+export interface SavedPosReport extends CreatePosReportExportRequest {
+  id: string;
+  name: string;
 }
 
 export interface PosReportExport {
@@ -5010,3 +5044,4 @@ export interface SerialTraceability {
   serialNumber: string;
   status: 'available' | 'issued' | 'missing';
 }
+export * from './erp-reports.js';

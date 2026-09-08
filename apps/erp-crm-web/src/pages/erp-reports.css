@@ -1,0 +1,191 @@
+.erp-report-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+  font-size: 13px;
+}
+.erp-report-back svg {
+  transform: rotate(180deg);
+}
+.erp-reports .content-panel {
+  padding: 18px;
+  min-width: 0;
+}
+.erp-report-controls form {
+  display: flex;
+  gap: 12px;
+  align-items: end;
+  flex-wrap: wrap;
+}
+.erp-report-filter {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  flex: 1 1 160px;
+}
+.erp-report-filter label {
+  font-size: 12px;
+  font-weight: 600;
+}
+.erp-report-filter input,
+.erp-report-filter select {
+  width: 100%;
+  min-width: 0;
+  min-height: 40px;
+}
+.erp-report-note {
+  margin: 14px 0 0;
+  color: var(--vista-muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.erp-report-options summary {
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  width: fit-content;
+}
+.erp-report-options-body {
+  display: grid;
+  gap: 16px;
+  margin-top: 16px;
+}
+.erp-report-options fieldset {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+.erp-report-options legend {
+  font-size: 12px;
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+.erp-report-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr));
+  gap: 8px 16px;
+}
+.erp-report-fields label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  font-size: 13px;
+}
+.erp-report-fields input[type='checkbox'] {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  margin: 0;
+}
+.erp-report-options-row {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.erp-report-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.erp-report-actions span,
+.erp-report-options small {
+  font-size: 12px;
+  color: var(--vista-muted);
+}
+.erp-report-result-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+}
+.erp-report-result-heading h2 {
+  font-size: 16px;
+  margin: 0;
+}
+.erp-report-result-heading p,
+.erp-report-result-heading span {
+  font-size: 12px;
+  color: var(--vista-muted);
+}
+.erp-report-table-scroll {
+  overflow: auto;
+  max-height: 60vh;
+  margin-bottom: 16px;
+  border: 1px solid var(--vista-line);
+  border-radius: 8px;
+}
+.erp-report-table-scroll table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.erp-report-table-scroll td,
+.erp-report-table-scroll th {
+  padding: 12px;
+  border-bottom: 1px solid var(--vista-line);
+  text-align: left;
+  min-width: 110px;
+  max-width: 360px;
+  overflow-wrap: anywhere;
+}
+.erp-report-table-scroll th {
+  position: sticky;
+  top: 0;
+  background: var(--vista-surface);
+  font-size: 12px;
+}
+.erp-report-recent ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.erp-report-recent li {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 0;
+  border-top: 1px solid var(--vista-line);
+  flex-wrap: wrap;
+}
+.erp-report-recent li > div {
+  flex: 1 1 200px;
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+.erp-report-recent strong {
+  font-size: 13px;
+}
+.erp-report-recent small,
+.erp-report-recent li > span {
+  font-size: 12px;
+  color: var(--vista-muted);
+}
+.erp-report-options summary:focus-visible,
+.erp-report-table-scroll:focus-visible {
+  outline: 2px solid var(--vista-ink);
+  outline-offset: 4px;
+}
+@media (max-width: 600px) {
+  .erp-reports .content-panel {
+    padding: 14px;
+  }
+  .erp-report-controls form > .erp-report-filter:first-child {
+    flex-basis: 100%;
+  }
+  .erp-report-actions .vista-button {
+    flex: 1 1 auto;
+  }
+}
+.sales-report-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}

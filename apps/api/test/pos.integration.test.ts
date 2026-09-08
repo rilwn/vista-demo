@@ -144,6 +144,106 @@ describe.skipIf(!runInfrastructureTests)('POS split payment and linked return li
     }
   });
 
+  it('saves private POS period reports with validated fields and idempotent audit', async () => {
+    const endpoint = '/api/v1/pos/saved-reports';
+    const body = {
+      id: randomUUID(),
+      name: 'Product review',
+      definitionKey: 'pos.product-sales',
+      dateFrom: '2026-01-01',
+      dateTo: '2026-12-31',
+      format: 'xlsx',
+      columns: ['productName', 'netRevenueBgn'],
+    };
+    const send = (input: object) =>
+      request(application.getHttpServer())
+        .post(endpoint)
+        .set('authorization', `Bearer ${posToken}`)
+        .send(input);
+    await request(application.getHttpServer()).post(endpoint).send(body).expect(401);
+    await request(application.getHttpServer())
+      .post(endpoint)
+      .set('authorization', `Bearer ${viewerToken}`)
+      .send(body)
+      .expect(403);
+    const results = await Promise.all([send(body), send(body)]);
+    expect(results.map((result) => result.status)).toEqual([201, 201]);
+    expect(results[0]?.body).toEqual(body);
+    await send({ ...body, name: 'Changed' }).expect(409);
+    for (const invalid of [
+      { columns: [] },
+      { columns: ['password_hash'] },
+      { columns: ['productName', 'productName'] },
+      { columns: ['cashier'] },
+      { dateFrom: '2026-02-30' },
+      { dateFrom: '2027-01-01' },
+      { dateFrom: '2026-01-01T00:00:00Z' },
+      { dateTo: undefined },
+      { name: ' ' },
+      { sql: 'SELECT 1' },
+      { definitionKey: 'pos.x-report', shiftId: randomUUID() },
+      { definitionKey: 'pos.z-report', shiftId: randomUUID() },
+    ])
+      await send({ ...body, id: randomUUID(), ...invalid }).expect(400);
+    const list = await request(application.getHttpServer())
+      .get(endpoint)
+      .set('authorization', `Bearer ${posToken}`)
+      .expect(200);
+    expect(list.body.items).toEqual([body]);
+    await request(application.getHttpServer())
+      .get(endpoint)
+      .set('authorization', `Bearer ${managerToken}`)
+      .expect(403);
+    // Grant a second test account POS access only inside this isolated database.
+    const grant = await database.query(
+      'INSERT INTO iam.account_roles(account_id,role_id,assigned_by) SELECT $1,role_id,$1 FROM iam.account_roles WHERE account_id=$2 ON CONFLICT DO NOTHING',
+      [fixtureId('account:finance'), fixtureId('account:pos-operator')],
+    );
+    expect(grant.rowCount).toBeGreaterThan(0);
+    const otherToken = await login(application, 'finance@vista.local');
+    const other = await request(application.getHttpServer())
+      .get(endpoint)
+      .set('authorization', `Bearer ${otherToken}`)
+      .expect(200);
+    expect(other.body.total).toBe(0);
+    await request(application.getHttpServer())
+      .post('/api/v1/auth/logout')
+      .set('authorization', `Bearer ${otherToken}`)
+      .expect(204);
+    const audit = await database.query<{ count: number }>(
+      "SELECT count(*)::integer AS count FROM audit.events WHERE target_id=$1 AND action='report.view.created'",
+      [body.id],
+    );
+    expect(audit.rows[0]?.count).toBe(1);
+    const defs = await request(application.getHttpServer())
+      .get('/api/v1/pos/report-exports/definitions')
+      .set('authorization', `Bearer ${posToken}`)
+      .expect(200);
+    expect((defs.body as PosReportDefinition[]).filter((item) => item.columns)).toHaveLength(7);
+    const key = randomUUID();
+    const input = {
+      definitionKey: body.definitionKey,
+      dateFrom: body.dateFrom,
+      dateTo: body.dateTo,
+      columns: body.columns,
+      format: 'csv',
+    };
+    const exportSend = () =>
+      request(application.getHttpServer())
+        .post('/api/v1/pos/report-exports')
+        .set('authorization', `Bearer ${posToken}`)
+        .set('idempotency-key', key)
+        .send(input);
+    const first = await exportSend().expect(202);
+    const again = await exportSend().expect(202);
+    expect(again.body.id).toBe(first.body.id);
+    const row = await database.query<{ filters: { columns: string[] } }>(
+      'SELECT filters FROM reporting.export_jobs WHERE id=$1',
+      [first.body.id],
+    );
+    expect(row.rows[0]?.filters.columns).toEqual(body.columns);
+  });
+
   it('protects the assigned terminal and return commands with POS permissions', async () => {
     await request(application.getHttpServer()).get('/api/v1/pos/terminal-context').expect(401);
     await request(application.getHttpServer())

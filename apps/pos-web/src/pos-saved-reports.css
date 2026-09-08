@@ -1,0 +1,116 @@
+.pos-saved-reports {
+  border: 1px solid #d7dfd8;
+  border-radius: 10px;
+  background: #fff;
+  margin: 12px 0;
+}
+.pos-saved-reports > summary {
+  padding: 14px 16px;
+  cursor: pointer;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+.pos-saved-report-body {
+  display: grid;
+  gap: 14px;
+  padding: 0 16px 16px;
+}
+.pos-saved-report-body > label,
+.pos-saved-actions > label {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  font-size: 0.75rem;
+}
+.pos-saved-report-body input:not([type='checkbox']),
+.pos-saved-report-body select {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 40px;
+  padding: 8px 10px;
+  border: 1px solid #bac9be;
+  border-radius: 8px;
+  background: #f9fbf9;
+  color: #243d2d;
+  font: inherit;
+}
+.pos-saved-report-body fieldset {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+.pos-saved-report-body legend {
+  font-size: 0.75rem;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+.pos-saved-columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 8px;
+}
+.pos-saved-columns > label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px;
+  border: 1px solid #d7dfd8;
+  border-radius: 7px;
+  font-size: 0.75rem;
+}
+.pos-saved-columns input {
+  flex: 0 0 16px;
+  width: 16px;
+  height: 16px;
+  min-height: 0;
+  margin: 0;
+  accent-color: #216843;
+}
+.pos-saved-columns label:has(input:checked) {
+  background: #edf5ef;
+  border-color: #9cb6a3;
+}
+.pos-saved-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 110px auto auto;
+  align-items: end;
+  gap: 10px;
+}
+.pos-saved-report-body button {
+  min-height: 40px;
+  padding: 8px 12px;
+  border: 1px solid #bac9be;
+  border-radius: 8px;
+  font: inherit;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+.pos-saved-report-body button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.pos-saved-report-body small {
+  color: #53645a;
+  font-size: 0.73rem;
+}
+.pos-saved-paging {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+.pos-saved-reports :focus-visible {
+  outline: 2px solid #216843;
+  outline-offset: 2px;
+}
+@media (max-width: 800px) {
+  .pos-saved-actions {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+}
+@media (max-width: 440px) {
+  .pos-saved-actions,
+  .pos-saved-columns {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
