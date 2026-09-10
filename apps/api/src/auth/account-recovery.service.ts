@@ -80,6 +80,10 @@ export class AccountRecoveryService {
     try {
       await client.query('BEGIN');
       transactionOpen = true;
+      // Serialize the initial lookup too: a missing row cannot be locked FOR UPDATE.
+      await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [
+        `account-recovery:${actor.accountId}:${idempotencyKey.trim()}`,
+      ]);
       const replay = await client.query<{
         account_id: string;
         consumed_at: Date | null;
@@ -90,7 +94,7 @@ export class AccountRecoveryService {
         revoked_at: Date | null;
       }>(
         `SELECT handoff.account_id, employee.email, handoff.encrypted_code, handoff.expires_at,
-                handoff.reason
+                handoff.reason, handoff.consumed_at, handoff.revoked_at
          FROM identity.account_recovery_handoffs handoff
          JOIN identity.user_accounts account ON account.id = handoff.account_id
          JOIN identity.employees employee ON employee.id = account.employee_id

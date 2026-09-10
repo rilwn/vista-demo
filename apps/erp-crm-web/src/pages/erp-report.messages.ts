@@ -40,6 +40,8 @@ export const erpReportMessages = {
   actionError: 'The request could not be completed. Your options are still here. Try again.',
   savedError: 'Saved reports could not be loaded.',
   exportsError: 'Recent exports could not be loaded.',
+  downloadError: 'The file could not be downloaded. Select Download to try again.',
+  retryError: 'The export could not be restarted. Try again.',
   recent: 'Recent exports',
   owner: 'Only your exports are shown.',
   refresh: 'Refresh',

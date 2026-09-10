@@ -1,3 +1,4 @@
+import { useExportHistory, ExportHistoryControls } from './useExportHistory';
 import { DashboardCards } from '@vista/ui';
 import { apiV1BaseUrl } from '../api/client';
 import { Button, InlineAlert, Toast } from '@vista/ui';
@@ -529,7 +530,8 @@ export function CrmReportExportPanel({
   const [columns, setColumns] = useState<string[] | undefined>();
   const saveRequest = useRef<{ body: string; id: string } | null>(null);
   const exportRequest = useRef<{ body: string; id: string } | null>(null);
-  const [exports, setExports] = useState<CrmReportExport[]>([]);
+  const history = useExportHistory(token, listCrmReportExports);
+  const exports = history.items;
   const [definitionKey, setDefinitionKey] = useState<CrmReportDefinitionKey>('crm.customer-value');
   const [format, setFormat] = useState<ReportExportFormat>('xlsx');
   const [dateFrom, setDateFrom] = useState(initialDateFrom);
@@ -548,13 +550,11 @@ export function CrmReportExportPanel({
   }, [busy]);
 
   const load = useCallback(async () => {
-    const [available, recent, saved] = await Promise.all([
+    const [available, saved] = await Promise.all([
       getCrmReportDefinitions(token),
-      listCrmReportExports(token),
       listSavedCrmReports(token, savedPage),
     ]);
     setDefinitions(available);
-    setExports(recent.items);
     setSavedReports(saved.items);
     setSavedPages(saved.totalPages);
   }, [token, savedPage]);
@@ -617,18 +617,6 @@ export function CrmReportExportPanel({
   }, [load]);
 
   useEffect(() => {
-    if (!exports.some((item) => item.status === 'queued' || item.status === 'processing')) return;
-    const timer = window.setInterval(
-      () =>
-        void listCrmReportExports(token)
-          .then((page) => setExports(page.items))
-          .catch(() => undefined),
-      2_000,
-    );
-    return () => window.clearInterval(timer);
-  }, [exports, token]);
-
-  useEffect(() => {
     const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const panel = panelRef.current;
     if (!panel) return;
@@ -686,7 +674,8 @@ export function CrmReportExportPanel({
       if (exportRequest.current?.body !== body)
         exportRequest.current = { body, id: crypto.randomUUID() };
       await createCrmReportExport(token, exportRequest.current.id, input);
-      setExports((await listCrmReportExports(token)).items);
+      exportRequest.current = null;
+      history.refresh(true);
       setMessage('Your report is being prepared and will appear below when it is ready.');
     } catch (caught) {
       setError(errorMessage(caught, 'The report could not be prepared.'));
@@ -719,7 +708,7 @@ export function CrmReportExportPanel({
     setError(null);
     try {
       await retryCrmReportExport(token, report.id);
-      setExports((await listCrmReportExports(token)).items);
+      history.refresh();
       setMessage('We are preparing the report again.');
     } catch (caught) {
       setError(errorMessage(caught, 'The report could not be started again.'));
@@ -945,18 +934,14 @@ export function CrmReportExportPanel({
                 <p>Only reports requested from your account are shown.</p>
               </div>
               <button
-                disabled={loading || busy}
-                onClick={() =>
-                  void load().catch((caught) =>
-                    setError(errorMessage(caught, 'Reports could not be loaded.')),
-                  )
-                }
+                disabled={history.loading || busy}
+                onClick={() => history.refresh()}
                 type="button"
               >
                 Refresh
               </button>
             </header>
-            {!loading && !exports.length ? (
+            {!history.loading && !history.error && !exports.length ? (
               <div className="report-export-empty">
                 <Icon name="chart" size={20} />
                 <strong>No exports yet</strong>
@@ -996,6 +981,7 @@ export function CrmReportExportPanel({
                 </article>
               ))}
             </div>
+            <ExportHistoryControls history={history} />
           </section>
         </div>
         <footer className="security-drawer-actions report-export-actions">

@@ -74,11 +74,12 @@ export function getServiceReportDefinitions(token: string): Promise<ServiceRepor
 export function listServiceReportExports(
   token: string,
   page = 1,
+  pageSize = 20,
 ): Promise<ServiceReportExportPage> {
   return unwrapApiResponse(
     apiClient.GET('/api/v1/service/report-exports', {
       headers: authorizationHeaders(token),
-      params: { query: { page, pageSize: 20 } },
+      params: { query: { page, pageSize } },
     }),
   );
 }

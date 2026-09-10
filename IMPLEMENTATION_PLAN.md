@@ -1,6 +1,6 @@
 # Vista Integrated Information System — Remaining Implementation Plan
 
-Status date: 2026-09-08
+Status date: 2026-09-10
 Project: `BG16RFPR001-1.012-1324-C01`
 
 [`AGENTS.md`](AGENTS.md) is authoritative. This file contains only unfinished
@@ -24,14 +24,35 @@ relevant technical documentation—not here.
 
 ## Delivery order
 
-1. Phase 0 runs continuously and unblocks irreversible decisions.
-2. Complete the remaining shared platform services before depending on them in
-   ERP, CRM, POS, or Backup workflows.
-3. Close the remaining ERP/finance/logistics requirements before cross-module
-   CRM and POS completion.
-4. Deliver POS online operation before offline operation.
-5. Complete Backup/DR against the approved inventory and hardware, then harden,
-   deploy, and hand over the whole system.
+Continue with the original client-dependent phases while awaiting A3's hosted security
+evidence. That release gate is not waived. These are portions of the original
+phases, not new scope. Check existing evidence before implementing, and remove
+completed items from this file.
+
+Section B retains the client-dependent work in original dependency order.
+Do not declare an original phase complete merely because its independent work is
+done. Use plain UI text and a short, navigation-based `TESTME.md` with sample
+values; verify each complete UI/API flow before asking the user to test.
+
+## A. Work that can proceed without Vista's team
+
+### A3. Hosted security verification
+
+- Confirm the first hosted container scan and resolve its findings through tested
+  image upgrades or explicitly reviewed exceptions; do not bypass failed scans.
+
+**Scope/dependencies:** AGENTS §10; original Phase 9. Hosted CI execution and
+retained scan evidence. Application-image coverage is configured in CI.
+
+**Accept when:** the hosted scan succeeds and findings are resolved or explicitly
+reviewed. Local inventory tests are not vulnerability-scan acceptance.
+
+## B. Discuss with Vista, then implement
+
+The following work remains dependent on recorded business decisions, approved
+providers, client data, infrastructure or hardware. Approvals must name the
+decision-maker and scope in the decision register. Continue in original phase
+order as dependencies become available; never invent legal or conflict rules.
 
 ## Phase 0 — Decisions, backup plan, and traceability
 
@@ -61,8 +82,8 @@ enabled; every requirement remains traceable.
 - Deliver approved AD, LDAP, Entra ID, SAML, and OAuth/OIDC adapters and group
   mapping.
 - Complete the approved production storage, encryption, retention, malware-scan,
-  and quarantine policy, plus managed attachments for financial documents and
-  other remaining approved record types.
+  and quarantine policy; confirm any further managed-attachment record types
+  beyond the existing Finance attachment support.
 - Deliver approved email and backup-SMS adapters, notification preferences,
   retry/reconciliation behavior, monitoring, alert hooks, and operational
   runbooks.
@@ -120,10 +141,13 @@ and the approved business timezone.
 allocations, taxes, rates, exports, and integration recovery are tested; the
 procurement-to-accounting and quotation-to-payment scenarios pass end to end.
 
-## Phase 5 — Complete CRM
+## Phases 4–5 — Confirm Service/CRM policies and complete CRM
 
 **Remaining**
 
+- Confirm or adjust configurable SLA, warranty, inspection, labor/transport,
+  subscription, signature and KPI rules against client decisions. Existing
+  workflows are not a new backlog; development settings are not client approval.
 - Deliver the customer portal only if selected.
 - Deliver the approved external enterprise CRM APIs and reconciliation adapters.
 
@@ -199,14 +223,15 @@ RTO, evidence, corrective actions, and actual hardware compatibility.
 
 **Remaining**
 
-- Complete mandatory unit, integration, end-to-end, concurrency, simulator,
-  hardware, recovery, performance, migration-rehearsal, and security tests.
-- Complete TLS/HSTS deployment controls, dependency/container scanning,
-  monitoring and alerting, deployment/rollback procedures, and client-owned
-  infrastructure handover.
-- Complete required architecture, API, database, environment, integration,
-  hardware, backup, DR, operations, user-guide, built-in-help, training, and
-  handover deliverables.
+- Complete externally dependent official-document, hardware, offline and Backup
+  scenarios plus production-scale performance, security and client-data migration
+  acceptance beyond the independent tests in A3.
+- Apply approved hosting, network, domains, TLS/HSTS, monitoring and alerting,
+  production deployment/rollback and client-owned infrastructure handover beyond
+  the portable preparation in A4.
+- Finalize architecture, API, database, environment, integration, hardware,
+  Backup/DR, operations and user documentation against actual client decisions;
+  complete training and signed handover beyond the help prepared in A4.
 - Perform the final requirement-traceability review and explicitly record each
   optional feature as implemented or not selected.
 

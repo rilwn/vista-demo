@@ -23,6 +23,7 @@ import { Icon } from '../components/Icon';
 import { financialDocumentMessages as copy } from '../messages';
 import { useRouter } from '../routing/Router';
 import { FinanceTabs } from './FinanceBankPage';
+import { ManagedFilesPanel } from './PartnerDocumentsPanel';
 
 const emptyReferences: FinancialDocumentReferenceData = {
   businessTimezone: 'UTC',
@@ -1115,6 +1116,14 @@ function DocumentPreviewDrawer({
             <p>{document.notes}</p>
           </section>
         ) : null}
+        <ManagedFilesPanel
+          key={document.id}
+          canEdit={canEdit}
+          copy={copy.attachments}
+          parentId={document.id}
+          parentType="financial_document"
+          token={token}
+        />
         {document.cancellationReason ? (
           <InlineAlert tone="warning">Cancelled: {document.cancellationReason}</InlineAlert>
         ) : null}

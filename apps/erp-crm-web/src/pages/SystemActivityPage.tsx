@@ -17,6 +17,7 @@ import {
 import { useAuth } from '../auth/AuthProvider';
 import { Icon } from '../components/Icon';
 import { messages } from '../messages';
+import { JobMonitor } from './JobMonitor';
 
 type StatusFilter = IntegrationEventStatus | 'all';
 
@@ -80,6 +81,7 @@ export function SystemActivityPage() {
       ) : null}
 
       <ActivitySummary loading={loading} telemetry={telemetry} />
+      <JobMonitor token={token} />
 
       <section className="content-panel system-activity-panel">
         <div className="system-activity-toolbar">

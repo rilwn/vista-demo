@@ -253,7 +253,9 @@ describe('ERP reporting workspace', () => {
       total: 1,
       totalPages: 1,
     });
-    vi.mocked(downloadErpReport).mockResolvedValue(new Blob(['Reference,Quantity']));
+    vi.mocked(downloadErpReport)
+      .mockRejectedValueOnce(new Error('Connection interrupted'))
+      .mockResolvedValue(new Blob(['Reference,Quantity']));
     vi.stubGlobal(
       'URL',
       Object.assign(URL, { createObjectURL: vi.fn(() => 'blob:report'), revokeObjectURL: vi.fn() }),
@@ -263,6 +265,10 @@ describe('ERP reporting workspace', () => {
       .mockImplementation(() => undefined);
     mount('procurement');
     const recent = await screen.findByRole('heading', { name: 'Recent exports' });
+    fireEvent.click(within(recent.closest('section')!).getByRole('button', { name: 'Download' }));
+    await screen.findByText('The file could not be downloaded. Select Download to try again.');
+    expect(screen.queryByText('Recent exports could not be loaded.')).toBeNull();
+    expect(click).not.toHaveBeenCalled();
     fireEvent.click(within(recent.closest('section')!).getByRole('button', { name: 'Download' }));
     await waitFor(() =>
       expect(downloadErpReport).toHaveBeenCalledWith('test-token', 'procurement', report),

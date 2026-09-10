@@ -251,7 +251,7 @@ export const messages = {
       'Enter your current password, then choose a new password that meets your company policy.',
     passwordTitle: 'Change your password',
     removeAuthenticatorWarning:
-      'Removing this factor makes future sign-ins rely on your password only. Confirm with your password and current code.',
+      'After removal, you will sign in with your password only. Enter your password and a current authentication code to confirm.',
     retryPolicy: 'Try again',
     savePassword: 'Update password',
     setUpAuthenticator: 'Set up authenticator',
@@ -312,25 +312,26 @@ export const messages = {
       'Creation was stopped because an existing legal entity may match. Review the record below; records are never merged automatically.',
     duplicateTitle: 'Possible duplicate found',
     documents: {
+      retry: 'Try again',
       add: 'Add document',
       back: 'Back to partner',
       cancel: 'Cancel',
       chooseFile: 'Choose file',
-      controlledFiles: 'Controlled files',
+      controlledFiles: 'Partner documents',
       download: 'Download',
       downloadError: 'The document could not be downloaded.',
       emptyDescription: 'Add the first approved PDF or image when it becomes available.',
       emptyTitle: 'No documents attached',
       fileRequirements: 'PDF, JPEG, PNG or WebP · up to 10 MB',
       hideVersions: 'Hide versions',
-      integrity: 'Integrity checked · access follows this partner record',
+      integrity: 'Available to employees who can view this partner',
       loadError: 'Documents could not be loaded.',
       loading: 'Loading documents…',
       open: 'Documents',
       replace: 'Replace',
       replaceTitle: 'Upload replacement version',
       selection: (name: string) => `Selected: ${name}`,
-      subtitle: 'PDFs and images retained with checksum and immutable version history.',
+      subtitle: 'Keep PDFs and images together, with earlier versions available.',
       title: 'Documents',
       upload: 'Upload',
       uploadError: 'The document could not be uploaded.',
@@ -531,7 +532,43 @@ export const salesPricingMessages = {
   updated: 'Pricing record saved.',
 } as const;
 
+export const jobMonitorMessages = {
+  title: 'Background processing',
+  description: 'Check the queue used for reports, reminders and other background work.',
+  refresh: 'Refresh processing status',
+  loading: 'Checking background processing…',
+  unavailable:
+    'Processing status could not be checked. Try refreshing; if this continues, contact your administrator.',
+  paused: 'Processing is paused',
+  accepting: 'Queue is not paused',
+  updated: 'Checked',
+  failureHint:
+    'Some jobs have failed. Review the relevant report or notification before retrying it through its original workflow.',
+  retained:
+    'Counts show jobs still retained in the queue, not lifetime totals. An unpaused queue does not confirm that a worker is running.',
+  states: {
+    waiting: 'Waiting',
+    active: 'In progress',
+    delayed: 'Scheduled or retrying',
+    completed: 'Completed',
+    failed: 'Failed',
+  },
+};
+
 export const financialDocumentMessages = {
+  attachments: {
+    ...messages.partners.documents,
+    add: 'Add attachment',
+    back: 'Back to document',
+    controlledFiles: 'Supporting files',
+    emptyDescription: 'Attach a supporting PDF or image to this financial document.',
+    emptyTitle: 'No attachments yet',
+    integrity: 'Integrity checked · access follows this financial document',
+    open: 'Attachments',
+    subtitle: 'Supporting files and their previous versions. Financial details remain unchanged.',
+    title: 'Attachments',
+    uploadTitle: 'Upload attachment',
+  },
   addDocument: 'New financial document',
   addLine: 'Add line',
   allStatuses: 'All statuses',

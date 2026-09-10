@@ -92,6 +92,7 @@ it('reviews a saved view and retains its submission id after a lost schedule res
   const dialog = screen.getByRole('dialog');
   expect(within(dialog).getByText('Product')).toBeTruthy();
   fireEvent.click(within(dialog).getByRole('button', { name: 'Schedule this view' }));
+  expect(api.schedule).not.toHaveBeenCalled();
   fireEvent.change(within(dialog).getByLabelText('First run'), {
     target: { value: '2026-09-09T09:00' },
   });

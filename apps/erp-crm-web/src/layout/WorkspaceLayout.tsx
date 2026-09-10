@@ -1,4 +1,5 @@
 import { type PropsWithChildren, useEffect, useMemo, useRef, useState } from 'react';
+import { Help } from '@vista/ui';
 
 import { useAuth } from '../auth/AuthProvider';
 import { GlobalNavigationSearch } from '../components/GlobalNavigationSearch';
@@ -119,6 +120,12 @@ export function WorkspaceLayout({ children }: PropsWithChildren) {
           </button>
           <GlobalNavigationSearch />
           <div className="topbar-actions">
+            <Help
+              app="operations"
+              modules={session.context.permissions
+                .filter((item) => item.action === 'view')
+                .map((item) => item.module)}
+            />
             <NotificationCenter />
             <AccountMenu
               administrative={session.context.isAdministrative}

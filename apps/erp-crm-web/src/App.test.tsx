@@ -270,10 +270,12 @@ describe('ERP and CRM authenticated workspace', () => {
     await screen.findByRole('heading', { name: `${messages.home.title}, Mila.` });
 
     const search = screen.getByRole('combobox', { name: 'Search pages and work areas' });
+    fireEvent.focus(search);
+    await screen.findByRole('listbox', { name: 'Workspace destinations' });
     fireEvent.change(search, { target: { value: 'Finance' } });
-    expect(screen.getByText('No matching page')).toBeTruthy();
+    expect(await screen.findByText('No matching page')).toBeTruthy();
     fireEvent.change(search, { target: { value: 'Customers & CRM' } });
-    fireEvent.click(screen.getByRole('option', { name: /Customers & CRM/u }));
+    fireEvent.click(await screen.findByRole('option', { name: /Customers & CRM/u }));
     expect(await screen.findByRole('heading', { name: moduleMessages.crm.label })).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: 'Open account menu' }));
@@ -678,10 +680,14 @@ describe('ERP and CRM authenticated workspace', () => {
       permissions: [...authenticationContext.permissions, { action: 'create', module: 'crm' }],
     };
     storeAuthenticatedSession(crmContext);
+    let releaseReferences: () => void = () => {};
+    const referenceGate = new Promise<void>((resolve) => {
+      releaseReferences = resolve;
+    });
     const fetchMock = vi.fn((input: string) => {
       if (input.endsWith('/auth/me')) return Promise.resolve(jsonResponse(crmContext));
       if (input.endsWith('/crm/tickets/reference-data')) {
-        return Promise.resolve(
+        return referenceGate.then(() =>
           jsonResponse({
             assignees: [],
             businessTimezone: 'Europe/Sofia',
@@ -720,7 +726,13 @@ describe('ERP and CRM authenticated workspace', () => {
 
     renderApplication(['/modules/crm/tickets']);
 
-    fireEvent.click(await screen.findByRole('button', { name: /New ticket/u }));
+    const newTicket = await screen.findByRole<HTMLButtonElement>('button', { name: /New ticket/u });
+    expect(newTicket.disabled).toBe(true);
+    fireEvent.click(newTicket);
+    expect(screen.queryByRole('dialog', { name: 'New ticket' })).toBeNull();
+    releaseReferences();
+    await waitFor(() => expect(newTicket.disabled).toBe(false));
+    fireEvent.click(newTicket);
     const dialog = await screen.findByRole('dialog', { name: 'New ticket' });
     const form = dialog.querySelector<HTMLFormElement>('.crm-ticket-form');
     expect(form).toBeTruthy();
@@ -4595,7 +4607,7 @@ describe('ERP and CRM authenticated workspace', () => {
     expect(await screen.findByText('SADV-2026-000001 was allocated.')).toBeTruthy();
     fireEvent.click(within(dialog).getByRole('button', { name: 'Back to supplier payables' }));
 
-    fireEvent.click(screen.getByRole('button', { name: /Payable register/u }));
+    fireEvent.click(await screen.findByRole('button', { name: /Payable register/u }));
     fireEvent.click(await screen.findByRole('button', { name: 'Preview' }));
     dialog = await screen.findByRole('dialog', { name: 'SP-2026-000001' });
     fireEvent.click(within(dialog).getByRole('button', { name: 'Create offset' }));
@@ -4736,7 +4748,35 @@ describe('ERP and CRM authenticated workspace', () => {
       version: 1,
     };
     let documents: unknown[] = [];
+    let attached = false;
+    const attachment = {
+      id: 'ace56756-038f-4f8a-8384-3bfba4785ca2',
+      originalName: 'support.pdf',
+      mediaType: 'application/pdf',
+      byteSize: 100,
+      createdAt: '2026-09-09T12:00:00Z',
+      version: 1,
+      versionCount: 1,
+      status: 'available',
+      isCurrent: true,
+    };
     const fetchMock = vi.fn((input: string, options?: RequestInit) => {
+      if (input.includes('/files?'))
+        return Promise.resolve(
+          jsonResponse({
+            items: attached ? [attachment] : [],
+            page: 1,
+            total: attached ? 1 : 0,
+            totalPages: 1,
+          }),
+        );
+      if (input.endsWith('/files') && options?.method === 'POST') {
+        const body = options.body as FormData;
+        expect(body.get('parentType')).toBe('financial_document');
+        expect(body.get('parentId')).toBe(document.id);
+        attached = true;
+        return Promise.resolve(jsonResponse(attachment, 201));
+      }
       if (input.endsWith('/auth/me')) return Promise.resolve(jsonResponse(financeContext));
       if (input.endsWith('/finance/financial-documents/reference-data'))
         return Promise.resolve(jsonResponse(references));
@@ -4771,9 +4811,32 @@ describe('ERP and CRM authenticated workspace', () => {
     expect(within(preview).getByText('No official number allocated')).toBeTruthy();
     expect(within(preview).getByText('INV-DRAFT-2026-000014')).toBeTruthy();
     expect(within(preview).getByText('Standard 20% (20.0000%)')).toBeTruthy();
+    expect(await within(preview).findByText('No attachments yet')).toBeTruthy();
+    fireEvent.click(within(preview).getByRole('button', { name: 'Add attachment' }));
+    fireEvent.change(within(preview).getByLabelText('Choose file'), {
+      target: {
+        files: [
+          new File(['%PDF-1.4 supporting document'], 'support.pdf', { type: 'application/pdf' }),
+        ],
+      },
+    });
+    fireEvent.click(within(preview).getByRole('button', { name: 'Upload' }));
+    expect(await within(preview).findByText('support.pdf')).toBeTruthy();
+    expect(within(preview).getByRole('button', { name: 'Replace' })).toBeTruthy();
     expect(
       within(preview).getByRole('button', { name: 'Back to financial documents' }),
     ).toBeTruthy();
+    cleanup();
+    financeContext.permissions = financeContext.permissions.filter(
+      (permission) => !(permission.module === 'erp.finance' && permission.action === 'edit'),
+    );
+    storeAuthenticatedSession(financeContext);
+    renderApplication(['/modules/erp.finance/invoices']);
+    fireEvent.click(await screen.findByRole('button', { name: 'Preview' }));
+    const readOnlyPreview = await screen.findByRole('dialog', { name: document.number });
+    expect(await within(readOnlyPreview).findByText('support.pdf')).toBeTruthy();
+    expect(within(readOnlyPreview).queryByRole('button', { name: 'Add attachment' })).toBeNull();
+    expect(within(readOnlyPreview).queryByRole('button', { name: 'Replace' })).toBeNull();
   });
 
   it('hands completed Service charges to Finance and keeps the work order link visible', async () => {
@@ -4965,9 +5028,17 @@ describe('ERP and CRM authenticated workspace', () => {
             totalPages: 0,
           }),
         );
+      if (input.endsWith(`/service/work-orders/${workOrderId}`))
+        return Promise.resolve(jsonResponse(workOrder));
       if (input.includes('/service/work-orders'))
         return Promise.resolve(
-          jsonResponse({ items: [workOrder], page: 1, pageSize: 25, total: 1, totalPages: 1 }),
+          jsonResponse({
+            items: [{ ...workOrder, status: 'scheduled' }],
+            page: 1,
+            pageSize: 25,
+            total: 1,
+            totalPages: 1,
+          }),
         );
       if (input.endsWith('/finance/financial-documents/reference-data'))
         return Promise.resolve(jsonResponse(references));
@@ -4992,6 +5063,9 @@ describe('ERP and CRM authenticated workspace', () => {
     renderApplication(['/modules/erp.service/work-orders']);
     fireEvent.click(await screen.findByRole('button', { name: /DEV-WO-FIN-0001/u }));
     let dialog = await screen.findByRole('dialog', { name: 'DEV-WO-FIN-0001' });
+    expect(
+      fetchMock.mock.calls.some(([url]) => url.endsWith(`/service/work-orders/${workOrderId}`)),
+    ).toBe(true);
     fireEvent.click(within(dialog).getByRole('button', { name: /Prepare invoice draft/u }));
 
     dialog = await screen.findByRole('dialog', { name: 'New financial document' });

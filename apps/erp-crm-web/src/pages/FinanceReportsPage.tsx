@@ -1,3 +1,4 @@
+import { useExportHistory, ExportHistoryControls } from './useExportHistory';
 import { Button, InlineAlert, Toast } from '@vista/ui';
 import { DashboardCards } from '@vista/ui';
 import { apiV1BaseUrl } from '../api/client';
@@ -193,7 +194,8 @@ function ReportExportPanel({
   const [columns, setColumns] = useState<string[] | undefined>();
   const saveRequest = useRef<{ body: string; id: string } | null>(null);
   const exportRequest = useRef<{ body: string; id: string } | null>(null);
-  const [exports, setExports] = useState<FinanceReportExport[]>([]);
+  const history = useExportHistory(token, listFinanceReportExports);
+  const exports = history.items;
   const [definitionKey, setDefinitionKey] = useState<FinanceReportDefinitionKey>(defaultDefinition);
   const [format, setFormat] = useState<ReportExportFormat>('xlsx');
   const [dateFrom, setDateFrom] = useState(initialDateFrom);
@@ -206,13 +208,11 @@ function ReportExportPanel({
   const definition = definitions.find((item) => item.key === definitionKey);
 
   const load = useCallback(async () => {
-    const [available, recent, saved] = await Promise.all([
+    const [available, saved] = await Promise.all([
       getFinanceReportDefinitions(token),
-      listFinanceReportExports(token),
       listSavedFinanceReports(token, savedPage),
     ]);
     setDefinitions(available);
-    setExports(recent.items);
     setSavedReports(saved.items);
     setSavedPages(saved.totalPages);
   }, [token, savedPage]);
@@ -273,16 +273,6 @@ function ReportExportPanel({
     };
   }, [load]);
 
-  useEffect(() => {
-    if (!exports.some((item) => item.status === 'queued' || item.status === 'processing')) return;
-    const timer = window.setInterval(() => {
-      void listFinanceReportExports(token)
-        .then((page) => setExports(page.items))
-        .catch(() => undefined);
-    }, 2_000);
-    return () => window.clearInterval(timer);
-  }, [exports, token]);
-
   async function createExport() {
     if (!definition) return;
     setBusy(true);
@@ -298,11 +288,9 @@ function ReportExportPanel({
       const body = JSON.stringify(input);
       if (exportRequest.current?.body !== body)
         exportRequest.current = { body, id: crypto.randomUUID() };
-      const created = await createFinanceReportExport(token, exportRequest.current.id, input);
+      await createFinanceReportExport(token, exportRequest.current.id, input);
       exportRequest.current = null;
-      setExports((items) => [created, ...items.filter((item) => item.id !== created.id)]);
-      const recent = await listFinanceReportExports(token).catch(() => null);
-      if (recent) setExports(recent.items);
+      history.refresh(true);
       setMessage('Your report is being prepared. It will appear below when it is ready.');
     } catch (caught) {
       setError(errorMessage(caught, 'The report could not be prepared.'));
@@ -334,8 +322,7 @@ function ReportExportPanel({
     setError(null);
     try {
       await retryFinanceReportExport(token, report.id);
-      const recent = await listFinanceReportExports(token);
-      setExports(recent.items);
+      history.refresh();
       setMessage('We are preparing the report again.');
     } catch (caught) {
       setError(errorMessage(caught, 'The report could not be started again.'));
@@ -566,18 +553,14 @@ function ReportExportPanel({
                 <p>Only reports requested from your account are shown.</p>
               </div>
               <button
-                disabled={loading || busy}
-                onClick={() =>
-                  void load().catch((caught) =>
-                    setError(errorMessage(caught, 'Reports could not be refreshed.')),
-                  )
-                }
+                disabled={history.loading || busy}
+                onClick={() => history.refresh()}
                 type="button"
               >
                 Refresh
               </button>
             </header>
-            {!loading && !exports.length ? (
+            {!history.loading && !history.error && !exports.length ? (
               <div className="report-export-empty">
                 <Icon name="chart" size={20} />
                 <strong>No exports yet</strong>
@@ -617,6 +600,7 @@ function ReportExportPanel({
                 </article>
               ))}
             </div>
+            <ExportHistoryControls history={history} />
           </section>
         </div>
         <footer className="security-drawer-actions report-export-actions">

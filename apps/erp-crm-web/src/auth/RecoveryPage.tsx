@@ -255,9 +255,6 @@ function RecoveryStatus({
 }) {
   return (
     <section className="recovery-status" aria-live="polite">
-      <span className="recovery-status-mark" aria-hidden="true">
-        <Icon name="shield" size={21} />
-      </span>
       <h2>{title}</h2>
       <p>{detail}</p>
       <div className="recovery-status-actions">{children}</div>

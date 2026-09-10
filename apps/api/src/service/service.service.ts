@@ -1184,6 +1184,9 @@ export class ServiceOperationsService {
         );
         return photo;
       },
+      async (client) => {
+        this.assertTechnicianAccess(await this.lockWorkOrder(client, id), auth);
+      },
     );
   }
 
@@ -1927,12 +1930,14 @@ export class ServiceOperationsService {
     payload: object,
     responseStatus: number,
     action: (client: PoolClient, commandKey: string) => Promise<T>,
+    authorize?: (client: PoolClient) => Promise<void>,
   ): Promise<T> {
     const idempotencyKey = validKey(key);
     const hash = createHash('sha256').update(JSON.stringify(payload)).digest('hex');
     const client = await this.database.getPool().connect();
     try {
       await client.query('BEGIN');
+      await authorize?.(client);
       const replay = await claim(client, scope, idempotencyKey, hash);
       if (replay) {
         await client.query('COMMIT');

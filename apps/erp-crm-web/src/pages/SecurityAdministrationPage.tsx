@@ -910,18 +910,22 @@ function RecoveryHandoffDrawer({
 }) {
   const [reason, setReason] = useState('Identity verified in person.');
   const [handoff, setHandoff] = useState<AccountRecoveryHandoff | null>(null);
+  const attempt = useRef<{ reason: string; key: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
   async function issue(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const normalizedReason = reason.trim();
+    if (attempt.current?.reason !== normalizedReason)
+      attempt.current = { reason: normalizedReason, key: crypto.randomUUID() };
     setBusy(true);
     setError('');
     try {
       setHandoff(
-        await issueAccountRecoveryHandoff(token, crypto.randomUUID(), account, {
+        await issueAccountRecoveryHandoff(token, attempt.current.key, account, {
           expectedVersion: account.version,
-          reason: reason.trim(),
+          reason: normalizedReason,
         }),
       );
     } catch (failure) {

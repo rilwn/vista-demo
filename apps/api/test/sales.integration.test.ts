@@ -2827,6 +2827,29 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
       .attach('photo', tinyPng, { contentType: 'image/png', filename: 'display-check.png' })
       .expect(201);
     expect((photoReplay.body as ServiceWorkOrderPhoto).id).toBe(photo.id);
+    const temporaryRole = await grantServicePermissions(database, viewerAccountId, [
+      'view',
+      'edit',
+    ]);
+    const unassignedToken = await login(application, `sales-viewer-${runId}@example.invalid`);
+    try {
+      for (const key of [`service-photo-${runId}`, `unassigned-photo-${runId}`]) {
+        await request(application.getHttpServer())
+          .post(`/api/v1/service/work-orders/${started.id}/photos`)
+          .set('authorization', `Bearer ${unassignedToken}`)
+          .set('idempotency-key', key)
+          .attach('photo', tinyPng, { contentType: 'image/png', filename: 'display-check.png' })
+          .expect(403);
+      }
+    } finally {
+      await request(application.getHttpServer())
+        .post('/api/v1/auth/logout')
+        .set('authorization', `Bearer ${unassignedToken}`);
+      await database.query('DELETE FROM iam.account_roles WHERE account_id=$1 AND role_id=$2', [
+        viewerAccountId,
+        temporaryRole,
+      ]);
+    }
     const downloadedPhoto = await request(application.getHttpServer())
       .get(`/api/v1/service/work-orders/${started.id}/photos/${photo.id}`)
       .set('authorization', `Bearer ${token}`)
@@ -4481,6 +4504,7 @@ async function grantServicePermissions(
     accountId,
     roleId,
   ]);
+  return roleId;
 }
 
 async function grantWarehouseViewPermission(pool: Pool, accountId: string) {

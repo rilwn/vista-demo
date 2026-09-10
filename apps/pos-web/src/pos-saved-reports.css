@@ -99,6 +99,16 @@
   gap: 12px;
   align-items: center;
 }
+.pos-export-paging {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--vista-line, #d6ded8);
+  font-size: 0.75rem;
+}
 .pos-saved-reports :focus-visible {
   outline: 2px solid #216843;
   outline-offset: 2px;

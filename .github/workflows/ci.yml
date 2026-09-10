@@ -10,6 +10,124 @@ permissions:
   contents: read
 
 jobs:
+  application-images:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [api, operations, pos, recovery]
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -f infrastructure/deployment/Dockerfile --target ${{ matrix.target }} -t vista-${{ matrix.target }}:ci .
+      - name: Scan built application image
+        uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8 # v0.36.0
+        with:
+          version: v0.70.0
+          scan-type: image
+          image-ref: vista-${{ matrix.target }}:ci
+          scanners: vuln
+          vuln-type: os,library
+          severity: HIGH,CRITICAL
+          ignore-unfixed: false
+          exit-code: '1'
+          format: json
+          output: application-vulnerabilities.json
+          timeout: 15m
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ${{ matrix.target }}-vulnerabilities
+          path: application-vulnerabilities.json
+          retention-days: 7
+  deployment-rehearsal:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run test:deployment
+  container-inventory:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      matrix: ${{ steps.images.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          cache: npm
+          node-version: 22
+      - run: npm ci
+      - run: npm run test:container-security
+      - run: npx tsc -p tests/security/tsconfig.json
+      - id: images
+        name: Read versioned images without loading local credentials
+        run: |
+          matrix=$(node --import tsx tests/security/container-images.ts)
+          test -n "$matrix"
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+  container-security:
+    needs: container-inventory
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.container-inventory.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Scan operating system and library vulnerabilities
+        uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8 # v0.36.0
+        with:
+          version: v0.70.0
+          scan-type: image
+          image-ref: ${{ matrix.image }}
+          scanners: vuln
+          vuln-type: os,library
+          severity: HIGH,CRITICAL
+          ignore-unfixed: false
+          exit-code: '1'
+          format: json
+          output: container-vulnerabilities.json
+          timeout: 15m
+      - name: Retain scan evidence even when vulnerabilities are found
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}-vulnerabilities
+          path: container-vulnerabilities.json
+          if-no-files-found: warn
+          retention-days: 7
+  browser-acceptance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          cache: npm
+          node-version: 22
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Install PDF text and rendering validation tools
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends poppler-utils
+      - run: npm run build:packages
+      - run: npm run build -w @vista/api
+      - run: npx tsc --project tests/e2e/tsconfig.json --noEmit
+      - run: npm run test:acceptance
+      - name: Browser failure evidence (disposable test data only)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-failure-evidence
+          path: |
+            test-results/browser
+            playwright-report
+          retention-days: 3
   validate:
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -63,6 +181,8 @@ jobs:
           node-version: 22
       - run: npm ci
       - run: npm audit --omit=dev --audit-level=high
+      - run: npm run build:packages
+      - run: npm run build -w @vista/api
       - name: Start S3-compatible test storage
         run: |
           docker run --detach --name vista-ci-minio \

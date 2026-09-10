@@ -5,7 +5,7 @@ export default defineConfig({
   plugins: [react()],
   server: {
     proxy: {
-      '/api': 'http://localhost:3000',
+      '/api': process.env['VISTA_API_PROXY_URL'] ?? 'http://localhost:3000',
     },
   },
   test: {

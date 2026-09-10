@@ -21,19 +21,19 @@
   justify-items: center;
   gap: 0.65rem;
   padding: 2rem;
-  color: #eff6ea;
-  background: #102a1e;
+  color: #17251d;
+  background: #f1f5f1;
   text-align: center;
 }
 
 .backup-application-state > .vista-mark {
-  color: #c5e2ac;
+  color: #286343;
 }
 
 .backup-application-state > .vista-mark .vista-mark-symbol {
   width: 2.7rem;
   height: 2.7rem;
-  border-color: rgb(219 237 207 / 23%);
+  border-color: #d5e2d8;
 }
 
 .backup-application-state strong,
@@ -46,13 +46,13 @@
 .backup-application-state p {
   max-width: 28rem;
   margin: 0;
-  color: #b9c9ba;
+  color: #586c60;
   font-size: 0.86rem;
   line-height: 1.55;
 }
 
-.backup-application-state--restricted > p:first-of-type {
-  color: #b9d89f;
+.backup-application-state--restricted > .backup-state-eyebrow {
+  color: #42734e;
   font-size: 0.72rem;
   font-weight: 720;
   letter-spacing: 0.1em;
@@ -61,9 +61,9 @@
 
 .backup-application-state .vista-button--secondary {
   margin-top: 0.55rem;
-  border-color: rgb(255 255 255 / 22%);
-  color: #eff6ea;
-  background: rgb(255 255 255 / 0.08);
+  border-color: #cedbd2;
+  color: #214a32;
+  background: #fff;
 }
 
 .backup-console :focus-visible {

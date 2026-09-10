@@ -51,11 +51,16 @@ describe('HTTP rate-limit coverage', () => {
       })),
     );
 
-    expect(assignments).toHaveLength(129);
+    expect(assignments).toHaveLength(130);
     expect(assignments.filter(({ policy }) => policy === undefined)).toEqual([]);
     expect(assignments).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ controller: 'AuthController', name: 'login', policy: 'public' }),
+        expect.objectContaining({
+          controller: 'JobsController',
+          name: 'prometheus',
+          policy: 'read',
+        }),
         expect.objectContaining({
           controller: 'AuthController',
           name: 'completeRecovery',

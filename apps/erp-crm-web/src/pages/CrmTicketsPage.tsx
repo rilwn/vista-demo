@@ -134,7 +134,10 @@ export function CrmTicketsPage() {
           <p>Keep customer issues, response commitments, and Service work connected.</p>
         </div>
         {canCreate ? (
-          <Button onClick={() => setCreating(true)}>
+          <Button
+            disabled={loading || !references.customers.length}
+            onClick={() => setCreating(true)}
+          >
             <Icon name="plus" size={17} /> New ticket
           </Button>
         ) : null}

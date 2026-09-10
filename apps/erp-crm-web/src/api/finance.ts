@@ -198,11 +198,12 @@ export function getFinanceReportDefinitions(token: string): Promise<FinanceRepor
 export function listFinanceReportExports(
   token: string,
   page = 1,
+  pageSize = 20,
 ): Promise<FinanceReportExportPage> {
   return unwrapApiResponse(
     apiClient.GET('/api/v1/finance/report-exports', {
       headers: authorizationHeaders(token),
-      params: { query: { page, pageSize: 20 } },
+      params: { query: { page, pageSize } },
     }),
   );
 }

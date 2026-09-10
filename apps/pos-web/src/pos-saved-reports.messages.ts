@@ -16,3 +16,15 @@ export const savedReportText = {
   unavailable: 'This saved report is no longer available.',
   hint: 'Saved options use the applied filters above. The on-screen table keeps all its columns.',
 } as const;
+
+export const exportHistoryText = {
+  title: 'Recent exports',
+  owner: 'Only reports requested from this account are shown.',
+  refresh: 'Refresh',
+  loading: 'Loading your files…',
+  error: 'Your files could not be loaded. Select Refresh to try again.',
+  empty: 'Your prepared files will appear here.',
+  previous: 'Previous exports',
+  next: 'Next exports',
+  page: (page: number, pages: number) => `Page ${page} of ${Math.max(1, pages)}`,
+} as const;

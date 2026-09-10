@@ -109,3 +109,12 @@ POS receipt invoice preparation ends at a Finance draft until the approved legal
 issuance, numbering, signing, delivery, and H-18 rules are implemented. Warranty
 cards are printable PDFs; direct transport to an approved physical printer remains
 part of the target-hardware work.
+
+## Report timestamps
+
+New shift-register, X and Z exports format opening, closing and snapshot times
+in `BUSINESS_TIMEZONE`, including daylight-saving changes. The printed form is
+`YYYY-MM-DD HH:mm:ss`, with the timezone named in the report criteria. Stored
+timestamps and the live JSON report API retain their existing UTC representation;
+previously generated files are not rewritten. CSV, Excel and PDF use the same
+formatted export values.

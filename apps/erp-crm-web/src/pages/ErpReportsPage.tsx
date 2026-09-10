@@ -666,6 +666,7 @@ function RecentErpExports({
   const [page, setPage] = useState(1);
   const [reload, setReload] = useState(0);
   const [error, setError] = useState(false);
+  const [actionError, setActionError] = useState('');
   const [busy, setBusy] = useState(false);
   useEffect(() => setPage(1), [refresh]);
   useEffect(() => {
@@ -695,7 +696,7 @@ function RecentErpExports({
   async function action(id: string, download: boolean) {
     if (busy) return;
     setBusy(true);
-    setError(false);
+    setActionError('');
     try {
       const item = data?.items.find((r) => r.id === id);
       if (!item) return;
@@ -712,7 +713,7 @@ function RecentErpExports({
         setReload((n) => n + 1);
       }
     } catch {
-      setError(true);
+      setActionError(download ? copy.downloadError : copy.retryError);
     } finally {
       setBusy(false);
     }
@@ -729,6 +730,7 @@ function RecentErpExports({
         </Button>
       </div>
       {error ? <InlineAlert tone="error">{copy.exportsError}</InlineAlert> : null}
+      {actionError ? <InlineAlert tone="error">{actionError}</InlineAlert> : null}
       {loading && !data ? (
         <p role="status">{copy.loading}</p>
       ) : !data?.items.length ? (

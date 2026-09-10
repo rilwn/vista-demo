@@ -26,6 +26,7 @@ import type {
   PosSalePage,
   PosShift,
   PosTerminalContext,
+  SerialTraceability,
 } from '@vista/contracts';
 import { Pool } from 'pg';
 import request from 'supertest';
@@ -242,6 +243,24 @@ describe.skipIf(!runInfrastructureTests)('POS split payment and linked return li
       [first.body.id],
     );
     expect(row.rows[0]?.filters.columns).toEqual(body.columns);
+    const secondPosToken = await login(application, 'finance@vista.local');
+    const privateExports = await request(application.getHttpServer())
+      .get('/api/v1/pos/report-exports?page=1&pageSize=1')
+      .set('authorization', `Bearer ${secondPosToken}`)
+      .expect(200);
+    expect(privateExports.body.total).toBe(0);
+    await request(application.getHttpServer())
+      .get(`/api/v1/pos/report-exports/${first.body.id}/content`)
+      .set('authorization', `Bearer ${secondPosToken}`)
+      .expect(404);
+    await request(application.getHttpServer())
+      .post(`/api/v1/pos/report-exports/${first.body.id}/retry`)
+      .set('authorization', `Bearer ${secondPosToken}`)
+      .expect(404);
+    await request(application.getHttpServer())
+      .post('/api/v1/auth/logout')
+      .set('authorization', `Bearer ${secondPosToken}`)
+      .expect(204);
   });
 
   it('protects the assigned terminal and return commands with POS permissions', async () => {
@@ -1047,6 +1066,35 @@ describe.skipIf(!runInfrastructureTests)('POS split payment and linked return li
         warehouse_id: fixtureId('warehouse:service'),
       },
     ]);
+    if (!serialNumber) throw new Error('The test sale must have a serial number');
+    const trace = await get<SerialTraceability>(
+      application,
+      `/api/v1/warehouse/serial-traceability/${encodeURIComponent(serialNumber)}`,
+      managerToken,
+    );
+    expect(trace.currentCustody.type).toBe('service');
+    expect(trace.events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          eventType: 'sale',
+          referenceType: 'POS sale',
+          referenceId: serialSale.saleNumber,
+        }),
+        expect.objectContaining({
+          eventType: 'return_received',
+          referenceType: 'POS return',
+          referenceId: serviceReturn.returnNumber,
+        }),
+      ]),
+    );
+    expect(
+      trace.events.find((event) => event.referenceId === serviceReturn.returnNumber)?.details,
+    ).toEqual(
+      expect.arrayContaining([
+        { label: 'Original POS sale', value: serialSale.saleNumber },
+        { label: 'Reversal', value: serviceReturn.fiscalReversalNumber },
+      ]),
+    );
 
     const sales = await get<PosSalePage>(application, '/api/v1/pos/sales', posToken);
     const completedSale = sales.items.find((item) => item.id === sale.id);

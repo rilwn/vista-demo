@@ -1,0 +1,44 @@
+services:
+  postgres:
+    image: postgres:16.9-alpine
+    environment:
+      POSTGRES_USER: vista_e2e
+      POSTGRES_PASSWORD: local-e2e-only
+      POSTGRES_DB: vista_e2e
+    ports: ['127.0.0.1:58432:5432']
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U vista_e2e -d vista_e2e']
+      interval: 2s
+      timeout: 2s
+      retries: 30
+  redis:
+    image: redis:7.4.5-alpine
+    ports: ['127.0.0.1:58379:6379']
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 2s
+      timeout: 2s
+      retries: 30
+  minio:
+    image: minio/minio:RELEASE.2025-07-23T15-54-02Z
+    command: server /data
+    environment:
+      MINIO_ROOT_USER: vista-e2e
+      MINIO_ROOT_PASSWORD: local-e2e-storage-only
+    ports: ['127.0.0.1:58900:9000']
+    healthcheck:
+      test: ['CMD', 'curl', '-f', 'http://localhost:9000/minio/health/live']
+      interval: 2s
+      timeout: 2s
+      retries: 30
+  mailpit:
+    image: axllent/mailpit:v1.27.8
+    ports: ['127.0.0.1:58025:1025']
+  minio-init:
+    image: minio/mc:RELEASE.2025-07-21T05-28-08Z
+    entrypoint: /bin/sh
+    command:
+      [
+        '-c',
+        'mc alias set e2e http://minio:9000 vista-e2e local-e2e-storage-only && mc mb e2e/vista-e2e && mc anonymous set none e2e/vista-e2e',
+      ]

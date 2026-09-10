@@ -239,6 +239,32 @@ describe('POS application', () => {
     expect(screen.getByText('No certified fiscal receipt was issued.')).toBeTruthy();
   });
 
+  it('keeps checkout disabled during the offer debounce and pending price request', async () => {
+    const mock = installApiMock();
+    let release!: () => void;
+    const pricingGate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    vi.stubGlobal('fetch', async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      if (url.includes('/pos/baskets/price')) await pricingGate;
+      return mock(input, init);
+    });
+    render(<App />);
+    await screen.findByRole('heading', { name: 'New sale' });
+    fireEvent.click(screen.getByRole('link', { name: 'Shifts' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Open cashier shift' }));
+    fireEvent.click(
+      (await screen.findAllByRole('button', { name: /Demo 12 V Power Adapter/u }))[0]!,
+    );
+    fireEvent.change(screen.getByLabelText('Cash received'), { target: { value: '100' } });
+    const complete = screen.getByRole('button', { name: /Complete sale · 60.00 BGN/u });
+    expect(complete.hasAttribute('disabled')).toBe(true);
+    expect(screen.getByText('Checking offers…')).toBeTruthy();
+    release();
+    await waitFor(() => expect(complete.hasAttribute('disabled')).toBe(false));
+  });
+
   it('guides a cashier through a split cash and card payment', async () => {
     installApiMock();
     render(<App />);
@@ -280,8 +306,27 @@ describe('POS application', () => {
 
     expect(await screen.findByText('80.00 BGN')).toBeTruthy();
     expect(screen.getByText('2,000.00 BGN')).toBeTruthy();
+    const advanceInput = screen.getByLabelText('Use from advance');
+    const complete = screen.getByRole('button', { name: /Complete sale · 60.00 BGN/u });
+    for (const [value, message] of [
+      ['81', 'The amount is higher than the available advance.'],
+      ['61', 'The advance amount cannot exceed the sale total.'],
+      ['-1', 'Enter zero or a positive advance amount.'],
+    ]) {
+      fireEvent.change(advanceInput, { target: { value } });
+      expect(complete.hasAttribute('disabled')).toBe(true);
+      expect(advanceInput.getAttribute('aria-invalid')).toBe('true');
+      expect(document.getElementById('customer-advance-amount-error')?.textContent).toBe(message);
+      expect(screen.queryByText('The advance covers the full sale.')).toBeNull();
+    }
     fireEvent.change(screen.getByLabelText('Use from advance'), { target: { value: '20' } });
+    expect(advanceInput.hasAttribute('aria-invalid')).toBe(false);
     expect(screen.getByText(/Due in 14 days/u)).toBeTruthy();
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: /Complete sale · 60.00 BGN/u }).hasAttribute('disabled'),
+      ).toBe(false),
+    );
     fireEvent.click(screen.getByRole('button', { name: /Complete sale · 60.00 BGN/u }));
 
     await screen.findByRole('heading', { name: sale.fiscalReceiptNumber });
@@ -357,6 +402,11 @@ describe('POS application', () => {
     expect(await screen.findByRole('heading', { name: posReturn.returnNumber })).toBeTruthy();
     expect(screen.getByText(posReturn.fiscalReversalNumber)).toBeTruthy();
     expect(screen.getAllByText('60.00 BGN').length).toBeGreaterThanOrEqual(2);
+    fireEvent.click(screen.getByRole('button', { name: 'Done' }));
+    fireEvent.click(screen.getByRole('link', { name: 'Shifts' }));
+    await waitFor(() =>
+      expect(screen.getByText('Expected cash').nextElementSibling?.textContent).toBe('100.00 BGN'),
+    );
   });
 
   it('records the counted drawer amount when the cashier closes a shift', async () => {
@@ -433,6 +483,7 @@ describe('POS application', () => {
 
 function installApiMock({ lookupSale = false, savedReport = false } = {}) {
   let shiftOpen = false;
+  let returned = false;
   const mock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(
       typeof input === 'string' ? input : input instanceof URL ? input.href : input.url,
@@ -443,7 +494,12 @@ function installApiMock({ lookupSale = false, savedReport = false } = {}) {
     if (url.pathname.endsWith('/auth/me')) return jsonResponse(posContext);
     if (url.pathname.endsWith('/auth/logout')) return new Response(null, { status: 204 });
     if (url.pathname.endsWith('/pos/terminal-context'))
-      return jsonResponse({ ...(shiftOpen ? { currentShift: shift } : {}), registers: [register] });
+      return jsonResponse({
+        ...(shiftOpen
+          ? { currentShift: returned ? { ...shift, expectedCashBgn: '100.0000' } : shift }
+          : {}),
+        registers: [register],
+      });
     if (url.pathname.endsWith('/pos/shifts') && method === 'POST') {
       shiftOpen = true;
       return jsonResponse(shift, 201);
@@ -568,8 +624,10 @@ function installApiMock({ lookupSale = false, savedReport = false } = {}) {
       );
     if (url.pathname.endsWith('/pos/sales'))
       return jsonResponse({ items: [sale], page: 1, pageSize: 50, total: 1, totalPages: 1 });
-    if (url.pathname.endsWith('/pos/returns') && method === 'POST')
+    if (url.pathname.endsWith('/pos/returns') && method === 'POST') {
+      returned = true;
       return jsonResponse(posReturn, 201);
+    }
     if (url.pathname.endsWith('/pos/returns'))
       return jsonResponse({ items: [], page: 1, pageSize: 50, total: 0, totalPages: 0 });
     return jsonResponse({ error: { code: 'NOT_FOUND', message: 'Unexpected test request' } }, 404);

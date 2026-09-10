@@ -713,6 +713,7 @@ function NewLeadDrawer({
   references: CrmPipelineReferenceData;
   token: string;
 }) {
+  const retryKey = useRetryKey();
   const [organizationName, setOrganizationName] = useState('');
   const [contactName, setContactName] = useState('');
   const [telephone, setTelephone] = useState('');
@@ -738,7 +739,7 @@ function NewLeadDrawer({
         ...(sourceDetails.trim() ? { sourceDetails } : {}),
         ...(telephone.trim() ? { telephone } : {}),
       };
-      onSaved(await createCrmLead(token, crypto.randomUUID(), input));
+      onSaved(await createCrmLead(token, retryKey(input), input));
     } catch (caught) {
       setError(errorText(caught, 'The lead could not be saved.'));
     } finally {
@@ -1008,6 +1009,7 @@ function ConvertLeadDrawer({
   references: CrmPipelineReferenceData;
   token: string;
 }) {
+  const retryKey = useRetryKey();
   const [customerMode, setCustomerMode] = useState<'existing' | 'new'>('new');
   const [existingCustomerId, setExistingCustomerId] = useState(references.customers[0]?.id ?? '');
   const [displayName, setDisplayName] = useState(lead.organizationName);
@@ -1056,7 +1058,7 @@ function ConvertLeadDrawer({
         ...(note.trim() ? { note } : {}),
         ...(opportunity ? { opportunity } : {}),
       };
-      onSaved(await convertCrmLead(token, lead.id, crypto.randomUUID(), input));
+      onSaved(await convertCrmLead(token, lead.id, retryKey(input), input));
     } catch (caught) {
       setError(errorText(caught, 'The lead could not be converted.'));
     } finally {
@@ -1435,6 +1437,7 @@ function OpportunityDrawer({
   references: CrmPipelineReferenceData;
   token: string;
 }) {
+  const retryKey = useRetryKey();
   const [stage, setStage] = useState<CrmOpportunityStage>(opportunity.stage);
   const [probabilityPercent, setProbabilityPercent] = useState(opportunity.probabilityPercent);
   const [note, setNote] = useState('');
@@ -1460,12 +1463,13 @@ function OpportunityDrawer({
     setBusy(true);
     setError(null);
     try {
-      const saved = await moveCrmOpportunity(token, opportunity.id, crypto.randomUUID(), {
+      const input = {
         expectedVersion: opportunity.version,
         ...(note.trim() ? { note } : {}),
         probabilityPercent,
         stage,
-      });
+      };
+      const saved = await moveCrmOpportunity(token, opportunity.id, retryKey(input), input);
       onSaved(saved, `${saved.number} moved to ${stageLabel(saved.stage)}.`);
       setNote('');
     } catch (caught) {
@@ -1649,6 +1653,18 @@ function OpportunityDrawer({
       </div>
     </PipelineDrawer>
   );
+}
+
+// Keep the same command identity while retrying an unchanged form after a lost response.
+// A deliberate change to the request starts a new attempt.
+function useRetryKey() {
+  const attempt = useRef<{ fingerprint: string; key: string } | null>(null);
+  return (input: unknown) => {
+    const fingerprint = JSON.stringify(input);
+    if (attempt.current?.fingerprint !== fingerprint)
+      attempt.current = { fingerprint, key: crypto.randomUUID() };
+    return attempt.current.key;
+  };
 }
 
 function PipelineDrawer({

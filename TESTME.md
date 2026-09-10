@@ -1,62 +1,52 @@
-# Test the report library and schedules
+# Verify help and deployment preparation
 
-## Appearance checks
+Completed verification. No new business records are needed.
 
-1. Open POS at http://localhost:5174. If signed in, sign out through the account
-   menu. The sign-in button should be green, including when hovered.
-   All three apps use the refined light sign-in card, with header and footer
-   dividers reaching both card edges. Check **Show/Hide** beside
-   Password, then sign in as usual. If prompted, enter your authenticator code.
-   On Operations sign-in, select **Use a recovery code**. The recovery page
-   should retain the same light green palette. Do not reset your password just
-   to check its appearance.
-2. Open Recovery at http://localhost:5175 and sign in with your existing backup
-   account. The sidebar should be light. Choose **Policies** in the topbar area
-   selector, then **Overview** in the sidebar. Both controls should stay in sync.
-3. In Operations at http://localhost:5173, open **ERP → Finance** from the
-   sidebar. The page title and icon should be compact, with readable description
-   text. Narrow the window: headings should wrap without horizontal overflow.
+1. Sign in to **Vista Operations** with your warehouse account. Select **Help**
+   in the top bar, enter `reservations`, and read the stock guide. Finance-only
+   guidance should not appear. Press **Escape** to return to your unchanged page.
+2. Sign in to **Vista POS**. Select **Help**, search `offline`, then select
+   **Back to work**. The guide must distinguish checkout recovery from full
+   offline selling.
+3. Sign in to **Vista Recovery** with your enrolled authenticator. Select
+   **Help**, search `restore`, and confirm the guide clearly states what is not
+   operational yet. Narrow the browser: the guide should scroll while its close
+   and return controls remain reachable.
 
-## Report setup
+For the separate, disposable container check run `npm run test:deployment`.
+See [deployment instructions](infrastructure/deployment/README.md) for its scope,
+ports and cleanup. This is not a production deployment or Backup/DR test.
 
-Restart with `npm run dev` to apply the new migration. No manual seed command is needed.
-Open ERP/CRM at http://localhost:5173 and sign in as **manager@vista.local** with
-your existing development password.
+## Complete local regression
 
-## 1. Save and download a report
+No manual seed command, password reset or stock change is needed.
 
-1. Sidebar: **ERP → Warehouse → Reports**. Select **Stock and valuation**.
-2. Leave the search empty and select **Apply**. Open **Customize view**.
-3. Keep the selected fields. Enter **Daily stock review** in **Report name**,
-   choose **CSV** in **File type**, then **Save as new report**.
-4. Sidebar: **Reports → Report library**. Find **Daily stock review** under
-   **My saved views**, then **Review saved view → Prepare export · CSV**.
-5. When it says **Ready**, select **Download**. The file contains the selected
-   stock columns. An empty warehouse may produce headings without data rows.
+From the project folder, with Docker running and Chromium installed:
 
-## 2. Schedule it
+```sh
+# Install once if missing:
+sudo apt-get install poppler-utils
 
-1. In the same saved-view panel, select **Schedule this view**.
-2. Name: **Daily stock download**. Repeat: **Daily**. Reporting period:
-   **Current records**. Keep the suggested **First run**, which is about two
-   minutes ahead in the timezone shown below the field. Select **Create schedule**.
-3. Select **Scheduled exports**, then **Run history** beside your schedule.
-   After the chosen time, one run appears and changes from **Queued/Preparing**
-   to **Ready**. Select **Download**. The history refreshes automatically.
-4. Select **Back**, then **Pause** beside the schedule. It should say **Paused**.
-   Leave it paused after testing to avoid unwanted daily files.
+PLAYWRIGHT_EXECUTABLE_PATH=/usr/bin/chromium npm run test:regression
+```
 
-The notification bell also shows **Your scheduled report is ready** after
-processing. Files stay in your account; no email is sent. **Resume** catches up
-occurrences missed while paused. Current-stock reports use stock at execution
-time, not historical stock.
+This validates and builds the apps first, then runs the API and browser tests.
+Do not start another build or test suite while it is running.
+Your normal development data and accounts are not used or changed.
 
-## 3. Save your dashboard layout
+The browser tests follow these flows automatically:
 
-1. Sidebar: **Customers & CRM → Analytics**. Open **Customize cards**.
-2. Uncheck **Average transaction**, then **Save layout**. That card disappears.
-3. Reload the page. It stays hidden. Open **Customize cards → Show all → Save layout**
-   to restore it.
-4. The same control is available in **ERP → Service → Reports**, **ERP → Finance →
-   Finance reports → Aging & balances**, and **Vista POS → Reports** using your
-   POS operator account. Preferences affect only the signed-in account.
+- Sign in, verify an authenticator, recover access and sign out across the apps.
+- Procurement: order, receive, record the supplier invoice and compare quantities.
+- Sales and Finance: quote, reserve a serial, ship, prepare a draft and collect payment.
+- Service: dispatch, complete work, use parts, retain a signature and prepare a draft.
+- CRM: qualify and convert a lead, progress an opportunity and link a Service ticket.
+- POS: sell, apply approved offers, pay, recover interrupted checkout and return goods.
+- Reports and files: save, export, download, retry and check account permissions.
+
+Expected: all checks pass, the latest test-database migration rolls back and
+reapplies, and temporary services are removed. Allow several minutes.
+If a check fails, share its test name and error, not credentials or tokens.
+
+These checks do not certify fiscal hardware, full offline selling or operational
+Backup/DR. For setup details, see [Browser tests](tests/e2e/README.md).

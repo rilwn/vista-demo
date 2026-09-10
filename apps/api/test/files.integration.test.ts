@@ -1,6 +1,7 @@
 import 'reflect-metadata';
 
 import { randomUUID } from 'node:crypto';
+import type { Server } from 'node:http';
 import { fileURLToPath } from 'node:url';
 
 import type { INestApplication } from '@nestjs/common';
@@ -31,6 +32,8 @@ describe.skipIf(!runInfrastructureTests)('managed partner files', () => {
   let partnerId: string;
   let storage: ObjectStorageService;
   let viewerToken: string;
+  let financeToken: string;
+  const financialDocumentId = randomUUID();
   let firstVersion: ManagedFile;
   let secondVersion: ManagedFile;
   const runId = randomUUID().replaceAll('-', '');
@@ -70,13 +73,13 @@ describe.skipIf(!runInfrastructureTests)('managed partner files', () => {
     const migrationDirectory = fileURLToPath(
       new URL('../src/database/migrations', import.meta.url),
     );
-    await migrateUp(database, migrationDirectory);
+    const applied = await migrateUp(database, migrationDirectory);
     const rolledBack = await migrateDown(database, migrationDirectory);
-    if (rolledBack !== '0033_managed_file_versions') {
-      throw new Error(`Expected to roll back 0033_managed_file_versions, received ${rolledBack}`);
+    if (rolledBack !== applied.at(-1)) {
+      throw new Error(`Unexpected migration rollback: ${rolledBack}`);
     }
     const reapplied = await migrateUp(database, migrationDirectory);
-    if (!reapplied.includes('0033_managed_file_versions')) {
+    if (!rolledBack || !reapplied.includes(rolledBack)) {
       throw new Error('Managed-file version migration could not be reapplied');
     }
 
@@ -112,6 +115,9 @@ describe.skipIf(!runInfrastructureTests)('managed partner files', () => {
     const editor = await createAccount(database, 'editor', passwordHash, runId);
     const viewer = await createAccount(database, 'viewer', passwordHash, runId);
     const outsider = await createAccount(database, 'outsider', passwordHash, runId);
+    const finance = await createAccount(database, 'finance', passwordHash, runId);
+    await grantCrmPermissions(database, finance.accountId, ['edit', 'view'], 'erp.finance');
+    await grantCrmPermissions(database, viewer.accountId, ['view'], 'erp.finance');
     await grantCrmPermissions(database, editor.accountId, ['edit', 'view']);
     await grantCrmPermissions(database, viewer.accountId, ['view']);
     partnerId = randomUUID();
@@ -127,8 +133,34 @@ describe.skipIf(!runInfrastructureTests)('managed partner files', () => {
       ],
     );
     editorToken = await login(application, editor.email);
+    financeToken = await login(application, finance.email);
     viewerToken = await login(application, viewer.email);
     outsiderToken = await login(application, outsider.email);
+    await database.query(
+      `WITH entity AS (
+        INSERT INTO organization.legal_entities (code,name,created_by,updated_by)
+        VALUES ('FILES','Files test issuer',$1,$1) RETURNING id
+      ), branch AS (
+        INSERT INTO organization.branches (legal_entity_id,code,name,created_by,updated_by)
+        SELECT id,'FILES','Files branch',$1,$1 FROM entity RETURNING id,legal_entity_id
+      ), location AS (
+        INSERT INTO organization.business_locations
+          (branch_id,code,name,location_type,address_line_1,city,created_by,updated_by)
+        SELECT id,'FILES','Files location','office','Test address','Vratsa',$1,$1
+        FROM branch RETURNING id,branch_id
+      )
+      INSERT INTO finance.financial_documents
+        (id,draft_number,document_type,legal_entity_id,branch_id,business_location_id,
+         customer_partner_id,issue_date,tax_event_date,due_date,currency_code,
+         exchange_rate,rate_date,rate_source,issuer_name,issuer_address,customer_name,
+         customer_address,net_total,vat_total,gross_total,bgn_net_total,bgn_vat_total,
+         bgn_gross_total,created_by)
+      SELECT $2,'FILES-DRAFT','invoice',branch.legal_entity_id,branch.id,location.id,
+        $3,CURRENT_DATE,CURRENT_DATE,CURRENT_DATE,'BGN',1,CURRENT_DATE,'internal_bgn',
+        'Files issuer','Test address','Files customer','Test address',50,10,60,50,10,60,$1
+      FROM branch JOIN location ON location.branch_id=branch.id`,
+      [finance.accountId, financialDocumentId, partnerId],
+    );
   }, 30_000);
 
   afterAll(async () => {
@@ -139,7 +171,7 @@ describe.skipIf(!runInfrastructureTests)('managed partner files', () => {
       for (const row of keys.rows) await storage.deleteObject(row.storage_key);
     }
     if (application) {
-      for (const token of [editorToken, viewerToken, outsiderToken]) {
+      for (const token of [editorToken, viewerToken, outsiderToken, financeToken]) {
         if (token) {
           await request(application.getHttpServer())
             .post('/api/v1/auth/logout')
@@ -154,6 +186,79 @@ describe.skipIf(!runInfrastructureTests)('managed partner files', () => {
       await adminDatabase.query(`DROP DATABASE IF EXISTS ${databaseName}`);
       await adminDatabase.end();
     }
+  });
+
+  it('protects Finance attachments and preserves financial snapshots across replacement', async () => {
+    const http = application.getHttpServer() as Server;
+    const url = `/api/v1/files?parentType=financial_document&parentId=${financialDocumentId}`;
+    const before = (
+      await database.query<Record<string, unknown>>(
+        'SELECT * FROM finance.financial_documents WHERE id=$1',
+        [financialDocumentId],
+      )
+    ).rows[0];
+    await request(http).get(url).set('authorization', `Bearer ${editorToken}`).expect(403);
+    await request(http).get(url).set('authorization', `Bearer ${viewerToken}`).expect(200);
+    const send = (token: string, key: string, parentId = financialDocumentId, buffer = firstPdf) =>
+      request(http)
+        .post('/api/v1/files')
+        .set('authorization', `Bearer ${token}`)
+        .set('idempotency-key', key)
+        .field('parentType', 'financial_document')
+        .field('parentId', parentId)
+        .attach('file', buffer, { filename: 'support.pdf', contentType: 'application/pdf' });
+    await send(viewerToken, `denied-finance-${runId}`).expect(403);
+    await send(financeToken, `missing-finance-${runId}`, randomUUID()).expect(404);
+    await send(
+      financeToken,
+      `invalid-finance-${runId}`,
+      financialDocumentId,
+      Buffer.from('not a PDF'),
+    ).expect(400);
+    const first = (await send(financeToken, `finance-${runId}`).expect(201)).body as ManagedFile;
+    expect((await send(financeToken, `finance-${runId}`).expect(201)).body.id).toBe(first.id);
+    await request(http)
+      .get(`/api/v1/files/${first.id}/content`)
+      .set('authorization', `Bearer ${editorToken}`)
+      .expect(403);
+    await request(http)
+      .get(`/api/v1/files/${first.id}/content`)
+      .set('authorization', `Bearer ${viewerToken}`)
+      .expect(200);
+    const replace = () =>
+      request(http)
+        .post(`/api/v1/files/${first.id}/versions`)
+        .set('authorization', `Bearer ${financeToken}`)
+        .set('idempotency-key', `finance-replace-${runId}`)
+        .attach('file', secondPdf, { filename: 'support-v2.pdf', contentType: 'application/pdf' });
+    const second = (await replace().expect(201)).body as ManagedFile;
+    await request(http)
+      .post(`/api/v1/files/${first.id}/versions`)
+      .set('authorization', `Bearer ${viewerToken}`)
+      .set('idempotency-key', `denied-replace-${runId}`)
+      .attach('file', secondPdf, { filename: 'denied.pdf', contentType: 'application/pdf' })
+      .expect(403);
+    await request(http)
+      .get(`/api/v1/files/${first.id}/versions`)
+      .set('authorization', `Bearer ${editorToken}`)
+      .expect(403);
+    expect((await replace().expect(201)).body.id).toBe(second.id);
+    const versions = await request(http)
+      .get(`/api/v1/files/${first.id}/versions`)
+      .set('authorization', `Bearer ${viewerToken}`)
+      .expect(200);
+    expect((versions.body as ManagedFile[]).map((file) => file.version)).toEqual([2, 1]);
+    expect(
+      (await request(http).get(url).set('authorization', `Bearer ${viewerToken}`).expect(200)).body
+        .items[0].id,
+    ).toBe(second.id);
+    expect(
+      (
+        await database.query('SELECT * FROM finance.financial_documents WHERE id=$1', [
+          financialDocumentId,
+        ])
+      ).rows[0],
+    ).toEqual(before);
   });
 
   it('inherits partner permissions for lists and upload commands', async () => {
@@ -289,7 +394,7 @@ describe.skipIf(!runInfrastructureTests)('managed partner files', () => {
        UNION ALL
        SELECT after_data AS payload FROM audit.events WHERE target_type = 'file_object'`,
     );
-    expect(sideEffects.rows).toHaveLength(4);
+    expect(sideEffects.rows).toHaveLength(8);
     const serialized = JSON.stringify(sideEffects.rows);
     expect(serialized).not.toContain(secondPdf.toString('utf8'));
     expect(serialized).not.toContain(firstPdf.toString('utf8'));
@@ -339,6 +444,7 @@ async function grantCrmPermissions(
   pool: Pool,
   accountId: string,
   actions: Array<'edit' | 'view'>,
+  module = 'crm',
 ): Promise<void> {
   const roleId = randomUUID();
   await pool.query(
@@ -348,10 +454,10 @@ async function grantCrmPermissions(
   for (const action of actions) {
     const permission = await pool.query<{ id: string }>(
       `INSERT INTO iam.permissions (id, module, action)
-       VALUES ($1, 'crm', $2)
+       VALUES ($1, $3, $2)
        ON CONFLICT (module, action) DO UPDATE SET module = EXCLUDED.module
        RETURNING id`,
-      [randomUUID(), action],
+      [randomUUID(), action, module],
     );
     await pool.query('INSERT INTO iam.role_permissions (role_id, permission_id) VALUES ($1, $2)', [
       roleId,

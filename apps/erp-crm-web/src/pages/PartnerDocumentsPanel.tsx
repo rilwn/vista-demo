@@ -62,7 +62,22 @@ interface ManagedFileCopy {
   versionsError: string;
 }
 
-export function ManagedFilesPanel({
+export function ManagedFilesPanel(props: {
+  canEdit: boolean;
+  copy: ManagedFileCopy;
+  parentId: string;
+  parentType: ManagedFileParentType;
+  token: string;
+}) {
+  return (
+    <ScopedManagedFilesPanel
+      key={`${props.token}:${props.parentType}:${props.parentId}`}
+      {...props}
+    />
+  );
+}
+
+function ScopedManagedFilesPanel({
   canEdit,
   copy,
   parentId,
@@ -78,6 +93,7 @@ export function ManagedFilesPanel({
   const [files, setFiles] = useState<ManagedFile[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [showUpload, setShowUpload] = useState(false);
   const [file, setFile] = useState<File | null>(null);
@@ -89,11 +105,13 @@ export function ManagedFilesPanel({
 
   async function refresh() {
     setLoading(true);
+    setLoadFailed(false);
     setError(null);
     try {
       const result = await listManagedFiles(token, parentType, parentId);
       setFiles(result.items);
     } catch (caught) {
+      setLoadFailed(true);
       setError(errorText(caught, copy.loadError));
     } finally {
       setLoading(false);
@@ -106,7 +124,7 @@ export function ManagedFilesPanel({
 
   async function upload() {
     if (!file) return;
-    const fingerprint = `${file.name}:${file.size}:${file.lastModified}:new`;
+    const fingerprint = `${file.name}:${file.size}:${file.lastModified}:${replacing ?? 'new'}`;
     if (uploadAttempt.current?.fingerprint !== fingerprint) {
       uploadAttempt.current = { fingerprint, key: crypto.randomUUID() };
     }
@@ -189,6 +207,7 @@ export function ManagedFilesPanel({
         </div>
         {canEdit ? (
           <Button
+            disabled={uploading}
             onClick={() => {
               setReplacing(null);
               setShowUpload((value) => !value);
@@ -210,6 +229,7 @@ export function ManagedFilesPanel({
             <span>{copy.chooseFile}</span>
             <input
               accept="application/pdf,image/jpeg,image/png,image/webp"
+              disabled={uploading}
               key={inputKey}
               onChange={chooseFile}
               type="file"
@@ -238,8 +258,13 @@ export function ManagedFilesPanel({
       ) : null}
 
       {error ? <InlineAlert tone="error">{error}</InlineAlert> : null}
+      {loadFailed ? (
+        <Button onClick={() => void refresh()} variant="secondary">
+          {messages.partners.documents.retry}
+        </Button>
+      ) : null}
       {loading ? <p className="partner-documents-state">{copy.loading}</p> : null}
-      {!loading && files.length === 0 ? (
+      {!loading && !loadFailed && files.length === 0 ? (
         <div className="partner-documents-empty">
           <strong>{copy.emptyTitle}</strong>
           <p>{copy.emptyDescription}</p>
@@ -284,7 +309,11 @@ export function ManagedFilesPanel({
                   </Button>
                 ) : null}
                 {canEdit ? (
-                  <Button onClick={() => beginReplacement(record)} variant="quiet">
+                  <Button
+                    disabled={uploading}
+                    onClick={() => beginReplacement(record)}
+                    variant="quiet"
+                  >
                     {copy.replace}
                   </Button>
                 ) : null}

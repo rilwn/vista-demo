@@ -339,7 +339,7 @@ function pdfColumnWidths(columns: FinanceReportExportColumn[], available: number
     if (column.key === 'partnerName') return 1.8;
     if (column.type === 'money') return 1.15;
     if (column.type === 'date') return 1;
-    if (column.type === 'number') return 0.72;
+    if (column.type === 'number') return 1;
     return 1.25;
   });
   const total = weights.reduce((sum, weight) => sum + weight, 0);

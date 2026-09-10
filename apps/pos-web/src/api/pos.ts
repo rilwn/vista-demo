@@ -234,11 +234,15 @@ export function getPosReportDefinitions(token: string): Promise<PosReportDefinit
   );
 }
 
-export function getPosReportExports(token: string): Promise<PosReportExportPage> {
+export function getPosReportExports(
+  token: string,
+  page = 1,
+  pageSize = 20,
+): Promise<PosReportExportPage> {
   return unwrapApiResponse(
     posApiClient.GET('/api/v1/pos/report-exports', {
       headers: authorizationHeaders(token),
-      params: { query: { page: 1, pageSize: 20 } },
+      params: { query: { page, pageSize } },
     }),
   );
 }

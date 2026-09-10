@@ -192,6 +192,8 @@ interface SaleLineRow {
   returnable_quantity: string;
   returnable_serial_numbers: string[];
   returned_quantity: string;
+  returned_net_total: string;
+  returned_vat_total: string;
   sale_id: string;
   serial_numbers: string[];
   unit_price: string;
@@ -3165,6 +3167,10 @@ const saleLinesSql = `
     line.net_total::text, line.vat_total::text, line.gross_total::text,
     COALESCE((SELECT sum(return_line.quantity) FROM pos.return_lines return_line
       WHERE return_line.original_sale_line_id = line.id), 0)::text AS returned_quantity,
+    COALESCE((SELECT sum(return_line.net_total) FROM pos.return_lines return_line
+      WHERE return_line.original_sale_line_id = line.id), 0)::text AS returned_net_total,
+    COALESCE((SELECT sum(return_line.vat_total) FROM pos.return_lines return_line
+      WHERE return_line.original_sale_line_id = line.id), 0)::text AS returned_vat_total,
     (line.quantity - COALESCE((SELECT sum(return_line.quantity)
       FROM pos.return_lines return_line
       WHERE return_line.original_sale_line_id = line.id), 0))::text AS returnable_quantity,
@@ -3785,6 +3791,8 @@ function mapSaleLine(row: SaleLineRow): PosSaleLine {
     returnableQuantity: row.returnable_quantity,
     returnableSerialNumbers: row.returnable_serial_numbers,
     returnedQuantity: row.returned_quantity,
+    returnedNetTotal: row.returned_net_total,
+    returnedVatTotal: row.returned_vat_total,
     serialNumbers: row.serial_numbers,
     unitPrice: row.unit_price,
     vatTotal: row.vat_total,

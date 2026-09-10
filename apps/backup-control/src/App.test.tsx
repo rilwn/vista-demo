@@ -27,6 +27,17 @@ describe('backup-control application shell', () => {
     expect(screen.getByText('No records yet')).toBeTruthy();
   });
 
+  it('does not open Recovery for a backup role with a password-only session', async () => {
+    const context = { ...backupContext, twoFactorVerified: false };
+    storeSession(context);
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse(context)));
+    render(<App />);
+    expect(await screen.findByRole('heading', { name: messages.mfaRequiredTitle })).toBeTruthy();
+    expect(screen.queryByRole('navigation', { name: 'Backup control navigation' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Sign out' }));
+    expect(await screen.findByRole('button', { name: 'Sign in' })).toBeTruthy();
+  });
+
   it('keeps every backup and recovery page reachable from the authenticated navigation', async () => {
     render(<App />);
     await screen.findByRole('heading', { name: 'Backup operations' });

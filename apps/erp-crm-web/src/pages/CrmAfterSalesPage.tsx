@@ -721,6 +721,8 @@ function ClaimDrawer({
 }) {
   const [note, setNote] = useState('');
   const [file, setFile] = useState<File | null>(null);
+  const fileAttempt = useRef<{ file: File; key: string } | null>(null);
+  const fileInput = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   async function transition(nextStatus: TransitionWarrantyClaimRequest['nextStatus']) {
@@ -743,6 +745,8 @@ function ClaimDrawer({
   }
   async function upload() {
     if (!file) return;
+    if (fileAttempt.current?.file !== file)
+      fileAttempt.current = { file, key: crypto.randomUUID() };
     setBusy(true);
     setError(null);
     try {
@@ -750,11 +754,16 @@ function ClaimDrawer({
         token,
         'warranty_claim',
         claim.id,
-        crypto.randomUUID(),
+        fileAttempt.current.key,
         file,
       );
-      onChanged({ ...claim, attachments: [...claim.attachments, uploaded] });
+      onChanged({
+        ...claim,
+        attachments: [...claim.attachments.filter((item) => item.id !== uploaded.id), uploaded],
+      });
       setFile(null);
+      fileAttempt.current = null;
+      if (fileInput.current) fileInput.current.value = '';
     } catch (caught) {
       setError(errorText(caught, 'The supporting file could not be uploaded.'));
     } finally {
@@ -813,10 +822,17 @@ function ClaimDrawer({
                 <input
                   accept="application/pdf,image/jpeg,image/png,image/webp"
                   aria-label="Supporting file"
+                  disabled={busy}
+                  ref={fileInput}
                   onChange={(event) => setFile(event.target.files?.[0] ?? null)}
                   type="file"
                 />
-                <Button disabled={!file} onClick={() => void upload()} variant="secondary">
+                <Button
+                  busy={busy}
+                  disabled={!file}
+                  onClick={() => void upload()}
+                  variant="secondary"
+                >
                   Upload file
                 </Button>
               </div>

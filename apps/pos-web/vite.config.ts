@@ -7,7 +7,7 @@ export default defineConfig({
     proxy: {
       '/api': {
         changeOrigin: true,
-        target: 'http://localhost:3000',
+        target: process.env['VISTA_API_PROXY_URL'] ?? 'http://localhost:3000',
       },
     },
   },

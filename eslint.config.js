@@ -8,6 +8,8 @@ export default tseslint.config(
       '**/coverage/**',
       '**/dist/**',
       '**/node_modules/**',
+      'playwright-report/**',
+      'test-results/**',
       '**/openapi.json',
       'packages/contracts/src/generated/**',
       'eslint.config.js',

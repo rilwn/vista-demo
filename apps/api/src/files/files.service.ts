@@ -421,7 +421,10 @@ export class FilesService {
     const canAccessParent =
       parentType === 'warranty_claim'
         ? canAccessWarrantyClaim
-        : hasPermission(auth.permissions, { action, module: 'crm' });
+        : hasPermission(auth.permissions, {
+            action,
+            module: parentType === 'financial_document' ? 'erp.finance' : 'crm',
+          });
     if (!canAccessParent) {
       throw new ApiErrorException(
         'FILE_PARENT_ACCESS_DENIED',
@@ -433,6 +436,11 @@ export class FilesService {
     if (parentType === 'partner') {
       parent = await queryable.query<{ id: string }>(
         'SELECT id FROM master_data.partners WHERE id = $1',
+        [parentId],
+      );
+    } else if (parentType === 'financial_document') {
+      parent = await queryable.query<{ id: string }>(
+        'SELECT id FROM finance.financial_documents WHERE id = $1',
         [parentId],
       );
     } else if (parentType === 'crm_interaction') {

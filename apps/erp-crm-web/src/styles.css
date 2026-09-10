@@ -10628,10 +10628,32 @@ select.vista-field-input {
   gap: 1rem;
 }
 
-.access-authenticator-drawer .security-drawer-body {
-  display: grid;
-  align-content: start;
+.access-authenticator-drawer > .security-drawer-body {
+  display: flex;
+  min-height: 0;
+  padding: 0;
+  overflow: hidden;
+  scrollbar-gutter: auto;
+}
+
+.access-authenticator-drawer .access-authenticator-form {
+  --drawer-body-inline: 1rem;
+  --drawer-body-bottom: 0px;
+
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
   gap: 1rem;
+  padding: 1rem 1rem 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.access-authenticator-drawer .access-authenticator-form > .security-drawer-actions {
+  flex: 0 0 auto;
+  bottom: 0;
+  margin: auto -1rem 0;
 }
 
 .access-authenticator-form > .vista-alert p {

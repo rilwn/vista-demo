@@ -1,0 +1,14 @@
+.report-export-history .export-history-pagination {
+  flex-wrap: wrap;
+}
+
+@media (max-width: 480px) {
+  .report-export-history .export-history-pagination > span {
+    order: -1;
+    flex-basis: 100%;
+  }
+
+  .report-export-history .export-history-pagination > button {
+    flex: 1;
+  }
+}

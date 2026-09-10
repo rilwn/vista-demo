@@ -558,6 +558,8 @@ export class PosDiscountAuthorizationDto implements PosDiscountAuthorization {
 }
 
 export class PosSaleLineDto implements PosSaleLine {
+  @ApiPropertyOptional({ type: String }) returnedNetTotal?: string;
+  @ApiPropertyOptional({ type: String }) returnedVatTotal?: string;
   @ApiProperty({ type: String }) automaticDiscountTotal!: string;
   @ApiProperty({ type: String }) baseNetTotal!: string;
   @ApiPropertyOptional({ format: 'uuid', type: String }) batchId?: string;

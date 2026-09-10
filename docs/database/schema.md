@@ -461,7 +461,12 @@ metadata into immutable logical-file histories. Every replacement keeps its own
 object key, checksum, issuer, timestamp, and monotonically increasing version
 under one `version_group_id`; the previous object is retained through
 `replaces_object_id`. Authorized parents currently include canonical partner
-records, warranty claims, and CRM interactions. Each parent keeps its own module
+records, warranty claims, CRM interactions, and financial documents. Finance
+attachment reads require Finance view; uploads/replacements require Finance edit.
+The parent must exist in `finance.financial_documents`; CRM access alone grants
+no access. Supporting files never mutate document snapshots or status. This
+extension uses the existing unconstrained parent-type column and version model,
+so no schema migration is needed. Each parent keeps its own module
 permissions; a Service technician can only access a claim in their assigned work
 scope unless they hold Service approval authority.
 Current uploads accept configured PDF/JPEG/PNG/WebP types, enforce a configured

@@ -1,0 +1,56 @@
+.job-monitor {
+  padding: 1.1rem;
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
+}
+.job-monitor header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.job-monitor h2 {
+  margin: 0;
+  font-size: 1rem;
+}
+.job-monitor header p,
+.job-monitor small {
+  margin: 0.3rem 0 0;
+  color: var(--vista-muted);
+  font-size: 0.8rem;
+}
+.job-monitor-status {
+  margin: 0;
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  font-size: 0.8rem;
+}
+.job-monitor-status span {
+  color: var(--vista-muted);
+}
+.job-monitor dl {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 0.75rem;
+  margin: 0;
+}
+.job-monitor dl div {
+  padding: 0.85rem;
+  border: 1px solid var(--vista-line);
+  border-radius: 0.65rem;
+  background: var(--vista-surface);
+}
+.job-monitor dt {
+  font-size: 0.75rem;
+  color: var(--vista-muted);
+}
+.job-monitor dd {
+  margin: 0.4rem 0 0;
+  font-size: 1.5rem;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}

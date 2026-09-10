@@ -266,13 +266,17 @@ export class PosReportsService {
           `Shift: ${shift.shiftNumber}`,
           `Register: ${shift.cashRegisterName}`,
           `Cashier: ${shift.operatorName}`,
-          ...(filters.asOf ? [`Snapshot time: ${filters.asOf}`] : []),
+          ...(filters.asOf
+            ? [
+                `Snapshot time: ${posReportTimestamp(filters.asOf, this.environment.BUSINESS_TIMEZONE)}`,
+              ]
+            : []),
           `Times use ${this.environment.BUSINESS_TIMEZONE}`,
           'Currency: BGN',
           fiscalCriterion(shift.fiscalMode),
         ],
         generatedAt: new Date().toISOString(),
-        rows: [shiftExportRow(shift)],
+        rows: [shiftExportRow(shift, this.environment.BUSINESS_TIMEZONE)],
         title: definitionKey === 'pos.x-report' ? 'POS X report' : 'POS Z report',
       };
     }
@@ -289,7 +293,11 @@ export class PosReportsService {
     const criteria = await this.criteria(reportFilters);
     const generatedAt = new Date().toISOString();
     if (definitionKey === 'pos.shift-register')
-      return reportData('POS shift register', shiftColumns, report.shifts.map(shiftExportRow));
+      return reportData(
+        'POS shift register',
+        shiftColumns,
+        report.shifts.map((row) => shiftExportRow(row, this.environment.BUSINESS_TIMEZONE)),
+      );
     if (definitionKey === 'pos.cashier-performance')
       return reportData(
         'POS cashier report',
@@ -792,12 +800,12 @@ function mapShift(row: ShiftReportRow): PosShiftReportRow {
   };
 }
 
-function shiftExportRow(row: PosShiftReportRow): Record<string, number | string> {
+function shiftExportRow(row: PosShiftReportRow, timeZone: string): Record<string, number | string> {
   return {
     cashRefundsBgn: row.cashRefundsBgn,
     cashSalesBgn: row.cashSalesBgn,
     cashier: row.operatorName,
-    closedAt: row.closedAt ?? '',
+    closedAt: row.closedAt ? posReportTimestamp(row.closedAt, timeZone) : '',
     closingCashBgn: row.closingCashBgn ?? '',
     differenceBgn: row.differenceBgn ?? '',
     expectedCashBgn: row.expectedCashBgn,
@@ -805,7 +813,7 @@ function shiftExportRow(row: PosShiftReportRow): Record<string, number | string>
     grossSalesBgn: row.grossSalesBgn,
     location: row.locationName,
     netRevenueBgn: row.netRevenueBgn,
-    openedAt: row.openedAt,
+    openedAt: posReportTimestamp(row.openedAt, timeZone),
     openingCashBgn: row.openingCashBgn,
     register: row.cashRegisterName,
     reportType: row.reportType.toUpperCase(),
@@ -813,6 +821,22 @@ function shiftExportRow(row: PosShiftReportRow): Record<string, number | string>
     saleCount: row.saleCount,
     shiftNumber: row.shiftNumber,
   };
+}
+
+export function posReportTimestamp(value: string, timeZone: string): string {
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(new Date(value));
+  const part = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((item) => item.type === type)!.value;
+  return `${part('year')}-${part('month')}-${part('day')} ${part('hour')}:${part('minute')}:${part('second')}`;
 }
 
 function subtract(left: string, right: string): string {

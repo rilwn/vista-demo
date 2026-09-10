@@ -37,11 +37,15 @@ export function getCrmReportDefinitions(token: string): Promise<CrmReportDefinit
   );
 }
 
-export function listCrmReportExports(token: string, page = 1): Promise<CrmReportExportPage> {
+export function listCrmReportExports(
+  token: string,
+  page = 1,
+  pageSize = 20,
+): Promise<CrmReportExportPage> {
   return unwrapApiResponse(
     apiClient.GET('/api/v1/crm/report-exports', {
       headers: authorizationHeaders(token),
-      params: { query: { page, pageSize: 20 } },
+      params: { query: { page, pageSize } },
     }),
   );
 }

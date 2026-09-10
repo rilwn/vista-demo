@@ -3306,6 +3306,14 @@
   gap: 0.3rem;
 }
 
+.pos-customer-advance-fields > .pos-money-error {
+  grid-column: 1 / -1;
+  color: #a3332c;
+  font-size: 0.75rem;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
 .pos-money-entry > div {
   display: flex;
   overflow: hidden;
@@ -4009,6 +4017,9 @@
 .pos-account {
   position: relative;
   flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
 }
 
 .pos-account-trigger {

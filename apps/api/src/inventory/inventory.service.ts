@@ -56,6 +56,11 @@ type ReservationRow = {
 };
 type Replay = { request_hash: string; status: string; response_body: unknown };
 type TraceMovementRow = {
+  pos_sale_number: string | null;
+  pos_receipt_number: string | null;
+  pos_return_number: string | null;
+  pos_original_sale_number: string | null;
+  pos_reversal_number: string | null;
   actor_id: string;
   actor_name: string;
   customer_id: string | null;
@@ -152,7 +157,7 @@ type TraceServiceRow = {
   work_order_number: string | null;
 };
 const traceMovementSelect = `SELECT movement.id AS movement_id,
-  CASE WHEN shipment_line.id IS NOT NULL THEN 'sale'
+  CASE WHEN shipment_line.id IS NOT NULL OR pos_line.id IS NOT NULL THEN 'sale'
        WHEN movement.movement_type = 'receipt' THEN 'receipt'
        WHEN movement.movement_type = 'issue' THEN 'issue'
        WHEN movement.movement_type = 'return_in' THEN 'return_received'
@@ -174,8 +179,13 @@ const traceMovementSelect = `SELECT movement.id AS movement_id,
   , handover.certificate_number AS handover_number
   , handover.status AS handover_status
   , reverse_return.return_number AS return_number
-  , reverse_return.reason AS return_reason
-  , reverse_return_line.disposition AS return_disposition
+  , COALESCE(reverse_return.reason, pos_return.reason) AS return_reason
+  , COALESCE(reverse_return_line.disposition, pos_return_line.disposition) AS return_disposition
+  , pos_sale.sale_number AS pos_sale_number
+  , pos_sale.fiscal_receipt_number AS pos_receipt_number
+  , pos_return.return_number AS pos_return_number
+  , original_pos_sale.sale_number AS pos_original_sale_number
+  , pos_return.fiscal_reversal_number AS pos_reversal_number
 FROM inventory.stock_movements movement
 JOIN master_data.warehouses warehouse ON warehouse.id = movement.warehouse_id
 JOIN identity.user_accounts actor ON actor.id = movement.actor_account_id
@@ -198,7 +208,12 @@ LEFT JOIN sales.handover_certificates handover ON handover.shipment_id = shipmen
 LEFT JOIN logistics.reverse_return_lines reverse_return_line
   ON reverse_return_line.inventory_return_movement_id = movement.id
 LEFT JOIN logistics.reverse_returns reverse_return
-  ON reverse_return.id = reverse_return_line.reverse_return_id`;
+  ON reverse_return.id = reverse_return_line.reverse_return_id
+LEFT JOIN pos.sale_lines pos_line ON pos_line.stock_movement_id = movement.id
+LEFT JOIN pos.sales pos_sale ON pos_sale.id = pos_line.sale_id
+LEFT JOIN pos.return_lines pos_return_line ON pos_return_line.stock_movement_id = movement.id
+LEFT JOIN pos.returns pos_return ON pos_return.id = pos_return_line.return_id
+LEFT JOIN pos.sales original_pos_sale ON original_pos_sale.id = pos_return.original_sale_id`;
 
 @Injectable()
 export class InventoryService {
@@ -1915,6 +1930,10 @@ function reservation(row: ReservationRow, serialItemIds: string[]): StockReserva
 }
 function traceMovement(row: TraceMovementRow): SerialTraceEvent {
   const details: SerialTraceEvent['details'] = [];
+  if (row.pos_receipt_number) details.push({ label: 'POS receipt', value: row.pos_receipt_number });
+  if (row.pos_original_sale_number)
+    details.push({ label: 'Original POS sale', value: row.pos_original_sale_number });
+  if (row.pos_reversal_number) details.push({ label: 'Reversal', value: row.pos_reversal_number });
   if (row.goods_receipt_number)
     details.push({ label: 'Goods receipt', value: row.goods_receipt_number });
   if (row.purchase_order_number)
@@ -1926,7 +1945,12 @@ function traceMovement(row: TraceMovementRow): SerialTraceEvent {
   if (row.return_disposition)
     details.push({ label: 'Next step', value: humanToken(row.return_disposition) });
   const reference =
-    row.shipment_number ?? row.return_number ?? row.goods_receipt_number ?? row.reference_id;
+    row.pos_sale_number ??
+    row.pos_return_number ??
+    row.shipment_number ??
+    row.return_number ??
+    row.goods_receipt_number ??
+    row.reference_id;
   return {
     actor: { id: row.actor_id, displayName: row.actor_name },
     ...(row.event_type === 'sale'
@@ -1940,14 +1964,17 @@ function traceMovement(row: TraceMovementRow): SerialTraceEvent {
     movementId: row.movement_id,
     occurredAt: row.occurred_at,
     referenceId: reference,
-    referenceType:
-      row.event_type === 'sale'
-        ? 'Sales shipment'
-        : row.event_type === 'return_received'
-          ? 'Customer return'
-          : row.goods_receipt_number
-            ? 'Supplier delivery'
-            : humanToken(row.reference_type),
+    referenceType: row.pos_sale_number
+      ? 'POS sale'
+      : row.pos_return_number
+        ? 'POS return'
+        : row.event_type === 'sale'
+          ? 'Sales shipment'
+          : row.event_type === 'return_received'
+            ? 'Customer return'
+            : row.goods_receipt_number
+              ? 'Supplier delivery'
+              : humanToken(row.reference_type),
     unitCostBgn: row.unit_cost_bgn,
     warehouse: { id: row.warehouse_id, displayName: row.warehouse_name },
     ...(row.supplier_id && row.supplier_name

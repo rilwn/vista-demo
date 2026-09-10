@@ -53,8 +53,10 @@ describe.skipIf(!runInfrastructureTests)('CRM lead and opportunity pipeline', ()
     );
     const applied = await migrateUp(database, migrationDirectory);
     expect(applied).toContain('0048_crm_lead_opportunity_pipeline');
-    expect(await migrateDown(database, migrationDirectory)).toBe('0052_pos_payments_returns');
-    expect(await migrateUp(database, migrationDirectory)).toContain('0052_pos_payments_returns');
+    const latest = applied.at(-1);
+    expect(latest).toBeTruthy();
+    expect(await migrateDown(database, migrationDirectory)).toBe(latest);
+    expect(await migrateUp(database, migrationDirectory)).toContain(latest);
 
     Object.assign(process.env, {
       BUSINESS_TIMEZONE: 'Europe/Sofia',
@@ -330,6 +332,62 @@ describe.skipIf(!runInfrastructureTests)('CRM lead and opportunity pipeline', ()
     );
     expect(Number(sideEffects.rows[0]?.audit_total)).toBeGreaterThanOrEqual(9);
     expect(sideEffects.rows[0]?.outbox_total).toBe(sideEffects.rows[0]?.audit_total);
+  });
+  it('records one Lost outcome on replay, excludes its weighted revenue and denies viewer changes', async () => {
+    const created = await request(application.getHttpServer())
+      .post('/api/v1/crm/opportunities')
+      .set('authorization', `Bearer ${editorToken}`)
+      .set('idempotency-key', `lost-opportunity-${runId}`)
+      .send({
+        customerPartnerId: convertedCustomerId,
+        title: 'Deferred equipment purchase',
+        estimatedRevenueBgn: '600.00',
+        probabilityPercent: 40,
+        ownerAccountId: editorAccountId,
+      })
+      .expect(201);
+    const id = (created.body as CrmOpportunity).id;
+    const payload = {
+      expectedVersion: 1,
+      stage: 'lost',
+      probabilityPercent: 0,
+      note: 'Customer postponed the purchase.',
+    };
+    const key = `lost-stage-${runId}`;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const response = await request(application.getHttpServer())
+        .post(`/api/v1/crm/opportunities/${id}/stage`)
+        .set('authorization', `Bearer ${editorToken}`)
+        .set('idempotency-key', key)
+        .send(payload)
+        .expect(200);
+      const saved = response.body as CrmOpportunity;
+      expect(saved).toMatchObject({
+        stage: 'lost',
+        probabilityPercent: 0,
+        weightedRevenueBgn: '0.00',
+        version: 2,
+      });
+      expect(saved.history.filter((item) => item.type === 'stage_changed')).toHaveLength(1);
+      expect(saved.history.at(-1)?.note).toBe(payload.note);
+    }
+    await request(application.getHttpServer())
+      .post(`/api/v1/crm/opportunities/${id}/stage`)
+      .set('authorization', `Bearer ${viewerToken}`)
+      .set('idempotency-key', key)
+      .send(payload)
+      .expect(403);
+    await request(application.getHttpServer())
+      .post(`/api/v1/crm/opportunities/${id}/stage`)
+      .set('authorization', `Bearer ${editorToken}`)
+      .set('idempotency-key', `stale-lost-${runId}`)
+      .send({ ...payload, stage: 'negotiation', probabilityPercent: 50 })
+      .expect(409);
+    const listed = await request(application.getHttpServer())
+      .get('/api/v1/crm/opportunities?page=1&pageSize=100')
+      .set('authorization', `Bearer ${viewerToken}`)
+      .expect(200);
+    expect((listed.body as CrmOpportunityPage).summary.openCount).toBe(0);
   });
 });
 

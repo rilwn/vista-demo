@@ -1,0 +1,28 @@
+.service-evidence-placeholder {
+  display: grid;
+  min-height: 6.6rem;
+  place-items: center;
+  padding: 0.6rem;
+  border: 1px solid var(--vista-line);
+  border-radius: 0.65rem;
+  background: var(--vista-surface-muted);
+  color: var(--vista-muted);
+  font-size: 0.75rem;
+  text-align: center;
+}
+.service-evidence-download {
+  justify-self: start;
+  padding: 0.5rem 0;
+  color: var(--vista-primary, #216843);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+.service-evidence-download:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 3px;
+}
+@media (max-width: 480px) {
+  .service-evidence-gallery .service-evidence-signature {
+    grid-column: 1 / -1;
+  }
+}

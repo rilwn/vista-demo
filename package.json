@@ -23,6 +23,12 @@
     "apps/*"
   ],
   "scripts": {
+    "test:deployment": "node --import tsx infrastructure/deployment/rehearse.ts",
+    "test:container-security": "node --import tsx --test tests/security/container-images.test.ts",
+    "test:e2e": "node --import tsx tests/e2e/run.ts",
+    "test:acceptance": "npm run test:e2e -- --all-integration --migration-rehearsal",
+    "test:regression": "npm run validate && npm run test:acceptance",
+    "test:e2e:reports": "npm run test:e2e -- tests/e2e/report-families.spec.ts tests/e2e/reporting-more.spec.ts tests/e2e/reports.spec.ts tests/e2e/report-history.spec.ts tests/e2e/pos-report-history.spec.ts tests/e2e/report-hardening.spec.ts",
     "build": "npm run build --workspaces --if-present",
     "build:packages": "npm run build --workspace=@vista/contracts --workspace=@vista/auth --workspace=@vista/config --workspace=@vista/domain --workspace=@vista/ui",
     "dev": "npm run infra:up && npm run db:migrate && npm run db:fixtures:dev && npm run dev:apps",
@@ -47,6 +53,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.32.0",
+    "@playwright/test": "1.61.1",
     "concurrently": "^9.2.0",
     "eslint": "^9.32.0",
     "globals": "^16.3.0",

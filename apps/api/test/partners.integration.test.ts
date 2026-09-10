@@ -220,6 +220,13 @@ describe.skipIf(!runInfrastructureTests)('partner master-data vertical slice', (
   });
 
   it('exposes payload-free background job lifecycle metrics only to platform operators', async () => {
+    await request(application.getHttpServer())
+      .get('/api/v1/platform/jobs/metrics/prometheus')
+      .expect(401);
+    await request(application.getHttpServer())
+      .get('/api/v1/platform/jobs/metrics/prometheus')
+      .set('authorization', `Bearer ${viewerToken}`)
+      .expect(403);
     await request(application.getHttpServer()).get('/api/v1/platform/jobs/metrics').expect(401);
     await request(application.getHttpServer())
       .get('/api/v1/platform/jobs/metrics')
@@ -239,6 +246,14 @@ describe.skipIf(!runInfrastructureTests)('partner master-data vertical slice', (
         .set('authorization', `Bearer ${categoryCreatorToken}`)
         .expect(200);
       const telemetryBody = telemetry.body as BackgroundJobTelemetry;
+      const exported = await request(application.getHttpServer())
+        .get('/api/v1/platform/jobs/metrics/prometheus')
+        .set('authorization', `Bearer ${categoryCreatorToken}`)
+        .expect(200);
+      expect(exported.headers['content-type']).toContain('text/plain');
+      expect(exported.headers['cache-control']).toBe('no-store');
+      expect(exported.text).toContain('# TYPE vista_jobs gauge');
+      expect(exported.text).not.toContain('returned-by-the-api');
       for (const value of [
         telemetryBody.active,
         telemetryBody.completed,

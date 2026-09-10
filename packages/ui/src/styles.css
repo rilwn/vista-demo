@@ -1946,3 +1946,142 @@ select.vista-searchable-multi-select {
 .vista-dashboard-cards > div {
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 160px), 1fr));
 }
+/* Help stays above the workspace without changing its scroll or form state. */
+.vista-help-trigger {
+  border: 1px solid #cbd8d0;
+  border-radius: 8px;
+  background: #fff;
+  color: #234b36;
+  padding: 8px 12px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.vista-help {
+  padding: 0;
+  border: 1px solid #d4dfd8;
+  border-radius: 16px;
+  width: min(720px, calc(100vw - 24px));
+  max-height: min(800px, calc(100dvh - 32px));
+  color: #20372a;
+  background: #f7f9f7;
+  box-shadow: 0 24px 80px #102b2533;
+}
+.vista-help[open] {
+  display: flex;
+  flex-direction: column;
+}
+.vista-help::backdrop {
+  background: #102b2573;
+}
+.vista-help-header,
+.vista-help-footer {
+  flex: none;
+  padding: 18px 22px;
+  background: #fff;
+}
+.vista-help-header {
+  display: flex;
+  gap: 18px;
+  align-items: flex-start;
+  border-bottom: 1px solid #d4dfd8;
+}
+.vista-help-header h2 {
+  margin: 0;
+  font-size: 20px;
+  line-height: 1.3;
+}
+.vista-help-header p {
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: #627168;
+  line-height: 1.5;
+}
+.vista-help-header button {
+  margin-left: auto;
+  flex: none;
+  width: 36px;
+  height: 36px;
+  border: 1px solid #cbd8d0;
+  border-radius: 8px;
+  background: #fff;
+  font-size: 22px;
+  color: inherit;
+  cursor: pointer;
+}
+.vista-help-body {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 18px 22px;
+}
+.vista-help-search {
+  display: grid;
+  gap: 7px;
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 16px;
+}
+.vista-help-search input {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 42px;
+  border: 1px solid #cbd8d0;
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: #fff;
+  color: inherit;
+  font: inherit;
+}
+.vista-help-topic {
+  border: 1px solid #d4dfd8;
+  border-radius: 10px;
+  background: #fff;
+  margin: 10px 0;
+  overflow-wrap: anywhere;
+}
+.vista-help-topic summary {
+  padding: 14px 16px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+}
+.vista-help-topic ol {
+  padding: 0 22px 0 36px;
+  margin: 0 0 16px;
+  font-size: 14px;
+  line-height: 1.65;
+}
+.vista-help-topic li + li {
+  margin-top: 9px;
+}
+.vista-help-note {
+  margin: 0 16px 16px;
+  padding: 12px;
+  border-radius: 8px;
+  background: #edf3ee;
+  font-size: 13px;
+  line-height: 1.55;
+}
+.vista-help-footer {
+  border-top: 1px solid #d4dfd8;
+  display: flex;
+  justify-content: flex-end;
+}
+.vista-help-footer button {
+  border: 0;
+  border-radius: 8px;
+  padding: 10px 16px;
+  background: #225c3d;
+  color: #fff;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.vista-help :focus-visible,
+.vista-help-trigger:focus-visible {
+  outline: 3px solid #79a68b;
+  outline-offset: 3px;
+}

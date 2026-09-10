@@ -51,8 +51,6 @@ import {
   createServiceInspectionPlan,
   createServiceRequest,
   createWarrantyClaim,
-  fetchServicePhoto,
-  fetchServiceSignature,
   getServiceEquipmentHistory,
   getServiceCareOverview,
   getServiceReferenceData,
@@ -68,6 +66,8 @@ import {
   uploadServicePhoto,
 } from '../api/service';
 import { downloadManagedFile, uploadManagedFile } from '../api/files';
+import { ServiceEvidenceGallery } from './ServiceEvidenceGallery';
+import { serviceEvidenceText } from './service-evidence.messages';
 import { createCrmTicketFromServiceRequest, getCrmTicketReferenceData } from '../api/crm-tickets';
 import { useAuth } from '../auth/AuthProvider';
 import { Icon } from '../components/Icon';
@@ -144,8 +144,9 @@ export function ServiceOperationsPage({ view }: { view: ServiceOperationsView })
       .catch(() => setNotice('The linked Service request could not be opened.'));
   }, [location.state, token]);
 
-  if (data.loading) return <ServiceState title="Loading service work" />;
-  if (data.error)
+  const keepPanelOpen = selectedWorkOrder || selectedRequest || creating;
+  if (data.loading && !keepPanelOpen) return <ServiceState title="Loading service work" />;
+  if (data.error && !keepPanelOpen)
     return (
       <ServiceState title="Service work could not be loaded">
         <Button onClick={data.reload} variant="secondary">
@@ -218,6 +219,14 @@ export function ServiceOperationsPage({ view }: { view: ServiceOperationsView })
         ) : null}
       </nav>
 
+      {data.error && keepPanelOpen ? (
+        <InlineAlert tone="warning">
+          {serviceEvidenceText.refreshFailed}
+          <Button onClick={data.reload} variant="secondary">
+            {serviceEvidenceText.refresh}
+          </Button>
+        </InlineAlert>
+      ) : null}
       {notice ? (
         <Toast
           durationMs={notice.includes('could not') ? 7000 : 5200}
@@ -243,7 +252,7 @@ export function ServiceOperationsPage({ view }: { view: ServiceOperationsView })
         <ServiceWorkOrdersView
           canApprove={canApprove}
           currentAccountId={session?.context.accountId ?? ''}
-          onOpen={setSelectedWorkOrder}
+          onOpen={(workOrder) => void openWorkOrder(workOrder.id)}
           onPageChange={setWorkOrderListPage}
           myWorkOrderPage={data.myWorkOrderPage}
           timezone={businessTimezone}
@@ -1694,6 +1703,8 @@ function WarrantyClaimDrawer({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [file, setFile] = useState<File | null>(null);
+  const fileAttempt = useRef<{ file: File; key: string } | null>(null);
+  const fileInput = useRef<HTMLInputElement>(null);
 
   async function transition(nextStatus: TransitionWarrantyClaimRequest['nextStatus']) {
     setBusy(true);
@@ -1715,6 +1726,8 @@ function WarrantyClaimDrawer({
 
   async function upload() {
     if (!file) return;
+    if (fileAttempt.current?.file !== file)
+      fileAttempt.current = { file, key: crypto.randomUUID() };
     setBusy(true);
     setError(null);
     try {
@@ -1722,11 +1735,16 @@ function WarrantyClaimDrawer({
         token,
         'warranty_claim',
         claim.id,
-        crypto.randomUUID(),
+        fileAttempt.current.key,
         file,
       );
-      onChanged({ ...claim, attachments: [...claim.attachments, uploaded] });
+      onChanged({
+        ...claim,
+        attachments: [...claim.attachments.filter((item) => item.id !== uploaded.id), uploaded],
+      });
       setFile(null);
+      fileAttempt.current = null;
+      if (fileInput.current) fileInput.current.value = '';
     } catch (caught) {
       setError(errorText(caught, 'The supporting file could not be uploaded.'));
     } finally {
@@ -1786,10 +1804,13 @@ function WarrantyClaimDrawer({
                 <input
                   accept="application/pdf,image/jpeg,image/png,image/webp"
                   aria-label="Supporting file"
+                  disabled={busy}
+                  ref={fileInput}
                   onChange={(event) => setFile(event.target.files?.[0] ?? null)}
                   type="file"
                 />
                 <Button
+                  busy={busy}
                   disabled={!file}
                   onClick={() => void upload()}
                   type="button"
@@ -2912,6 +2933,8 @@ function ServiceWorkOrderDrawer({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [photo, setPhoto] = useState<File | null>(null);
+  const photoRequest = useRef<{ file: File; key: string } | null>(null);
+  const photoInput = useRef<HTMLInputElement>(null);
   const canManage =
     canEdit && (canApprove || workOrder.assignedTechnician?.accountId === currentAccountId);
 
@@ -2919,9 +2942,10 @@ function ServiceWorkOrderDrawer({
     return (
       <CompleteWorkOrderDrawer
         onBack={() => setMode('details')}
-        onSaved={(saved) =>
-          onSaved(saved, `${saved.number} was completed and the visit was recorded.`)
-        }
+        onSaved={(saved) => {
+          setMode('details');
+          onSaved(saved, `${saved.number} was completed and the visit was recorded.`);
+        }}
         references={references}
         token={token}
         timezone={timezone}
@@ -2951,9 +2975,13 @@ function ServiceWorkOrderDrawer({
     setBusy(true);
     setError(null);
     try {
-      await uploadServicePhoto(token, workOrder.id, crypto.randomUUID(), photo);
+      if (photoRequest.current?.file !== photo)
+        photoRequest.current = { file: photo, key: crypto.randomUUID() };
+      await uploadServicePhoto(token, workOrder.id, photoRequest.current.key, photo);
       const refreshed = await getServiceWorkOrder(token, workOrder.id);
       setPhoto(null);
+      photoRequest.current = null;
+      if (photoInput.current) photoInput.current.value = '';
       onSaved(refreshed, 'Photo evidence was added to the work order.');
     } catch (caught) {
       setError(errorText(caught, 'The photo could not be uploaded.'));
@@ -3031,6 +3059,8 @@ function ServiceWorkOrderDrawer({
               <input
                 accept="image/jpeg,image/png,image/webp"
                 aria-label="Service photo"
+                disabled={busy}
+                ref={photoInput}
                 onChange={(event) => setPhoto(event.target.files?.[0] ?? null)}
                 type="file"
               />
@@ -3206,79 +3236,6 @@ function ServiceWorkEvidence({
         </ol>
       </section>
     </>
-  );
-}
-
-function ServiceEvidenceGallery({
-  token,
-  workOrder,
-}: {
-  token: string;
-  workOrder: ServiceWorkOrder;
-}) {
-  const [error, setError] = useState<string | null>(null);
-  const [photoUrls, setPhotoUrls] = useState<Record<string, string>>({});
-  const [signatureUrl, setSignatureUrl] = useState<string | null>(null);
-  const photoKey = workOrder.photos.map((photo) => photo.id).join(':');
-
-  useEffect(() => {
-    let active = true;
-    const createdUrls: string[] = [];
-    setError(null);
-    setPhotoUrls({});
-    setSignatureUrl(null);
-    void Promise.all([
-      ...workOrder.photos.map(async (photo) => {
-        const url = URL.createObjectURL(await fetchServicePhoto(token, workOrder.id, photo.id));
-        createdUrls.push(url);
-        return [photo.id, url] as const;
-      }),
-      ...(workOrder.signature
-        ? [
-            fetchServiceSignature(token, workOrder.id).then((blob) => {
-              const url = URL.createObjectURL(blob);
-              createdUrls.push(url);
-              return url;
-            }),
-          ]
-        : []),
-    ])
-      .then((entries) => {
-        if (!active) return;
-        const photos = entries.filter((entry): entry is readonly [string, string] =>
-          Array.isArray(entry),
-        );
-        setPhotoUrls(Object.fromEntries(photos));
-        const signature = entries.find((entry): entry is string => typeof entry === 'string');
-        setSignatureUrl(signature ?? null);
-      })
-      .catch((caught) => {
-        if (active) setError(errorText(caught, 'Service evidence could not be loaded.'));
-      });
-    return () => {
-      active = false;
-      createdUrls.forEach((url) => URL.revokeObjectURL(url));
-    };
-  }, [photoKey, token, workOrder.id, workOrder.signature?.signedAt]);
-
-  return (
-    <div className="service-evidence-gallery">
-      {error ? <InlineAlert tone="warning">{error}</InlineAlert> : null}
-      {workOrder.photos.map((photo) =>
-        photoUrls[photo.id] ? (
-          <figure key={photo.id}>
-            <img alt={`Service photo: ${photo.fileName}`} src={photoUrls[photo.id]} />
-            <figcaption>{photo.fileName}</figcaption>
-          </figure>
-        ) : null,
-      )}
-      {signatureUrl && workOrder.signature ? (
-        <figure className="service-evidence-signature">
-          <img alt={`Signature from ${workOrder.signature.signerName}`} src={signatureUrl} />
-          <figcaption>Customer signature · {workOrder.signature.signerName}</figcaption>
-        </figure>
-      ) : null}
-    </div>
   );
 }
 

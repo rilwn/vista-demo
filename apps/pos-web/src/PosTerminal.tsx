@@ -15,12 +15,14 @@ import type {
   PosShift,
   PosTerminalContext,
 } from '@vista/contracts';
-import { Toast, VistaMark } from '@vista/ui';
+import { Help, Toast, VistaMark } from '@vista/ui';
 import { useActiveItemVisibility } from '@vista/ui/navigation';
 import type { MouseEvent, ReactNode } from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { ApiClientError } from './api/client';
+import { messages } from './messages';
+import { returnLineGross } from './return-totals';
 import {
   authorizePosDiscount,
   createPosInvoiceDraft,
@@ -217,6 +219,7 @@ export function PosTerminal({
           </button>
         </div>
         <div className="pos-account" ref={accountMenu}>
+          <Help app="pos" />
           <button
             aria-expanded={accountMenuOpen}
             aria-haspopup="true"
@@ -312,6 +315,7 @@ export function PosTerminal({
             <ReturnsScreen
               onNavigate={navigate}
               onNotice={setNotice}
+              onReturned={refreshContext}
               register={activeRegister}
               shift={shift}
               token={token}
@@ -519,9 +523,10 @@ function SellScreen({
       setPricingLoading(false);
       return;
     }
+    let active = true;
+    setPricingLoading(true);
+    setPricingError(undefined);
     const timer = window.setTimeout(() => {
-      setPricingLoading(true);
-      setPricingError(undefined);
       void pricePosBasket(token, {
         ...(customer ? { customerPartnerId: customer.customer.id } : {}),
         lines: saleLinesFor(basket),
@@ -537,14 +542,22 @@ function SellScreen({
           : {}),
         shiftId: shift.id,
       })
-        .then(setPricing)
+        .then((result) => {
+          if (active) setPricing(result);
+        })
         .catch((error) => {
+          if (!active) return;
           setPricing(undefined);
           setPricingError(messageFor(error));
         })
-        .finally(() => setPricingLoading(false));
+        .finally(() => {
+          if (active) setPricingLoading(false);
+        });
     }, 140);
-    return () => window.clearTimeout(timer);
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+    };
   }, [basket, customer, loyaltyPoints, manualDiscount, shift, token]);
 
   const localTotals = useMemo(() => basketTotals(basket), [basket]);
@@ -558,6 +571,14 @@ function SellScreen({
   const selectedAdvance = paymentOptions?.advances.find(
     (advance) => advance.id === customerAdvanceId,
   );
+  const advanceInputError =
+    paymentMode === 'customer' && selectedAdvance
+      ? advanceAmountIssue(
+          customerAdvanceAmount,
+          totals.gross,
+          Number(selectedAdvance.availableAmount),
+        )
+      : undefined;
   const advancePortion =
     paymentMode === 'customer'
       ? Math.min(totals.gross, Math.max(0, Number(customerAdvanceAmount || 0)))
@@ -582,6 +603,7 @@ function SellScreen({
   const cashChange = Math.max(0, Number(cashTendered || 0) - cashPortion);
   const blockingIssue =
     (checkoutBlocked ? 'Confirm the saved checkout before completing another sale.' : undefined) ??
+    advanceInputError ??
     basketIssue(
       basket,
       customer,
@@ -1137,6 +1159,9 @@ function SellScreen({
                           </select>
                         </label>
                         <MoneyEntry
+                          {...(advanceInputError
+                            ? { errorId: 'customer-advance-amount-error' }
+                            : {})}
                           id="customer-advance-amount"
                           label="Use from advance"
                           max={Math.min(
@@ -1149,6 +1174,11 @@ function SellScreen({
                           }}
                           value={customerAdvanceAmount}
                         />
+                        {advanceInputError ? (
+                          <small className="pos-money-error" id="customer-advance-amount-error">
+                            {advanceInputError}
+                          </small>
+                        ) : null}
                       </div>
                     ) : (
                       <p className="pos-customer-payment-state">No unused advance is available.</p>
@@ -1194,11 +1224,11 @@ function SellScreen({
                           </small>
                         ) : null}
                       </fieldset>
-                    ) : (
+                    ) : !advanceInputError ? (
                       <div className="pos-advance-covers-total">
                         <PosIcon name="check" /> The advance covers the full sale.
                       </div>
-                    )}
+                    ) : null}
                   </>
                 ) : null}
               </div>
@@ -1250,9 +1280,11 @@ function SellScreen({
           >
             {paying ? 'Completing sale…' : `Complete sale · ${money(totals.gross)}`}
           </button>
-          <p className="pos-basket-disclaimer">
-            {blockingIssue ?? `${paymentLabel(paymentMode)} payment is ready.`}
-          </p>
+          {!advanceInputError ? (
+            <p className="pos-basket-disclaimer">
+              {blockingIssue ?? `${paymentLabel(paymentMode)} payment is ready.`}
+            </p>
+          ) : null}
         </div>
       </aside>
 
@@ -1491,12 +1523,14 @@ function QuickAccessDialog({
 }
 
 function MoneyEntry({
+  errorId,
   id,
   label,
   max,
   onChange,
   value,
 }: {
+  errorId?: string;
   id: string;
   label: string;
   max?: number;
@@ -1508,6 +1542,8 @@ function MoneyEntry({
       <span>{label}</span>
       <div>
         <input
+          aria-invalid={errorId ? true : undefined}
+          aria-describedby={errorId}
           aria-label={label}
           id={id}
           inputMode="decimal"
@@ -1523,6 +1559,14 @@ function MoneyEntry({
       </div>
     </label>
   );
+}
+
+function advanceAmountIssue(value: string, gross: number, available: number): string | undefined {
+  const amount = Number(value || 0);
+  if (!Number.isFinite(amount) || amount < 0) return messages.advanceInvalid;
+  if (amount > available) return messages.advanceAboveBalance;
+  if (amount > gross) return messages.advanceAboveTotal;
+  return undefined;
 }
 
 function BasketRow({
@@ -2453,12 +2497,14 @@ function ShiftScreen({
 function ReturnsScreen({
   onNavigate,
   onNotice,
+  onReturned,
   register,
   shift,
   token,
 }: {
   onNavigate: (screen: PosScreen) => void;
   onNotice: (notice: Notice) => void;
+  onReturned: () => Promise<void>;
   register: PosRegisterOption | undefined;
   shift: PosShift | undefined;
   token: string;
@@ -2592,6 +2638,7 @@ function ReturnsScreen({
             setSelectedSale(undefined);
             setCompleted(result);
             onNotice({ kind: 'success', text: `${result.returnNumber} completed successfully.` });
+            void onReturned();
             void load();
           }}
           register={register}
@@ -3387,15 +3434,6 @@ function saleStatusLabel(status: PosSale['status']) {
 }
 function dispositionLabel(disposition: PosReturn['lines'][number]['disposition']) {
   return disposition === 'service' ? 'Sent to Service' : 'Restocked';
-}
-function returnLineGross(line: PosSale['lines'][number], selectedQuantity: number) {
-  const rate =
-    line.vatTreatment === 'reduced_9'
-      ? 0.09
-      : line.vatTreatment === 'standard_20' || line.vatTreatment === 'ica'
-        ? 0.2
-        : 0;
-  return Number(line.unitPrice) * (1 + rate) * selectedQuantity;
 }
 function allocateRefunds(sale: PosSale, total: number) {
   let unallocated = Math.round(total * 10000) / 10000;

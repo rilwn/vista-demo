@@ -15,7 +15,7 @@ import type {
 import type { ReactNode } from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { PosSavedReports } from './PosSavedReports';
-import { savedReportText } from './pos-saved-reports.messages';
+import { savedReportText, exportHistoryText as historyText } from './pos-saved-reports.messages';
 
 import {
   createPosReportExport,
@@ -66,7 +66,7 @@ export function PosReports({
   const [draft, setDraft] = useState<PosReportFilters>(initialFilters);
   const [error, setError] = useState<string>();
   const [exporting, setExporting] = useState<string>();
-  const [exports, setExports] = useState<PosReportExport[]>([]);
+  const [exportRefresh, setExportRefresh] = useState(0);
   const [loading, setLoading] = useState(true);
   const [overview, setOverview] = useState<PosReportOverview>();
   const [references, setReferences] = useState<PosReportReferenceData>();
@@ -103,27 +103,23 @@ export function PosReports({
     onNotice({ kind: 'success', text: savedReportText.restored });
   }
 
-  const loadExports = useCallback(async () => {
-    const page = await getPosReportExports(token);
-    setExports(page.items);
-    return page.items;
-  }, [token]);
+  const loadExports = useCallback(() => {
+    setExportRefresh((value) => value + 1);
+  }, []);
 
   const loadReport = useCallback(
     async (filters: PosReportFilters) => {
       setLoading(true);
       setError(undefined);
       try {
-        const [nextOverview, nextReferences, nextDefinitions, nextExports] = await Promise.all([
+        const [nextOverview, nextReferences, nextDefinitions] = await Promise.all([
           getPosReportOverview(token, filters),
           getPosReportReferenceData(token),
           getPosReportDefinitions(token),
-          getPosReportExports(token),
         ]);
         setOverview(nextOverview);
         setReferences(nextReferences);
         setDefinitions(nextDefinitions);
-        setExports(nextExports.items);
       } catch (caught) {
         setError(messageFor(caught));
       } finally {
@@ -136,12 +132,6 @@ export function PosReports({
   useEffect(() => {
     void loadReport(applied);
   }, [applied, loadReport]);
-
-  useEffect(() => {
-    if (!exports.some((item) => item.status === 'queued' || item.status === 'processing')) return;
-    const timer = window.setInterval(() => void loadExports().catch(() => undefined), 1800);
-    return () => window.clearInterval(timer);
-  }, [exports, loadExports]);
 
   const registers = (references?.registers ?? []).filter(
     (item) => !draft.businessLocationId || item.businessLocationId === draft.businessLocationId,
@@ -174,7 +164,9 @@ export function PosReports({
       if (exportRequest.current?.body !== body)
         exportRequest.current = { body, id: crypto.randomUUID() };
       await createPosReportExport(token, input, exportRequest.current.id);
-      await loadExports();
+      // Keep the key only for uncertain submissions, not a later fresh export.
+      exportRequest.current = undefined;
+      loadExports();
       onNotice({ kind: 'success', text: 'Report preparation started. It will be ready shortly.' });
     } catch (caught) {
       onNotice({ kind: 'error', text: messageFor(caught) });
@@ -201,7 +193,7 @@ export function PosReports({
   async function retry(report: PosReportExport) {
     try {
       await retryPosReportExport(token, report.id);
-      await loadExports();
+      loadExports();
       onNotice({ kind: 'success', text: 'The report is being prepared again.' });
     } catch (caught) {
       onNotice({ kind: 'error', text: messageFor(caught) });
@@ -397,14 +389,11 @@ export function PosReports({
       )}
 
       <RecentExports
+        key={token}
+        token={token}
+        refresh={exportRefresh}
         canRetry={canCreate}
-        exports={exports}
         onDownload={(report) => void download(report)}
-        onRefresh={() =>
-          void loadExports().catch((caught: unknown) =>
-            onNotice({ kind: 'error', text: messageFor(caught) }),
-          )
-        }
         onRetry={(report) => {
           if (canCreate) void retry(report);
         }}
@@ -730,33 +719,76 @@ function ReportValue({ label, value }: { label: string; value: string }) {
   );
 }
 
-function RecentExports({
+export function RecentExports({
   canRetry,
-  exports,
+  token,
+  refresh,
   onDownload,
-  onRefresh,
   onRetry,
 }: {
   canRetry: boolean;
-  exports: PosReportExport[];
+  token: string;
+  refresh: number;
   onDownload: (report: PosReportExport) => void;
-  onRefresh: () => void;
   onRetry: (report: PosReportExport) => void;
 }) {
+  const [page, setPage] = useState(1);
+  const [reload, setReload] = useState(0);
+  const [data, setData] = useState<Awaited<ReturnType<typeof getPosReportExports>>>();
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+  useEffect(() => setPage(1), [refresh]);
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    setError(false);
+    void getPosReportExports(token, page, 6)
+      .then((result) => {
+        if (active) setData(result);
+      })
+      .catch(() => {
+        if (active) setError(true);
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [token, page, reload, refresh]);
+  useEffect(() => {
+    if (
+      loading ||
+      error ||
+      !data?.items.some((item) => ['queued', 'processing'].includes(item.status))
+    )
+      return;
+    const timer = window.setTimeout(() => setReload((value) => value + 1), 1800);
+    return () => window.clearTimeout(timer);
+  }, [data, loading, error]);
+  const exports = data?.items ?? [];
   return (
     <section className="pos-recent-exports">
       <header>
         <div>
-          <strong>Recent exports</strong>
-          <span>Only reports requested from this account are shown.</span>
+          <strong>{historyText.title}</strong>
+          <span>{historyText.owner}</span>
         </div>
-        <button onClick={onRefresh} type="button">
-          Refresh
+        <button disabled={loading} onClick={() => setReload((value) => value + 1)} type="button">
+          {historyText.refresh}
         </button>
       </header>
-      {exports.length ? (
+      {loading && (!data || data.page !== page) ? (
+        <p className="pos-report-empty" role="status">
+          {historyText.loading}
+        </p>
+      ) : error ? (
+        <p className="pos-report-empty" role="alert">
+          {historyText.error}
+        </p>
+      ) : exports.length ? (
         <div className="pos-export-list">
-          {exports.slice(0, 6).map((report) => (
+          {exports.map((report) => (
             <article key={report.id}>
               <span className="pos-export-format">{report.format.toUpperCase()}</span>
               <div>
@@ -783,8 +815,29 @@ function RecentExports({
           ))}
         </div>
       ) : (
-        <p className="pos-report-empty">Your prepared files will appear here.</p>
+        <p className="pos-report-empty">{historyText.empty}</p>
       )}
+      {(data?.totalPages ?? 0) > 1 ? (
+        <nav className="pos-export-paging" aria-label={historyText.title}>
+          <button
+            className="pos-secondary-button"
+            type="button"
+            disabled={loading || page <= 1}
+            onClick={() => setPage((value) => value - 1)}
+          >
+            {historyText.previous}
+          </button>
+          <span>{historyText.page(page, data?.totalPages ?? 1)}</span>
+          <button
+            className="pos-secondary-button"
+            type="button"
+            disabled={loading || page >= (data?.totalPages ?? 1)}
+            onClick={() => setPage((value) => value + 1)}
+          >
+            {historyText.next}
+          </button>
+        </nav>
+      ) : null}
     </section>
   );
 }

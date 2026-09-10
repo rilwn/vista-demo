@@ -3,6 +3,11 @@
 User manuals and built-in help are written with each executable workflow. Module
 empty states do not present sample records as real behavior.
 
+Select **Help** in the top bar of Operations, POS or Recovery. Search for a task,
+open a guide, then select **Back to work** or press **Escape** to return without
+leaving the current page. Operations guides follow your module access. POS and
+Recovery guidance explicitly identifies capabilities that are not yet available.
+
 ## ERP/CRM employee access
 
 1. Open the ERP/CRM web application and enter the email and password assigned to

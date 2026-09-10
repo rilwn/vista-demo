@@ -7,6 +7,7 @@ import type {
 import { type FormEvent, useEffect, useRef, useState } from 'react';
 
 export { SearchableSelects } from './searchable-selects';
+export { Help } from './help';
 
 export interface AppShellProps extends PropsWithChildren {
   eyebrow: string;

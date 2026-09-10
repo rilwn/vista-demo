@@ -363,6 +363,7 @@ function SavedViewDialog({
       {view.canCreate && !created ? (
         schedule ? (
           <Button
+            key="create-schedule"
             form="hub-schedule-form"
             type="submit"
             disabled={!name.trim() || !first}
@@ -372,7 +373,15 @@ function SavedViewDialog({
             {copy.create}
           </Button>
         ) : (
-          <Button disabled={busy} onClick={() => setSchedule(true)}>
+          <Button
+            key="open-schedule"
+            type="button"
+            disabled={busy}
+            onClick={(event) => {
+              event.preventDefault();
+              setSchedule(true);
+            }}
+          >
             {copy.schedule}
           </Button>
         )

@@ -1,6 +1,6 @@
 import { useBrowserSession } from '@vista/auth/browser-session';
 import type { AuthenticationContextResponse, LoginRequest, LoginResponse } from '@vista/contracts';
-import { AuthenticationForm, Button, SearchableSelects, VistaMark } from '@vista/ui';
+import { AuthenticationForm, Button, Help, SearchableSelects, VistaMark } from '@vista/ui';
 import { useActiveItemVisibility } from '@vista/ui/navigation';
 import { useState } from 'react';
 
@@ -120,6 +120,18 @@ function Application() {
   if (!hasBackupAccess(session.context)) {
     return <AccessUnavailable onSignOut={authentication.logout} />;
   }
+  if (!session.context.twoFactorVerified) {
+    return (
+      <main className="backup-application-state backup-application-state--restricted">
+        <VistaMark compact product="Vista Recovery" />
+        <h1>{messages.mfaRequiredTitle}</h1>
+        <p>{messages.mfaRequiredDescription}</p>
+        <Button onClick={() => void authentication.logout()} variant="secondary">
+          {messages.signOut}
+        </Button>
+      </main>
+    );
+  }
   return (
     <BackupConsole employeeName={session.context.displayName} onSignOut={authentication.logout} />
   );
@@ -195,6 +207,7 @@ function BackupConsole({
             </select>
           </label>
           <div className="backup-topbar-actions">
+            <Help app="recovery" />
             <span>
               <i className="backup-risk-dot" /> Setup incomplete
             </span>
@@ -279,7 +292,7 @@ function AccessUnavailable({ onSignOut }: { onSignOut: () => Promise<void> }) {
   return (
     <main className="backup-application-state backup-application-state--restricted">
       <VistaMark compact product="Vista Recovery" />
-      <p>Vista Recovery</p>
+      <p className="backup-state-eyebrow">Vista Recovery</p>
       <h1>Backup access is not assigned</h1>
       <p>Use an account with backup access, then sign in again.</p>
       <Button onClick={() => void onSignOut()} variant="secondary">

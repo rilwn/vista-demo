@@ -1,5 +1,256 @@
 # Requirement Traceability Matrix
 
+A4 preparation (AGENTS §§3.2–3.4, 17, 18): shared `packages/ui/src/help.tsx`
+provides searchable, module-filtered help in all three authenticated shells.
+`help-content.ts` keeps the guides and unavailable-feature warnings separate
+from presentation. Unit and browser checks cover search, role filtering, Escape,
+focus return, narrow viewports and returning to the workspace. Deployment
+Dockerfiles, loopback-only Compose, an isolated migration/restart rehearsal and
+four application-image CI scans are added under `infrastructure/deployment` and
+`.github/workflows/ci.yml`. `npm run validate` passes, including formatting,
+lint, types, OpenAPI consistency, 333 enabled workspace tests and production
+builds. `npm run test:deployment` passes four built images, migrations, deep
+links, API health/access checks and restart using disposable resources only.
+Hosted scan evidence and public deployment remain unclaimed.
+
+Finance, Service, CRM, POS and central report browser acceptance (AGENTS §§6.7,
+7.6, 8.7, 11–13, 15, 17): `tests/e2e/reporting-more.spec.ts` adds five isolated
+journeys. Finance supplier turnover, the initial Service and CRM reports, and the
+POS shift register restore saved periods after reload and produce real CSV,
+Excel and PDF downloads. Finance, Service and CRM verify that another employee
+can access report definitions but cannot list or download the owner's export.
+The central library finds a saved Warehouse view, produces an on-demand export,
+runs a daily schedule, downloads its generated file and persists pause/resume.
+The schedule-opening button no longer turns the opening click into an unintended
+form submission; explicit creation remains a separate action. Browser coverage
+exercises that editable step and a component assertion rejects premature submission.
+Desktop and phone export-panel screenshots and footer/overflow checks are included.
+File checks cover names, binary signatures and non-HTML CSV output, not every cell,
+every definition, official filings or fiscal certification. The standalone POS
+case also supports an empty period; the full suite provides earlier cashier sales.
+No migrations, contracts, business calculations or development accounts changed.
+Validation: all 30 browser journeys pass together; 27 targeted reporting
+component/display tests pass, including the updated eight hub cases. Operations
+and browser type checking, targeted lint/format checks and the Operations build
+pass. The existing bundle-size warning remains. Test infrastructure is disposable;
+this is not production, statutory, hardware or Backup/DR acceptance.
+
+ERP report browser acceptance (AGENTS §§6.7, 11, 13, 15, 17):
+`tests/e2e/reports.spec.ts` exercises the first operational report in Procurement,
+Warehouse, Sales and Logistics through UI navigation and real APIs. It creates
+the Logistics delivery through the UI, recovers empty searches, rejects inverted
+date ranges, restores saved searches after reload and downloads twelve queued
+CSV/Excel/PDF files. Assertions cover format signatures, filenames and CSV text,
+not every exported cell or statutory compliance. A failed Warehouse download can
+be retried without requesting a new export. Its error now describes the failed
+download separately from export-list loading. A read-only viewer sees stock but
+cannot request an export; a direct authenticated create request receives 403.
+Narrow-screen screenshots and page-overflow assertions accompany the journeys.
+All 24 targeted reporting component/display tests pass, including the eight ERP
+workspace cases and failed-download recovery.
+Final validation: all 25 isolated browser tests pass together. The older Service
+and trade journeys now use the shared, bounded login-cooldown helper rather than
+failing when the expanded suite reaches the real authentication rate limit.
+Browser/Operations TypeScript checks, targeted ESLint/Prettier and the Operations
+production build pass. Desktop and phone screenshots were reviewed; the existing
+large-bundle build warning remains. Disposable test services were removed normally.
+No migrations or API contracts changed. Other report definitions, pagination,
+cross-account file access and Finance/Service/CRM/POS/central browser journeys
+remain pending; existing API tests are complementary, not replaced.
+
+Account-security lifecycle acceptance (AGENTS §§4.2, 6.8, 10, 15, 17):
+`tests/e2e/auth.spec.ts` adds two isolated employee journeys. The first verifies
+current-password and authentication-code errors, authenticator enrollment,
+revocation of a second session, MFA on the next login, removal and subsequent
+password-only login. The second verifies password confirmation, password change,
+other-session revocation, policy expiry, administrator-issued recovery through
+Security, one-time-code consumption, revocation of a separate active session and
+login with the recovered password. The fixture alone receives a simulated expiry;
+no development credentials are changed. Authenticator footer positioning and
+phone-width overflow have explicit browser assertions.
+The authentication integration suite passes all 16 tests, including mandatory
+administrator MFA, administrator recovery/re-enrollment, password history,
+lockout, authorization and audit. Its stale rollback test now unwinds all newer
+dependencies through migration 0023 and verifies exact reapplication order.
+CI builds shared/API dependencies before browser type checking and validation.
+The isolated runner accepts `--auth-integration` without production credentials.
+Validation: all 20 browser journeys passed together, with 54 Operations component
+tests and the 16 authentication integration tests passing separately. Targeted
+lint/formatting, API/browser/Operations TypeScript checks and the Operations
+production build passed. The authenticator footer fills the panel width without
+an unused scrollbar gutter; the recovery status no longer repeats the header icon.
+No API contract or schema change was needed. Hosted CI results are not asserted
+by these local runs.
+
+Administrator recovery hardening (AGENTS §§4.2, 4.3, 10, 11, 15, 16, 17):
+`tests/e2e/auth.spec.ts` verifies administrator-issued recovery with an interrupted
+handoff response and same-key retry, old-session revocation, mandatory replacement
+authenticator enrollment, invalid-code rejection, consumed-code rejection and
+subsequent MFA-verified administrative access. Phone recovery layout is checked.
+`authentication.integration.test.ts` issues four concurrent identical handoffs,
+asserts one code and audit event, and rejects consumed/revoked handoff retrieval.
+The service now serializes that initial lookup and selects the lifecycle flags
+used by its replay guard. All eight authentication browser journeys and 16 API
+integration tests passed together on 10 September 2026, with six authentication
+unit tests and 104 Operations component tests passing separately. No real accounts
+or development credentials were modified. No contract or schema changes.
+
+Cross-app authentication acceptance (AGENTS §§4.2, 6.8, 9.3, 10, 17):
+`tests/e2e/auth.spec.ts` exercises real Operations manager, POS cashier and
+Recovery operator MFA challenges, invalid-code rejection, phone-width form
+access, reload/session restoration and server-side sign-out revocation. The
+viewer is denied POS/Recovery navigation and the POS API returns 403. Password-only
+backup sessions now receive setup guidance instead of the Recovery console.
+This console gate is not a replacement for backend MFA/authorization on future
+Backup operations, which remain unavailable and pending Phase 8 acceptance.
+The isolated runner now includes Recovery on port 5375, with a configurable API
+proxy matching the other apps. Administrator provisioning uses the existing
+controlled function; temporary test factors are removed before later cashier
+journeys. No local development account or authenticator is changed.
+All 18 browser journeys passed together; eight Recovery component tests,
+targeted lint, browser/Recovery TypeScript checks and the Recovery build passed.
+The five authentication journeys passed again after the final notice styling;
+phone-width MFA and setup-required screenshots were reviewed.
+Authenticator enrollment/removal, recovery/expiry and additional action-level
+acceptance remain pending rather than being counted as covered by sign-in tests.
+
+POS returns and interrupted-checkout acceptance (AGENTS §§6.3, 8.3–8.5, 15–17):
+`tests/e2e/pos-recovery-returns.spec.ts` exercises an 83.40 BGN card-paid bundle
+with a fixed discount and points redemption, full refund and points reversal;
+a serialised return to Service with sale/return references in Operations; and a
+real committed sale whose HTTP acknowledgement is lost, surviving reload and
+recovering one receipt without another sale submission. All three focused
+browser journeys and four real-database POS integration tests passed.
+Refund previews now use saved discounted net/VAT amounts and cumulative returned
+amounts, including the final-return rounding residue, rather than list prices.
+Five `return-totals.test.ts` regressions bring POS component coverage to 39 tests.
+The additive optional `returnedNetTotal`/`returnedVatTotal` API fields expose
+existing persisted return amounts; no migration is required. Serial traceability
+resolves POS sale, fiscal receipt, return and reversal references, with database
+integration assertions. These tests use disposable services and simulated fiscal
+and card adapters, not certified hardware or full offline selling.
+Final validation: all 13 browser journeys passed together on a fresh migrated
+database; all 39 POS component tests passed. API/POS/browser TypeScript checks,
+targeted lint/formatting, POS production build and generated-client consistency
+passed. Discounted-return, recovered-receipt and Service-custody screenshots were
+reviewed. Repeated cashier logins honor the real rate-limit cooldown rather than
+changing security limits. Disposable test services were removed after execution.
+
+POS commercial/payment browser acceptance (AGENTS §§8.3, 8.5, 15–17):
+`tests/e2e/pos-commercial.spec.ts` verifies a two-adapter quantity offer, denied
+cashier self-approval, a separately authenticated manager's percentage discount,
+100-point redemption, 96-point earning, and a 40 BGN cash / 56 BGN simulated-card
+split with 10 BGN change. The sale has exactly two persisted points entries after
+reload. A second journey applies 20 BGN of an 80 BGN customer advance and 40 BGN
+of approved credit, then reopens 60 BGN unused advance and 1,960 BGN available
+credit. Each shift closes with its expected cash balance.
+Excessive advance input is no longer silently clamped at checkout: validation
+blocks it and preserves the entered value with an accessible field error.
+`apps/pos-web/src/App.test.tsx` covers negative, over-balance and over-total inputs
+followed by a valid payment. The subsequent returns/recovery acceptance above
+covers card-only, fixed/bundle discounts, loyalty reversal and repair returns;
+broader cross-app acceptance stays in A3.
+The PIN-pad/fiscal adapters are development simulators, not hardware acceptance.
+Validation: the full ten-test browser suite passed twice; both affected journeys
+passed again after the final validation-hint adjustment. All 34 POS component
+tests, targeted lint/formatting, TypeScript and the POS production build passed.
+The field-error screenshot was reviewed. No API contract or database migration
+changed; each browser run applied migrations to a new disposable database.
+
+Online POS browser acceptance (AGENTS §§8.1–8.4, 15.3(3), 17):
+`tests/e2e/pos.spec.ts` opens a shift with 100 BGN, blocks a missing-serial sale,
+sells DEMO-FR-STOCK-01 to an existing customer/location for 720 BGN, checks
+30 BGN change, downloads the generated warranty PDF and prepares a linked
+Finance draft. History reload preserves that draft. A linked full return
+restocks the device, shows Fully returned and restores expected cash to 100 BGN
+before closing the shift. The runner starts a separate POS server on 5374 using
+the isolated API. Fiscal receipts/reversals use the development simulator.
+The POS now blocks checkout throughout pricing refresh, ignores stale pricing
+responses and refreshes terminal context after a return. Component regressions
+cover pricing-debounce blocking and the refreshed post-return drawer balance.
+Eight browser tests and 34 POS component tests pass locally, along with targeted
+lint, TypeScript, formatting and POS production-build checks. Hosted CI has not
+been run as part of this local milestone.
+This is not certified fiscal/offline acceptance or official invoice issuance;
+broader payment, commercial, recovery, reporting and role journeys remain pending.
+
+CRM browser acceptance (AGENTS §§7.3, 7.4, 15.3(6–7), 17):
+`tests/e2e/crm.spec.ts` qualifies a lead, converts it against an existing customer,
+links that customer's seeded quotation, drags the opportunity into Negotiation,
+records Won and verifies persistence and narrow-screen overflow. The ticket
+journey creates linked records from both CRM and Service and checks that repeated
+round trips retain their original ticket/request numbers. Ticket creation now
+waits for reference data, preventing an empty initial customer/location state;
+`App.test.tsx` holds the reference response pending to guard this regression.
+The new-customer journey verifies conversion replay after a lost response, the
+shared customer/contact registry and a Lost outcome with 0% probability and a
+single retained history note after retry/reload. Duplicate detection keeps the
+form and permits explicit existing-customer selection without silent merging.
+Four CRM browser journeys, five CRM pipeline API integration tests and 104
+Operations component tests passed on 10 September 2026 in targeted runs. API
+tests also verify zero Lost weighted revenue, denied viewer stage changes and
+stale-version rejection. Hosted CI execution remains separate from local evidence.
+
+Service browser acceptance (AGENTS §§6.5, 15.3(4), 17):
+`tests/e2e/service.spec.ts` verifies manager dispatch, separate assigned-technician
+completion at phone width, required signature capture and retained image,
+45 minutes, one batch-tracked part, 106 BGN repair cost and stock falling from
+5 to 4. The manager opens the completed work from an older list and prepares a
+Finance draft with an asserted source-work-order link. Work-order list previews
+now fetch current details rather than reopening cached list data; `App.test.tsx`
+also covers a stale scheduled row with a completed detail response. Five browser
+tests and 97 Operations component tests pass. Official issuance, Service photo
+upload browser coverage and broader role/report acceptance remain pending.
+
+Sales collections browser acceptance (AGENTS §§6.1, 15.3(1), 17):
+`tests/e2e/trade.spec.ts` continues the received-device sale into its linked
+collection. It verifies 720 BGN total, a rejected 721 BGN input, a 200 BGN partial
+payment and 520 BGN final payment, status/balance transitions and exactly two
+persisted payment references after reload. A pre-submit browser disconnection
+preserves the entered amount/reference and allows retry after reconnecting.
+Phone-width overflow and a paid-record screenshot are checked. Four local
+browser tests pass against isolated real services. This is operational collection
+acceptance, not official invoice issuance, bank-provider settlement or recovery
+from an acknowledgement lost after server commit.
+
+Procurement/Sales browser acceptance (AGENTS §§6.2, 6.3, 6.4, 15.3):
+`tests/e2e/trade.spec.ts` creates a two-device purchase order, posts separate
+serialised receipts, verifies both receipt records and matched supplier invoice
+quantities/VAT, then sells a received serial through reservation, shipment,
+customer handover and invoice draft. It verifies mandatory serial selection,
+receipt checkbox state, phone-width overflow and persistence after reload.
+Four local browser tests pass with real API/storage/database services. Official
+issuance remains outside this trade test's coverage; operational collection
+payments are covered by the continuation above.
+
+Browser acceptance foundation (AGENTS §§10, 15, 16): `npm run test:e2e`
+creates isolated disposable PostgreSQL, Redis, storage and mail services, migrates
+and seeds them, then runs Chromium against the compiled API and Operations app.
+`tests/e2e/operations.spec.ts` covers Finance draft attachment replacement,
+original-version byte integrity, reopening and narrow-screen access; monitoring
+navigation/refresh; and a viewer's blocked monitoring route. Three local browser
+tests pass. CI is configured to run them and retain failure evidence; hosted CI
+has not been run here. This is partial acceptance, not completion of A3 or the ten
+required business journeys. Setup and remaining coverage: `tests/e2e/README.md`.
+
+Operational monitoring (AGENTS §§3.4, 4.6, 11, 12): System activity now displays
+the existing protected queue metrics with read-only refresh and explicit failure
+states. `/platform/jobs/metrics/prometheus` exports fixed-label gauges under the
+same platform-view permission. Queue checks have a five-second HTTP deadline and
+sanitized failure responses. Evidence: `jobs.controller.test.ts`,
+`JobMonitor.test.tsx`, the real-queue access test in `partners.integration.test.ts`
+and `infrastructure/monitoring/README.md`. A mobile fixture screenshot verifies
+the new component's layout. Production alerting/provider selection remains pending.
+
+Finance supporting attachments (AGENTS §§4.5, 10, 11, 17): the managed-file
+`financial_document` parent, Finance view/edit authorization and document-preview
+attachment controls support upload, download and immutable replacement history.
+Evidence: `files.integration.test.ts` covers denied CRM/view-only access, missing
+parents, invalid bytes, replay, history and unchanged financial snapshots;
+`App.test.tsx` covers preview upload. Desktop/mobile fixture browser checks verify
+the replacement form and scrolling at 1440px/390px without horizontal overflow.
+Existing schema/storage are reused; no migration or official issuance is added.
+
 ERP reporting completion (AGENTS §§6.2–6.7, 11, 13, 17):
 `0063_erp_operational_reports`, `/erp/reports/{scope}` APIs, ten controlled
 definitions, `ErpReportsPage` and the shared export worker cover Procurement,
@@ -126,6 +377,124 @@ phase-level placeholders as each vertical slice begins.
 | DOD-01 §19–20         | Inspect/trace/test/document every change; authorization/audit/failure/idempotency/UI/migration/Linux/traceability definition of done; full mandatory scope and explicit optional disposition | all modules                                                                 | all deliverables                                              | milestone evidence review                                   | P0–P9 / in progress                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 
 ## Matrix maintenance
+
+### Service photo acceptance (2026-09-10)
+
+AGENTS §§4.5, 6.5, 11, 15 and 17: `tests/e2e/service.spec.ts` exercises invalid
+image content, lost upload acknowledgement with one-photo replay, individual image
+retry, exact download, signed completion and authorized manager reopening.
+`ServiceEvidenceGallery.test.tsx` covers partial gallery failures and late-response
+cleanup. Open Service panels now survive background list refreshes. Photo replay
+reauthorizes the current work-order assignment, verified by
+`apps/api/test/sales.integration.test.ts`. The shared managed-file integration suite
+also passes parent-access, immutable-version and content-validation checks. No
+schema or public API changes were required. Remaining attachment browser journeys
+are named in the implementation plan; production storage/scanning decisions remain open.
+
+### Reporting acceptance evidence (2026-09-10)
+
+- AGENTS §§6.7, 8.7, 11–13: `tests/e2e/pos-report-history.spec.ts` verifies
+  paged POS export history, older downloads, lost-acknowledgement replay and fresh
+  repeated exports. `apps/pos-web/src/PosExportHistory.test.tsx` covers paging,
+  refresh reset and recoverable loading failures.
+- The isolated `--sales-integration --pos-integration` run passed 25 database
+  tests and 31 browser journeys. Existing Sales integration coverage verifies all
+  ten Procurement/Warehouse/Sales/Logistics report definitions, private exports,
+  concurrent schedule creation/dispatch, worker deduplication and access revocation.
+  These checks do not certify statutory outputs or hardware behavior.
+- Finance, Service and CRM now use shared paged export history with independent
+  loading/recovery and account-change response guards. `useExportHistory.test.tsx`
+  covers current-page refresh, creation reset and stale-account responses;
+  `tests/e2e/report-history.spec.ts` verifies older CSV downloads, repeated fresh
+  exports, interrupted-history recovery and responsive layouts in all three panels.
+  POS integration checks deny another POS-authorized employee's list, content and
+  retry access. Production-scale export/performance acceptance remains separate.
+
+Attachment acceptance evidence for AGENTS §§4.5, 7.2, 7.5 and 11:
+`tests/e2e/attachments.spec.ts` exercises partner documents, CRM interaction
+attachments and warranty-claim evidence through UI navigation. It proves stable
+keys after lost upload responses, single-file replay, exact original-version
+downloads, persisted files after reopening, narrow-screen layout and backend
+read-only upload denial with permitted downloads. Shared-list failure recovery and
+parent/account state isolation are covered by `PartnerDocumentsPanel.test.tsx`.
+All three browser journeys and six managed-file integration tests passed on
+10 September 2026. Production malware scanning/storage policy remains FILE-001
+dependent; this acceptance does not remove that requirement.
+
+ERP report hardening evidence for AGENTS §§11, 13 and 15:
+`tests/e2e/report-hardening.spec.ts` passed both browser journeys on
+10 September 2026. A disposable 1,001-product fixture verifies all 41 preview
+pages against the complete CSV, keyboard paging and narrow-screen containment.
+Read-only users receive HTTP 403 for save/export/retry in Procurement, Warehouse,
+Sales and Logistics (12 denied requests). Three tests in
+`apps/api/src/jobs/erp-report-data.service.test.ts` verify export bounds,
+parameterized queries, repeatable-read snapshots and failure cleanup.
+Local timings are attached to the HTML browser report. These checks do not
+establish production-scale performance or close other report-family acceptance.
+
+Container-scanning evidence for AGENTS §10:
+`.github/workflows/ci.yml` discovers images from both Compose files and runs a
+commit-pinned Trivy action for OS/library vulnerabilities. High/critical findings
+and scan errors fail the check; other images continue and JSON evidence is retained.
+All five `tests/security/container-images.test.ts` checks passed on
+10 September 2026, with TypeScript, ESLint and YAML syntax validation.
+See `docs/deployment/container-security.md` for reproduction and triage.
+Hosted execution, finding remediation and future A4 application-image coverage
+remain pending; configuration tests are not a clean vulnerability assessment.
+The local Redis scan was stopped during a slow vulnerability-database download;
+it produced no assessment and must be rerun.
+
+Report-family acceptance for AGENTS §§4.2, 6.7, 7.6, 8.7, 11 and 13:
+`tests/e2e/report-families.spec.ts` covers Finance purchase journals, the Service
+request register, CRM employee performance and POS closed shifts. Each uses
+1,001 disposable records and compares every identifier in downloaded CSV,
+Excel and multi-page PDF files. A dropped successful submission response must
+retry with the same key/export ID. The viewer is denied save/create/retry in all
+four families; Service approval and POS module restrictions remain intact.
+`report-family-fixtures.ts` rejects non-test databases, creates disabled synthetic
+employees and removes its records before later tests. No business posting rules
+or development records are changed. `report-history.spec.ts` now calculates its
+expected page counts from existing history, so tests can run together.
+`npm run test:e2e:reports` runs the combined report acceptance group. PDF content
+checks require Poppler; CI installs it. These are local fixture measurements,
+not production capacity, official accounting or hardware acceptance.
+
+The PDF inspection identified raw UTC times in POS exports despite business-time
+criteria. `pos-reports.service.ts` now formats new shift-register and X/Z export
+times in the configured business timezone. Four tests cover winter, summer,
+midnight rollover and a non-Sofia configuration. Stored/API timestamps and old
+export files remain unchanged. Shared PDF numeric columns have more space for
+headings; generated first/last pages are included in local visual acceptance.
+
+Verified on 10 September 2026: the combined report run passed all 21 browser
+checks and 4 POS database integration tests. Related validation passed 71 API
+unit tests, 31 Operations/POS component tests, TypeScript, affected-file lint
+and formatting checks. Temporary services were removed after the successful
+run. This closes the bounded report-family acceptance, not all Phase A3 work.
+
+Cross-app regression for AGENTS §§10, 15, 16 and 18 is reproducible with
+`npm run test:regression`: repository validation precedes isolated acceptance
+so shared-package builds cannot hot-reload an active browser journey. CI runs
+`npm run test:acceptance` with all database/infrastructure API tests enabled,
+followed by browser journeys and latest-migration rollback/reapply. Generated
+browser artifacts are excluded from lint/formatting, not the test sources.
+The generated API client and rate-limit inventory now include the existing
+Prometheus monitoring route. Authentication browser helpers honor real rate-limit
+cooldowns and regenerate MFA codes after waiting. The CRM timeline integration
+setup rolls back dependent migrations in order, then reapplies the timeline and
+its successors before testing interactions, tasks and attachments.
+
+Verified on 10 September 2026: repository validation passed all 329 enabled
+workspace tests, contract drift, formatting, lint, type checks and application
+builds. The final isolated acceptance run passed all 241 API tests with database
+and infrastructure checks enabled and all 47 browser journeys (8.2 minutes).
+Migration `0064_reporting_hub` rolled back and reapplied after the browser run;
+temporary services were removed successfully. Changed-test lint and browser/
+security TypeScript checks also passed, as did five container-inventory tests.
+These results close local cross-app acceptance for implemented workflows only.
+Hosted vulnerability scans, production capacity, official/fiscal hardware,
+full offline selling, operational Backup/DR and client-data acceptance remain
+pending. Development accounts, credentials and records were not modified.
 
 For an active vertical slice, split the relevant group row into individual
 requirements and add concrete identifiers, for example migration timestamp,

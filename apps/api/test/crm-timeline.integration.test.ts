@@ -73,14 +73,14 @@ describe.skipIf(!runInfrastructureTests)('CRM customer timeline', () => {
     if (!applied.includes('0047_crm_customer_timeline')) {
       throw new Error('The CRM timeline migration was not applied');
     }
-    const rolledBack = await migrateDown(database, migrationDirectory);
-    if (rolledBack !== '0047_crm_customer_timeline') {
-      throw new Error(`Expected CRM timeline rollback, received ${rolledBack ?? 'nothing'}`);
+    // Newer migrations depend on the timeline schema. Roll them back in order
+    // in this fresh, disposable database before testing the timeline rollback.
+    const rollbackOrder = applied.slice(applied.indexOf('0047_crm_customer_timeline')).reverse();
+    for (const expected of rollbackOrder) {
+      expect(await migrateDown(database, migrationDirectory)).toBe(expected);
     }
     const reapplied = await migrateUp(database, migrationDirectory);
-    if (!reapplied.includes('0047_crm_customer_timeline')) {
-      throw new Error('The CRM timeline migration was not reapplied');
-    }
+    expect(reapplied).toEqual([...rollbackOrder].reverse());
 
     Object.assign(process.env, {
       BUSINESS_TIMEZONE: 'Europe/Sofia',

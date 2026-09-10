@@ -74,19 +74,13 @@ describe.skipIf(!runInfrastructureTests)(
       const migrationDirectory = fileURLToPath(
         new URL('../src/database/migrations', import.meta.url),
       );
-      await migrateUp(database, migrationDirectory);
-      for (const expectedMigration of [
-        '0032_account_recovery_handoffs',
-        '0031_totp_enrollment_lifecycle',
-        '0030_service_work_orders_core',
-        '0029_finance_collections_foundation',
-        '0028_sales_subscriptions_handover',
-        '0027_sales_pricing_foundation',
-        '0026_sales_workflow_foundation',
-        '0025_procurement_supplier_controls',
-        '0024_procurement_purchase_receiving',
-        '0023_employee_password_change',
-      ]) {
+      const applied = await migrateUp(database, migrationDirectory);
+      const passwordMigrationIndex = applied.indexOf('0023_employee_password_change');
+      if (passwordMigrationIndex < 0) throw new Error('Password migration is missing');
+      const rollbackRange = applied.slice(passwordMigrationIndex);
+      // Newer migrations depend on these tables. Roll them back first, rather
+      // than assuming the authentication migrations are still the newest ones.
+      for (const expectedMigration of [...rollbackRange].reverse()) {
         const rolledBack = await migrateDown(database, migrationDirectory);
         if (rolledBack !== expectedMigration) {
           throw new Error(
@@ -94,7 +88,7 @@ describe.skipIf(!runInfrastructureTests)(
           );
         }
       }
-      await migrateUp(database, migrationDirectory);
+      expect(await migrateUp(database, migrationDirectory)).toEqual(rollbackRange);
       Object.assign(process.env, {
         AUTH_LOGIN_RATE_LIMIT_MAX: '5',
         BUSINESS_TIMEZONE: 'Europe/Sofia',
@@ -598,15 +592,26 @@ describe.skipIf(!runInfrastructureTests)(
     it('recovers standard and administrative accounts without exposing recovery codes in audit data', async () => {
       const standardTarget = await accountForEmail(database, deniedEmail);
       const standardKey = `recovery-standard-${randomUUID()}`;
-      const handoff = await request(application.getHttpServer())
-        .post(`/api/v1/platform/security/accounts/${standardTarget.id}/recovery-handoff`)
-        .set('authorization', `Bearer ${adminToken}`)
-        .set('idempotency-key', standardKey)
-        .send({
-          expectedVersion: standardTarget.version,
-          reason: 'Employee identity verified in person.',
-        })
-        .expect(201);
+      const handoffs = await Promise.all(
+        Array.from({ length: 4 }, () =>
+          request(application.getHttpServer())
+            .post(`/api/v1/platform/security/accounts/${standardTarget.id}/recovery-handoff`)
+            .set('authorization', `Bearer ${adminToken}`)
+            .set('idempotency-key', standardKey)
+            .send({
+              expectedVersion: standardTarget.version,
+              reason: 'Employee identity verified in person.',
+            })
+            .expect(201),
+        ),
+      );
+      const handoff = handoffs[0]!;
+      for (const result of handoffs) expect(result.body).toEqual(handoff.body);
+      const issuance = await database.query<{ count: string }>(
+        `SELECT count(*)::text AS count FROM audit.events WHERE action = 'auth.recovery.handoff_issued' AND target_id = $1`,
+        [standardTarget.id],
+      );
+      expect(issuance.rows[0]?.count).toBe('1');
       expect(handoff.body).toMatchObject({ email: deniedEmail });
       expect(handoff.body.recoveryCode).toMatch(/^[A-Za-z0-9_-]{43}$/u);
       const standardRecoveryCode = handoff.body.recoveryCode as string;
@@ -660,6 +665,41 @@ describe.skipIf(!runInfrastructureTests)(
         })
         .expect(400);
       expect(consumed.body).toMatchObject({ error: { code: 'RECOVERY_CODE_INVALID' } });
+      const consumedHandoffReplay = await request(application.getHttpServer())
+        .post(`/api/v1/platform/security/accounts/${standardTarget.id}/recovery-handoff`)
+        .set('authorization', `Bearer ${adminToken}`)
+        .set('idempotency-key', standardKey)
+        .send({
+          expectedVersion: standardTarget.version,
+          reason: 'Employee identity verified in person.',
+        })
+        .expect(400);
+      expect(consumedHandoffReplay.body).toMatchObject({
+        error: { code: 'RECOVERY_CODE_INVALID' },
+      });
+      const refreshedTarget = await accountForEmail(database, deniedEmail);
+      const replacedKey = `replaced-handoff-${randomUUID()}`;
+      const replacementInput = {
+        expectedVersion: refreshedTarget.version,
+        reason: 'Employee identity verified again in person.',
+      };
+      for (const key of [replacedKey, `replacement-handoff-${randomUUID()}`]) {
+        await request(application.getHttpServer())
+          .post(`/api/v1/platform/security/accounts/${refreshedTarget.id}/recovery-handoff`)
+          .set('authorization', `Bearer ${adminToken}`)
+          .set('idempotency-key', key)
+          .send(replacementInput)
+          .expect(201);
+      }
+      await request(application.getHttpServer())
+        .post(`/api/v1/platform/security/accounts/${refreshedTarget.id}/recovery-handoff`)
+        .set('authorization', `Bearer ${adminToken}`)
+        .set('idempotency-key', replacedKey)
+        .send(replacementInput)
+        .expect(400)
+        .expect(({ body }) =>
+          expect(body).toMatchObject({ error: { code: 'RECOVERY_CODE_INVALID' } }),
+        );
 
       const recoveryAdministratorEmail = `recovery-admin-${randomUUID()}@example.invalid`;
       const recoveryAdministratorId = await createAccount(

@@ -2406,6 +2406,22 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/platform/jobs/metrics/prometheus': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['JobsController_prometheus'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/platform/security/accounts': {
     parameters: {
       query?: never;
@@ -7812,7 +7828,7 @@ export interface components {
       /** Format: uuid */
       parentId: string;
       /** @enum {string} */
-      parentType: 'partner' | 'warranty_claim' | 'crm_interaction';
+      parentType: 'partner' | 'warranty_claim' | 'crm_interaction' | 'financial_document';
       /** Format: date-time */
       scannedAt?: string;
       /** @enum {string} */
@@ -8509,7 +8525,9 @@ export interface components {
       quantity: string;
       returnableQuantity: string;
       returnableSerialNumbers: string[];
+      returnedNetTotal?: string;
       returnedQuantity: string;
+      returnedVatTotal?: string;
       serialNumbers: string[];
       unitPrice: string;
       vatTotal: string;
@@ -12918,7 +12936,7 @@ export interface operations {
         page?: number;
         pageSize?: number;
         parentId: string;
-        parentType: 'partner' | 'warranty_claim' | 'crm_interaction';
+        parentType: 'partner' | 'warranty_claim' | 'crm_interaction' | 'financial_document';
       };
       header?: never;
       path?: never;
@@ -12967,7 +12985,7 @@ export interface operations {
           /** Format: uuid */
           parentId: string;
           /** @enum {string} */
-          parentType: 'partner' | 'warranty_claim' | 'crm_interaction';
+          parentType: 'partner' | 'warranty_claim' | 'crm_interaction' | 'financial_document';
         };
       };
     };
@@ -17317,6 +17335,40 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['BackgroundJobTelemetryDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  JobsController_prometheus: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Current retained queue counts, not lifetime counters. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'text/plain': string;
         };
       };
       /** @description The endpoint request limit was exceeded. */

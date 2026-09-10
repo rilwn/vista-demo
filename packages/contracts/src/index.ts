@@ -104,7 +104,12 @@ export interface NotificationPage {
   unreadCount: number;
 }
 
-export const managedFileParentTypes = ['partner', 'warranty_claim', 'crm_interaction'] as const;
+export const managedFileParentTypes = [
+  'partner',
+  'warranty_claim',
+  'crm_interaction',
+  'financial_document',
+] as const;
 export type ManagedFileParentType = (typeof managedFileParentTypes)[number];
 export type ManagedFileStatus = 'available' | 'deleted' | 'quarantined' | 'rejected';
 
@@ -1043,6 +1048,8 @@ export interface CreatePosSaleRequest {
 }
 
 export interface PosSaleLine {
+  returnedNetTotal?: string;
+  returnedVatTotal?: string;
   automaticDiscountTotal: string;
   baseNetTotal: string;
   batchId?: string;
