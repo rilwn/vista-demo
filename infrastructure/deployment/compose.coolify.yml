@@ -62,7 +62,7 @@ services:
 
   migrate:
     image: vista-api:${VISTA_IMAGE_TAG:?Set VISTA_IMAGE_TAG in Coolify}
-    build: { context: ../.., dockerfile: infrastructure/deployment/Dockerfile, target: api }
+    build: { context: ., dockerfile: infrastructure/deployment/Dockerfile, target: api }
     init: true
     read_only: true
     tmpfs: [/tmp]
@@ -77,7 +77,7 @@ services:
 
   api:
     image: vista-api:${VISTA_IMAGE_TAG:?Set VISTA_IMAGE_TAG in Coolify}
-    build: { context: ../.., dockerfile: infrastructure/deployment/Dockerfile, target: api }
+    build: { context: ., dockerfile: infrastructure/deployment/Dockerfile, target: api }
     init: true
     read_only: true
     tmpfs: [/tmp]
@@ -116,7 +116,7 @@ services:
 
   operations:
     image: vista-operations:${VISTA_IMAGE_TAG:?Set VISTA_IMAGE_TAG in Coolify}
-    build: { context: ../.., dockerfile: infrastructure/deployment/Dockerfile, target: operations }
+    build: { context: ., dockerfile: infrastructure/deployment/Dockerfile, target: operations }
     expose: ['8080']
     read_only: true
     tmpfs: [/tmp]
@@ -126,7 +126,7 @@ services:
 
   pos:
     image: vista-pos:${VISTA_IMAGE_TAG:?Set VISTA_IMAGE_TAG in Coolify}
-    build: { context: ../.., dockerfile: infrastructure/deployment/Dockerfile, target: pos }
+    build: { context: ., dockerfile: infrastructure/deployment/Dockerfile, target: pos }
     expose: ['8080']
     read_only: true
     tmpfs: [/tmp]
@@ -136,7 +136,7 @@ services:
 
   recovery:
     image: vista-recovery:${VISTA_IMAGE_TAG:?Set VISTA_IMAGE_TAG in Coolify}
-    build: { context: ../.., dockerfile: infrastructure/deployment/Dockerfile, target: recovery }
+    build: { context: ., dockerfile: infrastructure/deployment/Dockerfile, target: recovery }
     expose: ['8080']
     read_only: true
     tmpfs: [/tmp]
