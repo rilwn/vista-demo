@@ -532,6 +532,11 @@ describe('ERP and CRM authenticated workspace', () => {
     );
 
     expect(await within(drawer).findByText('ABCD EFGH IJKL MNOP')).toBeTruthy();
+    expect(
+      await within(drawer).findByRole('img', {
+        name: 'Scan this QR code with your authenticator app',
+      }),
+    ).toBeTruthy();
     fireEvent.change(within(drawer).getByLabelText(messages.access.authenticatorCode), {
       target: { value: '123 456extra' },
     });

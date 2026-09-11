@@ -7,6 +7,7 @@ import {
   startAccountRecoveryTotpEnrollment,
   verifyAccountRecoveryTotpEnrollment,
 } from '../api/auth';
+import { AuthenticatorQrCode } from '../components/AuthenticatorQrCode';
 import { Icon } from '../components/Icon';
 import { messages } from '../messages';
 import { Link } from '../routing/Router';
@@ -185,18 +186,22 @@ export function RecoveryPage() {
               </p>
               <form className="login-form" onSubmit={(event) => void verifyEnrollment(event)}>
                 {error ? <InlineAlert tone="error">{error}</InlineAlert> : null}
+                <AuthenticatorQrCode provisioningUri={enrollment.provisioningUri} />
                 <section className="authenticator-setup-key" aria-label="Setup key">
-                  <span>Setup key</span>
+                  <span>Manual setup key</span>
                   <code>{groupAuthenticatorKey(enrollment.manualEntryKey)}</code>
                 </section>
-                <TextField
-                  id="recovery-authenticator-link"
-                  label="Setup link"
-                  hint="Use this only if your authenticator app supports setup links."
-                  readOnly
-                  type="text"
-                  value={enrollment.provisioningUri}
-                />
+                <details className="authenticator-setup-link">
+                  <summary>Use a setup link instead</summary>
+                  <TextField
+                    id="recovery-authenticator-link"
+                    label="Setup link"
+                    hint="Use this only if your authenticator app supports setup links."
+                    readOnly
+                    type="text"
+                    value={enrollment.provisioningUri}
+                  />
+                </details>
                 <TextField
                   autoComplete="one-time-code"
                   autoFocus

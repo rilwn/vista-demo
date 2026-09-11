@@ -19,6 +19,7 @@ import {
 } from '../api/auth';
 import { ApiClientError } from '../api/client';
 import { useAuth } from '../auth/AuthProvider';
+import { AuthenticatorQrCode } from '../components/AuthenticatorQrCode';
 import { Icon } from '../components/Icon';
 import { messages, moduleMessages } from '../messages';
 
@@ -327,21 +328,25 @@ function AuthenticatorEnrollmentDrawer({
               <p>{error}</p>
             </InlineAlert>
           ) : null}
+          <AuthenticatorQrCode provisioningUri={enrollment.provisioningUri} />
           <section
             className="authenticator-setup-key"
             aria-label={messages.access.authenticatorSetupCode}
           >
-            <span>{messages.access.authenticatorSetupCode}</span>
+            <span>Manual setup key</span>
             <code>{groupAuthenticatorKey(enrollment.manualEntryKey)}</code>
           </section>
-          <TextField
-            id="authenticator-setup-link"
-            label={messages.access.authenticatorSetupLink}
-            hint={messages.access.authenticatorSetupLinkHint}
-            readOnly
-            type="text"
-            value={enrollment.provisioningUri}
-          />
+          <details className="authenticator-setup-link">
+            <summary>Use a setup link instead</summary>
+            <TextField
+              id="authenticator-setup-link"
+              label={messages.access.authenticatorSetupLink}
+              hint={messages.access.authenticatorSetupLinkHint}
+              readOnly
+              type="text"
+              value={enrollment.provisioningUri}
+            />
+          </details>
           <TextField
             autoComplete="one-time-code"
             autoFocus

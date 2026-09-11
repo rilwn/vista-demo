@@ -10669,6 +10669,59 @@ select.vista-field-input {
   background: #f4f8f5;
 }
 
+.authenticator-setup-qr {
+  display: grid;
+  justify-items: center;
+  gap: 0.6rem;
+  padding: 0.9rem;
+  border: 1px solid #cbdccf;
+  border-radius: 0.75rem;
+  background: #f4f8f5;
+  text-align: center;
+}
+
+.authenticator-setup-qr img,
+.authenticator-setup-qr-placeholder {
+  display: block;
+  width: 11rem;
+  height: 11rem;
+  padding: 0.35rem;
+  border-radius: 0.55rem;
+  background: #fff;
+}
+
+.authenticator-setup-qr-placeholder {
+  display: grid;
+  place-items: center;
+  color: var(--vista-muted);
+  font-size: 0.78rem;
+}
+
+.authenticator-setup-qr p {
+  max-width: 19rem;
+  margin: 0;
+  color: var(--vista-muted);
+  font-size: 0.76rem;
+  line-height: 1.45;
+}
+
+.authenticator-setup-link {
+  color: var(--vista-muted);
+  font-size: 0.78rem;
+}
+
+.authenticator-setup-link summary {
+  width: fit-content;
+  cursor: pointer;
+  color: var(--vista-accent-strong);
+  font-weight: 700;
+}
+
+.authenticator-setup-link[open] {
+  display: grid;
+  gap: 0.65rem;
+}
+
 .authenticator-setup-key > span {
   color: var(--vista-muted);
   font-size: 0.68rem;
