@@ -84,6 +84,7 @@ services:
     security_opt: [no-new-privileges:true]
     environment:
       NODE_ENV: production
+      VISTA_DEPLOYMENT_STAGE: ${VISTA_DEPLOYMENT_STAGE:?Set VISTA_DEPLOYMENT_STAGE in Coolify}
       API_HOST: 0.0.0.0
       API_PORT: '3000'
       API_RATE_LIMIT_STORE: redis

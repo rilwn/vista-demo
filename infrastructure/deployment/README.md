@@ -95,3 +95,7 @@ to internal port `8080`. Do not assign domains or host ports to API, PostgreSQL,
 Redis, MinIO or Mailpit. The staging stack captures email in its private Mailpit
 container; no email leaves the VPS. Replace it with the approved SMTP adapter
 only after `INT-001` is decided.
+
+Set `VISTA_DEPLOYMENT_STAGE=staging` in the Coolify resource. A separate,
+explicitly enabled command can create the disposable demo accounts and records;
+it refuses to run outside this staging designation. It is not a production seed.
