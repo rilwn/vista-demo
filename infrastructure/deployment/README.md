@@ -1,6 +1,6 @@
 # Deployment preparation
 
-This is a **local rehearsal**, not a public production configuration. It builds
+`compose.yml` is a **local rehearsal**, not a public production configuration. It builds
 versioned API, Operations, POS and Recovery images. The web images serve deep
 links and proxy `/api/` to the API. Processes run without root; application
 filesystems are read-only. No development accounts or credentials are included.
@@ -82,3 +82,16 @@ certification, full offline selling and operational Backup/DR remain gated.
 CI builds and vulnerability-scans all four application images as well as the
 existing infrastructure images. A configured scan is not a passing scan; retain
 the hosted results before release.
+
+## Coolify staging deployment
+
+Use [`compose.coolify.yml`](compose.coolify.yml) only through a Git-based
+Docker Compose resource in the approved shared Coolify Team. It runs migrations
+before the API, keeps all data services internal and exposes only the three web
+services through Coolify's proxy. Configure the values in
+[`.env.coolify.example`](.env.coolify.example) as Coolify variables; never upload
+an environment file. Assign the Operations, POS and Recovery domains in Coolify
+to internal port `8080`. Do not assign domains or host ports to API, PostgreSQL,
+Redis, MinIO or Mailpit. The staging stack captures email in its private Mailpit
+container; no email leaves the VPS. Replace it with the approved SMTP adapter
+only after `INT-001` is decided.

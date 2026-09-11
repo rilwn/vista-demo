@@ -47,6 +47,7 @@ without inventing business policy.
 ## Recorded technical decisions
 
 - [ADR-0001: TypeScript npm-workspaces modular monorepo](0001-typescript-npm-workspaces-monorepo.md) — proposed.
+- [ADR-0002: Hostinger VPS and Coolify staging target](0002-hostinger-coolify-staging.md) — accepted for staging only.
 
 When an open decision is approved, add a dated ADR that names the decision-maker,
 scope, consequences, migration needs, and traceability rows, then update this table.

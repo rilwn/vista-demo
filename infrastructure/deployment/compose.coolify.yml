@@ -1,0 +1,150 @@
+# Coolify staging/production stack. Configure every ${...} value in Coolify;
+# do not create a server .env file or publish ports for internal services.
+services:
+  postgres:
+    image: postgres:16.9-alpine
+    environment:
+      POSTGRES_USER: vista
+      POSTGRES_DB: vista
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in Coolify}
+    volumes: [postgres-data:/var/lib/postgresql/data]
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U vista -d vista']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7.4.5-alpine
+    command: [redis-server, --appendonly, 'yes']
+    volumes: [redis-data:/data]
+    healthcheck:
+      test: [CMD, redis-cli, ping]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  minio:
+    image: minio/minio:RELEASE.2025-07-23T15-54-02Z
+    command: [server, /data]
+    environment:
+      MINIO_ROOT_USER: vista-storage
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_ACCESS_KEY:?Set S3_SECRET_ACCESS_KEY in Coolify}
+    volumes: [files-data:/data]
+    healthcheck:
+      test: [CMD, curl, -f, http://localhost:9000/minio/health/live]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  minio-init:
+    image: minio/mc:RELEASE.2025-07-21T05-28-08Z
+    depends_on:
+      minio: { condition: service_healthy }
+    environment:
+      STORAGE_SECRET: ${S3_SECRET_ACCESS_KEY:?Set S3_SECRET_ACCESS_KEY in Coolify}
+    entrypoint: [/bin/sh, -c]
+    command:
+      [
+        'mc alias set vista http://minio:9000 vista-storage "$$STORAGE_SECRET" && mc mb --ignore-existing vista/vista-files && mc anonymous set none vista/vista-files',
+      ]
+    restart: 'no'
+    exclude_from_hc: true
+
+  # Staging email capture only. It is intentionally not assigned a public domain.
+  mailpit:
+    image: axllent/mailpit:v1.27.8
+    healthcheck:
+      test: [CMD, /mailpit, readyz]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  migrate:
+    image: vista-api:${VISTA_IMAGE_TAG:?Set VISTA_IMAGE_TAG in Coolify}
+    build: { context: ../.., dockerfile: infrastructure/deployment/Dockerfile, target: api }
+    init: true
+    read_only: true
+    tmpfs: [/tmp]
+    security_opt: [no-new-privileges:true]
+    environment:
+      DATABASE_URL: postgresql://vista:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in Coolify}@postgres:5432/vista
+    command: [node, apps/api/dist/database/migrate.js, up]
+    depends_on:
+      postgres: { condition: service_healthy }
+    restart: 'no'
+    exclude_from_hc: true
+
+  api:
+    image: vista-api:${VISTA_IMAGE_TAG:?Set VISTA_IMAGE_TAG in Coolify}
+    build: { context: ../.., dockerfile: infrastructure/deployment/Dockerfile, target: api }
+    init: true
+    read_only: true
+    tmpfs: [/tmp]
+    security_opt: [no-new-privileges:true]
+    environment:
+      NODE_ENV: production
+      API_HOST: 0.0.0.0
+      API_PORT: '3000'
+      API_RATE_LIMIT_STORE: redis
+      API_RATE_LIMIT_REDIS_PREFIX: ${API_RATE_LIMIT_REDIS_PREFIX:-vista:staging:rate-limit}
+      API_TRUST_PROXY_HOPS: '2'
+      BUSINESS_TIMEZONE: ${BUSINESS_TIMEZONE:-Europe/Sofia}
+      CORS_ORIGINS: ${CORS_ORIGINS:?Set the three public Vista origins in Coolify}
+      DATABASE_URL: postgresql://vista:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in Coolify}@postgres:5432/vista
+      REDIS_URL: redis://redis:6379/0
+      SESSION_SECRET: ${SESSION_SECRET:?Set SESSION_SECRET in Coolify}
+      TOTP_ENCRYPTION_KEY: ${TOTP_ENCRYPTION_KEY:?Set TOTP_ENCRYPTION_KEY in Coolify}
+      TOTP_ISSUER: ${TOTP_ISSUER:-Vista Service Staging}
+      S3_ENDPOINT: http://minio:9000
+      S3_ACCESS_KEY_ID: vista-storage
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:?Set S3_SECRET_ACCESS_KEY in Coolify}
+      S3_BUCKET: vista-files
+      S3_REGION: us-east-1
+      S3_FORCE_PATH_STYLE: 'true'
+      SMTP_HOST: mailpit
+      SMTP_PORT: '1025'
+      SMTP_FROM: staging@vista.local
+      DEV_FIXTURES_ENABLED: 'false'
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      minio: { condition: service_healthy }
+      minio-init: { condition: service_completed_successfully }
+      mailpit: { condition: service_healthy }
+      migrate: { condition: service_completed_successfully }
+
+  operations:
+    image: vista-operations:${VISTA_IMAGE_TAG:?Set VISTA_IMAGE_TAG in Coolify}
+    build: { context: ../.., dockerfile: infrastructure/deployment/Dockerfile, target: operations }
+    expose: ['8080']
+    read_only: true
+    tmpfs: [/tmp]
+    security_opt: [no-new-privileges:true]
+    depends_on:
+      api: { condition: service_healthy }
+
+  pos:
+    image: vista-pos:${VISTA_IMAGE_TAG:?Set VISTA_IMAGE_TAG in Coolify}
+    build: { context: ../.., dockerfile: infrastructure/deployment/Dockerfile, target: pos }
+    expose: ['8080']
+    read_only: true
+    tmpfs: [/tmp]
+    security_opt: [no-new-privileges:true]
+    depends_on:
+      api: { condition: service_healthy }
+
+  recovery:
+    image: vista-recovery:${VISTA_IMAGE_TAG:?Set VISTA_IMAGE_TAG in Coolify}
+    build: { context: ../.., dockerfile: infrastructure/deployment/Dockerfile, target: recovery }
+    expose: ['8080']
+    read_only: true
+    tmpfs: [/tmp]
+    security_opt: [no-new-privileges:true]
+    depends_on:
+      api: { condition: service_healthy }
+
+volumes:
+  postgres-data:
+  redis-data:
+  files-data:
