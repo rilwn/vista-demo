@@ -35,7 +35,7 @@ services:
     image: axllent/mailpit:v1.27.8
     ports: ['127.0.0.1:58025:1025']
   minio-init:
-    image: minio/mc:RELEASE.2025-07-21T05-28-08Z
+    image: quay.io/minio/mc:RELEASE.2025-07-21T05-28-08Z
     entrypoint: /bin/sh
     command:
       [

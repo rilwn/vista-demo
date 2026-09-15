@@ -34,7 +34,7 @@ services:
       timeout: 3s
       retries: 20
   minio-init:
-    image: minio/mc:RELEASE.2025-07-21T05-28-08Z
+    image: quay.io/minio/mc:RELEASE.2025-07-21T05-28-08Z
     depends_on:
       minio: { condition: service_healthy }
     environment:
