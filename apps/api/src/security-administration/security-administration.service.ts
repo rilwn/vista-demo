@@ -18,6 +18,7 @@ import type {
   SecurityAccountStatus,
   SecurityRole,
   SecurityRoleBrief,
+  UpdateSecurityRoleRequest,
   SecuritySession,
 } from '@vista/contracts';
 import type { Pool, PoolClient } from 'pg';
@@ -346,6 +347,83 @@ export class SecurityAdministrationService {
               isAdministrative: normalized.isAdministrative,
               name: normalized.name,
               permissions,
+            },
+            correlationId: metadata.correlationId,
+            targetId: roleId,
+            targetType: 'role',
+            ...(metadata.sourceIp ? { sourceIp: metadata.sourceIp } : {}),
+            ...(metadata.userAgent ? { userAgent: metadata.userAgent } : {}),
+          },
+          client,
+        );
+        return requiredRole(await findRole(client, roleId));
+      },
+    );
+    return result.value;
+  }
+
+  async updateRole(
+    roleId: string,
+    input: UpdateSecurityRoleRequest,
+    keyValue: string | undefined,
+    actor: AuthenticationContext,
+    metadata: RequestSecurityMetadata,
+  ): Promise<SecurityRole> {
+    const normalized = {
+      description: normalizeOptional(input.description),
+      expectedVersion: input.expectedVersion,
+      name: normalizeRequired(input.name, 'name'),
+      permissions: normalizePermissions(input.permissions),
+    };
+    const result = await this.runIdempotent<SecurityRole>(
+      `security.role.${roleId}.update`,
+      keyValue,
+      normalized,
+      200,
+      async (client) => {
+        const role = await lockRole(client, roleId, normalized.expectedVersion);
+        if (role.is_administrative) assertAdministrativeFactor(actor);
+        const current = requiredRole(await findRole(client, roleId));
+        const unchanged =
+          current.name === normalized.name &&
+          (current.description ?? undefined) === normalized.description &&
+          samePermissions(current.permissions, normalized.permissions);
+        if (unchanged) return current;
+
+        await client.query(
+          `UPDATE iam.roles
+           SET name = $2, description = $3, version = version + 1
+           WHERE id = $1`,
+          [roleId, normalized.name, normalized.description ?? null],
+        );
+        await client.query('DELETE FROM iam.role_permissions WHERE role_id = $1', [roleId]);
+        for (const permission of normalized.permissions) {
+          const inserted = await client.query<{ id: string }>(
+            `INSERT INTO iam.permissions (id, module, action)
+             VALUES ($1, $2, $3)
+             ON CONFLICT (module, action) DO UPDATE SET module = EXCLUDED.module
+             RETURNING id`,
+            [randomUUID(), permission.module, permission.action],
+          );
+          await client.query(
+            `INSERT INTO iam.role_permissions (role_id, permission_id, granted_by)
+             VALUES ($1, $2, $3)`,
+            [roleId, inserted.rows[0]?.id, actor.accountId],
+          );
+        }
+        await this.audit.append(
+          {
+            action: 'iam.role.updated',
+            actorAccountId: actor.accountId,
+            after: {
+              description: normalized.description,
+              name: normalized.name,
+              permissions: normalized.permissions,
+            },
+            before: {
+              description: current.description,
+              name: current.name,
+              permissions: current.permissions,
             },
             correlationId: metadata.correlationId,
             targetId: roleId,
@@ -715,6 +793,36 @@ async function lockAccount(
   return row;
 }
 
+async function lockRole(
+  client: PoolClient,
+  roleId: string,
+  expectedVersion: number,
+): Promise<{ is_administrative: boolean; is_system_role: boolean; version: number }> {
+  const result = await client.query<{
+    is_administrative: boolean;
+    is_system_role: boolean;
+    version: number;
+  }>('SELECT is_administrative, is_system_role, version FROM iam.roles WHERE id = $1 FOR UPDATE', [
+    roleId,
+  ]);
+  const row = result.rows[0];
+  if (!row) {
+    throw new ApiErrorException(
+      'SECURITY_ROLE_NOT_FOUND',
+      'The role was not found',
+      HttpStatus.NOT_FOUND,
+    );
+  }
+  if (row.version !== expectedVersion) {
+    throw new ApiErrorException(
+      'RECORD_VERSION_CONFLICT',
+      'The role changed; reload it and try again',
+      HttpStatus.CONFLICT,
+    );
+  }
+  return row;
+}
+
 async function accountIsAdministrative(queryable: Queryable, accountId: string): Promise<boolean> {
   const result = await queryable.query<{ administrative: boolean }>(
     `SELECT EXISTS (
@@ -776,6 +884,16 @@ function normalizePermissions(input: ApiPermission[]): ApiPermission[] {
   }
   return [...unique.values()].sort((left, right) =>
     `${left.module}:${left.action}`.localeCompare(`${right.module}:${right.action}`),
+  );
+}
+
+function samePermissions(left: ApiPermission[], right: ApiPermission[]): boolean {
+  return (
+    left.length === right.length &&
+    left.every(
+      (permission, index) =>
+        permission.module === right[index]?.module && permission.action === right[index]?.action,
+    )
   );
 }
 

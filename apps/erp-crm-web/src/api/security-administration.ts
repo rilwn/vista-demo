@@ -11,6 +11,7 @@ import type {
   SecurityAccountPage,
   SecurityRole,
   SecuritySession,
+  UpdateSecurityRoleRequest,
 } from '@vista/contracts';
 
 import {
@@ -137,6 +138,24 @@ export function createSecurityRole(
       body: input,
       headers: authorizationHeaders(token),
       params: { header: idempotencyParameters(key).header },
+    }),
+  );
+}
+
+export function updateSecurityRole(
+  token: string,
+  key: string,
+  role: SecurityRole,
+  input: Omit<UpdateSecurityRoleRequest, 'expectedVersion'>,
+): Promise<SecurityRole> {
+  return unwrapApiResponse(
+    apiClient.PUT('/api/v1/platform/security/roles/{id}', {
+      body: { ...input, expectedVersion: role.version },
+      headers: authorizationHeaders(token),
+      params: {
+        header: idempotencyParameters(key).header,
+        path: { id: role.id },
+      },
     }),
   );
 }

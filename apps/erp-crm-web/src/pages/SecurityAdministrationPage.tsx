@@ -10,6 +10,7 @@ import type {
   SecurityAccount,
   SecurityRole,
   SecuritySession,
+  UpdateSecurityRoleRequest,
 } from '@vista/contracts';
 import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
@@ -24,6 +25,7 @@ import {
   listSecuritySessions,
   replaceSecurityAccountRoles,
   revokeSecuritySession,
+  updateSecurityRole,
   verifyAuditIntegrity,
 } from '../api/security-administration';
 import { ApiClientError } from '../api/client';
@@ -60,6 +62,7 @@ export function SecurityAdministrationPage() {
   const [view, setView] = useState<SecurityView>('accounts');
   const [composer, setComposer] = useState<Composer>(null);
   const [selected, setSelected] = useState<SecurityAccount | null>(null);
+  const [selectedRole, setSelectedRole] = useState<SecurityRole | null>(null);
   const [recoveryTarget, setRecoveryTarget] = useState<SecurityAccount | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
@@ -194,7 +197,9 @@ export function SecurityAdministrationPage() {
           {view === 'accounts' ? (
             <AccountsView accounts={accounts} canApprove={canApprove} onSelect={setSelected} />
           ) : null}
-          {view === 'roles' ? <RolesView roles={roles} /> : null}
+          {view === 'roles' ? (
+            <RolesView canApprove={canApprove} onSelect={setSelectedRole} roles={roles} />
+          ) : null}
           {view === 'sessions' ? (
             <SessionsView
               canApprove={canApprove}
@@ -253,6 +258,21 @@ export function SecurityAdministrationPage() {
             reload();
           }}
           roles={roles}
+          token={token}
+        />
+      ) : null}
+      {selectedRole ? (
+        <RoleEditorDrawer
+          administrativeSession={Boolean(
+            session?.context.isAdministrative && session.context.twoFactorVerified,
+          )}
+          onClose={() => setSelectedRole(null)}
+          onUpdated={() => {
+            setSelectedRole(null);
+            setNotice('Role access updated.');
+            reload();
+          }}
+          role={selectedRole}
           token={token}
         />
       ) : null}
@@ -373,7 +393,15 @@ function AccountsView({
   );
 }
 
-function RolesView({ roles }: { roles: SecurityRole[] }) {
+function RolesView({
+  canApprove,
+  onSelect,
+  roles,
+}: {
+  canApprove: boolean;
+  onSelect: (role: SecurityRole) => void;
+  roles: SecurityRole[];
+}) {
   const [page, setPage] = useState(1);
   const pageSize = 8;
   const totalPages = Math.max(Math.ceil(roles.length / pageSize), 1);
@@ -390,8 +418,18 @@ function RolesView({ roles }: { roles: SecurityRole[] }) {
     );
   return (
     <div className="security-role-list">
+      <div className="security-role-list-heading">
+        <div>
+          <span>Role directory</span>
+          <p>Each role defines the access an employee can be assigned.</p>
+        </div>
+        <strong>{roles.length} roles</strong>
+      </div>
       {visible.map((role) => (
         <article key={role.id}>
+          <span className="security-role-mark" aria-hidden="true">
+            <Icon name={role.isAdministrative ? 'shield' : 'customers'} size={18} />
+          </span>
           <div className="security-role-copy">
             <div>
               <h3>{friendlyRoleText(role.name)}</h3>
@@ -400,10 +438,17 @@ function RolesView({ roles }: { roles: SecurityRole[] }) {
               ) : null}
             </div>
             <p>{friendlyRoleDescription(role)}</p>
+            <small>
+              {role.permissions.length}{' '}
+              {role.permissions.length === 1 ? 'permission' : 'permissions'}
+            </small>
           </div>
           <footer>
-            <strong>{role.permissions.length}</strong>
-            <span>{role.permissions.length === 1 ? 'permission' : 'permissions'}</span>
+            {canApprove ? (
+              <Button onClick={() => onSelect(role)} variant="quiet">
+                Edit access
+              </Button>
+            ) : null}
           </footer>
         </article>
       ))}
@@ -622,7 +667,7 @@ function AccountComposer({
           <Button onClick={onClose} variant="quiet">
             Cancel
           </Button>
-          <Button busy={busy} busyLabel="Creating account">
+          <Button busy={busy} busyLabel="Creating account" type="submit">
             Add employee
           </Button>
         </div>
@@ -728,44 +773,179 @@ function RoleComposer({
             </small>
           </span>
         </label>
-        <fieldset className="security-permission-matrix">
-          <legend>Permissions</legend>
-          <div className="security-permission-head">
-            <span>Module</span>
-            {actions.map((action) => (
-              <span key={action}>{permissionActionLabel(action)}</span>
-            ))}
-          </div>
-          {modules.map((module) => (
-            <div className="security-permission-row" key={module}>
-              <strong>{shortModule(module)}</strong>
-              {actions.map((action) => {
-                const key = `${module}:${action}`;
-                return (
-                  <label key={key}>
-                    <input
-                      aria-label={`${shortModule(module)} ${permissionActionLabel(action)}`}
-                      checked={selected.includes(key)}
-                      onChange={() => toggle(module, action)}
-                      type="checkbox"
-                    />
-                    <span>{permissionActionLabel(action)}</span>
-                  </label>
-                );
-              })}
-            </div>
-          ))}
-        </fieldset>
+        <PermissionMatrix selected={selected} onToggle={toggle} />
         <div className="security-drawer-actions">
           <Button onClick={onClose} variant="quiet">
             Cancel
           </Button>
-          <Button busy={busy} busyLabel="Creating role">
+          <Button busy={busy} busyLabel="Creating role" type="submit">
             Add role
           </Button>
         </div>
       </form>
     </Drawer>
+  );
+}
+
+function RoleEditorDrawer({
+  administrativeSession,
+  onClose,
+  onUpdated,
+  role,
+  token,
+}: {
+  administrativeSession: boolean;
+  onClose: () => void;
+  onUpdated: () => void;
+  role: SecurityRole;
+  token: string;
+}) {
+  const [draft, setDraft] = useState<Omit<UpdateSecurityRoleRequest, 'expectedVersion'>>({
+    description: role.description ?? '',
+    name: role.name,
+    permissions: [],
+  });
+  const [selected, setSelected] = useState(() =>
+    role.permissions
+      .filter(
+        (permission) =>
+          modules.includes(permission.module as (typeof modules)[number]) &&
+          actions.includes(permission.action as (typeof actions)[number]),
+      )
+      .map((permission) => `${permission.module}:${permission.action}`),
+  );
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const attempt = useRef<{ fingerprint: string; key: string } | null>(null);
+  const editAllowed = !role.isAdministrative || administrativeSession;
+
+  function toggle(module: string, action: string) {
+    const key = `${module}:${action}`;
+    setSelected((items) =>
+      items.includes(key) ? items.filter((item) => item !== key) : [...items, key],
+    );
+  }
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    setBusy(true);
+    setError('');
+    const input: Omit<UpdateSecurityRoleRequest, 'expectedVersion'> = {
+      ...draft,
+      permissions: modules.flatMap((module) =>
+        actions
+          .filter((action) => selected.includes(`${module}:${action}`))
+          .map((action) => ({ action, module }) satisfies ApiPermission),
+      ),
+    };
+    const fingerprint = JSON.stringify(input);
+    if (attempt.current?.fingerprint !== fingerprint)
+      attempt.current = { fingerprint, key: crypto.randomUUID() };
+    try {
+      await updateSecurityRole(token, attempt.current.key, role, input);
+      attempt.current = null;
+      onUpdated();
+    } catch (failure) {
+      setError(apiMessage(failure));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Drawer
+      title={`Edit ${friendlyRoleText(role.name)}`}
+      subtitle="Update the role name, description, and available access."
+      onClose={onClose}
+      wide
+    >
+      <form
+        className="security-admin-form security-role-editor"
+        onSubmit={(event) => void submit(event)}
+      >
+        {error ? <InlineAlert tone="error">{error}</InlineAlert> : null}
+        {role.isAdministrative ? (
+          <section className="security-role-protection">
+            <Icon name="shield" size={18} />
+            <span>
+              <strong>Administrative role</strong>
+              <small>
+                Changing this role requires a two-factor verified administrator session.
+              </small>
+            </span>
+          </section>
+        ) : null}
+        {!editAllowed ? (
+          <InlineAlert tone="warning">
+            Set up and verify your authenticator before changing this administrative role.
+          </InlineAlert>
+        ) : null}
+        <TextField
+          id="security-role-edit-name"
+          label="Role name"
+          onChange={(event) => setDraft({ ...draft, name: event.target.value })}
+          required
+          value={draft.name}
+        />
+        <TextField
+          id="security-role-edit-description"
+          label="Description"
+          onChange={(event) => setDraft({ ...draft, description: event.target.value })}
+          value={draft.description ?? ''}
+        />
+        <PermissionMatrix disabled={!editAllowed} selected={selected} onToggle={toggle} />
+        <div className="security-drawer-actions">
+          <Button onClick={onClose} variant="quiet">
+            Cancel
+          </Button>
+          <Button busy={busy} disabled={!editAllowed} busyLabel="Saving role" type="submit">
+            Save access
+          </Button>
+        </div>
+      </form>
+    </Drawer>
+  );
+}
+
+function PermissionMatrix({
+  disabled = false,
+  onToggle,
+  selected,
+}: {
+  disabled?: boolean;
+  onToggle: (module: string, action: string) => void;
+  selected: string[];
+}) {
+  return (
+    <fieldset className="security-permission-matrix" disabled={disabled}>
+      <legend>Permissions</legend>
+      <p>Choose only the actions this role needs for daily work.</p>
+      <div className="security-permission-head">
+        <span>Module</span>
+        {actions.map((action) => (
+          <span key={action}>{permissionActionLabel(action)}</span>
+        ))}
+      </div>
+      {modules.map((module) => (
+        <div className="security-permission-row" key={module}>
+          <strong>{shortModule(module)}</strong>
+          {actions.map((action) => {
+            const key = `${module}:${action}`;
+            return (
+              <label key={key}>
+                <input
+                  aria-label={`${shortModule(module)} ${permissionActionLabel(action)}`}
+                  checked={selected.includes(key)}
+                  onChange={() => onToggle(module, action)}
+                  type="checkbox"
+                />
+                <span>{permissionActionLabel(action)}</span>
+              </label>
+            );
+          })}
+        </div>
+      ))}
+    </fieldset>
   );
 }
 
@@ -830,63 +1010,85 @@ function AccountAccessDrawer({
     }
   }
   return (
-    <Drawer title={account.displayName} subtitle="Employee access" onClose={onClose}>
-      <div className="security-account-detail">
-        <span>{account.employeeNumber}</span>
-        <strong>{account.email}</strong>
-        <StatusLabel status={account.status} />
-      </div>
-      {error ? <InlineAlert tone="error">{error}</InlineAlert> : null}
-      <section className="security-account-factor">
-        <Icon name="key" size={19} />
+    <Drawer
+      ariaLabel={account.displayName}
+      title={`Manage ${account.displayName}`}
+      subtitle={account.email}
+      onClose={onClose}
+    >
+      <section className="security-account-detail">
+        <span className="security-account-avatar" aria-hidden="true">
+          {account.displayName
+            .split(/\s+/u)
+            .slice(0, 2)
+            .map((part) => part.charAt(0).toUpperCase())
+            .join('')}
+        </span>
         <div>
-          <strong>
-            {account.twoFactorEnrolled
-              ? 'Two-factor authentication is set up'
-              : 'Two-factor authentication is not set up'}
-          </strong>
-          <span>An administrator role cannot be assigned until this is set up.</span>
+          <strong>{account.displayName}</strong>
+          <span>{account.employeeNumber}</span>
         </div>
+        <StatusLabel status={account.status} />
       </section>
-      {canIssueRecovery && account.status !== 'disabled' ? (
-        <section className="security-account-recovery">
+      {error ? <InlineAlert tone="error">{error}</InlineAlert> : null}
+      <section className="security-account-section">
+        <div className="security-account-section-heading">
           <div>
-            <strong>Account recovery</strong>
-            <span>
-              Issue a short-lived, single-use recovery code after verifying this employee’s
-              identity.
-            </span>
+            <span>Sign-in protection</span>
+            <p>Authenticator status for this employee.</p>
           </div>
-          <Button onClick={() => onIssueRecovery(account)} variant="secondary">
-            Issue recovery handoff
-          </Button>
-        </section>
-      ) : null}
+          <Icon name="key" size={18} />
+        </div>
+        <div className="security-account-factor">
+          <span className={account.twoFactorEnrolled ? 'is-ready' : ''} aria-hidden="true" />
+          <div>
+            <strong>
+              {account.twoFactorEnrolled ? 'Authenticator set up' : 'Authenticator not set up'}
+            </strong>
+            <small>Administrator access requires an authenticator.</small>
+          </div>
+        </div>
+        {canIssueRecovery && account.status !== 'disabled' ? (
+          <div className="security-account-recovery">
+            <div>
+              <strong>Recover access</strong>
+              <span>Issue a one-time recovery code after checking the employee’s identity.</span>
+            </div>
+            <Button onClick={() => onIssueRecovery(account)} variant="secondary">
+              Issue code
+            </Button>
+          </div>
+        ) : null}
+      </section>
       <fieldset className="security-role-assignment" disabled={!canApprove}>
         <legend>Assigned roles</legend>
+        <p>Choose the roles that match this employee’s responsibilities.</p>
         {roles.length ? (
-          roles.map((role) => (
-            <label key={role.id}>
-              <input
-                checked={selected.includes(role.id)}
-                onChange={() =>
-                  setSelected((items) =>
-                    items.includes(role.id)
-                      ? items.filter((id) => id !== role.id)
-                      : [...items, role.id],
-                  )
-                }
-                type="checkbox"
-              />
-              <span>
-                <strong>{role.name}</strong>
-                <small>
-                  {role.code}
-                  {role.isAdministrative ? ' · Administrative' : ''}
-                </small>
-              </span>
-            </label>
-          ))
+          <div className="security-role-choices">
+            {roles.map((role) => (
+              <label key={role.id}>
+                <input
+                  checked={selected.includes(role.id)}
+                  onChange={() =>
+                    setSelected((items) =>
+                      items.includes(role.id)
+                        ? items.filter((id) => id !== role.id)
+                        : [...items, role.id],
+                    )
+                  }
+                  type="checkbox"
+                />
+                <span>
+                  <strong>{friendlyRoleText(role.name)}</strong>
+                  <small>
+                    {role.isAdministrative
+                      ? 'Administrator'
+                      : `${role.permissions.length} permissions`}
+                  </small>
+                </span>
+              </label>
+            ))}
+          </div>
         ) : (
           <p>No roles are available yet.</p>
         )}
@@ -1044,12 +1246,14 @@ function RecoveryHandoffDrawer({
 }
 
 function Drawer({
+  ariaLabel,
   children,
   onClose,
   subtitle,
   title,
   wide = false,
 }: {
+  ariaLabel?: string;
   children: React.ReactNode;
   onClose: () => void;
   subtitle?: string;
@@ -1065,7 +1269,7 @@ function Drawer({
         type="button"
       />
       <aside
-        aria-label={title}
+        aria-label={ariaLabel ?? title}
         aria-modal="true"
         className={`security-drawer${wide ? ' is-wide' : ''}`}
         role="dialog"

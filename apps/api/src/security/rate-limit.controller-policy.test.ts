@@ -51,7 +51,7 @@ describe('HTTP rate-limit coverage', () => {
       })),
     );
 
-    expect(assignments).toHaveLength(130);
+    expect(assignments).toHaveLength(131);
     expect(assignments.filter(({ policy }) => policy === undefined)).toEqual([]);
     expect(assignments).toEqual(
       expect.arrayContaining([
@@ -90,6 +90,11 @@ describe('HTTP rate-limit coverage', () => {
           controller: 'PartnersController',
           name: 'customerOperationalOverview',
           policy: 'read',
+        }),
+        expect.objectContaining({
+          controller: 'SecurityAdministrationController',
+          name: 'updateRole',
+          policy: 'sensitive',
         }),
       ]),
     );

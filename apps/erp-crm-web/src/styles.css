@@ -24884,6 +24884,437 @@ body:has(.security-drawer-layer) {
   max-width: 100%;
 }
 
+/* Security administration: role directory and access panels */
+.security-admin-workspace .security-role-list {
+  gap: 0;
+  padding: 0;
+}
+
+.security-role-list-heading {
+  align-items: center;
+  border-bottom: 1px solid var(--vista-line);
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  padding: 1rem 1.1rem;
+}
+
+.security-role-list-heading > div {
+  display: grid;
+  gap: 0.18rem;
+}
+
+.security-role-list-heading span,
+.security-role-list-heading strong {
+  color: var(--vista-ink);
+  font-size: 0.76rem;
+  font-weight: 760;
+}
+
+.security-role-list-heading p {
+  color: var(--vista-ink-muted);
+  font-size: 0.72rem;
+  line-height: 1.4;
+  margin: 0;
+}
+
+.security-role-list-heading strong {
+  background: var(--vista-surface-muted);
+  border: 1px solid var(--vista-line);
+  border-radius: 999px;
+  color: var(--vista-ink-muted);
+  padding: 0.32rem 0.58rem;
+  white-space: nowrap;
+}
+
+.security-admin-workspace .security-role-list > article {
+  align-items: center;
+  border-bottom: 1px solid var(--vista-line);
+  display: grid;
+  gap: 0.8rem;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  padding: 0.95rem 1.1rem;
+}
+
+.security-admin-workspace .security-role-list > article:hover {
+  background: color-mix(in srgb, var(--vista-surface-muted) 70%, transparent);
+}
+
+.security-role-mark {
+  align-items: center;
+  background: var(--vista-surface-muted);
+  border: 1px solid var(--vista-line);
+  border-radius: 0.68rem;
+  color: var(--vista-green-strong);
+  display: inline-flex;
+  height: 2.3rem;
+  justify-content: center;
+  width: 2.3rem;
+}
+
+.security-role-copy {
+  gap: 0.22rem;
+}
+
+.security-role-copy > div {
+  flex-wrap: wrap;
+  gap: 0.38rem;
+}
+
+.security-admin-workspace .security-role-list h3 {
+  color: var(--vista-ink);
+  font-size: 0.86rem;
+  font-weight: 760;
+}
+
+.security-admin-workspace .security-role-list p {
+  color: var(--vista-ink-muted);
+  font-size: 0.73rem;
+  line-height: 1.42;
+}
+
+.security-role-copy small {
+  color: var(--vista-ink-faint);
+  font-size: 0.68rem;
+  font-weight: 650;
+}
+
+.security-role-admin,
+.security-role-system {
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font-size: 0.62rem;
+  font-weight: 760;
+  line-height: 1;
+  padding: 0.28rem 0.42rem;
+}
+
+.security-role-admin {
+  background: #ebf5ee;
+  border-color: #c6dfcd;
+  color: #23643f;
+}
+
+.security-role-system {
+  background: var(--vista-surface-muted);
+  border-color: var(--vista-line);
+  color: var(--vista-ink-muted);
+}
+
+.security-admin-workspace .security-role-list footer {
+  display: flex;
+  justify-content: flex-end;
+  text-align: inherit;
+}
+
+.security-admin-workspace .security-role-list > .security-admin-pagination {
+  margin: 0;
+}
+
+.security-drawer .security-admin-form {
+  gap: 1rem;
+}
+
+.security-drawer .security-admin-form > .vista-alert {
+  margin: 0;
+}
+
+.security-drawer .security-admin-toggle,
+.security-drawer .security-role-protection,
+.security-drawer .security-account-detail,
+.security-drawer .security-account-section,
+.security-drawer .security-role-assignment,
+.security-drawer .security-account-status-actions {
+  background: var(--vista-surface);
+  border: 1px solid var(--vista-line);
+  border-radius: 0.9rem;
+  box-shadow: none;
+}
+
+.security-drawer .security-admin-toggle,
+.security-drawer .security-role-protection {
+  padding: 0.9rem;
+}
+
+.security-drawer .security-admin-toggle input {
+  flex: 0 0 auto;
+}
+
+.security-drawer .security-permission-matrix {
+  background: var(--vista-surface);
+  border: 1px solid var(--vista-line);
+  border-radius: 0.9rem;
+  margin: 0;
+  padding: 0.8rem;
+}
+
+.security-drawer .security-permission-matrix legend,
+.security-drawer .security-role-assignment legend {
+  color: var(--vista-ink);
+  font-size: 0.78rem;
+  font-weight: 760;
+}
+
+.security-drawer .security-permission-matrix > p,
+.security-drawer .security-role-assignment > p {
+  color: var(--vista-ink-muted);
+  font-size: 0.72rem;
+  line-height: 1.45;
+  margin: 0.08rem 0 0.8rem;
+}
+
+.security-role-protection {
+  align-items: flex-start;
+  background: #f1f7f3 !important;
+  border-color: #cde0d3 !important;
+  color: var(--vista-green-strong);
+  display: flex;
+  gap: 0.65rem;
+}
+
+.security-role-protection span {
+  display: grid;
+  gap: 0.16rem;
+}
+
+.security-role-protection small {
+  color: var(--vista-ink-muted);
+  font-size: 0.71rem;
+  line-height: 1.45;
+}
+
+.security-drawer .security-account-detail {
+  align-items: center;
+  display: grid;
+  gap: 0.65rem;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  padding: 0.9rem;
+}
+
+.security-account-avatar {
+  align-items: center;
+  background: var(--vista-green-strong);
+  border-radius: 0.68rem;
+  color: white;
+  display: inline-flex;
+  font-size: 0.7rem;
+  font-weight: 780;
+  height: 2.35rem;
+  justify-content: center;
+  letter-spacing: 0.04em;
+  width: 2.35rem;
+}
+
+.security-drawer .security-account-detail > div {
+  display: grid;
+  gap: 0.12rem;
+}
+
+.security-drawer .security-account-detail strong {
+  color: var(--vista-ink);
+  font-size: 0.8rem;
+}
+
+.security-drawer .security-account-detail > div span {
+  color: var(--vista-ink-muted);
+  font-size: 0.68rem;
+}
+
+.security-drawer .security-account-section {
+  display: grid;
+  gap: 0.8rem;
+  padding: 0.95rem;
+}
+
+.security-account-section-heading {
+  align-items: start;
+  display: flex;
+  gap: 0.75rem;
+  justify-content: space-between;
+}
+
+.security-account-section-heading > div {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.security-account-section-heading span {
+  color: var(--vista-ink);
+  font-size: 0.77rem;
+  font-weight: 760;
+}
+
+.security-account-section-heading p {
+  color: var(--vista-ink-muted);
+  font-size: 0.7rem;
+  margin: 0;
+}
+
+.security-account-section-heading > svg {
+  color: var(--vista-green-strong);
+}
+
+.security-drawer .security-account-factor {
+  align-items: center;
+  background: var(--vista-surface-muted);
+  border: 0;
+  border-radius: 0.7rem;
+  display: flex;
+  gap: 0.55rem;
+  padding: 0.72rem;
+}
+
+.security-account-factor > span {
+  background: #d5a649;
+  border-radius: 99px;
+  box-shadow: 0 0 0 3px color-mix(in srgb, #d5a649 14%, transparent);
+  height: 0.44rem;
+  width: 0.44rem;
+}
+
+.security-account-factor > span.is-ready {
+  background: var(--vista-green-strong);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--vista-green-strong) 14%, transparent);
+}
+
+.security-drawer .security-account-factor div {
+  display: grid;
+  gap: 0.12rem;
+}
+
+.security-drawer .security-account-factor strong {
+  color: var(--vista-ink);
+  font-size: 0.73rem;
+}
+
+.security-drawer .security-account-factor small {
+  color: var(--vista-ink-muted);
+  font-size: 0.68rem;
+}
+
+.security-drawer .security-account-recovery {
+  align-items: center;
+  border-top: 1px solid var(--vista-line);
+  display: flex;
+  gap: 0.75rem;
+  justify-content: space-between;
+  padding-top: 0.8rem;
+}
+
+.security-account-recovery > div {
+  display: grid;
+  gap: 0.14rem;
+}
+
+.security-account-recovery strong {
+  color: var(--vista-ink);
+  font-size: 0.72rem;
+}
+
+.security-account-recovery span {
+  color: var(--vista-ink-muted);
+  font-size: 0.68rem;
+  line-height: 1.4;
+}
+
+.security-drawer .security-role-assignment {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 0.95rem;
+}
+
+.security-role-choices {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.security-drawer .security-role-assignment > .security-role-choices > label {
+  align-items: flex-start;
+  background: var(--vista-surface-muted);
+  border: 1px solid transparent;
+  border-radius: 0.7rem;
+  display: flex;
+  gap: 0.58rem;
+  padding: 0.68rem;
+}
+
+.security-drawer .security-role-assignment > .security-role-choices > label:has(input:checked) {
+  background: #f0f7f2;
+  border-color: #bdd9c5;
+}
+
+.security-drawer .security-role-assignment input {
+  accent-color: var(--vista-green-strong);
+  flex: 0 0 auto;
+  height: 1rem;
+  margin: 0.12rem 0 0;
+  min-height: 0;
+  width: 1rem;
+}
+
+.security-drawer .security-role-assignment label > span {
+  display: grid;
+  gap: 0.1rem;
+}
+
+.security-drawer .security-role-assignment label strong {
+  color: var(--vista-ink);
+  font-size: 0.73rem;
+}
+
+.security-drawer .security-role-assignment label small {
+  color: var(--vista-ink-muted);
+  font-size: 0.66rem;
+}
+
+.security-drawer .security-account-status-actions {
+  align-items: center;
+  display: flex;
+  gap: 0.75rem;
+  justify-content: space-between;
+  padding: 0.9rem;
+}
+
+.security-drawer .security-account-status-actions > div {
+  display: grid;
+  gap: 0.14rem;
+}
+
+.security-drawer .security-account-status-actions strong {
+  color: var(--vista-ink);
+  font-size: 0.75rem;
+}
+
+.security-drawer .security-account-status-actions span {
+  color: var(--vista-ink-muted);
+  font-size: 0.68rem;
+  line-height: 1.4;
+}
+
+@media (max-width: 640px) {
+  .security-admin-workspace .security-role-list > article {
+    align-items: start;
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .security-admin-workspace .security-role-list footer {
+    grid-column: 2;
+    justify-content: flex-start;
+  }
+
+  .security-drawer .security-account-recovery,
+  .security-drawer .security-account-status-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .security-drawer .security-account-recovery .vista-button,
+  .security-drawer .security-account-status-actions .vista-button {
+    width: 100%;
+  }
+}
+
 .security-drawer :is(label, legend, dt) {
   text-align: left;
 }

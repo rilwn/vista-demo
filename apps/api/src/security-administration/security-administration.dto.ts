@@ -17,6 +17,7 @@ import type {
   SecurityAccountStatus,
   SecurityRole,
   SecurityRoleBrief,
+  UpdateSecurityRoleRequest,
   SecuritySession,
 } from '@vista/contracts';
 import { Type } from 'class-transformer';
@@ -116,6 +117,32 @@ export class CreateSecurityRoleDto implements CreateSecurityRoleRequest {
   @ApiProperty({ type: Boolean })
   @IsBoolean()
   isAdministrative!: boolean;
+
+  @ApiProperty({ maxLength: 255, type: String })
+  @IsString()
+  @MinLength(1)
+  @MaxLength(255)
+  name!: string;
+
+  @ApiProperty({ type: [SecurityPermissionDto] })
+  @IsArray()
+  @ArrayMaxSize(100)
+  @ValidateNested({ each: true })
+  @Type(() => SecurityPermissionDto)
+  permissions!: RolePermission[];
+}
+
+export class UpdateSecurityRoleDto implements UpdateSecurityRoleRequest {
+  @ApiPropertyOptional({ maxLength: 2000, type: String })
+  @IsString()
+  @MaxLength(2000)
+  @IsOptional()
+  description?: string;
+
+  @ApiProperty({ minimum: 1, type: Number })
+  @IsInt()
+  @Min(1)
+  expectedVersion!: number;
 
   @ApiProperty({ maxLength: 255, type: String })
   @IsString()

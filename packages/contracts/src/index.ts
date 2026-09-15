@@ -297,6 +297,13 @@ export interface CreateSecurityRoleRequest {
   permissions: RolePermission[];
 }
 
+export interface UpdateSecurityRoleRequest {
+  description?: string;
+  expectedVersion: number;
+  name: string;
+  permissions: RolePermission[];
+}
+
 export interface ReplaceAccountRolesRequest {
   expectedVersion: number;
   roleIds: string[];

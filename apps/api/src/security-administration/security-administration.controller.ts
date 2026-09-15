@@ -49,6 +49,7 @@ import {
   AccountRecoveryHandoffDto,
   CreateSecurityAccountDto,
   CreateSecurityRoleDto,
+  UpdateSecurityRoleDto,
   ReplaceAccountRolesDto,
   IssueAccountRecoveryHandoffDto,
   SecurityAccountDto,
@@ -207,6 +208,27 @@ export class SecurityAdministrationController {
     @Req() request: AuthenticatedRequest,
   ): Promise<SecurityRole> {
     return this.security.createRole(input, key, request.authentication, requestMetadata(request));
+  }
+
+  @Put('roles/:id')
+  @RequirePermissions({ action: 'approve', module: 'platform' })
+  @ApiParam({ format: 'uuid', name: 'id', type: String })
+  @ApiBody({ type: UpdateSecurityRoleDto })
+  @ApiHeader({ name: 'Idempotency-Key', required: true })
+  @ApiOkResponse({ type: SecurityRoleDto })
+  updateRole(
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Body() input: UpdateSecurityRoleDto,
+    @Headers('idempotency-key') key: string | undefined,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<SecurityRole> {
+    return this.security.updateRole(
+      id,
+      input,
+      key,
+      request.authentication,
+      requestMetadata(request),
+    );
   }
 
   @Get('sessions')

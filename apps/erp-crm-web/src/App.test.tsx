@@ -2572,6 +2572,9 @@ describe('ERP and CRM authenticated workspace', () => {
         );
       }
       if (input.endsWith('/platform/security/roles')) return Promise.resolve(jsonResponse([role]));
+      if (input.endsWith(`/platform/security/roles/${role.id}`) && options?.method === 'PUT') {
+        return Promise.resolve(jsonResponse(role));
+      }
       if (input.endsWith('/platform/security/sessions'))
         return Promise.resolve(jsonResponse([sessionRecord]));
       if (input.includes('/platform/security/audit-events?'))
@@ -2617,6 +2620,10 @@ describe('ERP and CRM authenticated workspace', () => {
 
     fireEvent.click(screen.getByRole('tab', { name: /^Roles/u }));
     expect(await screen.findByRole('heading', { name: role.name })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Edit access' }));
+    const roleDialog = screen.getByRole('dialog', { name: `Edit ${role.name}` });
+    fireEvent.click(within(roleDialog).getByRole('button', { name: 'Save access' }));
+    expect(await screen.findByText('Role access updated.')).toBeTruthy();
     fireEvent.click(screen.getByRole('tab', { name: /^Sessions/u }));
     expect(await screen.findByText(/Current session/u)).toBeTruthy();
     fireEvent.click(screen.getByRole('tab', { name: 'Activity log' }));
@@ -2635,6 +2642,20 @@ describe('ERP and CRM authenticated workspace', () => {
     expect(JSON.parse((roleCommand?.[1] as RequestInit).body as string)).toEqual({
       expectedVersion: 1,
       roleIds: [role.id],
+    });
+    const roleUpdateCommand = fetchMock.mock.calls.find(
+      ([url, options]) =>
+        url.endsWith(`/platform/security/roles/${role.id}`) && options?.method === 'PUT',
+    );
+    expect(roleUpdateCommand).toBeTruthy();
+    expect(
+      new Headers((roleUpdateCommand?.[1] as RequestInit).headers).get('Idempotency-Key'),
+    ).toBeTruthy();
+    expect(JSON.parse((roleUpdateCommand?.[1] as RequestInit).body as string)).toEqual({
+      description: role.description,
+      expectedVersion: role.version,
+      name: role.name,
+      permissions: role.permissions,
     });
   });
 

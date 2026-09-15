@@ -2550,6 +2550,22 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/platform/security/roles/{id}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put: operations['SecurityAdministrationController_updateRole'];
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/platform/security/sessions': {
     parameters: {
       query?: never;
@@ -10456,6 +10472,12 @@ export interface components {
       validTo: string;
       version: number;
     };
+    UpdateSecurityRoleDto: {
+      description?: string;
+      expectedVersion: number;
+      name: string;
+      permissions: components['schemas']['SecurityPermissionDto'][];
+    };
     UpdateServiceSubscriptionDto: {
       active: boolean;
       /** @example 120.0000 */
@@ -17751,6 +17773,47 @@ export interface operations {
     };
     responses: {
       201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SecurityRoleDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  SecurityAdministrationController_updateRole: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['UpdateSecurityRoleDto'];
+      };
+    };
+    responses: {
+      200: {
         headers: {
           [name: string]: unknown;
         };
