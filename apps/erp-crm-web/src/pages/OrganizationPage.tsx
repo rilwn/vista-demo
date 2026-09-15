@@ -78,18 +78,16 @@ export function OrganizationPage() {
   return (
     <main className="page-stack organization-page">
       <header className="page-header organization-header">
-        <div className="organization-heading-mark">
-          <Icon name="organization" size={24} />
+        <div className="admin-page-heading">
+          <span className="admin-page-heading-mark" aria-hidden="true">
+            <Icon name="organization" size={20} />
+          </span>
+          <div>
+            <p className="page-eyebrow">Administration</p>
+            <h1>Business structure</h1>
+            <p>Manage legal entities, locations, cash registers, and assigned operators.</p>
+          </div>
         </div>
-        <div>
-          <p className="page-eyebrow">Administration</p>
-          <h1>Business structure</h1>
-          <p>
-            Set up legal entities, branches, business locations, cash registers, operators, and
-            warehouse responsibility across Vista Service.
-          </p>
-        </div>
-        <span className="organization-policy-note">Flexible business structure</span>
       </header>
 
       {notice ? (

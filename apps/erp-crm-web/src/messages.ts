@@ -533,19 +533,18 @@ export const salesPricingMessages = {
 } as const;
 
 export const jobMonitorMessages = {
-  title: 'Background processing',
-  description: 'Check the queue used for reports, reminders and other background work.',
-  refresh: 'Refresh processing status',
-  loading: 'Checking background processing…',
+  title: 'Scheduled work',
+  description: 'Reports, reminders, and other tasks prepared by the system.',
+  refresh: 'Refresh scheduled work',
+  loading: 'Checking scheduled work…',
   unavailable:
     'Processing status could not be checked. Try refreshing; if this continues, contact your administrator.',
-  paused: 'Processing is paused',
-  accepting: 'Queue is not paused',
+  paused: 'New work is paused',
+  accepting: 'Ready for new work',
   updated: 'Checked',
   failureHint:
     'Some jobs have failed. Review the relevant report or notification before retrying it through its original workflow.',
-  retained:
-    'Counts show jobs still retained in the queue, not lifetime totals. An unpaused queue does not confirm that a worker is running.',
+  retained: 'Counts cover recent work that is still available in the system.',
   states: {
     waiting: 'Waiting',
     active: 'In progress',

@@ -126,10 +126,15 @@ export function SecurityAdministrationPage() {
   return (
     <div className="page-stack security-admin-page">
       <header className="page-header security-admin-header">
-        <div>
-          <p className="page-eyebrow">Administration</p>
-          <h1>Security</h1>
-          <p>Manage employee access, roles, active sign-ins, and activity history.</p>
+        <div className="admin-page-heading">
+          <span className="admin-page-heading-mark" aria-hidden="true">
+            <Icon name="shield" size={20} />
+          </span>
+          <div>
+            <p className="page-eyebrow">Administration</p>
+            <h1>Security</h1>
+            <p>Control employee access, roles, sign-ins, and the protected activity record.</p>
+          </div>
         </div>
         <span className={`integrity-pill${integrity?.valid ? ' is-valid' : ' is-warning'}`}>
           {integrity?.valid ? 'Activity log checked' : 'Activity log needs review'}
@@ -272,6 +277,7 @@ function AccountsView({
   onSelect: (account: SecurityAccount) => void;
 }) {
   const [query, setQuery] = useState('');
+  const [page, setPage] = useState(1);
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
     return needle
@@ -282,6 +288,13 @@ function AccountsView({
         )
       : accounts;
   }, [accounts, query]);
+  const pageSize = 8;
+  const totalPages = Math.max(Math.ceil(filtered.length / pageSize), 1);
+  const visible = filtered.slice((page - 1) * pageSize, page * pageSize);
+
+  useEffect(() => setPage(1), [query]);
+  useEffect(() => setPage((value) => Math.min(value, totalPages)), [totalPages]);
+
   return (
     <div className="security-admin-directory">
       <div className="security-admin-filter">
@@ -302,51 +315,54 @@ function AccountsView({
         </span>
       </div>
       {filtered.length ? (
-        <div className="table-scroll">
-          <table className="security-admin-table">
-            <thead>
-              <tr>
-                <th>Employee</th>
-                <th>Status</th>
-                <th>Access</th>
-                <th>Two-factor</th>
-                <th>Sessions</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((account) => (
-                <tr key={account.accountId}>
-                  <td data-label="Employee">
-                    <strong>{account.displayName}</strong>
-                    <span>
-                      {account.email} · {account.employeeNumber}
-                    </span>
-                  </td>
-                  <td data-label="Status">
-                    <StatusLabel status={account.status} />
-                  </td>
-                  <td data-label="Access">
-                    {account.roles.length
-                      ? account.roles.map((role) => role.name).join(', ')
-                      : 'No role'}
-                  </td>
-                  <td data-label="Two-factor">
-                    {account.twoFactorEnrolled ? 'Set up' : 'Not set up'}
-                  </td>
-                  <td data-label="Sessions">{account.activeSessionCount}</td>
-                  <td className="security-account-row-action">
-                    {canApprove ? (
-                      <Button onClick={() => onSelect(account)} variant="quiet">
-                        Manage
-                      </Button>
-                    ) : null}
-                  </td>
+        <>
+          <div className="table-scroll">
+            <table className="security-admin-table">
+              <thead>
+                <tr>
+                  <th>Employee</th>
+                  <th>Status</th>
+                  <th>Access</th>
+                  <th>Two-factor</th>
+                  <th>Sessions</th>
+                  <th />
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {visible.map((account) => (
+                  <tr key={account.accountId}>
+                    <td data-label="Employee">
+                      <strong>{account.displayName}</strong>
+                      <span>
+                        {account.email} · {account.employeeNumber}
+                      </span>
+                    </td>
+                    <td data-label="Status">
+                      <StatusLabel status={account.status} />
+                    </td>
+                    <td data-label="Access">
+                      {account.roles.length
+                        ? account.roles.map((role) => friendlyRoleText(role.name)).join(', ')
+                        : 'No role'}
+                    </td>
+                    <td data-label="Two-factor">
+                      {account.twoFactorEnrolled ? 'Set up' : 'Not set up'}
+                    </td>
+                    <td data-label="Sessions">{account.activeSessionCount}</td>
+                    <td className="security-account-row-action">
+                      {canApprove ? (
+                        <Button onClick={() => onSelect(account)} variant="quiet">
+                          Manage
+                        </Button>
+                      ) : null}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <SecurityPagination page={page} totalPages={totalPages} onPageChange={setPage} />
+        </>
       ) : (
         <SecurityEmpty
           title="No employees found"
@@ -358,6 +374,13 @@ function AccountsView({
 }
 
 function RolesView({ roles }: { roles: SecurityRole[] }) {
+  const [page, setPage] = useState(1);
+  const pageSize = 8;
+  const totalPages = Math.max(Math.ceil(roles.length / pageSize), 1);
+  const visible = roles.slice((page - 1) * pageSize, page * pageSize);
+
+  useEffect(() => setPage((value) => Math.min(value, totalPages)), [totalPages]);
+
   if (!roles.length)
     return (
       <SecurityEmpty
@@ -367,24 +390,24 @@ function RolesView({ roles }: { roles: SecurityRole[] }) {
     );
   return (
     <div className="security-role-list">
-      {roles.map((role) => (
+      {visible.map((role) => (
         <article key={role.id}>
           <div className="security-role-copy">
             <div>
-              <h3>{role.name}</h3>
+              <h3>{friendlyRoleText(role.name)}</h3>
               {role.isAdministrative ? (
                 <span className="security-role-admin">Administrator</span>
               ) : null}
             </div>
-            <p>{role.description ?? 'No description'}</p>
+            <p>{friendlyRoleDescription(role)}</p>
           </div>
           <footer>
             <strong>{role.permissions.length}</strong>
             <span>{role.permissions.length === 1 ? 'permission' : 'permissions'}</span>
-            <small>{role.code}</small>
           </footer>
         </article>
       ))}
+      <SecurityPagination page={page} totalPages={totalPages} onPageChange={setPage} />
     </div>
   );
 }
@@ -404,6 +427,13 @@ function SessionsView({
 }) {
   const [busyId, setBusyId] = useState('');
   const [error, setError] = useState('');
+  const [page, setPage] = useState(1);
+  const pageSize = 8;
+  const totalPages = Math.max(Math.ceil(sessions.length / pageSize), 1);
+  const visible = sessions.slice((page - 1) * pageSize, page * pageSize);
+
+  useEffect(() => setPage((value) => Math.min(value, totalPages)), [totalPages]);
+
   async function revoke(id: string) {
     setBusyId(id);
     setError('');
@@ -420,7 +450,7 @@ function SessionsView({
     <div className="security-session-list">
       {error ? <InlineAlert tone="error">{error}</InlineAlert> : null}
       {sessions.length ? (
-        sessions.map((item) => {
+        visible.map((item) => {
           const active = !item.revokedAt && new Date(item.expiresAt).getTime() > Date.now();
           return (
             <article key={item.id}>
@@ -455,6 +485,9 @@ function SessionsView({
       ) : (
         <SecurityEmpty title="No sign-ins recorded" detail="Employee sign-ins will appear here." />
       )}
+      {sessions.length ? (
+        <SecurityPagination page={page} totalPages={totalPages} onPageChange={setPage} />
+      ) : null}
     </div>
   );
 }
@@ -466,6 +499,13 @@ function AuditView({
   events: AuditEventRecord[];
   integrity: AuditIntegrityResult | null;
 }) {
+  const [page, setPage] = useState(1);
+  const pageSize = 12;
+  const totalPages = Math.max(Math.ceil(events.length / pageSize), 1);
+  const visible = events.slice((page - 1) * pageSize, page * pageSize);
+
+  useEffect(() => setPage((value) => Math.min(value, totalPages)), [totalPages]);
+
   return (
     <div className="security-audit-view">
       <div className={`security-integrity-card${integrity?.valid ? ' is-valid' : ' is-warning'}`}>
@@ -477,7 +517,7 @@ function AuditView({
       </div>
       {events.length ? (
         <div className="security-audit-timeline">
-          {events.map((event) => (
+          {visible.map((event) => (
             <article key={event.id}>
               <span className="security-audit-node" />
               <div>
@@ -492,6 +532,7 @@ function AuditView({
               </div>
             </article>
           ))}
+          <SecurityPagination page={page} totalPages={totalPages} onPageChange={setPage} />
         </div>
       ) : (
         <SecurityEmpty
@@ -1074,6 +1115,30 @@ function SecurityEmpty({ detail, title }: { detail: string; title: string }) {
     </div>
   );
 }
+function SecurityPagination({
+  onPageChange,
+  page,
+  totalPages,
+}: {
+  onPageChange: (page: number) => void;
+  page: number;
+  totalPages: number;
+}) {
+  if (totalPages <= 1) return null;
+  return (
+    <nav aria-label="Register pages" className="security-admin-pagination">
+      <Button disabled={page === 1} onClick={() => onPageChange(page - 1)} variant="quiet">
+        Previous
+      </Button>
+      <span>
+        Page {page} of {totalPages}
+      </span>
+      <Button disabled={page === totalPages} onClick={() => onPageChange(page + 1)} variant="quiet">
+        Next
+      </Button>
+    </nav>
+  );
+}
 function SecurityLoading() {
   return (
     <div className="page-stack security-admin-page">
@@ -1151,6 +1216,20 @@ function permissionActionLabel(action: (typeof actions)[number]): string {
 }
 function titleCase(value: string): string {
   return value.replace(/\b\w/gu, (character) => character.toUpperCase());
+}
+function friendlyRoleText(value: string): string {
+  return value
+    .replace(/^Development fixture:\s*/iu, '')
+    .replace(/^Vista Demo\s+/iu, '')
+    .replace(/^Vista bootstrap\s+/iu, '');
+}
+function friendlyRoleDescription(role: SecurityRole): string {
+  if (/development fixture role/iu.test(role.description ?? '')) {
+    return role.isAdministrative
+      ? 'Administrative permissions for platform management.'
+      : 'Standard permissions for assigned daily work.';
+  }
+  return role.description ? friendlyRoleText(role.description) : 'No description';
 }
 function formatDate(value: string): string {
   return new Intl.DateTimeFormat('en-GB', {

@@ -20,6 +20,7 @@ import { messages } from '../messages';
 import { JobMonitor } from './JobMonitor';
 
 type StatusFilter = IntegrationEventStatus | 'all';
+const activityPageSize = 12;
 
 export function SystemActivityPage() {
   const { hasPermission, session } = useAuth();
@@ -27,6 +28,9 @@ export function SystemActivityPage() {
   const [events, setEvents] = useState<IntegrationEventSummary[]>([]);
   const [telemetry, setTelemetry] = useState<IntegrationEventTelemetry | null>(null);
   const [status, setStatus] = useState<StatusFilter>('all');
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
@@ -40,12 +44,14 @@ export function SystemActivityPage() {
     setLoadError(false);
     void Promise.all([
       getIntegrationTelemetry(token),
-      listIntegrationEvents(token, status === 'all' ? undefined : status),
+      listIntegrationEvents(token, status === 'all' ? undefined : status, page, activityPageSize),
     ])
       .then(([nextTelemetry, page]) => {
         if (!active) return;
         setTelemetry(nextTelemetry);
         setEvents(page.items);
+        setTotal(page.total);
+        setTotalPages(Math.max(page.totalPages, 1));
       })
       .catch(() => {
         if (active) setLoadError(true);
@@ -56,15 +62,24 @@ export function SystemActivityPage() {
     return () => {
       active = false;
     };
-  }, [revision, status, token]);
+  }, [page, revision, status, token]);
+
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages);
+  }, [page, totalPages]);
 
   return (
     <div className="page-stack system-activity-page">
       <header className="page-header system-activity-header">
-        <div>
-          <p className="page-eyebrow">{messages.operations.eyebrow}</p>
-          <h1>{messages.operations.title}</h1>
-          <p>{messages.operations.subtitle}</p>
+        <div className="admin-page-heading">
+          <span className="admin-page-heading-mark" aria-hidden="true">
+            <Icon name="activity" size={20} />
+          </span>
+          <div>
+            <p className="page-eyebrow">{messages.operations.eyebrow}</p>
+            <h1>{messages.operations.title}</h1>
+            <p>Review queued work, delivery progress, and items that need attention.</p>
+          </div>
         </div>
         <Button disabled={loading} onClick={reload} variant="secondary">
           {messages.operations.refresh}
@@ -89,62 +104,96 @@ export function SystemActivityPage() {
             <strong>{messages.operations.history}</strong>
             <span>{messages.operations.historyHint}</span>
           </div>
-          <label>
-            <span>{messages.operations.filter}</span>
-            <select
-              onChange={(event) => setStatus(event.target.value as StatusFilter)}
-              value={status}
-            >
-              <option value="all">{messages.operations.allStatuses}</option>
-              <option value="pending">{statusLabel('pending')}</option>
-              <option value="publishing">{statusLabel('publishing')}</option>
-              <option value="published">{statusLabel('published')}</option>
-              <option value="completed">{statusLabel('completed')}</option>
-              <option value="dead_letter">{statusLabel('dead_letter')}</option>
-            </select>
-          </label>
+          <div className="system-activity-filter">
+            {!loading && total ? (
+              <span>
+                {Math.min((page - 1) * activityPageSize + 1, total)} to{' '}
+                {Math.min(page * activityPageSize, total)} of {total}
+              </span>
+            ) : null}
+            <label>
+              <span>{messages.operations.filter}</span>
+              <select
+                onChange={(event) => {
+                  setPage(1);
+                  setStatus(event.target.value as StatusFilter);
+                }}
+                value={status}
+              >
+                <option value="all">{messages.operations.allStatuses}</option>
+                <option value="pending">{statusLabel('pending')}</option>
+                <option value="publishing">{statusLabel('publishing')}</option>
+                <option value="published">{statusLabel('published')}</option>
+                <option value="completed">{statusLabel('completed')}</option>
+                <option value="dead_letter">{statusLabel('dead_letter')}</option>
+              </select>
+            </label>
+          </div>
         </div>
         {loading ? (
           <ActivityLoading />
         ) : events.length ? (
-          <div className="system-activity-table-wrap">
-            <table className="system-activity-table">
-              <thead>
-                <tr>
-                  <th>{messages.operations.event}</th>
-                  <th>{messages.operations.status}</th>
-                  <th>{messages.operations.received}</th>
-                  <th>{messages.operations.attempts}</th>
-                  <th aria-label={messages.operations.open} />
-                </tr>
-              </thead>
-              <tbody>
-                {events.map((event) => (
-                  <tr key={event.id}>
-                    <td>
-                      <strong>{eventLabel(event.eventType)}</strong>
-                      <span>{shortReference(event.id)}</span>
-                    </td>
-                    <td>
-                      <StatusBadge status={event.status} />
-                    </td>
-                    <td>{dateTime(event.occurredAt)}</td>
-                    <td>{event.attemptCount}</td>
-                    <td>
-                      <button
-                        aria-label={`${messages.operations.open} ${eventLabel(event.eventType)}`}
-                        className="system-activity-open"
-                        onClick={() => setSelectedId(event.id)}
-                        type="button"
-                      >
-                        <Icon name="arrow" size={17} />
-                      </button>
-                    </td>
+          <>
+            <div className="system-activity-table-wrap">
+              <table className="system-activity-table">
+                <thead>
+                  <tr>
+                    <th>{messages.operations.event}</th>
+                    <th>{messages.operations.status}</th>
+                    <th>{messages.operations.received}</th>
+                    <th>{messages.operations.attempts}</th>
+                    <th aria-label={messages.operations.open} />
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {events.map((event) => (
+                    <tr key={event.id}>
+                      <td>
+                        <strong>{eventLabel(event.eventType)}</strong>
+                        <span>{shortReference(event.id)}</span>
+                      </td>
+                      <td>
+                        <StatusBadge status={event.status} />
+                      </td>
+                      <td>{dateTime(event.occurredAt)}</td>
+                      <td>{event.attemptCount}</td>
+                      <td>
+                        <button
+                          aria-label={`${messages.operations.open} ${eventLabel(event.eventType)}`}
+                          className="system-activity-open"
+                          onClick={() => setSelectedId(event.id)}
+                          type="button"
+                        >
+                          <Icon name="arrow" size={17} />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {totalPages > 1 ? (
+              <nav aria-label="Activity pages" className="system-activity-pagination">
+                <Button
+                  disabled={page === 1 || loading}
+                  onClick={() => setPage((value) => Math.max(1, value - 1))}
+                  variant="quiet"
+                >
+                  Previous
+                </Button>
+                <span>
+                  Page {page} of {totalPages}
+                </span>
+                <Button
+                  disabled={page === totalPages || loading}
+                  onClick={() => setPage((value) => Math.min(totalPages, value + 1))}
+                  variant="quiet"
+                >
+                  Next
+                </Button>
+              </nav>
+            ) : null}
+          </>
         ) : (
           <div className="system-activity-empty">
             <Icon name="activity" size={28} />
@@ -384,11 +433,29 @@ function ActivityLoading() {
 
 function eventLabel(type: string): string {
   if (type === 'inventory.low_stock.detected') return messages.operations.lowStock;
-  return type
-    .split(/[._-]/u)
-    .filter(Boolean)
-    .map((word) => word[0]?.toUpperCase() + word.slice(1))
-    .join(' ');
+  if (type.startsWith('scheduler.')) {
+    const job = type.replace(/^scheduler\./u, '').replace(/\.requested$/u, '');
+    const scheduledLabels: Record<string, string> = {
+      'backup.execute': 'Backup run scheduled',
+      'backup.missed-detect': 'Missed backup check scheduled',
+      'backup.verify': 'Backup verification scheduled',
+      'crm.sla.evaluate': 'Ticket SLA review scheduled',
+      'crm.warranty-expiration.prepare': 'Warranty reminder check scheduled',
+      'finance.payment-notification.send': 'Payment reminder delivery scheduled',
+      'finance.payment-status.detect': 'Payment status review scheduled',
+      'report.generate': 'Report preparation scheduled',
+      'sales.subscription-invoice.generate': 'Subscription invoice check scheduled',
+      'service.inspection-reminder.prepare': 'Inspection reminder check scheduled',
+      'service.plan-visit.generate': 'Service visit planning scheduled',
+    };
+    return scheduledLabels[job] ?? `${humanizeEventWords(job)} scheduled`;
+  }
+  return humanizeEventWords(type);
+}
+
+function humanizeEventWords(type: string): string {
+  const label = type.split(/[._-]/u).filter(Boolean).join(' ');
+  return `${label.charAt(0).toUpperCase()}${label.slice(1)}`;
 }
 
 function consumerLabel(consumer: string): string {

@@ -23,11 +23,13 @@ export function getIntegrationTelemetry(token: string): Promise<IntegrationEvent
 export function listIntegrationEvents(
   token: string,
   status?: IntegrationEventStatus,
+  page = 1,
+  pageSize = 12,
 ): Promise<IntegrationEventPage> {
   return unwrapApiResponse(
     apiClient.GET('/api/v1/platform/integrations/events', {
       headers: authorizationHeaders(token),
-      params: { query: { page: 1, pageSize: 50, ...(status ? { status } : {}) } },
+      params: { query: { page, pageSize, ...(status ? { status } : {}) } },
     }),
   );
 }

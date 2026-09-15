@@ -24,13 +24,13 @@ it('shows real counts and recovers after a failed refresh without showing stale 
       .mockResolvedValueOnce(new Response(JSON.stringify({ ...data, paused: true }))),
   );
   render(<JobMonitor token="test" />);
-  expect(await screen.findByText('Queue is not paused')).toBeTruthy();
+  expect(await screen.findByText('Ready for new work')).toBeTruthy();
   expect(screen.getByText('9')).toBeTruthy();
-  fireEvent.click(screen.getByRole('button', { name: 'Refresh processing status' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Refresh scheduled work' }));
   expect(await screen.findByText(/Processing status could not be checked/u)).toBeTruthy();
   expect(screen.queryByText('9')).toBeNull();
-  fireEvent.click(screen.getByRole('button', { name: 'Refresh processing status' }));
-  expect(await screen.findByText('Processing is paused')).toBeTruthy();
+  fireEvent.click(screen.getByRole('button', { name: 'Refresh scheduled work' }));
+  expect(await screen.findByText('New work is paused')).toBeTruthy();
 });
 it('rejects malformed results instead of presenting false health', async () => {
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('{}')));

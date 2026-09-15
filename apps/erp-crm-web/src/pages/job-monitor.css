@@ -1,8 +1,9 @@
 .job-monitor {
-  padding: 1.1rem;
+  padding: 1rem;
   display: grid;
-  gap: 1rem;
+  gap: 0.8rem;
   min-width: 0;
+  overflow: hidden;
 }
 .job-monitor header {
   display: flex;
@@ -13,13 +14,15 @@
 }
 .job-monitor h2 {
   margin: 0;
-  font-size: 1rem;
+  font-size: 0.92rem;
+  letter-spacing: -0.015em;
 }
 .job-monitor header p,
 .job-monitor small {
   margin: 0.3rem 0 0;
   color: var(--vista-muted);
-  font-size: 0.8rem;
+  font-size: 0.73rem;
+  line-height: 1.45;
 }
 .job-monitor-status {
   margin: 0;
@@ -27,30 +30,58 @@
   justify-content: space-between;
   gap: 0.5rem;
   flex-wrap: wrap;
-  font-size: 0.8rem;
+  border-top: 1px solid var(--vista-line);
+  padding-top: 0.75rem;
+  font-size: 0.73rem;
+  font-weight: 700;
 }
 .job-monitor-status span {
   color: var(--vista-muted);
 }
 .job-monitor dl {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-  gap: 0.75rem;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0;
   margin: 0;
+  overflow: hidden;
+  border: 1px solid var(--vista-line);
+  border-radius: 0.78rem;
 }
 .job-monitor dl div {
-  padding: 0.85rem;
-  border: 1px solid var(--vista-line);
-  border-radius: 0.65rem;
-  background: var(--vista-surface);
+  min-width: 0;
+  padding: 0.7rem 0.8rem;
+  border-right: 1px solid var(--vista-line);
+  background: color-mix(in srgb, var(--vista-surface-muted) 45%, var(--vista-surface));
+}
+.job-monitor dl div:last-child {
+  border-right: 0;
 }
 .job-monitor dt {
-  font-size: 0.75rem;
+  font-size: 0.68rem;
   color: var(--vista-muted);
 }
 .job-monitor dd {
-  margin: 0.4rem 0 0;
-  font-size: 1.5rem;
-  font-weight: 650;
+  margin: 0.22rem 0 0;
+  font-size: 1.18rem;
+  font-weight: 720;
   font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 700px) {
+  .job-monitor dl {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .job-monitor dl div {
+    border-bottom: 1px solid var(--vista-line);
+  }
+
+  .job-monitor dl div:nth-child(even) {
+    border-right: 0;
+  }
+
+  .job-monitor dl div:last-child {
+    grid-column: 1 / -1;
+    border-bottom: 0;
+  }
 }
