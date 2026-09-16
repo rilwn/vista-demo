@@ -375,12 +375,12 @@ function ServiceRequestsView({
           <p>Start with a customer, service location, and registered device.</p>
         </ServiceState>
       ) : (
-        <section aria-label="Service requests" className="service-register">
+        <section aria-label="Service requests" className="service-register" role="table">
           <div className="service-register-head" role="row">
-            <span>Request</span>
-            <span>Customer &amp; device</span>
-            <span>Schedule</span>
-            <span>Status</span>
+            <span role="columnheader">Request</span>
+            <span role="columnheader">Customer &amp; device</span>
+            <span role="columnheader">Schedule</span>
+            <span role="columnheader">Status</span>
             <span aria-hidden="true" />
           </div>
           {requests.map((request) => {
@@ -388,21 +388,21 @@ function ServiceRequestsView({
               ? workOrders.find((item) => item.id === request.workOrderId)
               : undefined;
             return (
-              <article className="service-register-row" key={request.id}>
-                <div className="service-record-mark">
+              <article className="service-register-row" key={request.id} role="row">
+                <div className="service-record-mark" data-label="Request" role="cell">
                   <span className={`service-priority is-${request.priority}`} />
                   <div>
                     <strong>{request.number}</strong>
                     <small>{sourceLabel(request.sourceChannel)}</small>
                   </div>
                 </div>
-                <div className="service-customer-cell">
+                <div className="service-customer-cell" data-label="Customer and device" role="cell">
                   <strong>{request.customerName}</strong>
                   <span>
                     {request.deviceName} · {request.serialNumber}
                   </span>
                 </div>
-                <div className="service-schedule-cell">
+                <div className="service-schedule-cell" data-label="Schedule" role="cell">
                   {request.scheduledStart ? (
                     <>
                       <strong>{formatDateTime(request.scheduledStart, timezone)}</strong>
@@ -416,8 +416,10 @@ function ServiceRequestsView({
                     </span>
                   )}
                 </div>
-                <ServiceStatus status={request.status} />
-                <div className="service-row-actions">
+                <span className="service-status-cell" data-label="Status" role="cell">
+                  <ServiceStatus status={request.status} />
+                </span>
+                <div className="service-row-actions" role="cell">
                   {order ? (
                     <Button onClick={() => onOpenWorkOrder(order.id)} variant="quiet">
                       Work order
@@ -1122,7 +1124,10 @@ function ServiceDevicesView({
                 <li key={event.id}>
                   <span aria-hidden="true" />
                   <div>
-                    <strong>{event.workOrderNumber}</strong>
+                    <div className="service-history-event-heading">
+                      <strong>{event.workOrderNumber}</strong>
+                      <ServiceStatus status={event.status} />
+                    </div>
                     <p>{event.description}</p>
                     <small>
                       {formatDateTime(event.occurredAt, timezone)}
@@ -1138,7 +1143,6 @@ function ServiceDevicesView({
                       </div>
                     ) : null}
                   </div>
-                  <ServiceStatus status={event.status} />
                 </li>
               ))}
             </ol>
@@ -2263,12 +2267,32 @@ function NewServiceRequestDrawer({
 
   return (
     <ServiceDrawer
+      actions={
+        <>
+          <Button disabled={busy} onClick={onBack} type="button" variant="secondary">
+            Back
+          </Button>
+          <Button
+            busy={busy}
+            disabled={!customerEquipmentId || !customerLocationId || !customerPartnerId}
+            form="new-service-request-form"
+            type="submit"
+          >
+            Create request
+          </Button>
+        </>
+      }
       busy={busy}
       onBack={onBack}
       subtitle="Customer, device, and request details"
       title="New service request"
+      variant="request"
     >
-      <form className="service-form" onSubmit={(event) => void submit(event)}>
+      <form
+        className="service-form"
+        id="new-service-request-form"
+        onSubmit={(event) => void submit(event)}
+      >
         {error ? <InlineAlert tone="error">{error}</InlineAlert> : null}
         {!references.customers.length ? (
           <InlineAlert tone="warning">
@@ -2279,35 +2303,37 @@ function NewServiceRequestDrawer({
             <FormSection
               index="1"
               title="Customer and equipment"
-              description="Use the shared customer and device register."
+              description="Choose the customer, service location, and device."
             >
-              <ServiceField label="Customer">
-                <select
-                  onChange={(event) => changeCustomer(event.target.value)}
-                  required
-                  value={customerPartnerId}
-                >
-                  {references.customers.map((customer) => (
-                    <option key={customer.id} value={customer.id}>
-                      {customer.name}
-                    </option>
-                  ))}
-                </select>
-              </ServiceField>
-              <ServiceField label="Service location">
-                <select
-                  onChange={(event) => changeLocation(event.target.value)}
-                  required
-                  value={customerLocationId}
-                >
-                  <option value="">Choose location</option>
-                  {locations.map((location) => (
-                    <option key={location.id} value={location.id}>
-                      {location.name}
-                    </option>
-                  ))}
-                </select>
-              </ServiceField>
+              <div className="service-form-grid">
+                <ServiceField label="Customer">
+                  <select
+                    onChange={(event) => changeCustomer(event.target.value)}
+                    required
+                    value={customerPartnerId}
+                  >
+                    {references.customers.map((customer) => (
+                      <option key={customer.id} value={customer.id}>
+                        {customer.name}
+                      </option>
+                    ))}
+                  </select>
+                </ServiceField>
+                <ServiceField label="Service location">
+                  <select
+                    onChange={(event) => changeLocation(event.target.value)}
+                    required
+                    value={customerLocationId}
+                  >
+                    <option value="">Choose location</option>
+                    {locations.map((location) => (
+                      <option key={location.id} value={location.id}>
+                        {location.name}
+                      </option>
+                    ))}
+                  </select>
+                </ServiceField>
+              </div>
               {equipment.length ? (
                 <ServiceField label="Device and serial number">
                   <select
@@ -2336,7 +2362,7 @@ function NewServiceRequestDrawer({
               <FormSection
                 index="2"
                 title="Request details"
-                description="Capture the source and service coverage accurately."
+                description="Add how the request arrived, its priority, and service coverage."
               >
                 <div className="service-form-grid">
                   <ServiceField label="Request source">
@@ -2408,12 +2434,6 @@ function NewServiceRequestDrawer({
             ) : null}
           </>
         )}
-        <DrawerActions
-          busy={busy}
-          disabled={!customerEquipmentId || !customerLocationId || !customerPartnerId}
-          onBack={onBack}
-          submitLabel="Create request"
-        />
       </form>
     </ServiceDrawer>
   );
@@ -3310,13 +3330,25 @@ function CompleteWorkOrderDrawer({
 
   return (
     <ServiceDrawer
+      actions={
+        <>
+          <Button disabled={busy} onClick={onBack} type="button" variant="secondary">
+            Back
+          </Button>
+          <Button busy={busy} form="complete-service-work-form" type="submit">
+            Complete work
+          </Button>
+        </>
+      }
       busy={busy}
       onBack={onBack}
       subtitle={`${workOrder.number} · ${workOrder.customerName}`}
       title="Complete work"
+      variant="completion"
     >
       <form
         className="service-form service-completion-form"
+        id="complete-service-work-form"
         onSubmit={(event) => void submit(event)}
       >
         {error ? <InlineAlert tone="error">{error}</InlineAlert> : null}
@@ -3537,7 +3569,6 @@ function CompleteWorkOrderDrawer({
           </ServiceField>
           <SignaturePad onChange={setSignatureImageDataUrl} />
         </FormSection>
-        <DrawerActions busy={busy} onBack={onBack} submitLabel="Complete work" />
       </form>
     </ServiceDrawer>
   );
@@ -3694,6 +3725,7 @@ function SignaturePad({ onChange }: { onChange: (value: string) => void }) {
 }
 
 function ServiceDrawer({
+  actions,
   busy,
   children,
   onBack,
@@ -3701,12 +3733,13 @@ function ServiceDrawer({
   title,
   variant,
 }: {
+  actions?: ReactNode;
   busy: boolean;
   children: ReactNode;
   onBack: () => void;
   subtitle: string;
   title: string;
-  variant?: 'care';
+  variant?: 'care' | 'completion' | 'request';
 }) {
   const drawerRef = useRef<HTMLElement | null>(null);
   const busyRef = useRef(busy);
@@ -3769,7 +3802,7 @@ function ServiceDrawer({
       <aside
         aria-label={title}
         aria-modal="true"
-        className={`security-drawer is-wide service-drawer${variant === 'care' ? ' service-care-drawer' : ''}`}
+        className={`security-drawer is-wide service-drawer${variant === 'care' ? ' service-care-drawer' : ''}${variant === 'request' ? ' service-request-drawer' : ''}${variant === 'completion' ? ' service-completion-drawer' : ''}`}
         ref={drawerRef}
         role="dialog"
         tabIndex={-1}
@@ -3799,6 +3832,7 @@ function ServiceDrawer({
           </div>
         </header>
         <div className="security-drawer-body">{children}</div>
+        {actions ? <footer className="service-panel-footer">{actions}</footer> : null}
       </aside>
     </div>
   );
@@ -4003,12 +4037,12 @@ function pageMeta(view: ServiceOperationsView) {
     },
     devices: {
       description:
-        'Follow each registered serial through its service work, technician, and used parts.',
+        'Review service visits, repairs, technicians, and parts for each registered device.',
       title: 'Equipment history',
     },
     requests: {
       description:
-        'Capture, dispatch, and follow customer service needs from one operational register.',
+        'Record customer issues, schedule visits, and track each request through completion.',
       title: 'Service requests',
     },
     reports: {
