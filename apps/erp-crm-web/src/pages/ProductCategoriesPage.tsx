@@ -10,7 +10,7 @@ import { createProductCategory, listProductCategories } from '../api/product-cat
 import { ApiClientError } from '../api/client';
 import { useAuth } from '../auth/AuthProvider';
 import { Icon } from '../components/Icon';
-import { messages } from '../messages';
+import { messages } from '../i18n/legacyMessages';
 
 export function ProductCategoriesPage() {
   const { hasPermission, session } = useAuth();
@@ -313,7 +313,7 @@ function CreateCategoryDrawer({
             />
             <span>
               <strong>{messages.categories.requiresExpiry}</strong>
-              <small>Leave this clear when expiry dates do not apply to the category.</small>
+              <small>{messages.categories.expiryHint}</small>
             </span>
           </label>
         ) : null}
@@ -401,13 +401,13 @@ function Drawer({
       <aside aria-label={title} aria-modal="true" className="record-drawer" role="dialog">
         <div className="record-drawer-navigation">
           <button
-            aria-label="Back to categories"
+            aria-label={messages.categories.backLabel}
             className="panel-back-button"
             onClick={onClose}
             type="button"
           >
             <Icon name="arrow" size={17} />
-            Back
+            {messages.categories.back}
           </button>
           <button
             aria-label={messages.partners.close}

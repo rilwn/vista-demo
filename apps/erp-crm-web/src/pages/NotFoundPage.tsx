@@ -1,16 +1,17 @@
 import { Button } from '@vista/ui';
 
-import { messages } from '../messages';
+import { useLocalization } from '../i18n/LocalizationProvider';
 import { useRouter } from '../routing/Router';
 
 export function NotFoundPage() {
   const { navigate } = useRouter();
+  const { t } = useLocalization();
   return (
     <section className="not-found-page">
       <span>404</span>
-      <h1>{messages.states.notFound}</h1>
+      <h1>{t('states.notFound')}</h1>
       <Button onClick={() => navigate('/')} variant="secondary">
-        {messages.states.notFoundAction}
+        {t('states.returnOverview')}
       </Button>
     </section>
   );

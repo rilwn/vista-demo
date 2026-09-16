@@ -26,7 +26,7 @@ import {
 import { ApiClientError } from '../api/client';
 import { useAuth } from '../auth/AuthProvider';
 import { Icon } from '../components/Icon';
-import { messages } from '../messages';
+import { messages } from '../i18n/legacyMessages';
 import { CustomerAssetsPanel } from './CustomerAssetsPanel';
 import { CustomerOperationalOverviewPanel } from './CustomerOperationalOverviewPanel';
 import { PartnerDocumentsPanel } from './PartnerDocumentsPanel';
@@ -620,7 +620,7 @@ function PartnerDetailDrawer({
         className="customer-overview-drawer"
         onBack={() => setCustomerOverviewOpen(false)}
         onClose={onClose}
-        title="Customer overview"
+        title={messages.partners.customerOverview}
       >
         <CustomerOperationalOverviewPanel partnerId={current.id} token={token} />
       </Drawer>
@@ -656,8 +656,8 @@ function PartnerDetailDrawer({
       </div>
       <section className="partner-detail-summary" aria-labelledby="partner-registration-heading">
         <div className="partner-detail-section-heading">
-          <h3 id="partner-registration-heading">Registration details</h3>
-          <p>Identity and tax information used across ERP and CRM records.</p>
+          <h3 id="partner-registration-heading">{messages.partners.registrationDetails}</h3>
+          <p>{messages.partners.registrationDetailsHint}</p>
         </div>
         <dl className="partner-detail-list">
           {details.map(([label, value]) => (
@@ -670,7 +670,9 @@ function PartnerDetailDrawer({
       </section>
       <div className="partner-maintenance-actions">
         {token && current.roles.includes('customer') ? (
-          <Button onClick={() => setCustomerOverviewOpen(true)}>Customer overview</Button>
+          <Button onClick={() => setCustomerOverviewOpen(true)}>
+            {messages.partners.customerOverview}
+          </Button>
         ) : null}
         {token ? (
           <Button onClick={() => setDocumentsOpen(true)} variant="secondary">
@@ -874,14 +876,14 @@ function PartnerMaintenanceForm({
           value={draft.displayName}
         />
         <label className="customer-asset-select" htmlFor="maintain-partner-kind">
-          <span>Partner type</span>
+          <span>{messages.partners.filterKind}</span>
           <select
             id="maintain-partner-kind"
             onChange={(event) => change('kind', event.target.value as PartnerKind)}
             value={draft.kind}
           >
-            <option value="legal_entity">Legal entity</option>
-            <option value="individual">Individual</option>
+            <option value="legal_entity">{messages.partners.legalEntity}</option>
+            <option value="individual">{messages.partners.individual}</option>
           </select>
         </label>
       </div>
@@ -909,7 +911,7 @@ function PartnerMaintenanceForm({
         value={draft.companyRepresentative}
       />
       <fieldset className="partner-role-fieldset">
-        <legend>Roles</legend>
+        <legend>{messages.partners.roles}</legend>
         <div>
           {(['customer', 'supplier', 'partner'] as const).map((role) => (
             <label key={role}>
@@ -933,14 +935,14 @@ function PartnerMaintenanceForm({
       {error ? <InlineAlert tone="error">{error}</InlineAlert> : null}
       <div className="drawer-actions">
         <Button onClick={onCancel} variant="quiet">
-          Cancel
+          {messages.partners.cancel}
         </Button>
         <Button
           busy={saving}
           disabled={!draft.displayName.trim() || draft.roles.length === 0}
           type="submit"
         >
-          Save partner changes
+          {messages.partners.saveChanges}
         </Button>
       </div>
     </form>

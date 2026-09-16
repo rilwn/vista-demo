@@ -2,10 +2,12 @@ import { Button } from '@vista/ui';
 import { useActiveItemVisibility } from '@vista/ui/navigation';
 
 import { Icon } from '../components/Icon';
+import { useLocalization } from '../i18n/LocalizationProvider';
 import { Link } from '../routing/Router';
 import { type WorkflowPageDefinition, pagesForModule, workflowPath } from './workflow-pages';
 
 export function WorkflowPage({ page }: { page: WorkflowPageDefinition }) {
+  const { t } = useLocalization();
   const relatedPages = pagesForModule(page.module);
   const tabs = useActiveItemVisibility<HTMLElement>(page.slug);
 
@@ -18,13 +20,17 @@ export function WorkflowPage({ page }: { page: WorkflowPageDefinition }) {
           <p>{page.description}</p>
         </div>
         <div className="workflow-header-actions">
-          <Button disabled title="Unavailable">
+          <Button disabled title={t('workflow.unavailable')}>
             {page.action}
           </Button>
         </div>
       </header>
 
-      <nav aria-label={`${page.title} workflow pages`} className="workflow-tabs" ref={tabs}>
+      <nav
+        aria-label={t('workflow.pages', { title: page.title })}
+        className="workflow-tabs"
+        ref={tabs}
+      >
         {relatedPages.map((item) => (
           <Link
             aria-current={item.slug === page.slug ? 'page' : undefined}
@@ -37,30 +43,34 @@ export function WorkflowPage({ page }: { page: WorkflowPageDefinition }) {
         ))}
       </nav>
 
-      <section className="workflow-command-bar" aria-label="List controls">
+      <section className="workflow-command-bar" aria-label={t('workflow.listControls')}>
         <label>
           <Icon name="search" size={17} />
           <input
-            aria-label={`Search ${page.title}`}
+            aria-label={t('workflow.search', { title: page.title })}
             disabled
-            placeholder={`Search ${page.title.toLowerCase()}`}
+            placeholder={t('workflow.searchPlaceholder', { title: page.title.toLocaleLowerCase() })}
           />
         </label>
         <div>
           <button disabled type="button">
-            All statuses
+            {t('workflow.allStatuses')}
           </button>
           <button disabled type="button">
-            Current period
+            {t('workflow.currentPeriod')}
           </button>
           <button disabled type="button">
-            Filter
+            {t('workflow.filter')}
           </button>
         </div>
       </section>
 
       <section className="workflow-record-panel">
-        <div className="workflow-table" role="table" aria-label={`${page.title} records`}>
+        <div
+          className="workflow-table"
+          role="table"
+          aria-label={t('workflow.records', { title: page.title })}
+        >
           <div className="workflow-table-head" role="row">
             {page.columns.map((column) => (
               <span key={column} role="columnheader">
@@ -74,8 +84,8 @@ export function WorkflowPage({ page }: { page: WorkflowPageDefinition }) {
                 <Icon name={page.icon} size={22} />
               </span>
               <div>
-                <strong>No records yet</strong>
-                <p>Records added to this area will appear here.</p>
+                <strong>{t('workflow.emptyTitle')}</strong>
+                <p>{t('workflow.emptyHint')}</p>
               </div>
             </div>
           </div>

@@ -31,6 +31,7 @@ import {
 import { ApiClientError } from '../api/client';
 import { useAuth } from '../auth/AuthProvider';
 import { Icon } from '../components/Icon';
+import { securityText as text } from '../i18n/securityMessages';
 
 type SecurityView = 'accounts' | 'audit' | 'roles' | 'sessions';
 type Composer = 'account' | 'role' | null;
@@ -117,10 +118,10 @@ export function SecurityAdministrationPage() {
       <div className="page-stack security-admin-page">
         <section className="content-panel security-admin-state">
           <Icon name="shield" size={28} />
-          <h1>Security settings could not be loaded</h1>
-          <p>Check your connection and try again.</p>
+          <h1>{text.loadTitle}</h1>
+          <p>{text.connection}</p>
           <Button onClick={reload} variant="secondary">
-            Try again
+            {text.retry}
           </Button>
         </section>
       </div>
@@ -134,13 +135,13 @@ export function SecurityAdministrationPage() {
             <Icon name="shield" size={20} />
           </span>
           <div>
-            <p className="page-eyebrow">Administration</p>
-            <h1>Security</h1>
-            <p>Control employee access, roles, sign-ins, and the protected activity record.</p>
+            <p className="page-eyebrow">{text.administration}</p>
+            <h1>{text.title}</h1>
+            <p>{text.subtitle}</p>
           </div>
         </div>
         <span className={`integrity-pill${integrity?.valid ? ' is-valid' : ' is-warning'}`}>
-          {integrity?.valid ? 'Activity log checked' : 'Activity log needs review'}
+          {integrity?.valid ? text.logChecked : text.logReview}
         </span>
       </header>
 
@@ -153,17 +154,17 @@ export function SecurityAdministrationPage() {
       <section className="content-panel security-admin-workspace">
         <div className="security-admin-toolbar">
           <div
-            aria-label="Security views"
+            aria-label={text.views}
             className="security-admin-tabs"
             ref={securityTabs}
             role="tablist"
           >
             {(
               [
-                ['accounts', `Employees · ${accounts.length}`],
-                ['roles', `Roles · ${roles.length}`],
-                ['sessions', `Sessions · ${activeSessions}`],
-                ['audit', 'Activity log'],
+                ['accounts', `${text.employees} · ${accounts.length}`],
+                ['roles', `${text.roles} · ${roles.length}`],
+                ['sessions', `${text.sessions} · ${activeSessions}`],
+                ['audit', text.activity],
               ] as const
             ).map(([key, label]) => (
               <button
@@ -183,12 +184,12 @@ export function SecurityAdministrationPage() {
           </div>
           {canCreate && view === 'accounts' ? (
             <Button onClick={() => setComposer('account')}>
-              <Icon name="plus" size={16} /> Add employee
+              <Icon name="plus" size={16} /> {text.addEmployee}
             </Button>
           ) : null}
           {canCreate && view === 'roles' ? (
             <Button onClick={() => setComposer('role')}>
-              <Icon name="plus" size={16} /> Add role
+              <Icon name="plus" size={16} /> {text.addRole}
             </Button>
           ) : null}
         </div>
@@ -205,7 +206,7 @@ export function SecurityAdministrationPage() {
               canApprove={canApprove}
               currentSessionId={session?.context.sessionId ?? ''}
               onRevoked={() => {
-                setNotice('The selected login session was revoked.');
+                setNotice(text.sessionRevoked);
                 reload();
               }}
               sessions={sessions}
@@ -221,7 +222,7 @@ export function SecurityAdministrationPage() {
           onClose={() => setComposer(null)}
           onCreated={() => {
             setComposer(null);
-            setNotice('Employee account created. You can now assign a role.');
+            setNotice(text.accountCreated);
             reload();
           }}
           token={token}
@@ -235,7 +236,7 @@ export function SecurityAdministrationPage() {
           onClose={() => setComposer(null)}
           onCreated={() => {
             setComposer(null);
-            setNotice('Role created.');
+            setNotice(text.roleCreated);
             reload();
           }}
           token={token}
@@ -254,7 +255,7 @@ export function SecurityAdministrationPage() {
           }}
           onUpdated={() => {
             setSelected(null);
-            setNotice('Employee access updated.');
+            setNotice(text.accessUpdated);
             reload();
           }}
           roles={roles}
@@ -269,7 +270,7 @@ export function SecurityAdministrationPage() {
           onClose={() => setSelectedRole(null)}
           onUpdated={() => {
             setSelectedRole(null);
-            setNotice('Role access updated.');
+            setNotice(text.roleUpdated);
             reload();
           }}
           role={selectedRole}
@@ -321,17 +322,18 @@ function AccountsView({
         <div>
           <Icon name="search" size={16} />
           <label className="visually-hidden" htmlFor="security-account-search">
-            Find an employee
+            {text.findEmployee}
           </label>
           <input
             id="security-account-search"
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search employees"
+            placeholder={text.searchEmployees}
             value={query}
           />
         </div>
         <span>
-          {filtered.length} {filtered.length === 1 ? 'employee' : 'employees'}
+          {filtered.length}{' '}
+          {filtered.length === 1 ? text.employee : text.employees.toLocaleLowerCase()}
         </span>
       </div>
       {filtered.length ? (
@@ -340,11 +342,11 @@ function AccountsView({
             <table className="security-admin-table">
               <thead>
                 <tr>
-                  <th>Employee</th>
-                  <th>Status</th>
-                  <th>Access</th>
-                  <th>Two-factor</th>
-                  <th>Sessions</th>
+                  <th>{text.employee}</th>
+                  <th>{text.status}</th>
+                  <th>{text.access}</th>
+                  <th>{text.twoFactor}</th>
+                  <th>{text.sessions}</th>
                   <th />
                 </tr>
               </thead>
@@ -363,16 +365,16 @@ function AccountsView({
                     <td data-label="Access">
                       {account.roles.length
                         ? account.roles.map((role) => friendlyRoleText(role.name)).join(', ')
-                        : 'No role'}
+                        : text.noRole}
                     </td>
                     <td data-label="Two-factor">
-                      {account.twoFactorEnrolled ? 'Set up' : 'Not set up'}
+                      {account.twoFactorEnrolled ? text.setUp : text.notSetUp}
                     </td>
                     <td data-label="Sessions">{account.activeSessionCount}</td>
                     <td className="security-account-row-action">
                       {canApprove ? (
                         <Button onClick={() => onSelect(account)} variant="quiet">
-                          Manage
+                          {text.manage}
                         </Button>
                       ) : null}
                     </td>
@@ -384,10 +386,7 @@ function AccountsView({
           <SecurityPagination page={page} totalPages={totalPages} onPageChange={setPage} />
         </>
       ) : (
-        <SecurityEmpty
-          title="No employees found"
-          detail="Try a different name, email, or employee number."
-        />
+        <SecurityEmpty title={text.noEmployees} detail={text.employeeHint} />
       )}
     </div>
   );
@@ -412,7 +411,7 @@ function RolesView({
   if (!roles.length)
     return (
       <SecurityEmpty
-        title="No roles yet"
+        title={text.noRoles}
         detail="Add a role to define what employees can view and change."
       />
     );
@@ -420,10 +419,12 @@ function RolesView({
     <div className="security-role-list">
       <div className="security-role-list-heading">
         <div>
-          <span>Role directory</span>
-          <p>Each role defines the access an employee can be assigned.</p>
+          <span>{text.roleDirectory}</span>
+          <p>{text.roleDirectoryHint}</p>
         </div>
-        <strong>{roles.length} roles</strong>
+        <strong>
+          {roles.length} {text.roles.toLocaleLowerCase()}
+        </strong>
       </div>
       {visible.map((role) => (
         <article key={role.id}>
@@ -434,19 +435,19 @@ function RolesView({
             <div>
               <h3>{friendlyRoleText(role.name)}</h3>
               {role.isAdministrative ? (
-                <span className="security-role-admin">Administrator</span>
+                <span className="security-role-admin">{text.administrator}</span>
               ) : null}
             </div>
             <p>{friendlyRoleDescription(role)}</p>
             <small>
               {role.permissions.length}{' '}
-              {role.permissions.length === 1 ? 'permission' : 'permissions'}
+              {role.permissions.length === 1 ? text.permission : text.permissions}
             </small>
           </div>
           <footer>
             {canApprove ? (
               <Button onClick={() => onSelect(role)} variant="quiet">
-                Edit access
+                {text.editAccess}
               </Button>
             ) : null}
           </footer>
@@ -486,7 +487,7 @@ function SessionsView({
       await revokeSecuritySession(token, id);
       onRevoked();
     } catch {
-      setError('The session could not be revoked. Reload and try again.');
+      setError(text.sessionRevoked);
     } finally {
       setBusyId('');
     }
@@ -503,17 +504,18 @@ function SessionsView({
               <div>
                 <strong>
                   {item.displayName}
-                  {item.id === currentSessionId ? ' · Current session' : ''}
+                  {item.id === currentSessionId ? ` · ${text.currentSession}` : ''}
                 </strong>
                 <span>{item.email}</span>
                 <small>
-                  {item.userAgent ?? 'Browser not recorded'} ·{' '}
-                  {item.ipAddress ?? 'Address not recorded'}
+                  {item.userAgent ?? text.browserMissing} · {item.ipAddress ?? text.addressMissing}
                 </small>
               </div>
               <div>
-                <span>{active ? 'Active' : item.revokedAt ? 'Revoked' : 'Expired'}</span>
-                <small>Last seen {formatDate(item.lastSeenAt)}</small>
+                <span>{active ? text.active : item.revokedAt ? text.revoked : text.expired}</span>
+                <small>
+                  {text.lastSeen} {formatDate(item.lastSeenAt)}
+                </small>
               </div>
               {canApprove && active ? (
                 <Button
@@ -521,14 +523,14 @@ function SessionsView({
                   onClick={() => void revoke(item.id)}
                   variant="danger"
                 >
-                  Revoke
+                  {text.revoke}
                 </Button>
               ) : null}
             </article>
           );
         })
       ) : (
-        <SecurityEmpty title="No sign-ins recorded" detail="Employee sign-ins will appear here." />
+        <SecurityEmpty title={text.noSignIns} detail={text.signInsHint} />
       )}
       {sessions.length ? (
         <SecurityPagination page={page} totalPages={totalPages} onPageChange={setPage} />
@@ -556,8 +558,8 @@ function AuditView({
       <div className={`security-integrity-card${integrity?.valid ? ' is-valid' : ' is-warning'}`}>
         <Icon name="shield" size={22} />
         <div>
-          <strong>{integrity?.valid ? 'Activity log checked' : 'Activity log needs review'}</strong>
-          <span>{integrity?.checkedEvents ?? 0} entries checked</span>
+          <strong>{integrity?.valid ? text.logChecked : text.logReview}</strong>
+          <span>{text.checkedEntries(integrity?.checkedEvents ?? 0)}</span>
         </div>
       </div>
       {events.length ? (
@@ -568,7 +570,7 @@ function AuditView({
               <div>
                 <strong>{humanAction(event.action)}</strong>
                 <span>
-                  {event.actorDisplayName ?? 'System'} · {formatDate(event.occurredAt)}
+                  {event.actorDisplayName ?? text.system} · {formatDate(event.occurredAt)}
                 </span>
                 <small>
                   {humanTarget(event.targetType)}
@@ -580,10 +582,7 @@ function AuditView({
           <SecurityPagination page={page} totalPages={totalPages} onPageChange={setPage} />
         </div>
       ) : (
-        <SecurityEmpty
-          title="No activity yet"
-          detail="Account and access changes will appear here."
-        />
+        <SecurityEmpty title={text.noActivity} detail={text.activityHint} />
       )}
     </div>
   );
@@ -626,7 +625,7 @@ function AccountComposer({
   }
   return (
     <Drawer
-      title="Add employee"
+      title={text.addEmployee}
       subtitle="Create the employee account now; assign access afterward."
       onClose={onClose}
     >
@@ -634,7 +633,7 @@ function AccountComposer({
         {error ? <InlineAlert tone="error">{error}</InlineAlert> : null}
         <TextField
           id="security-employee-name"
-          label="Display name"
+          label={text.employee}
           onChange={(e) => setDraft({ ...draft, displayName: e.target.value })}
           required
           value={draft.displayName}
@@ -665,10 +664,10 @@ function AccountComposer({
         />
         <div className="security-drawer-actions">
           <Button onClick={onClose} variant="quiet">
-            Cancel
+            {text.cancel}
           </Button>
-          <Button busy={busy} busyLabel="Creating account" type="submit">
-            Add employee
+          <Button busy={busy} busyLabel={text.createAccount} type="submit">
+            {text.addEmployee}
           </Button>
         </div>
       </form>
@@ -728,7 +727,7 @@ function RoleComposer({
   }
   return (
     <Drawer
-      title="Add role"
+      title={text.addRole}
       subtitle="Choose what employees with this role can do."
       onClose={onClose}
       wide
@@ -738,7 +737,7 @@ function RoleComposer({
         <div className="security-form-pair">
           <TextField
             id="security-role-name"
-            label="Role name"
+            label={text.roleName}
             onChange={(e) => setDraft({ ...draft, name: e.target.value })}
             required
             value={draft.name}
@@ -746,7 +745,7 @@ function RoleComposer({
           <TextField
             hint="Use lowercase letters, numbers, dots, dashes, or underscores."
             id="security-role-code"
-            label="Role code"
+            label={text.roleCode}
             onChange={(e) => setDraft({ ...draft, code: e.target.value.toLowerCase() })}
             pattern="[a-z][a-z0-9._-]{2,99}"
             required
@@ -755,7 +754,7 @@ function RoleComposer({
         </div>
         <TextField
           id="security-role-description"
-          label="Description"
+          label={text.description}
           onChange={(e) => setDraft({ ...draft, description: e.target.value })}
           value={draft.description ?? ''}
         />
@@ -767,19 +766,17 @@ function RoleComposer({
             type="checkbox"
           />
           <span>
-            <strong>Administrator role</strong>
-            <small>
-              Only an administrator signed in with two-factor authentication can select this.
-            </small>
+            <strong>{text.adminRole}</strong>
+            <small>{text.adminRoleHint}</small>
           </span>
         </label>
         <PermissionMatrix selected={selected} onToggle={toggle} />
         <div className="security-drawer-actions">
           <Button onClick={onClose} variant="quiet">
-            Cancel
+            {text.cancel}
           </Button>
-          <Button busy={busy} busyLabel="Creating role" type="submit">
-            Add role
+          <Button busy={busy} busyLabel={text.createRole} type="submit">
+            {text.addRole}
           </Button>
         </div>
       </form>
@@ -882,24 +879,24 @@ function RoleEditorDrawer({
         ) : null}
         <TextField
           id="security-role-edit-name"
-          label="Role name"
+          label={text.roleName}
           onChange={(event) => setDraft({ ...draft, name: event.target.value })}
           required
           value={draft.name}
         />
         <TextField
           id="security-role-edit-description"
-          label="Description"
+          label={text.description}
           onChange={(event) => setDraft({ ...draft, description: event.target.value })}
           value={draft.description ?? ''}
         />
         <PermissionMatrix disabled={!editAllowed} selected={selected} onToggle={toggle} />
         <div className="security-drawer-actions">
           <Button onClick={onClose} variant="quiet">
-            Cancel
+            {text.cancel}
           </Button>
-          <Button busy={busy} disabled={!editAllowed} busyLabel="Saving role" type="submit">
-            Save access
+          <Button busy={busy} disabled={!editAllowed} busyLabel={text.saveRole} type="submit">
+            {text.saveAccess}
           </Button>
         </div>
       </form>
@@ -918,10 +915,10 @@ function PermissionMatrix({
 }) {
   return (
     <fieldset className="security-permission-matrix" disabled={disabled}>
-      <legend>Permissions</legend>
-      <p>Choose only the actions this role needs for daily work.</p>
+      <legend>{text.permissionsTitle}</legend>
+      <p>{text.permissionsHint}</p>
       <div className="security-permission-head">
-        <span>Module</span>
+        <span>{text.module}</span>
         {actions.map((action) => (
           <span key={action}>{permissionActionLabel(action)}</span>
         ))}
@@ -1034,35 +1031,33 @@ function AccountAccessDrawer({
       <section className="security-account-section">
         <div className="security-account-section-heading">
           <div>
-            <span>Sign-in protection</span>
-            <p>Authenticator status for this employee.</p>
+            <span>{text.signInProtection}</span>
+            <p>{text.factorHint}</p>
           </div>
           <Icon name="key" size={18} />
         </div>
         <div className="security-account-factor">
           <span className={account.twoFactorEnrolled ? 'is-ready' : ''} aria-hidden="true" />
           <div>
-            <strong>
-              {account.twoFactorEnrolled ? 'Authenticator set up' : 'Authenticator not set up'}
-            </strong>
-            <small>Administrator access requires an authenticator.</small>
+            <strong>{account.twoFactorEnrolled ? text.factorSet : text.factorMissing}</strong>
+            <small>{text.factorRequired}</small>
           </div>
         </div>
         {canIssueRecovery && account.status !== 'disabled' ? (
           <div className="security-account-recovery">
             <div>
-              <strong>Recover access</strong>
-              <span>Issue a one-time recovery code after checking the employee’s identity.</span>
+              <strong>{text.recover}</strong>
+              <span>{text.recoverHint}</span>
             </div>
             <Button onClick={() => onIssueRecovery(account)} variant="secondary">
-              Issue code
+              {text.issueCode}
             </Button>
           </div>
         ) : null}
       </section>
       <fieldset className="security-role-assignment" disabled={!canApprove}>
-        <legend>Assigned roles</legend>
-        <p>Choose the roles that match this employee’s responsibilities.</p>
+        <legend>{text.assignedRoles}</legend>
+        <p>{text.assignedRolesHint}</p>
         {roles.length ? (
           <div className="security-role-choices">
             {roles.map((role) => (
@@ -1082,20 +1077,20 @@ function AccountAccessDrawer({
                   <strong>{friendlyRoleText(role.name)}</strong>
                   <small>
                     {role.isAdministrative
-                      ? 'Administrator'
-                      : `${role.permissions.length} permissions`}
+                      ? text.administrator
+                      : `${role.permissions.length} ${text.permissions}`}
                   </small>
                 </span>
               </label>
             ))}
           </div>
         ) : (
-          <p>No roles are available yet.</p>
+          <p>{text.noRoles}</p>
         )}
       </fieldset>
       <div className="security-drawer-actions">
         <Button onClick={onClose} variant="quiet">
-          Close
+          {text.close}
         </Button>
         {canApprove ? (
           <Button
@@ -1106,17 +1101,15 @@ function AccountAccessDrawer({
             )}
             onClick={() => void saveRoles()}
           >
-            Save roles
+            {text.saveRoles}
           </Button>
         ) : null}
       </div>
       {canApprove ? (
         <section className="security-account-status-actions">
           <div>
-            <strong>Account status</strong>
-            <span>
-              Disabling this account signs the employee out on every device. Their history is kept.
-            </span>
+            <strong>{text.accountStatus}</strong>
+            <span>{text.accountStatusHint}</span>
           </div>
           {account.status === 'disabled' ? (
             <Button
@@ -1124,7 +1117,7 @@ function AccountAccessDrawer({
               onClick={() => void changeStatus('active')}
               variant="secondary"
             >
-              Reactivate
+              {text.reactivate}
             </Button>
           ) : (
             <Button
@@ -1133,7 +1126,7 @@ function AccountAccessDrawer({
               onClick={() => void changeStatus('disabled')}
               variant="danger"
             >
-              Disable account
+              {text.disable}
             </Button>
           )}
         </section>
@@ -1263,7 +1256,7 @@ function Drawer({
   return (
     <div className="security-drawer-layer" role="presentation">
       <button
-        aria-label="Close panel"
+        aria-label={text.closePanel}
         className="security-drawer-scrim"
         onClick={onClose}
         type="button"
@@ -1276,16 +1269,16 @@ function Drawer({
       >
         <header className="panel-drawer-header">
           <button
-            aria-label="Back to security"
+            aria-label={text.backSecurity}
             className="panel-back-button"
             onClick={onClose}
             type="button"
           >
             <Icon name="arrow" size={17} />
-            Back
+            {text.back}
           </button>
           <button
-            aria-label="Close panel"
+            aria-label={text.closePanel}
             className="panel-close-button"
             onClick={onClose}
             type="button"
@@ -1306,7 +1299,7 @@ function Drawer({
 function StatusLabel({ status }: { status: SecurityAccount['status'] }) {
   return (
     <span className={`security-status security-status--${status}`}>
-      {status === 'active' ? 'Active' : status === 'disabled' ? 'Disabled' : 'Locked'}
+      {status === 'active' ? text.active : status === 'disabled' ? text.disable : 'Locked'}
     </span>
   );
 }
@@ -1330,15 +1323,13 @@ function SecurityPagination({
 }) {
   if (totalPages <= 1) return null;
   return (
-    <nav aria-label="Register pages" className="security-admin-pagination">
+    <nav aria-label={text.registerPages} className="security-admin-pagination">
       <Button disabled={page === 1} onClick={() => onPageChange(page - 1)} variant="quiet">
-        Previous
+        {text.previous}
       </Button>
-      <span>
-        Page {page} of {totalPages}
-      </span>
+      <span>{text.page(page, totalPages)}</span>
       <Button disabled={page === totalPages} onClick={() => onPageChange(page + 1)} variant="quiet">
-        Next
+        {text.next}
       </Button>
     </nav>
   );

@@ -2,7 +2,7 @@ import { Button, InlineAlert } from '@vista/ui';
 import type { BackgroundJobTelemetry } from '@vista/contracts';
 import { useEffect, useState } from 'react';
 import { apiV1BaseUrl, authorizationHeaders } from '../api/client';
-import { jobMonitorMessages as copy } from '../messages';
+import { jobMonitorMessages as copy } from '../i18n/legacyMessages';
 import './job-monitor.css';
 
 export function JobMonitor({ token }: { token: string }) {

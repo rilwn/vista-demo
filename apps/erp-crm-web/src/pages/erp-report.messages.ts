@@ -1,4 +1,6 @@
-export const erpReportMessages = {
+import { getOperationsLocale } from '../i18n/LocalizationProvider';
+
+const english = {
   scopes: {
     procurement: 'Procurement',
     warehouse: 'Warehouse',
@@ -66,3 +68,77 @@ export const erpReportMessages = {
   columns: (count: number) => `${count} columns`,
   emptyHint: 'Try a different date range or clear your search.',
 } as const;
+
+const bulgarian = {
+  scopes: {
+    procurement: 'Снабдяване',
+    warehouse: 'Склад',
+    sales: 'Продажби',
+    logistics: 'Логистика',
+  },
+  title: 'Справки',
+  description: 'Намирайте, преглеждайте и експортирайте записи.',
+  report: 'Справка',
+  from: 'От',
+  to: 'До',
+  search: 'Търсене в стойностите',
+  apply: 'Прилагане',
+  updating: 'Обновяване',
+  current: 'Текуща наличност',
+  loading: 'Зареждане на справката…',
+  error: 'Справката не може да бъде заредена. Опитайте отново.',
+  retry: 'Опитайте отново',
+  empty: 'Няма записи за избраните филтри.',
+  count: (count: number) => `${count.toLocaleString('bg-BG')} ${count === 1 ? 'запис' : 'записа'}`,
+  previous: 'Предишна',
+  next: 'Следваща',
+  page: (page: number, total: number) => `Страница ${page} от ${Math.max(1, total)}`,
+  options: 'Настройване на изгледа',
+  fields: 'Видими колони',
+  saved: 'Моите запазени справки',
+  chooseSaved: 'Избор на запазена справка',
+  name: 'Име на справката',
+  format: 'Тип файл',
+  save: 'Запазване като нова справка',
+  export: 'Подготовка на експорт',
+  formats: { xlsx: 'Excel', csv: 'CSV', pdf: 'PDF' },
+  hint: 'Запазването и експортирането използват приложените филтри. Изберете Прилагане след промяна.',
+  fieldError: 'Изберете поне едно поле.',
+  dateError: 'Изберете начална дата, която е преди или равна на крайната.',
+  savedOk: 'Изгледът на справката е запазен.',
+  exportOk: 'Експортът се подготвя.',
+  actionError: 'Заявката не може да бъде изпълнена. Настройките са запазени. Опитайте отново.',
+  savedError: 'Запазените справки не могат да бъдат заредени.',
+  exportsError: 'Последните експорти не могат да бъдат заредени.',
+  downloadError: 'Файлът не може да бъде изтеглен. Изберете Изтегляне и опитайте отново.',
+  retryError: 'Експортът не може да бъде стартиран повторно.',
+  recent: 'Последни експорти',
+  owner: 'Показани са само вашите експорти.',
+  refresh: 'Обновяване',
+  noExports: 'Все още няма заявени експорти.',
+  download: 'Изтегляне',
+  saving: 'Запазване',
+  preparing: 'Подготовка',
+  statuses: {
+    queued: 'На опашка',
+    processing: 'Подготовка',
+    completed: 'Готово',
+    failed: 'Изисква внимание',
+  },
+  savedPrevious: 'Предишни запазени справки',
+  savedNext: 'Следващи запазени справки',
+  reference: 'Референция',
+  copyReference: (label: string) => `Копиране: ${label.toLocaleLowerCase('bg-BG')}`,
+  copied: 'Копирано',
+  copyFailed: 'Не може да бъде копирано. Изберете референцията по-долу.',
+  missing: 'Не е записано',
+  reportDetails: 'За тази справка',
+  columns: (count: number) => `${count} колони`,
+  emptyHint: 'Опитайте друг период или изчистете търсенето.',
+} as const;
+
+export const erpReportMessages = new Proxy(english, {
+  get(target, property, receiver) {
+    return Reflect.get(getOperationsLocale() === 'bg' ? bulgarian : target, property, receiver);
+  },
+});

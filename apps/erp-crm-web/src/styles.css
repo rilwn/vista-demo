@@ -999,6 +999,98 @@ body {
   }
 }
 
+/* Operations language control */
+.language-switcher {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  min-height: 2.45rem;
+  padding: 0.2rem 0.24rem 0.2rem 0.5rem;
+  border: 1px solid var(--vista-line);
+  border-radius: 0.72rem;
+  background: color-mix(in srgb, var(--vista-surface) 94%, var(--vista-accent-soft));
+  box-shadow: 0 1px 2px rgb(19 48 36 / 5%);
+  color: var(--vista-muted);
+  gap: 0.15rem;
+}
+
+.language-switcher > .app-icon {
+  margin-right: 0.1rem;
+  color: var(--vista-forest);
+}
+
+.language-switcher > span {
+  width: 1px;
+  height: 1.05rem;
+  background: var(--vista-line);
+}
+
+.language-switcher button {
+  display: inline-grid;
+  min-width: 2rem;
+  min-height: 1.82rem;
+  padding: 0.2rem 0.34rem;
+  border: 0;
+  border-radius: 0.48rem;
+  background: transparent;
+  color: var(--vista-muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.68rem;
+  font-weight: 760;
+  letter-spacing: 0.035em;
+  place-items: center;
+  transition:
+    background-color 150ms ease,
+    color 150ms ease,
+    box-shadow 150ms ease;
+}
+
+.language-switcher button:hover {
+  background: var(--vista-surface-soft);
+  color: var(--vista-ink);
+}
+
+.language-switcher button:focus-visible {
+  outline: 2px solid var(--vista-focus);
+  outline-offset: 1px;
+}
+
+.language-switcher button.is-active {
+  background: var(--vista-accent-soft);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--vista-accent) 24%, transparent);
+  color: var(--vista-forest-dark);
+}
+
+.login-language-control {
+  position: fixed;
+  z-index: 5;
+  top: 1rem;
+  right: 1rem;
+}
+
+.login-language-control .language-switcher {
+  background: rgb(255 255 255 / 86%);
+  box-shadow: 0 8px 24px rgb(20 45 35 / 8%);
+  backdrop-filter: blur(14px);
+}
+
+@media (max-width: 760px) {
+  .workspace-topbar .language-switcher > .app-icon,
+  .workspace-topbar .language-switcher > span {
+    display: none;
+  }
+
+  .workspace-topbar .language-switcher {
+    padding-left: 0.24rem;
+  }
+
+  .login-language-control {
+    top: 0.75rem;
+    right: 0.75rem;
+  }
+}
+
 /* CRM lead and opportunity pipeline */
 .crm-pipeline-workspace {
   max-width: none;

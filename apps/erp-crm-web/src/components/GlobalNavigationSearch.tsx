@@ -1,8 +1,10 @@
 import { type KeyboardEvent, useEffect, useMemo, useRef, useState } from 'react';
 
 import { useAuth } from '../auth/AuthProvider';
+import { useLocalization } from '../i18n/LocalizationProvider';
+import { localizeModule, moduleLabel, navigationGroupLabel } from '../i18n/navigation';
 import { allModuleItems, navigationGroups } from '../navigation';
-import { workflowPages, workflowPath } from '../pages/workflow-pages';
+import { localizeWorkflowPage, workflowPages, workflowPath } from '../pages/workflow-pages';
 import { useRouter } from '../routing/Router';
 import { Icon, type IconName } from './Icon';
 
@@ -17,57 +19,9 @@ interface SearchDestination {
   permission?: string;
 }
 
-const utilityDestinations: SearchDestination[] = [
-  {
-    description: 'Return to your workspace overview.',
-    group: 'Workspace',
-    icon: 'home',
-    keywords: 'home dashboard start',
-    label: 'Overview',
-    path: '/',
-  },
-  {
-    description: 'Review your account, permissions, password, and authenticator.',
-    group: 'Account',
-    icon: 'profile',
-    keywords: 'profile password two factor 2fa security',
-    label: 'My access & security',
-    path: '/access',
-  },
-];
-
-const directDestinations: SearchDestination[] = [
-  {
-    description: 'Manage customers, suppliers, contacts, locations, and equipment.',
-    group: 'CRM',
-    icon: 'customers',
-    keywords: 'customer supplier business partner contact equipment',
-    label: 'Partner registry',
-    module: 'crm',
-    path: '/partners',
-  },
-  {
-    description: 'Manage products, units, barcodes, and tracking rules.',
-    group: 'ERP · Warehouse',
-    icon: 'warehouse',
-    keywords: 'product unit barcode serial batch inventory',
-    label: 'Product catalog',
-    module: 'erp.warehouse',
-    path: '/catalog',
-  },
-  {
-    description: 'Organise products and their serial, batch, and expiry rules.',
-    group: 'ERP · Warehouse',
-    icon: 'warehouse',
-    keywords: 'category hierarchy serial batch expiry',
-    label: 'Product categories',
-    module: 'erp.warehouse',
-    path: '/catalog/categories',
-  },
-];
-
 export function GlobalNavigationSearch() {
   const { hasPermission } = useAuth();
+  const { locale, t } = useLocalization();
   const { location, navigate } = useRouter();
   const rootRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -81,11 +35,12 @@ export function GlobalNavigationSearch() {
     );
     const moduleDestinations: SearchDestination[] = allModuleItems
       .filter((item) => hasPermission(item.key))
+      .map((item) => localizeModule(item, t))
       .map((item) => ({
         description: item.description,
-        group: groupByPath.get(item.path) ?? 'Workspace',
+        group: navigationGroupLabel(groupByPath.get(item.path) ?? 'Workspace', t),
         icon: item.icon,
-        keywords: item.key.replaceAll('.', ' '),
+        keywords: `${item.key.replaceAll('.', ' ')} ${item.label}`,
         label: item.label,
         module: item.key,
         path: item.path,
@@ -98,15 +53,63 @@ export function GlobalNavigationSearch() {
             page.slug !== 'reports' ||
             hasPermission('erp.service', 'approve')),
       )
+      .map(localizeWorkflowPage)
       .map((page) => ({
         description: page.description,
-        group: moduleGroup(page.module),
+        group: moduleGroup(page.module, t),
         icon: page.icon,
         keywords: `${page.action} ${page.sections.flatMap((section) => section.items).join(' ')}`,
         label: page.title,
         module: page.module,
         path: workflowPath(page),
       }));
+    const utilityDestinations: SearchDestination[] = [
+      {
+        description: t('search.overviewDescription'),
+        group: t('navigation.workspace'),
+        icon: 'home',
+        keywords: 'home dashboard start начало табло',
+        label: t('navigation.overview'),
+        path: '/',
+      },
+      {
+        description: t('search.accountDescription'),
+        group: t('search.account'),
+        icon: 'profile',
+        keywords: 'profile password two factor 2fa security профил парола сигурност',
+        label: t('account.myAccess'),
+        path: '/access',
+      },
+    ];
+    const directDestinations: SearchDestination[] = [
+      {
+        description: t('search.partnerDescription'),
+        group: t('navigation.crm'),
+        icon: 'customers',
+        keywords: 'customer supplier business partner contact equipment клиент доставчик партньор',
+        label: t('search.partnerRegistry'),
+        module: 'crm',
+        path: '/partners',
+      },
+      {
+        description: t('search.productDescription'),
+        group: `${t('navigation.erp')} · ${t('navigation.warehouse')}`,
+        icon: 'warehouse',
+        keywords: 'product unit barcode serial batch inventory продукт баркод склад',
+        label: t('search.productCatalog'),
+        module: 'erp.warehouse',
+        path: '/catalog',
+      },
+      {
+        description: t('search.categoryDescription'),
+        group: `${t('navigation.erp')} · ${t('navigation.warehouse')}`,
+        icon: 'warehouse',
+        keywords: 'category hierarchy serial batch expiry категория партида срок',
+        label: t('search.productCategories'),
+        module: 'erp.warehouse',
+        path: '/catalog/categories',
+      },
+    ];
     const permitted = [...utilityDestinations, ...directDestinations, ...moduleDestinations]
       .filter(
         (item) =>
@@ -116,7 +119,7 @@ export function GlobalNavigationSearch() {
       )
       .concat(workflowDestinations);
     return [...new Map(permitted.map((item) => [item.path, item])).values()];
-  }, [hasPermission]);
+  }, [hasPermission, locale, t]);
 
   const results = useMemo(
     () => rankDestinations(destinations, query).slice(0, 8),
@@ -193,7 +196,7 @@ export function GlobalNavigationSearch() {
           aria-autocomplete="list"
           aria-controls="workspace-search-results"
           aria-expanded={open}
-          aria-label="Search pages and work areas"
+          aria-label={t('search.label')}
           autoComplete="off"
           onClick={() => setOpen(true)}
           onChange={(event) => {
@@ -203,7 +206,7 @@ export function GlobalNavigationSearch() {
           }}
           onFocus={() => setOpen(true)}
           onKeyDown={keyboard}
-          placeholder="Search pages and work areas"
+          placeholder={t('search.label')}
           ref={inputRef}
           role="combobox"
           type="search"
@@ -215,10 +218,14 @@ export function GlobalNavigationSearch() {
       {open ? (
         <div className="global-search-panel">
           <header>
-            <span>{query.trim() ? 'Search results' : 'Quick navigation'}</span>
-            <small>{results.length ? `${results.length} shown` : 'No matches'}</small>
+            <span>{query.trim() ? t('search.results') : t('search.quick')}</span>
+            <small>
+              {results.length
+                ? t('search.shown', { count: results.length })
+                : t('search.noMatches')}
+            </small>
           </header>
-          <div aria-label="Workspace destinations" id="workspace-search-results" role="listbox">
+          <div aria-label={t('search.destinations')} id="workspace-search-results" role="listbox">
             {results.length ? (
               results.map((destination, index) => (
                 <button
@@ -245,21 +252,21 @@ export function GlobalNavigationSearch() {
             ) : (
               <div className="global-search-empty">
                 <Icon name="search" size={20} />
-                <strong>No matching page</strong>
-                <p>Try a module, task, document, or customer-workflow name.</p>
+                <strong>{t('search.emptyTitle')}</strong>
+                <p>{t('search.emptyHint')}</p>
               </div>
             )}
           </div>
           <footer>
             <span>
               <kbd>↑</kbd>
-              <kbd>↓</kbd> Move
+              <kbd>↓</kbd> {t('search.move')}
             </span>
             <span>
-              <kbd>Enter</kbd> Open
+              <kbd>Enter</kbd> {t('search.open')}
             </span>
             <span>
-              <kbd>Esc</kbd> Close
+              <kbd>Esc</kbd> {t('search.close')}
             </span>
           </footer>
         </div>
@@ -306,12 +313,11 @@ function normalize(value: string): string {
     .trim();
 }
 
-function moduleGroup(module: string): string {
+function moduleGroup(module: string, t: ReturnType<typeof useLocalization>['t']): string {
   if (module === 'crm') return 'CRM';
-  if (module === 'reports') return 'Reports';
+  if (module === 'reports') return t('navigation.reports');
   if (module.startsWith('erp.')) {
-    const area = module.slice(4);
-    return `ERP · ${area.charAt(0).toUpperCase()}${area.slice(1)}`;
+    return `${t('navigation.erp')} · ${moduleLabel(module, t)}`;
   }
-  return 'Administration';
+  return t('navigation.administration');
 }

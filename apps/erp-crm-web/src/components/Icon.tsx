@@ -12,6 +12,7 @@ export type IconName =
   | 'finance'
   | 'home'
   | 'key'
+  | 'language'
   | 'logistics'
   | 'logout'
   | 'menu'
@@ -90,6 +91,12 @@ const paths: Record<IconName, React.ReactNode> = {
     <>
       <circle cx="8" cy="15" r="4" />
       <path d="m11 12 8-8m-3 3 2 2m-5 1 2 2" />
+    </>
+  ),
+  language: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M3 12h18M12 3c2.3 2.5 3.5 5.5 3.5 9S14.3 18.5 12 21M12 3C9.7 5.5 8.5 8.5 8.5 12s1.2 6.5 3.5 9" />
     </>
   ),
   logistics: (

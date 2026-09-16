@@ -3,12 +3,15 @@ import { type FormEvent, useState } from 'react';
 
 import { ApiClientError } from '../api/auth';
 import { Icon } from '../components/Icon';
+import { LanguageSwitcher } from '../components/LanguageSwitcher';
+import { useLocalization } from '../i18n/LocalizationProvider';
 import { messages } from '../messages';
 import { Link, Navigate, useRouter } from '../routing/Router';
 import { useAuth } from './AuthProvider';
 
 export function LoginPage() {
   const { login, status } = useAuth();
+  const { t } = useLocalization();
   const { navigate } = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -24,8 +27,8 @@ export function LoginPage() {
         <span className="loader-mark" aria-hidden="true">
           <Icon name="brand" size={24} />
         </span>
-        <strong>{messages.states.loading}</strong>
-        <p>{messages.states.loadingDetail}</p>
+        <strong>{t('login.loading')}</strong>
+        <p>{t('login.loadingDetail')}</p>
       </main>
     );
   }
@@ -68,18 +71,21 @@ export function LoginPage() {
   const copy =
     step === 'credentials'
       ? {
-          eyebrow: messages.auth.credentialsEyebrow,
-          subtitle: messages.auth.credentialsSubtitle,
-          title: messages.auth.credentialsTitle,
+          eyebrow: t('login.employeeAccess'),
+          subtitle: t('login.subtitle'),
+          title: t('login.openWorkspace'),
         }
       : {
-          eyebrow: messages.auth.totpEyebrow,
-          subtitle: messages.auth.totpSubtitle,
-          title: messages.auth.totpTitle,
+          eyebrow: t('login.stepTwo'),
+          subtitle: t('login.verifySubtitle'),
+          title: t('login.verifyTitle'),
         };
 
   return (
     <main className="login-page">
+      <div className="login-language-control">
+        <LanguageSwitcher placement="login" />
+      </div>
       <section className="login-context" aria-label={messages.product.name}>
         <VistaMark product="Vista Service" />
       </section>
@@ -91,7 +97,7 @@ export function LoginPage() {
               <Icon name="organization" size={25} />
             </span>
             <span>
-              <small>{messages.product.suite}</small>
+              <small>{t('product.suite')}</small>
               <strong>{messages.product.name}</strong>
             </span>
             {step === 'totp' ? <em>{copy.eyebrow}</em> : null}
@@ -101,11 +107,11 @@ export function LoginPage() {
 
           <form className="login-form" onSubmit={(event) => void submit(event)}>
             {error ? (
-              <InlineAlert title={messages.auth.errorTitle} tone="error">
-                <p>{errorMessage(error.code)}</p>
+              <InlineAlert title={t('login.failed')} tone="error">
+                <p>{errorMessage(error.code, t)}</p>
                 {error.correlationId ? (
                   <small>
-                    {messages.auth.errorReference}: {error.correlationId.slice(0, 12)}
+                    {t('login.reference')}: {error.correlationId.slice(0, 12)}
                   </small>
                 ) : null}
               </InlineAlert>
@@ -117,7 +123,7 @@ export function LoginPage() {
                   autoComplete="username"
                   autoFocus
                   id="email"
-                  label={messages.auth.emailLabel}
+                  label={t('login.workEmail')}
                   maxLength={320}
                   name="email"
                   onChange={(event) => setEmail(event.target.value)}
@@ -129,20 +135,18 @@ export function LoginPage() {
                 <TextField
                   autoComplete="current-password"
                   id="password"
-                  label={messages.auth.passwordLabel}
+                  label={t('login.password')}
                   maxLength={128}
                   name="password"
                   onChange={(event) => setPassword(event.target.value)}
                   required
                   trailingAction={
                     <button
-                      aria-label={
-                        showPassword ? messages.auth.hidePassword : messages.auth.showPassword
-                      }
+                      aria-label={showPassword ? t('login.hide') : t('login.show')}
                       onClick={() => setShowPassword((visible) => !visible)}
                       type="button"
                     >
-                      {showPassword ? messages.auth.hidePassword : messages.auth.showPassword}
+                      {showPassword ? t('login.hide') : t('login.show')}
                     </button>
                   }
                   type={showPassword ? 'text' : 'password'}
@@ -155,16 +159,16 @@ export function LoginPage() {
                   <span>{email.slice(0, 1).toUpperCase()}</span>
                   <div>
                     <strong>{email}</strong>
-                    <small>{messages.auth.credentialsVerified}</small>
+                    <small>{t('login.credentialsVerified')}</small>
                   </div>
                 </div>
                 <TextField
                   autoComplete="one-time-code"
                   autoFocus
-                  hint={messages.auth.totpHint}
+                  hint={t('login.codeHint')}
                   id="totp-code"
                   inputMode="numeric"
-                  label={messages.auth.totpLabel}
+                  label={t('login.code')}
                   maxLength={6}
                   name="totpCode"
                   onChange={(event) =>
@@ -179,21 +183,21 @@ export function LoginPage() {
 
             <Button
               busy={busy}
-              busyLabel={step === 'credentials' ? messages.auth.signingIn : messages.auth.verifying}
+              busyLabel={step === 'credentials' ? t('login.signingIn') : t('login.verifying')}
               fullWidth
               type="submit"
             >
-              {step === 'credentials' ? messages.auth.signIn : messages.auth.verify}
+              {step === 'credentials' ? t('login.signIn') : t('login.verify')}
             </Button>
             {step === 'totp' ? (
               <Button fullWidth onClick={returnToCredentials} variant="quiet">
-                {messages.auth.back}
+                {t('login.back')}
               </Button>
             ) : null}
           </form>
 
           <p className="login-support">
-            {messages.auth.support} <Link to="/recover">{messages.auth.recoveryLink}</Link>
+            {t('login.needHelp')} <Link to="/recover">{t('login.recovery')}</Link>
           </p>
         </div>
       </section>
@@ -201,6 +205,14 @@ export function LoginPage() {
   );
 }
 
-function errorMessage(code: string): string {
-  return messages.errors[code as keyof typeof messages.errors] ?? messages.errors.default;
+function errorMessage(code: string, t: ReturnType<typeof useLocalization>['t']): string {
+  const keys = {
+    ACCOUNT_TEMPORARILY_LOCKED: 'login.error.locked',
+    AUTHENTICATION_FAILED: 'login.error.authentication',
+    PASSWORD_EXPIRED: 'login.error.expired',
+    RATE_LIMITED: 'login.error.rate',
+    TWO_FACTOR_ENROLLMENT_REQUIRED: 'login.error.enrollment',
+    UNAVAILABLE: 'login.error.unavailable',
+  } as const;
+  return t(keys[code as keyof typeof keys] ?? 'login.error.default');
 }

@@ -2,7 +2,7 @@ import { useAuth } from '../auth/AuthProvider';
 import { Icon } from '../components/Icon';
 import { WorkAreaCards, type WorkAreaItem } from '../components/WorkAreaCards';
 import { allModuleItems, type ModuleKey } from '../navigation';
-import { messages, moduleMessages } from '../messages';
+import { messages, moduleMessages } from '../i18n/legacyMessages';
 import { Navigate } from '../routing/Router';
 import { pagesForModule, workflowPath } from './workflow-pages';
 import { workAreaMessages } from './work-area.messages';

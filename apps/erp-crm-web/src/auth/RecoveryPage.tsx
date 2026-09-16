@@ -9,6 +9,8 @@ import {
 } from '../api/auth';
 import { AuthenticatorQrCode } from '../components/AuthenticatorQrCode';
 import { Icon } from '../components/Icon';
+import { LanguageSwitcher } from '../components/LanguageSwitcher';
+import { useLocalization } from '../i18n/LocalizationProvider';
 import { messages } from '../messages';
 import { Link } from '../routing/Router';
 
@@ -22,6 +24,7 @@ interface Enrollment {
 }
 
 export function RecoveryPage() {
+  const { dateLocale, t } = useLocalization();
   const [email, setEmail] = useState('');
   const [recoveryCode, setRecoveryCode] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -35,7 +38,7 @@ export function RecoveryPage() {
   async function submitRecovery(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (newPassword !== confirmPassword) {
-      setError('The new passwords do not match.');
+      setError(t('recovery.error.mismatch'));
       return;
     }
     setBusy(true);
@@ -44,7 +47,7 @@ export function RecoveryPage() {
       const result = await completeAccountRecovery({ email, newPassword, recoveryCode });
       setStep(result.requiresTotpEnrollment ? 'enrollment-ready' : 'complete');
     } catch (failure) {
-      setError(recoveryError(failure));
+      setError(recoveryError(failure, t));
     } finally {
       setBusy(false);
     }
@@ -57,7 +60,7 @@ export function RecoveryPage() {
       setEnrollment(await startAccountRecoveryTotpEnrollment({ email, recoveryCode }));
       setStep('enrollment');
     } catch (failure) {
-      setError(recoveryError(failure));
+      setError(recoveryError(failure, t));
     } finally {
       setBusy(false);
     }
@@ -78,7 +81,7 @@ export function RecoveryPage() {
       setAuthenticatorCode('');
       setEnrollment(null);
     } catch (failure) {
-      setError(recoveryError(failure));
+      setError(recoveryError(failure, t));
       setAuthenticatorCode('');
     } finally {
       setBusy(false);
@@ -87,6 +90,9 @@ export function RecoveryPage() {
 
   return (
     <main className="login-page recovery-page">
+      <div className="login-language-control">
+        <LanguageSwitcher placement="login" />
+      </div>
       <section className="login-context" aria-label={messages.product.name}>
         <VistaMark product="Vista Service" />
       </section>
@@ -98,24 +104,22 @@ export function RecoveryPage() {
               <Icon name="shield" size={24} />
             </span>
             <span>
-              <small>Secure staff access</small>
-              <strong>Account recovery</strong>
+              <small>{t('recovery.secureAccess')}</small>
+              <strong>{t('recovery.accountRecovery')}</strong>
             </span>
           </header>
           {step === 'form' ? (
             <>
-              <h2>Recover your account</h2>
-              <p className="login-form-subtitle">
-                Enter the one-time code supplied by your administrator and choose a new password.
-              </p>
+              <h2>{t('recovery.title')}</h2>
+              <p className="login-form-subtitle">{t('recovery.subtitle')}</p>
               <form className="login-form" onSubmit={(event) => void submitRecovery(event)}>
                 {error ? <InlineAlert tone="error">{error}</InlineAlert> : null}
                 <TextField
                   autoComplete="email"
                   autoFocus
-                  hint="Use the employee email verified by your administrator."
+                  hint={t('recovery.emailHint')}
                   id="recovery-email"
-                  label="Work email"
+                  label={t('login.workEmail')}
                   maxLength={320}
                   onChange={(event) => setEmail(event.target.value)}
                   required
@@ -124,9 +128,9 @@ export function RecoveryPage() {
                 />
                 <TextField
                   autoComplete="one-time-code"
-                  hint="Enter the full code exactly as it was issued."
+                  hint={t('recovery.codeHint')}
                   id="recovery-code"
-                  label="Recovery code"
+                  label={t('recovery.code')}
                   maxLength={64}
                   onChange={(event) => setRecoveryCode(event.target.value.trim())}
                   required
@@ -135,9 +139,9 @@ export function RecoveryPage() {
                 />
                 <TextField
                   autoComplete="new-password"
-                  hint="Use at least 12 characters, including upper and lower case letters, a number, and a symbol."
+                  hint={t('recovery.passwordHint')}
                   id="recovery-password"
-                  label="New password"
+                  label={t('recovery.newPassword')}
                   maxLength={128}
                   onChange={(event) => setNewPassword(event.target.value)}
                   required
@@ -147,56 +151,50 @@ export function RecoveryPage() {
                 <TextField
                   autoComplete="new-password"
                   id="recovery-password-confirm"
-                  label="Confirm new password"
+                  label={t('recovery.confirmPassword')}
                   maxLength={128}
                   onChange={(event) => setConfirmPassword(event.target.value)}
                   required
                   type="password"
                   value={confirmPassword}
                 />
-                <Button busy={busy} busyLabel="Updating access" fullWidth type="submit">
-                  Reset password
+                <Button busy={busy} busyLabel={t('recovery.updating')} fullWidth type="submit">
+                  {t('recovery.reset')}
                 </Button>
               </form>
             </>
           ) : null}
 
           {step === 'enrollment-ready' ? (
-            <RecoveryStatus
-              detail="Your password has been updated. Because this account administers access, set up a new authenticator before signing in."
-              title="One more security step"
-            >
+            <RecoveryStatus detail={t('recovery.moreStepDetail')} title={t('recovery.moreStep')}>
               {error ? <InlineAlert tone="error">{error}</InlineAlert> : null}
               <Button
                 busy={busy}
-                busyLabel="Preparing authenticator setup"
+                busyLabel={t('recovery.preparing')}
                 onClick={() => void startEnrollment()}
               >
-                Set up authenticator
+                {t('recovery.setup')}
               </Button>
             </RecoveryStatus>
           ) : null}
 
           {step === 'enrollment' && enrollment ? (
             <>
-              <h2>Set up your authenticator</h2>
-              <p className="login-form-subtitle">
-                Add a time-based code in your authenticator app, then enter its current six-digit
-                code below.
-              </p>
+              <h2>{t('recovery.setupTitle')}</h2>
+              <p className="login-form-subtitle">{t('recovery.setupSubtitle')}</p>
               <form className="login-form" onSubmit={(event) => void verifyEnrollment(event)}>
                 {error ? <InlineAlert tone="error">{error}</InlineAlert> : null}
                 <AuthenticatorQrCode provisioningUri={enrollment.provisioningUri} />
-                <section className="authenticator-setup-key" aria-label="Setup key">
-                  <span>Manual setup key</span>
+                <section className="authenticator-setup-key" aria-label={t('recovery.setupKey')}>
+                  <span>{t('recovery.manualKey')}</span>
                   <code>{groupAuthenticatorKey(enrollment.manualEntryKey)}</code>
                 </section>
                 <details className="authenticator-setup-link">
-                  <summary>Use a setup link instead</summary>
+                  <summary>{t('recovery.useLink')}</summary>
                   <TextField
                     id="recovery-authenticator-link"
-                    label="Setup link"
-                    hint="Use this only if your authenticator app supports setup links."
+                    label={t('recovery.setupLink')}
+                    hint={t('recovery.setupLinkHint')}
                     readOnly
                     type="text"
                     value={enrollment.provisioningUri}
@@ -207,7 +205,7 @@ export function RecoveryPage() {
                   autoFocus
                   id="recovery-authenticator-code"
                   inputMode="numeric"
-                  label="Authentication code"
+                  label={t('login.code')}
                   maxLength={6}
                   onChange={(event) =>
                     setAuthenticatorCode(event.target.value.replace(/\D/gu, '').slice(0, 6))
@@ -216,31 +214,29 @@ export function RecoveryPage() {
                   required
                   value={authenticatorCode}
                 />
-                <Button busy={busy} busyLabel="Verifying authenticator" fullWidth type="submit">
-                  Verify and finish
+                <Button busy={busy} busyLabel={t('recovery.verifying')} fullWidth type="submit">
+                  {t('recovery.finish')}
                 </Button>
                 <p className="recovery-expiry">
-                  Setup expires {formatDateTime(enrollment.expiresAt)}.
+                  {t('recovery.expires', {
+                    date: formatDateTime(enrollment.expiresAt, dateLocale),
+                  })}
                 </p>
               </form>
             </>
           ) : null}
 
           {step === 'complete' ? (
-            <RecoveryStatus
-              detail="Your password has been updated and previous sign-ins have been closed. You can now sign in with your new credentials."
-              title="Account recovered"
-            >
+            <RecoveryStatus detail={t('recovery.completeDetail')} title={t('recovery.complete')}>
               <Link className="vista-button vista-button--primary recovery-sign-in" to="/login">
-                Back to sign in
+                {t('recovery.back')}
               </Link>
             </RecoveryStatus>
           ) : null}
 
           {step !== 'complete' ? (
             <p className="login-support">
-              Need a recovery code? Contact a Vista Service administrator.{' '}
-              <Link to="/login">Back to sign in</Link>
+              {t('recovery.needCode')} <Link to="/login">{t('recovery.back')}</Link>
             </p>
           ) : null}
         </div>
@@ -267,23 +263,23 @@ function RecoveryStatus({
   );
 }
 
-function recoveryError(failure: unknown): string {
+function recoveryError(failure: unknown, t: ReturnType<typeof useLocalization>['t']): string {
   if (!(failure instanceof ApiClientError)) {
-    return 'Account recovery could not be completed. Check the details and try again.';
+    return t('recovery.error.default');
   }
   switch (failure.code) {
     case 'RECOVERY_CODE_INVALID':
-      return 'The recovery code is invalid, expired, or has already been used.';
+      return t('recovery.error.invalid');
     case 'PASSWORD_POLICY_VIOLATION':
-      return 'Choose a password that meets the requirements shown.';
+      return t('recovery.error.policy');
     case 'PASSWORD_REUSE_NOT_ALLOWED':
-      return 'Choose a password that has not been used recently.';
+      return t('recovery.error.reuse');
     case 'TOTP_CODE_INVALID':
-      return 'Enter the current six-digit code from your authenticator app.';
+      return t('recovery.error.totp');
     case 'RATE_LIMITED':
-      return 'Too many attempts. Wait a moment before trying again.';
+      return t('recovery.error.rate');
     default:
-      return 'Account recovery could not be completed. Check the details and try again.';
+      return t('recovery.error.default');
   }
 }
 
@@ -291,8 +287,8 @@ function groupAuthenticatorKey(key: string): string {
   return key.match(/.{1,4}/gu)?.join(' ') ?? key;
 }
 
-function formatDateTime(value: string): string {
-  return new Intl.DateTimeFormat('en-GB', {
+function formatDateTime(value: string, locale: string): string {
+  return new Intl.DateTimeFormat(locale, {
     dateStyle: 'medium',
     timeStyle: 'short',
   }).format(new Date(value));

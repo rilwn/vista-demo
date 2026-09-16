@@ -20,7 +20,7 @@ import {
 } from '../api/finance';
 import { useAuth } from '../auth/AuthProvider';
 import { Icon } from '../components/Icon';
-import { financialDocumentMessages as copy } from '../messages';
+import { financialDocumentMessages as copy } from '../i18n/legacyMessages';
 import { useRouter } from '../routing/Router';
 import { FinanceTabs } from './FinanceBankPage';
 import { ManagedFilesPanel } from './PartnerDocumentsPanel';

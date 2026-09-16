@@ -32,7 +32,7 @@ import {
 import { ApiClientError } from '../api/client';
 import { useAuth } from '../auth/AuthProvider';
 import { Icon } from '../components/Icon';
-import { salesPricingMessages as copy } from '../messages';
+import { salesPricingMessages as copy } from '../i18n/legacyMessages';
 
 type PricingTab = 'price-lists' | 'pos-offers' | 'groups' | 'campaigns';
 type PricingDrawer =

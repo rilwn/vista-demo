@@ -1,4 +1,5 @@
 import type { IconName } from '../components/Icon';
+import { getOperationsLocale } from '../i18n/LocalizationProvider';
 import { erpReportMessages } from './erp-report.messages';
 
 export interface WorkflowSection {
@@ -1002,11 +1003,27 @@ export const workflowPages: WorkflowPageDefinition[] = [
 ];
 
 export function pagesForModule(module: string): WorkflowPageDefinition[] {
-  return workflowPages.filter((pageDefinition) => pageDefinition.module === module);
+  return workflowPages
+    .filter((pageDefinition) => pageDefinition.module === module)
+    .map(localizeWorkflowPage);
 }
 
 export function findWorkflowPage(pathname: string): WorkflowPageDefinition | undefined {
-  return workflowPages.find((pageDefinition) => workflowPath(pageDefinition) === pathname);
+  const pageDefinition = workflowPages.find((item) => workflowPath(item) === pathname);
+  return pageDefinition ? localizeWorkflowPage(pageDefinition) : undefined;
+}
+
+export function localizeWorkflowPage(
+  pageDefinition: WorkflowPageDefinition,
+): WorkflowPageDefinition {
+  if (getOperationsLocale() !== 'bg') return pageDefinition;
+  const translated = bulgarianWorkflowMeta[`${pageDefinition.module}/${pageDefinition.slug}`];
+  return {
+    ...pageDefinition,
+    ...(translated ?? {}),
+    columns: ['Референция', 'Състояние', 'Клиент / източник', 'Отговорник', 'Актуализирано'],
+    eyebrow: bulgarianModuleName(pageDefinition.module),
+  };
 }
 
 export function workflowPath(
@@ -1035,4 +1052,249 @@ function page(
     slug,
     title,
   };
+}
+
+type WorkflowMeta = Pick<WorkflowPageDefinition, 'action' | 'description' | 'title'>;
+
+const bulgarianWorkflowMeta: Record<string, WorkflowMeta> = {
+  'erp.finance/invoices': {
+    title: 'Финансови документи',
+    description: 'Подготвяйте фактури, проформи, кредитни и дебитни известия.',
+    action: 'Нов финансов документ',
+  },
+  'erp.finance/payments': {
+    title: 'Вземания и плащания',
+    description: 'Проследявайте частични плащания, остатъци и разпределения по вземания.',
+    action: 'Регистриране на плащане',
+  },
+  'erp.finance/customer-accounts': {
+    title: 'Клиентски платежни сметки',
+    description: 'Управлявайте кредитни условия, аванси и неплатени клиентски салда.',
+    action: 'Регистриране на аванс',
+  },
+  'erp.finance/payables': {
+    title: 'Задължения към доставчици',
+    description: 'Проследявайте задължения, плащания, аванси и прихващания.',
+    action: 'Добавяне на фактура от доставчик',
+  },
+  'erp.finance/cash': {
+    title: 'Касови операции',
+    description: 'Издавайте приходни и разходни касови ордери и преглеждайте дневния регистър.',
+    action: 'Нов касов ордер',
+  },
+  'erp.finance/cash-bank': {
+    title: 'Банково съгласуване',
+    description: 'Въвеждайте банкови извлечения и съпоставяйте преводи с клиентски вземания.',
+    action: 'Ново извлечение',
+  },
+  'erp.finance/registers': {
+    title: 'Финансови справки',
+    description: 'Преглеждайте салда, обороти, дневници на документи и ДДС.',
+    action: 'Преглед на справките',
+  },
+  'erp.procurement/purchase-orders': {
+    title: 'Поръчки за покупка',
+    description: 'Планирайте покупки с количества, очаквани дати и условия за доставка.',
+    action: 'Нова поръчка за покупка',
+  },
+  'erp.procurement/goods-receipts': {
+    title: 'Складови приемания',
+    description: 'Приемайте доставки със серийни номера, партиди, срокове и стойности.',
+    action: 'Ново складово приемане',
+  },
+  'erp.procurement/supplier-claims': {
+    title: 'Рекламации към доставчици',
+    description: 'Проследявайте рекламации за повредени или несъответстващи доставки.',
+    action: 'Нова рекламация',
+  },
+  'erp.procurement/suppliers': {
+    title: 'Доставчици',
+    description: 'Преглеждайте контакти, условия за плащане и доставка и оценки.',
+    action: 'Отваряне на регистъра',
+  },
+  'erp.procurement/supplier-invoices': {
+    title: 'Фактури от доставчици',
+    description:
+      'Регистрирайте фактури и сравнявайте поръчани, доставени и фактурирани количества.',
+    action: 'Регистриране на фактура',
+  },
+  'erp.warehouse/catalog': {
+    title: 'Продукти и мерни единици',
+    description: 'Настройвайте продукти, мерни единици, баркодове и правила за проследяване.',
+    action: 'Добавяне на продукт',
+  },
+  'erp.warehouse/warehouses': {
+    title: 'Складове',
+    description: 'Управлявайте централни, сервизни и мобилни складове без фиксиран лимит.',
+    action: 'Добавяне на склад',
+  },
+  'erp.warehouse/stock': {
+    title: 'Преглед на наличностите',
+    description: 'Преглеждайте налични, резервирани и транзитни количества по склад и продукт.',
+    action: 'Проверка на наличност',
+  },
+  'erp.warehouse/movements': {
+    title: 'Складови движения',
+    description: 'Създавайте и проверявайте приемания, изписвания, трансфери и корекции.',
+    action: 'Ново движение',
+  },
+  'erp.warehouse/stocktakes': {
+    title: 'Инвентаризации',
+    description: 'Провеждайте преброявания, записвайте разлики и подавайте корекции.',
+    action: 'Нова инвентаризация',
+  },
+  'erp.warehouse/reservations': {
+    title: 'Резервации и серийно проследяване',
+    description: 'Резервирайте количества и серийни номера за поръчки, оферти и сервиз.',
+    action: 'Нова резервация',
+  },
+  'erp.sales/quotations': {
+    title: 'Оферти',
+    description: 'Подготвяйте оферти със срок на валидност и отстъпки.',
+    action: 'Нова оферта',
+  },
+  'erp.sales/orders': {
+    title: 'Поръчки за продажба',
+    description: 'Потвърждавайте поръчки и координирайте резервация, експедиция и фактуриране.',
+    action: 'Нова поръчка',
+  },
+  'erp.sales/shipments': {
+    title: 'Експедиции и предаване',
+    description: 'Координирайте подготовката и приемо-предавателните протоколи.',
+    action: 'Подготовка на експедиция',
+  },
+  'erp.sales/price-lists': {
+    title: 'Цени и промоции',
+    description: 'Управлявайте клиентски, групови, индивидуални и промоционални цени.',
+    action: 'Ново ценово правило',
+  },
+  'erp.sales/subscriptions': {
+    title: 'Сервизни абонаменти',
+    description: 'Управлявайте договори за сервиз по клиентски обекти и периодично фактуриране.',
+    action: 'Нов договор',
+  },
+  'erp.service/requests': {
+    title: 'Сервизни заявки',
+    description: 'Регистрирайте и разпределяйте заявки от телефон, имейл, портал или посещение.',
+    action: 'Нова сервизна заявка',
+  },
+  'erp.service/work-orders': {
+    title: 'Работни поръчки',
+    description: 'Отчитайте време, части, снимки, подписи и разходи по сервизната работа.',
+    action: 'Нова работна поръчка',
+  },
+  'erp.service/schedule': {
+    title: 'График на техниците',
+    description: 'Преглеждайте назначените посещения и графика на техниците.',
+    action: 'Планиране на посещение',
+  },
+  'erp.service/devices': {
+    title: 'История на оборудването',
+    description: 'Преглеждайте посещения, ремонти, техници и части по сериен номер.',
+    action: 'Търсене на оборудване',
+  },
+  'erp.service/care': {
+    title: 'Гаранции и проверки',
+    description: 'Следете гаранции, рекламации и задължителни проверки на устройствата.',
+    action: 'Отваряне на регистъра',
+  },
+  'erp.service/reports': {
+    title: 'Сервизни справки',
+    description: 'Преглеждайте обем, завършена работа, натоварване, време и стойност.',
+    action: 'Преглед на справките',
+  },
+  'erp.logistics/deliveries': {
+    title: 'Доставки',
+    description: 'Координирайте фирмен транспорт и куриерски доставки до предаването.',
+    action: 'Планиране на доставка',
+  },
+  'erp.logistics/couriers': {
+    title: 'Куриерски пратки',
+    description: 'Създавайте и проследявайте пратки на Econt и Speedy.',
+    action: 'Създаване на пратка',
+  },
+  'erp.logistics/returns': {
+    title: 'Връщания и обратна логистика',
+    description: 'Управлявайте върнати и ремонтируеми устройства и свързаните заявки.',
+    action: 'Регистриране на връщане',
+  },
+  'erp.logistics/routes': {
+    title: 'Маршрути',
+    description: 'Планирайте маршрути на техници и курсове за доставка по календар.',
+    action: 'Планиране на маршрут',
+  },
+  'crm/locations-equipment': {
+    title: 'Обекти и оборудване',
+    description: 'Поддържайте клиентски обекти, отговорни лица и инсталирано оборудване.',
+    action: 'Добавяне на клиентски обект',
+  },
+  'crm/timeline': {
+    title: 'Контакти, задачи и напомняния',
+    description: 'Поддържайте обща хронологична история по клиент и обект.',
+    action: 'Регистриране на контакт',
+  },
+  'crm/leads': {
+    title: 'Потенциални клиенти и възможности',
+    description: 'Квалифицирайте потенциални клиенти и управлявайте възможностите.',
+    action: 'Нов потенциален клиент',
+  },
+  'crm/tickets': {
+    title: 'Заявки и SLA',
+    description: 'Управлявайте клиентски заявки, срокове, ескалации и връзки със сервиза.',
+    action: 'Нова заявка',
+  },
+  'crm/customer-care': {
+    title: 'Гаранции, обратна връзка и препоръки',
+    description: 'Проследявайте гаранционни рекламации, удовлетвореност, NPS и препоръки.',
+    action: 'Изпращане на анкета',
+  },
+  'crm/analytics': {
+    title: 'CRM анализи',
+    description: 'Анализирайте клиентско поведение, фуния, служители и приходи.',
+    action: 'Създаване на анализ',
+  },
+  'reports/dashboards': {
+    title: 'Табла',
+    description: 'Настройвайте KPI изгледи с ясни филтри, източници и периоди.',
+    action: 'Настройване на табло',
+  },
+  'reports/report-library': {
+    title: 'Библиотека със справки',
+    description: 'Преглеждайте стандартни и конфигурируеми справки за всеки модул.',
+    action: 'Нова дефиниция на справка',
+  },
+  'reports/scheduled-exports': {
+    title: 'Планирани експорти',
+    description: 'Преглеждайте планирани справки, доставки, повторни опити и файлове.',
+    action: 'Планиране на експорт',
+  },
+  'erp.procurement/reports': reportMeta('Снабдяване'),
+  'erp.warehouse/reports': reportMeta('Склад'),
+  'erp.sales/reports': reportMeta('Продажби'),
+  'erp.logistics/reports': reportMeta('Логистика'),
+};
+
+function reportMeta(area: string): WorkflowMeta {
+  return {
+    title: 'Справки',
+    description: `Преглеждайте и експортирайте справки за ${area.toLocaleLowerCase('bg-BG')}.`,
+    action: 'Експортиране',
+  };
+}
+
+function bulgarianModuleName(module: string): string {
+  const [group, area] = module.split('.');
+  const names: Record<string, string> = {
+    crm: 'CRM',
+    finance: 'ФИНАНСИ',
+    logistics: 'ЛОГИСТИКА',
+    procurement: 'СНАБДЯВАНЕ',
+    reports: 'СПРАВКИ',
+    sales: 'ПРОДАЖБИ',
+    service: 'СЕРВИЗ',
+    warehouse: 'СКЛАД',
+  };
+  return area
+    ? `${group?.toUpperCase()} · ${names[area] ?? area.toUpperCase()}`
+    : (names[group ?? ''] ?? module);
 }

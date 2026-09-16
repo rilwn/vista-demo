@@ -14,6 +14,7 @@ import {
 } from '../api/organization';
 import { useAuth } from '../auth/AuthProvider';
 import { Icon } from '../components/Icon';
+import { organizationText as text } from '../i18n/organizationMessages';
 
 type CreateKind = 'branch' | 'entity' | 'location' | 'operator' | 'register';
 
@@ -65,10 +66,10 @@ export function OrganizationPage() {
       <main className="page-stack organization-page">
         <section className="content-panel organization-state">
           <Icon name="organization" size={26} />
-          <h1>Business structure could not be loaded</h1>
-          <p>Check your connection and try again.</p>
+          <h1>{text.loadTitle}</h1>
+          <p>{text.connection}</p>
           <Button onClick={reload} variant="secondary">
-            Try again
+            {text.retry}
           </Button>
         </section>
       </main>
@@ -83,9 +84,9 @@ export function OrganizationPage() {
             <Icon name="organization" size={20} />
           </span>
           <div>
-            <p className="page-eyebrow">Administration</p>
-            <h1>Business structure</h1>
-            <p>Manage legal entities, locations, cash registers, and assigned operators.</p>
+            <p className="page-eyebrow">{text.administration}</p>
+            <h1>{text.title}</h1>
+            <p>{text.subtitle}</p>
           </div>
         </div>
       </header>
@@ -98,37 +99,37 @@ export function OrganizationPage() {
       <TopologySummary topology={topology} />
 
       {canCreate ? (
-        <section className="organization-actions" aria-label="Business structure actions">
+        <section className="organization-actions" aria-label={text.actions}>
           <ActionButton active={composer === 'entity'} onClick={() => setComposer('entity')}>
-            Legal entity
+            {text.legalEntity}
           </ActionButton>
           <ActionButton
             active={composer === 'branch'}
             disabled={!topology.legalEntities.length}
             onClick={() => setComposer('branch')}
           >
-            Branch
+            {text.branch}
           </ActionButton>
           <ActionButton
             active={composer === 'location'}
             disabled={!topology.branches.length}
             onClick={() => setComposer('location')}
           >
-            Location
+            {text.location}
           </ActionButton>
           <ActionButton
             active={composer === 'operator'}
             disabled={!topology.locations.length || !members.length}
             onClick={() => setComposer('operator')}
           >
-            Operator
+            {text.operator}
           </ActionButton>
           <ActionButton
             active={composer === 'register'}
             disabled={!topology.locations.length}
             onClick={() => setComposer('register')}
           >
-            Cash register
+            {text.register}
           </ActionButton>
         </section>
       ) : null}
@@ -154,15 +155,12 @@ export function OrganizationPage() {
         <section className="content-panel organization-empty">
           <span className="organization-empty-mark">01</span>
           <div>
-            <p className="page-eyebrow">Get started</p>
-            <h2>No business structure configured</h2>
-            <p>
-              Add the legal entity first. Branches, operating locations, registers, operators, and
-              warehouse ownership remain unavailable until their parent exists.
-            </p>
+            <p className="page-eyebrow">{text.getStarted}</p>
+            <h2>{text.emptyTitle}</h2>
+            <p>{text.emptyHint}</p>
           </div>
           {canCreate ? (
-            <Button onClick={() => setComposer('entity')}>Add legal entity</Button>
+            <Button onClick={() => setComposer('entity')}>{text.addEntity}</Button>
           ) : null}
         </section>
       )}
@@ -172,17 +170,19 @@ export function OrganizationPage() {
 
 function TopologySummary({ topology }: { topology: OrganizationTopology }) {
   const items = [
-    ['Legal entities', topology.legalEntities.length],
-    ['Branches', topology.branches.length],
-    ['Locations', topology.locations.length],
-    ['Cash registers', topology.cashRegisters.length],
-    ['Operators', topology.operators.length],
+    [text.legalEntities, topology.legalEntities.length],
+    [text.branches, topology.branches.length],
+    [text.locations, topology.locations.length],
+    [text.registers, topology.cashRegisters.length],
+    [text.operators, topology.operators.length],
   ] as const;
   return (
-    <section className="organization-summary" aria-label="Structure summary">
+    <section className="organization-summary" aria-label={text.summary}>
       {items.map(([label, value]) => (
         <article key={label}>
-          <strong>{value.toLocaleString('en-GB')}</strong>
+          <strong>
+            {value.toLocaleString(document.documentElement.lang === 'bg' ? 'bg-BG' : 'en-GB')}
+          </strong>
           <span>{label}</span>
         </article>
       ))}
@@ -192,7 +192,7 @@ function TopologySummary({ topology }: { topology: OrganizationTopology }) {
 
 function TopologyDirectory({ topology }: { topology: OrganizationTopology }) {
   return (
-    <section className="organization-directory" aria-label="Configured business structure">
+    <section className="organization-directory" aria-label={text.configured}>
       {topology.legalEntities.map((entity) => {
         const branches = topology.branches.filter((branch) => branch.legalEntityId === entity.id);
         return (
@@ -204,7 +204,7 @@ function TopologyDirectory({ topology }: { topology: OrganizationTopology }) {
                 <p>
                   {[entity.uic ? `UIC ${entity.uic}` : null, entity.vatNumber]
                     .filter(Boolean)
-                    .join(' · ') || 'Registration identifiers not supplied'}
+                    .join(' · ') || text.identifiersMissing}
                 </p>
               </div>
             </header>
@@ -219,9 +219,7 @@ function TopologyDirectory({ topology }: { topology: OrganizationTopology }) {
                       <div className="organization-branch-heading">
                         <span>{branch.code}</span>
                         <strong>{branch.name}</strong>
-                        <small>
-                          {locations.length} {locations.length === 1 ? 'location' : 'locations'}
-                        </small>
+                        <small>{text.locationCount(locations.length)}</small>
                       </div>
                       {locations.length ? (
                         <div className="organization-locations">
@@ -234,14 +232,14 @@ function TopologyDirectory({ topology }: { topology: OrganizationTopology }) {
                           ))}
                         </div>
                       ) : (
-                        <p className="organization-nested-empty">No operating locations yet.</p>
+                        <p className="organization-nested-empty">{text.noLocations}</p>
                       )}
                     </section>
                   );
                 })}
               </div>
             ) : (
-              <p className="organization-nested-empty">No branches yet.</p>
+              <p className="organization-nested-empty">{text.noBranches}</p>
             )}
           </article>
         );
@@ -279,15 +277,15 @@ function LocationCard({
         {[location.postalCode, location.city, location.countryCode].filter(Boolean).join(' · ')}
       </address>
       <div className="organization-location-resources">
-        <span>{registers.length} registers</span>
-        <span>{operators.length} operators</span>
+        <span>{text.registerCount(registers.length)}</span>
+        <span>{text.operatorCount(operators.length)}</span>
       </div>
       {registers.length ? (
         <div className="organization-registers">
           {registers.map((register) => (
             <span key={register.id}>
               <strong>{register.code}</strong>
-              {register.name} · {register.operatorIds.length} assigned
+              {register.name} · {text.assignedCount(register.operatorIds.length)}
             </span>
           ))}
         </div>
@@ -378,13 +376,9 @@ function TopologyComposer({
         token,
         attempt,
       );
-      onCreated(`${result} was added to the shared business structure.`);
+      onCreated(text.added(result));
     } catch (caught) {
-      setError(
-        caught instanceof ApiClientError
-          ? caught.message
-          : 'The structure record could not be created.',
-      );
+      setError(caught instanceof ApiClientError ? caught.message : text.createError);
     } finally {
       setSaving(false);
     }
@@ -394,16 +388,16 @@ function TopologyComposer({
     <form className="content-panel organization-composer" onSubmit={(event) => void submit(event)}>
       <header className="panel-drawer-header">
         <button
-          aria-label="Back to business structure"
+          aria-label={text.backLabel}
           className="panel-back-button"
           onClick={onCancel}
           type="button"
         >
           <Icon name="arrow" size={17} />
-          Back
+          {text.back}
         </button>
         <button
-          aria-label="Close structure form"
+          aria-label={text.close}
           className="panel-close-button"
           onClick={onCancel}
           type="button"
@@ -411,7 +405,7 @@ function TopologyComposer({
           <Icon name="close" />
         </button>
         <div>
-          <p className="page-eyebrow">Business structure</p>
+          <p className="page-eyebrow">{text.title}</p>
           <h2>{composerTitle(kind)}</h2>
         </div>
       </header>
@@ -419,7 +413,7 @@ function TopologyComposer({
         {kind === 'branch' ? (
           <SelectControl
             id="structure-entity"
-            label="Legal entity"
+            label={text.legalEntity}
             onChange={(value) => set('entityId', value)}
             options={topology.legalEntities.map((item) => [item.id, `${item.code} · ${item.name}`])}
             value={fields['entityId'] ?? topology.legalEntities[0]?.id ?? ''}
@@ -428,7 +422,7 @@ function TopologyComposer({
         {kind === 'location' ? (
           <SelectControl
             id="structure-branch"
-            label="Parent branch"
+            label={text.parentBranch}
             onChange={(value) => set('branchId', value)}
             options={topology.branches.map((item) => [item.id, `${item.code} · ${item.name}`])}
             value={fields['branchId'] ?? topology.branches[0]?.id ?? ''}
@@ -437,7 +431,7 @@ function TopologyComposer({
         {kind === 'operator' || kind === 'register' ? (
           <SelectControl
             id="structure-location"
-            label="Business location"
+            label={text.businessLocation}
             onChange={(value) => {
               set('locationId', value);
               setSelectedOperators([]);
@@ -449,7 +443,7 @@ function TopologyComposer({
         {kind === 'operator' ? (
           <SelectControl
             id="structure-member"
-            label="Employee account"
+            label={text.employeeAccount}
             onChange={(value) => set('accountId', value)}
             options={members.map((item) => [item.accountId, `${item.displayName} · ${item.email}`])}
             value={fields['accountId'] ?? members[0]?.accountId ?? ''}
@@ -457,7 +451,7 @@ function TopologyComposer({
         ) : null}
         <TextField
           id="structure-code"
-          label={kind === 'operator' ? 'Operator code' : `${noun(kind)} code`}
+          label={text.code(noun(kind))}
           maxLength={30}
           onChange={(event) => set('code', event.target.value)}
           required
@@ -466,7 +460,7 @@ function TopologyComposer({
         {kind !== 'operator' ? (
           <TextField
             id="structure-name"
-            label={`${noun(kind)} name`}
+            label={text.name(noun(kind))}
             maxLength={255}
             onChange={(event) => set('name', event.target.value)}
             required
@@ -477,14 +471,14 @@ function TopologyComposer({
           <>
             <TextField
               id="structure-uic"
-              label="UIC (optional)"
+              label={text.uic}
               maxLength={30}
               onChange={(event) => set('uic', event.target.value)}
               value={fields['uic'] ?? ''}
             />
             <TextField
               id="structure-vat"
-              label="VAT number (optional)"
+              label={text.vat}
               maxLength={30}
               onChange={(event) => set('vatNumber', event.target.value)}
               value={fields['vatNumber'] ?? ''}
@@ -495,16 +489,16 @@ function TopologyComposer({
           <>
             <TextField
               id="structure-location-type"
-              label="Location type"
+              label={text.locationType}
               maxLength={100}
               onChange={(event) => set('locationType', event.target.value)}
-              placeholder="e.g. Service and retail center"
+              placeholder={text.locationPlaceholder}
               required
               value={fields['locationType'] ?? ''}
             />
             <TextField
               id="structure-address"
-              label="Address line 1"
+              label={text.address}
               maxLength={255}
               onChange={(event) => set('addressLine1', event.target.value)}
               required
@@ -512,7 +506,7 @@ function TopologyComposer({
             />
             <TextField
               id="structure-city"
-              label="City"
+              label={text.city}
               maxLength={150}
               onChange={(event) => set('city', event.target.value)}
               required
@@ -520,14 +514,14 @@ function TopologyComposer({
             />
             <TextField
               id="structure-postal"
-              label="Postal code (optional)"
+              label={text.postalCode}
               maxLength={30}
               onChange={(event) => set('postalCode', event.target.value)}
               value={fields['postalCode'] ?? ''}
             />
             <TextField
               id="structure-country"
-              label="Country code"
+              label={text.countryCode}
               maxLength={2}
               onChange={(event) => set('countryCode', event.target.value)}
               required
@@ -538,7 +532,7 @@ function TopologyComposer({
       </div>
       {kind === 'register' && eligibleOperators.length ? (
         <fieldset className="organization-operator-picker">
-          <legend>Operators allowed at this register</legend>
+          <legend>{text.allowedOperators}</legend>
           {eligibleOperators.map((operator) => (
             <label key={operator.id}>
               <input
@@ -563,10 +557,10 @@ function TopologyComposer({
       {error ? <InlineAlert tone="error">{error}</InlineAlert> : null}
       <footer>
         <Button onClick={onCancel} type="button" variant="secondary">
-          Cancel
+          {text.cancel}
         </Button>
-        <Button busy={saving} busyLabel="Saving…" type="submit">
-          Add {noun(kind).toLowerCase()}
+        <Button busy={saving} busyLabel={text.saving} type="submit">
+          {text.add(noun(kind))}
         </Button>
       </footer>
     </form>
@@ -654,7 +648,7 @@ function SelectControl({
 
 function OrganizationLoading() {
   return (
-    <main className="page-stack organization-page" aria-label="Loading business structure">
+    <main className="page-stack organization-page" aria-label={text.loading}>
       <div className="organization-loading-header" />
       <div className="organization-loading-summary" />
       <div className="organization-loading-body" />
@@ -663,23 +657,11 @@ function OrganizationLoading() {
 }
 
 function composerTitle(kind: CreateKind) {
-  return {
-    branch: 'Add a branch',
-    entity: 'Add a legal business entity',
-    location: 'Add an operating location',
-    operator: 'Assign an operator',
-    register: 'Add a cash register',
-  }[kind];
+  return text.composer[kind];
 }
 
 function noun(kind: CreateKind) {
-  return {
-    branch: 'Branch',
-    entity: 'Legal entity',
-    location: 'Location',
-    operator: 'Operator',
-    register: 'Cash register',
-  }[kind];
+  return text.nouns[kind];
 }
 
 function useStableAttempt() {

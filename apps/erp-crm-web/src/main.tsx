@@ -7,6 +7,7 @@ import './layout/workspace-theme.css';
 
 import { App } from './App';
 import { AuthProvider } from './auth/AuthProvider';
+import { LocalizationProvider } from './i18n/LocalizationProvider';
 import { RouterProvider } from './routing/Router';
 
 const root = document.querySelector<HTMLDivElement>('#root');
@@ -17,10 +18,12 @@ if (!root) {
 
 createRoot(root).render(
   <StrictMode>
-    <RouterProvider>
-      <AuthProvider>
-        <App />
-      </AuthProvider>
-    </RouterProvider>
+    <LocalizationProvider>
+      <RouterProvider>
+        <AuthProvider>
+          <App />
+        </AuthProvider>
+      </RouterProvider>
+    </LocalizationProvider>
   </StrictMode>,
 );

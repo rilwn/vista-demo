@@ -11,7 +11,7 @@ import {
 } from '../api/files';
 import { ApiClientError } from '../api/client';
 import { Icon } from '../components/Icon';
-import { messages } from '../messages';
+import { messages } from '../i18n/legacyMessages';
 
 export function PartnerDocumentsPanel({
   canEdit,

@@ -71,6 +71,7 @@ import { serviceEvidenceText } from './service-evidence.messages';
 import { createCrmTicketFromServiceRequest, getCrmTicketReferenceData } from '../api/crm-tickets';
 import { useAuth } from '../auth/AuthProvider';
 import { Icon } from '../components/Icon';
+import { useLocalization } from '../i18n/LocalizationProvider';
 import { Link, useRouter } from '../routing/Router';
 import { ServiceReportsView } from './ServiceReportsView';
 
@@ -106,6 +107,7 @@ const emptyWorkOrderPage: ServiceWorkOrderPage = {
 
 export function ServiceOperationsPage({ view }: { view: ServiceOperationsView }) {
   const { hasPermission, session } = useAuth();
+  const { t } = useLocalization();
   const { location, navigate } = useRouter();
   const openedFromNavigation = useRef(false);
   const token = session?.sessionToken ?? '';
@@ -155,58 +157,58 @@ export function ServiceOperationsPage({ view }: { view: ServiceOperationsView })
       </ServiceState>
     );
 
-  const page = pageMeta(view);
+  const page = pageMeta(view, t);
   const businessTimezone = data.references.businessTimezone;
   return (
     <div className="page-stack service-workspace">
       <header className="page-header service-workspace-header">
         <div>
-          <p className="page-eyebrow">ERP · Service</p>
+          <p className="page-eyebrow">{t('service.eyebrow')}</p>
           <h1>{page.title}</h1>
           <p>{page.description}</p>
         </div>
         {view === 'requests' && canCreate ? (
           <Button onClick={() => setCreating(true)}>
-            <Icon name="plus" size={17} /> New service request
+            <Icon name="plus" size={17} /> {t('service.newRequest')}
           </Button>
         ) : null}
       </header>
 
-      <nav aria-label="Service sections" className="service-tabs">
+      <nav aria-label={t('service.sections')} className="service-tabs">
         <Link
           className={({ isActive }) => (isActive ? 'is-active' : undefined)}
           end
           to="/modules/erp.service/requests"
         >
-          Service requests
+          {t('service.requests')}
         </Link>
         <Link
           className={({ isActive }) => (isActive ? 'is-active' : undefined)}
           end
           to="/modules/erp.service/work-orders"
         >
-          Work orders
+          {t('service.workOrders')}
         </Link>
         <Link
           className={({ isActive }) => (isActive ? 'is-active' : undefined)}
           end
           to="/modules/erp.service/schedule"
         >
-          Schedule
+          {t('service.schedule')}
         </Link>
         <Link
           className={({ isActive }) => (isActive ? 'is-active' : undefined)}
           end
           to="/modules/erp.service/devices"
         >
-          Equipment history
+          {t('service.equipmentHistory')}
         </Link>
         <Link
           className={({ isActive }) => (isActive ? 'is-active' : undefined)}
           end
           to="/modules/erp.service/care"
         >
-          Warranty &amp; inspections
+          {t('service.care')}
         </Link>
         {canApprove ? (
           <Link
@@ -214,7 +216,7 @@ export function ServiceOperationsPage({ view }: { view: ServiceOperationsView })
             end
             to="/modules/erp.service/reports"
           >
-            Reports
+            {t('service.reports')}
           </Link>
         ) : null}
       </nav>
@@ -1044,6 +1046,7 @@ function ServiceDevicesView({
   token: string;
   timezone: string;
 }) {
+  const { t } = useLocalization();
   const [equipmentId, setEquipmentId] = useState(references.equipment[0]?.id ?? '');
   const [history, setHistory] = useState<ServiceEquipmentHistory | null>(null);
   const [loading, setLoading] = useState(false);
@@ -1059,41 +1062,37 @@ function ServiceDevicesView({
     setError(null);
     void getServiceEquipmentHistory(token, equipmentId)
       .then((result) => active && setHistory(result))
-      .catch(
-        (caught) => active && setError(errorText(caught, 'Equipment history could not be loaded.')),
-      )
+      .catch((caught) => active && setError(errorText(caught, t('service.historyError'))))
       .finally(() => active && setLoading(false));
     return () => {
       active = false;
     };
-  }, [equipmentId, token]);
+  }, [equipmentId, t, token]);
 
   return (
     <section className="service-device-history-panel">
       <div className="service-device-picker">
         <div>
-          <h2>Service history by serial number</h2>
-          <p>
-            Review every recorded visit, technician, service result, and part used for one device.
-          </p>
+          <h2>{t('service.historyTitle')}</h2>
+          <p>{t('service.historyHint')}</p>
         </div>
         <label>
-          <span>Device</span>
+          <span>{t('service.device')}</span>
           <select onChange={(event) => setEquipmentId(event.target.value)} value={equipmentId}>
             {!references.equipment.length ? (
-              <option value="">No registered equipment</option>
+              <option value="">{t('service.noEquipment')}</option>
             ) : null}
             {references.equipment.map((equipment) => (
               <option key={equipment.id} value={equipment.id}>
                 {equipment.deviceName} · {equipment.serialNumber}
-                {equipment.status === 'retired' ? ' · Retired' : ''}
-                {!equipment.active ? ' · Inactive' : ''}
+                {equipment.status === 'retired' ? ` · ${t('service.retired')}` : ''}
+                {!equipment.active ? ` · ${t('service.inactive')}` : ''}
               </option>
             ))}
           </select>
         </label>
       </div>
-      {loading ? <ServiceState title="Loading equipment history" /> : null}
+      {loading ? <ServiceState title={t('service.loadingHistory')} /> : null}
       {error ? <InlineAlert tone="error">{error}</InlineAlert> : null}
       {!loading && !error && history ? (
         <div className="service-device-history">
@@ -1104,20 +1103,22 @@ function ServiceDevicesView({
             <div>
               <h3>{history.deviceName}</h3>
               <p>
-                Serial {history.serialNumber}
+                {t('service.serial', { serial: history.serialNumber })}
                 {history.warrantyEndsOn
-                  ? ` · Warranty until ${formatDate(history.warrantyEndsOn, timezone)}`
+                  ? ` · ${t('service.warrantyUntil', {
+                      date: formatDate(history.warrantyEndsOn, timezone),
+                    })}`
                   : ''}
               </p>
             </div>
             <strong>
-              {history.events.length} service record{history.events.length === 1 ? '' : 's'}
+              {t(history.events.length === 1 ? 'service.recordCount' : 'service.recordsCount', {
+                count: history.events.length,
+              })}
             </strong>
           </header>
           {!history.events.length ? (
-            <p className="service-empty-inline">
-              No service work has been recorded for this device yet.
-            </p>
+            <p className="service-empty-inline">{t('service.noHistory')}</p>
           ) : (
             <ol className="service-history-list">
               {history.events.map((event) => (
@@ -3942,7 +3943,15 @@ function ServiceStatus({
 }: {
   status: ServiceRequest['status'] | ServiceWorkOrder['status'];
 }) {
-  return <span className={`service-status is-${status}`}>{workOrderStatusLabel(status)}</span>;
+  const { t } = useLocalization();
+  const labels = {
+    cancelled: t('service.status.cancelled'),
+    completed: t('service.status.completed'),
+    in_progress: t('service.status.in_progress'),
+    new: t('service.status.new'),
+    scheduled: t('service.status.scheduled'),
+  };
+  return <span className={`service-status is-${status}`}>{labels[status]}</span>;
 }
 
 function ServiceState({ children, title }: { children?: ReactNode; title: string }) {
@@ -4028,37 +4037,31 @@ function partInput(part: PartForm): ServicePartUsageInput {
   };
 }
 
-function pageMeta(view: ServiceOperationsView) {
+function pageMeta(view: ServiceOperationsView, t: ReturnType<typeof useLocalization>['t']) {
   return {
     care: {
-      description:
-        'Monitor warranty coverage, handle claims, and keep required inspections on schedule.',
-      title: 'Warranty & inspections',
+      description: t('service.careDescription'),
+      title: t('service.care'),
     },
     devices: {
-      description:
-        'Review service visits, repairs, technicians, and parts for each registered device.',
-      title: 'Equipment history',
+      description: t('service.devicesDescription'),
+      title: t('service.equipmentHistory'),
     },
     requests: {
-      description:
-        'Record customer issues, schedule visits, and track each request through completion.',
-      title: 'Service requests',
+      description: t('service.requestsDescription'),
+      title: t('service.requests'),
     },
     reports: {
-      description:
-        'Review Service workload, completion, recorded time, and cost with downloadable reports.',
-      title: 'Service reports',
+      description: t('service.reportsDescription'),
+      title: t('service.reportsTitle'),
     },
     schedule: {
-      description:
-        'See upcoming visits and technician workload without leaving the service workspace.',
-      title: 'Technician schedule',
+      description: t('service.scheduleDescription'),
+      title: t('service.scheduleTitle'),
     },
     'work-orders': {
-      description:
-        'Keep field work, evidence, parts, time, cost, and customer confirmation together.',
-      title: 'Work orders',
+      description: t('service.workOrdersDescription'),
+      title: t('service.workOrders'),
     },
   }[view];
 }
@@ -4172,13 +4175,14 @@ function initials(value: string) {
 }
 
 function formatDate(value: string, timezone: string) {
-  return new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium', timeZone: timezone }).format(
-    new Date(`${value}T12:00:00Z`),
-  );
+  return new Intl.DateTimeFormat(activeDateLocale(), {
+    dateStyle: 'medium',
+    timeZone: timezone,
+  }).format(new Date(`${value}T12:00:00Z`));
 }
 
 function formatDateTime(value: string, timezone: string) {
-  return new Intl.DateTimeFormat('en-GB', {
+  return new Intl.DateTimeFormat(activeDateLocale(), {
     dateStyle: 'medium',
     timeStyle: 'short',
     timeZone: timezone,
@@ -4186,7 +4190,7 @@ function formatDateTime(value: string, timezone: string) {
 }
 
 function formatTime(value: string, timezone: string) {
-  return new Intl.DateTimeFormat('en-GB', {
+  return new Intl.DateTimeFormat(activeDateLocale(), {
     hour: '2-digit',
     minute: '2-digit',
     timeZone: timezone,
@@ -4194,9 +4198,13 @@ function formatTime(value: string, timezone: string) {
 }
 
 function formatMoney(value: string) {
-  return new Intl.NumberFormat('en-GB', { currency: 'BGN', style: 'currency' }).format(
+  return new Intl.NumberFormat(activeDateLocale(), { currency: 'BGN', style: 'currency' }).format(
     Number(value),
   );
+}
+
+function activeDateLocale() {
+  return document.documentElement.lang === 'bg' ? 'bg-BG' : 'en-GB';
 }
 
 function formatMinutes(value: number) {

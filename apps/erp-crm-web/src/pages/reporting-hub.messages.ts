@@ -1,4 +1,6 @@
-export const hubCopy = {
+import { getOperationsLocale } from '../i18n/LocalizationProvider';
+
+const english = {
   library: 'Report library',
   schedules: 'Scheduled exports',
   dashboards: 'Dashboards',
@@ -82,3 +84,95 @@ export const hubCopy = {
   notification: 'Your scheduled report is ready',
   notificationDetail: (name: string) => `${name}. Open Reports → Scheduled exports to download it.`,
 } as const;
+
+const bulgarian = {
+  library: 'Библиотека със справки',
+  schedules: 'Планирани експорти',
+  dashboards: 'Табла',
+  title: 'Справки',
+  description: 'Вашите справки, запазени изгледи и планирани файлове.',
+  standard: 'Преглед на справките',
+  saved: 'Моите запазени изгледи',
+  search: 'Търсене на справка',
+  all: 'Всички модули',
+  module: 'Модул',
+  open: 'Отваряне на справката',
+  view: 'Преглед на изгледа',
+  export: 'Подготовка на експорт',
+  schedule: 'Планиране на този изглед',
+  empty: 'Все още няма запазени изгледи. Запазете изглед от страницата на модулна справка.',
+  noMatch: 'Няма справки, които съвпадат с търсенето.',
+  noSchedules: 'Все още няма графици. Изберете запазен изглед, за да създадете.',
+  refresh: 'Обновяване',
+  retry: 'Опитайте отново',
+  download: 'Изтегляне',
+  loading: 'Зареждане на справките…',
+  error: 'Справките не могат да бъдат заредени. Опитайте отново.',
+  actionError:
+    'Действието не може да бъде завършено. Изборът е запазен. Обновете и опитайте отново.',
+  close: 'Назад',
+  next: 'Следваща',
+  previous: 'Предишна',
+  page: (n: number, total: number) => `Страница ${n} от ${Math.max(total, 1)}`,
+  name: 'Име на графика',
+  first: 'Първо изпълнение',
+  cadence: 'Повторение',
+  period: 'Период на справката',
+  create: 'Създаване на график',
+  creating: 'Създаване на графика',
+  created: 'Графикът е запазен.',
+  paused: 'Спряно',
+  active: 'Активно',
+  blocked: 'Изисква преглед',
+  pause: 'Спиране',
+  resume: 'Продължаване',
+  history: 'История на изпълненията',
+  noRuns: 'Все още няма изпълнения. Първият файл ще се появи след планираното време.',
+  nextRun: 'Следващо изпълнение',
+  timezone: (name: string) => `Всички времена използват ${name}.`,
+  timeHint:
+    'Използвайте дата и час от вчера нататък. Изминал час се изпълнява скоро след запазване.',
+  resumeHint: 'Продължаването създава и пропуснатите изпълнения.',
+  delivery: 'Файловете се доставят във вашия профил тук. Изпращането по имейл не е включено.',
+  fields: 'Включени полета',
+  dates: 'Запазени дати',
+  current: 'Текущи записи',
+  noFields: 'Всички полета',
+  cadences: { daily: 'Ежедневно', weekly: 'Ежеседмично', monthly: 'Ежемесечно' },
+  periods: {
+    saved_dates: 'Запазване на избраните дати',
+    previous_day: 'Предишен ден',
+    previous_7_days: 'Предишните 7 пълни дни',
+    previous_month: 'Предишен календарен месец',
+    current: 'Текущи записи',
+  },
+  formats: { xlsx: 'Excel', csv: 'CSV', pdf: 'PDF' },
+  statuses: {
+    queued: 'На опашка',
+    processing: 'Подготовка',
+    completed: 'Готово',
+    failed: 'Изисква внимание',
+  },
+  scopes: {
+    finance: 'Финанси',
+    procurement: 'Снабдяване',
+    warehouse: 'Склад',
+    sales: 'Продажби',
+    logistics: 'Логистика',
+    service: 'Сервиз',
+    crm: 'CRM',
+    pos: 'POS',
+  },
+  dashboardHint:
+    'Изберете табло и използвайте Настройване на картите, за да запазите желаните обобщения.',
+  overview: 'Оперативен преглед',
+  notification: 'Планираната справка е готова',
+  notificationDetail: (name: string) =>
+    `${name}. Отворете Справки, след това Планирани експорти, за да я изтеглите.`,
+} as const;
+
+export const hubCopy = new Proxy(english, {
+  get(target, property, receiver) {
+    return Reflect.get(getOperationsLocale() === 'bg' ? bulgarian : target, property, receiver);
+  },
+});

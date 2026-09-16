@@ -5,7 +5,9 @@ import { LoginPage } from './auth/LoginPage';
 import { RecoveryPage } from './auth/RecoveryPage';
 import { Icon } from './components/Icon';
 import { WorkspaceLayout } from './layout/WorkspaceLayout';
-import { messages } from './messages';
+import { messages } from './i18n/legacyMessages';
+import { LegacyTranslationBoundary } from './i18n/LegacyTranslationBoundary';
+import { useLocalization } from './i18n/LocalizationProvider';
 import { AccessPage } from './pages/AccessPage';
 import { CatalogPage } from './pages/CatalogPage';
 import { CrmTicketsPage } from './pages/CrmTicketsPage';
@@ -56,6 +58,7 @@ export function App() {
 
 function Application() {
   const { hasPermission, status } = useAuth();
+  useLocalization();
   const { location } = useRouter();
 
   if (location.pathname === '/recover') return <RecoveryPage />;
@@ -65,7 +68,13 @@ function Application() {
     return <Navigate replace state={{ from: location.pathname }} to="/login" />;
   }
 
-  return <WorkspaceLayout>{pageForPath(location.pathname, hasPermission)}</WorkspaceLayout>;
+  return (
+    <WorkspaceLayout>
+      <LegacyTranslationBoundary>
+        {pageForPath(location.pathname, hasPermission)}
+      </LegacyTranslationBoundary>
+    </WorkspaceLayout>
+  );
 }
 
 function pageForPath(

@@ -4,13 +4,17 @@ import { Help } from '@vista/ui';
 import { useAuth } from '../auth/AuthProvider';
 import { GlobalNavigationSearch } from '../components/GlobalNavigationSearch';
 import { Icon } from '../components/Icon';
+import { LanguageSwitcher } from '../components/LanguageSwitcher';
 import { NotificationCenter } from '../components/NotificationCenter';
+import { localizeModule, moduleLabel, navigationGroupLabel } from '../i18n/navigation';
+import { useLocalization } from '../i18n/LocalizationProvider';
 import { allModuleItems, navigationGroups } from '../navigation';
 import { messages } from '../messages';
 import { Link, useRouter } from '../routing/Router';
 
 export function WorkspaceLayout({ children }: PropsWithChildren) {
   const { hasPermission, logout, session } = useAuth();
+  const { t } = useLocalization();
   const { location } = useRouter();
   const [navigationOpen, setNavigationOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
@@ -22,10 +26,13 @@ export function WorkspaceLayout({ children }: PropsWithChildren) {
       navigationGroups
         .map((group) => ({
           ...group,
-          modules: group.modules.filter((module) => hasPermission(module.key)),
+          label: navigationGroupLabel(group.label, t),
+          modules: group.modules
+            .filter((module) => hasPermission(module.key))
+            .map((module) => localizeModule(module, t)),
         }))
         .filter((group) => group.modules.length > 0),
-    [hasPermission],
+    [hasPermission, t],
   );
 
   if (!session) return null;
@@ -41,10 +48,10 @@ export function WorkspaceLayout({ children }: PropsWithChildren) {
   return (
     <div className="workspace-shell">
       <a className="skip-link" href="#workspace-content">
-        {messages.navigation.skip}
+        {t('navigation.skip')}
       </a>
       <button
-        aria-label={messages.navigation.close}
+        aria-label={t('navigation.close')}
         className={`navigation-scrim${navigationOpen ? ' is-open' : ''}`}
         onClick={() => setNavigationOpen(false)}
         type="button"
@@ -61,11 +68,11 @@ export function WorkspaceLayout({ children }: PropsWithChildren) {
             </span>
             <span className="sidebar-brand-copy">
               <strong>{messages.product.name}</strong>
-              <small>Business workspace</small>
+              <small>{t('product.workspace')}</small>
             </span>
           </Link>
           <button
-            aria-label={messages.navigation.close}
+            aria-label={t('navigation.close')}
             className="sidebar-close"
             onClick={() => setNavigationOpen(false)}
             type="button"
@@ -74,9 +81,9 @@ export function WorkspaceLayout({ children }: PropsWithChildren) {
           </button>
         </div>
 
-        <nav aria-label={messages.navigation.primaryLabel} className="sidebar-navigation">
-          <NavigationSection label={messages.navigation.workspace}>
-            <SidebarLink end icon="home" label={messages.navigation.overview} to="/" />
+        <nav aria-label={t('navigation.primary')} className="sidebar-navigation">
+          <NavigationSection label={t('navigation.workspace')}>
+            <SidebarLink end icon="home" label={t('navigation.overview')} to="/" />
           </NavigationSection>
           {visibleGroups.map((group) => (
             <NavigationSection key={group.label} label={group.label}>
@@ -100,7 +107,7 @@ export function WorkspaceLayout({ children }: PropsWithChildren) {
             </span>
             <span className="account-copy">
               <strong>{session.context.displayName}</strong>
-              <small>Account &amp; security</small>
+              <small>{t('account.security')}</small>
             </span>
             <Icon name="arrow" size={16} />
           </Link>
@@ -111,7 +118,7 @@ export function WorkspaceLayout({ children }: PropsWithChildren) {
         <header className="workspace-topbar">
           <button
             aria-expanded={navigationOpen}
-            aria-label={messages.navigation.menu}
+            aria-label={t('navigation.open')}
             className="mobile-menu"
             onClick={() => setNavigationOpen(true)}
             type="button"
@@ -126,6 +133,7 @@ export function WorkspaceLayout({ children }: PropsWithChildren) {
                 .filter((item) => item.action === 'view')
                 .map((item) => item.module)}
             />
+            <LanguageSwitcher />
             <NotificationCenter />
             <AccountMenu
               administrative={session.context.isAdministrative}
@@ -142,14 +150,14 @@ export function WorkspaceLayout({ children }: PropsWithChildren) {
           {pageParent ? (
             <nav aria-label="Page navigation" className="workspace-page-navigation">
               <Link
-                aria-label={`${messages.navigation.backTo} ${pageParent.label}`}
+                aria-label={t('navigation.backTo', {
+                  area: moduleLabel(pageParent.key, t),
+                })}
                 className="workspace-back-link"
                 to={pageParent.to}
               >
                 <Icon name="arrow" size={16} />
-                <span>
-                  {messages.navigation.backTo} {pageParent.label}
-                </span>
+                <span>{t('navigation.backTo', { area: moduleLabel(pageParent.key, t) })}</span>
               </Link>
             </nav>
           ) : null}
@@ -178,6 +186,7 @@ function AccountMenu({
   signingOut: boolean;
 }) {
   const { location } = useRouter();
+  const { t } = useLocalization();
   const rootRef = useRef<HTMLDivElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const [open, setOpen] = useState(false);
@@ -207,7 +216,7 @@ function AccountMenu({
       <button
         aria-expanded={open}
         aria-haspopup="menu"
-        aria-label="Open account menu"
+        aria-label={t('account.openMenu')}
         className="topbar-account-trigger"
         onClick={() => setOpen((value) => !value)}
         ref={triggerRef}
@@ -218,13 +227,13 @@ function AccountMenu({
         </span>
         <span className="topbar-account-copy">
           <strong>{displayName}</strong>
-          <small>{administrative ? messages.home.adminAccess : messages.home.standardAccess}</small>
+          <small>{administrative ? t('account.administrative') : t('account.standard')}</small>
         </span>
         <Icon name="chevron" size={16} />
       </button>
 
       {open ? (
-        <div aria-label="Account menu" className="account-menu-popover" role="menu">
+        <div aria-label={t('account.menu')} className="account-menu-popover" role="menu">
           <header>
             <span className="account-avatar" aria-hidden="true">
               {initials}
@@ -234,21 +243,25 @@ function AccountMenu({
               <small>{email}</small>
             </div>
           </header>
-          <nav aria-label="Account destinations">
-            <AccountMenuLink icon="profile" label="My access & security" to="/access" />
-            <AccountMenuLink icon="home" label="Overview" to="/" />
+          <nav aria-label={t('account.destinations')}>
+            <AccountMenuLink icon="profile" label={t('account.myAccess')} to="/access" />
+            <AccountMenuLink icon="home" label={t('navigation.overview')} to="/" />
             {hasPermission('platform') ? (
-              <AccountMenuLink icon="shield" label="Security administration" to="/security" />
+              <AccountMenuLink icon="shield" label={t('account.securityAdmin')} to="/security" />
             ) : null}
             {hasPermission('platform.organization') ? (
               <AccountMenuLink
                 icon="organization"
-                label="Organization settings"
+                label={t('account.organizationSettings')}
                 to="/organization"
               />
             ) : null}
             {hasPermission('platform') ? (
-              <AccountMenuLink icon="activity" label="System activity" to="/operations" />
+              <AccountMenuLink
+                icon="activity"
+                label={t('account.systemActivity')}
+                to="/operations"
+              />
             ) : null}
           </nav>
           <footer>
@@ -262,7 +275,7 @@ function AccountMenu({
               type="button"
             >
               <Icon name="logout" size={17} />
-              <span>{signingOut ? 'Signing out…' : messages.navigation.signOut}</span>
+              <span>{signingOut ? t('account.signingOut') : t('account.signOut')}</span>
             </button>
           </footer>
         </div>
@@ -289,11 +302,11 @@ function AccountMenuLink({
   );
 }
 
-function nestedPageParent(pathname: string): { label: string; to: string } | null {
+function nestedPageParent(pathname: string): { key: string; to: string } | null {
   const moduleMatch = /^\/modules\/([^/]+)\/[^/]+$/u.exec(pathname);
   if (moduleMatch?.[1]) {
     const module = allModuleItems.find((item) => item.key === moduleMatch[1]);
-    if (module) return { label: module.label, to: module.path };
+    if (module) return { key: module.key, to: module.path };
   }
 
   const moduleKey =
@@ -304,10 +317,10 @@ function nestedPageParent(pathname: string): { label: string; to: string } | nul
         : null;
   if (moduleKey) {
     const module = allModuleItems.find((item) => item.key === moduleKey);
-    if (module) return { label: module.label, to: module.path };
+    if (module) return { key: module.key, to: module.path };
   }
 
-  return pathname === '/access' ? { label: messages.navigation.overview, to: '/' } : null;
+  return pathname === '/access' ? { key: 'overview', to: '/' } : null;
 }
 
 function NavigationSection({ children, label }: PropsWithChildren<{ label: string }>) {

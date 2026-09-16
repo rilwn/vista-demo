@@ -16,7 +16,7 @@ import {
 } from '../api/integrations';
 import { useAuth } from '../auth/AuthProvider';
 import { Icon } from '../components/Icon';
-import { messages } from '../messages';
+import { messages } from '../i18n/legacyMessages';
 import { JobMonitor } from './JobMonitor';
 
 type StatusFilter = IntegrationEventStatus | 'all';
@@ -78,7 +78,7 @@ export function SystemActivityPage() {
           <div>
             <p className="page-eyebrow">{messages.operations.eyebrow}</p>
             <h1>{messages.operations.title}</h1>
-            <p>Review queued work, delivery progress, and items that need attention.</p>
+            <p>{messages.operations.introduction}</p>
           </div>
         </div>
         <Button disabled={loading} onClick={reload} variant="secondary">
@@ -173,13 +173,13 @@ export function SystemActivityPage() {
               </table>
             </div>
             {totalPages > 1 ? (
-              <nav aria-label="Activity pages" className="system-activity-pagination">
+              <nav aria-label={messages.operations.pages} className="system-activity-pagination">
                 <Button
                   disabled={page === 1 || loading}
                   onClick={() => setPage((value) => Math.max(1, value - 1))}
                   variant="quiet"
                 >
-                  Previous
+                  {messages.operations.previous}
                 </Button>
                 <span>
                   Page {page} of {totalPages}
@@ -189,7 +189,7 @@ export function SystemActivityPage() {
                   onClick={() => setPage((value) => Math.min(totalPages, value + 1))}
                   variant="quiet"
                 >
-                  Next
+                  {messages.operations.next}
                 </Button>
               </nav>
             ) : null}
@@ -310,13 +310,13 @@ function ActivityDrawer({
       >
         <header className="panel-drawer-header">
           <button
-            aria-label="Back to system activity"
+            aria-label={messages.operations.backLabel}
             className="panel-back-button"
             onClick={onClose}
             type="button"
           >
             <Icon name="arrow" size={17} />
-            Back
+            {messages.operations.back}
           </button>
           <button
             aria-label={messages.operations.close}

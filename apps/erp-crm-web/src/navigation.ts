@@ -1,5 +1,5 @@
 import type { IconName } from './components/Icon';
-import { messages, moduleMessages } from './messages';
+import { messages, moduleMessages } from './i18n/legacyMessages';
 
 export type ModuleKey = keyof typeof moduleMessages;
 

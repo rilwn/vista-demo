@@ -21,7 +21,7 @@ import { ApiClientError } from '../api/client';
 import { useAuth } from '../auth/AuthProvider';
 import { AuthenticatorQrCode } from '../components/AuthenticatorQrCode';
 import { Icon } from '../components/Icon';
-import { messages, moduleMessages } from '../messages';
+import { messages, moduleMessages } from '../i18n/legacyMessages';
 
 interface PasswordFields {
   confirmNewPassword?: string;
@@ -333,11 +333,11 @@ function AuthenticatorEnrollmentDrawer({
             className="authenticator-setup-key"
             aria-label={messages.access.authenticatorSetupCode}
           >
-            <span>Manual setup key</span>
+            <span>{messages.access.authenticatorManualKey}</span>
             <code>{groupAuthenticatorKey(enrollment.manualEntryKey)}</code>
           </section>
           <details className="authenticator-setup-link">
-            <summary>Use a setup link instead</summary>
+            <summary>{messages.access.authenticatorUseLink}</summary>
             <TextField
               id="authenticator-setup-link"
               label={messages.access.authenticatorSetupLink}
@@ -500,14 +500,14 @@ function SecurityDrawer({
       >
         <header className="panel-drawer-header">
           <button
-            aria-label="Back to my access"
+            aria-label={messages.access.backLabel}
             className="panel-back-button"
             disabled={busy}
             onClick={onClose}
             type="button"
           >
             <Icon name="arrow" size={17} />
-            Back
+            {messages.access.back}
           </button>
           <button
             aria-label={messages.access.cancelAuthenticator}
@@ -615,14 +615,14 @@ function PasswordChangeDrawer({
       >
         <header className="panel-drawer-header">
           <button
-            aria-label="Back to my access"
+            aria-label={messages.access.backLabel}
             className="panel-back-button"
             disabled={busy}
             onClick={onClose}
             type="button"
           >
             <Icon name="arrow" size={17} />
-            Back
+            {messages.access.back}
           </button>
           <button
             aria-label={messages.access.closePassword}

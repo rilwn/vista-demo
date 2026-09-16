@@ -1,4 +1,6 @@
-export const workAreaMessages = {
+import { getOperationsLocale } from '../i18n/LocalizationProvider';
+
+const english = {
   title: 'Choose an area',
   partners: {
     path: '/partners',
@@ -19,3 +21,31 @@ export const workAreaMessages = {
     icon: 'warehouse',
   },
 } as const;
+
+const bulgarian = {
+  title: 'Изберете област',
+  partners: {
+    path: '/partners',
+    label: 'Регистър на партньорите',
+    description: 'Клиенти, доставчици, контакти и обекти.',
+    icon: 'customers',
+  },
+  catalog: {
+    path: '/catalog',
+    label: 'Продуктов каталог',
+    description: 'Продукти, мерни единици, баркодове и правила за проследяване.',
+    icon: 'warehouse',
+  },
+  categories: {
+    path: '/catalog/categories',
+    label: 'Продуктови категории',
+    description: 'Групи продукти и проследяване по сериен номер, партида или срок.',
+    icon: 'warehouse',
+  },
+} as const;
+
+export const workAreaMessages = new Proxy(english, {
+  get(target, property, receiver) {
+    return Reflect.get(getOperationsLocale() === 'bg' ? bulgarian : target, property, receiver);
+  },
+});
