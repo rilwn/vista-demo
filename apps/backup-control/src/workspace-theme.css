@@ -250,3 +250,187 @@
     align-items: flex-start;
   }
 }
+.recovery-language-switcher {
+  align-items: center;
+  background: #f3f6f4;
+  border: 1px solid #d6dfd9;
+  border-radius: 9px;
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+}
+
+.recovery-language-switcher button {
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  color: #647169;
+  cursor: pointer;
+  font:
+    700 11px/1 system-ui,
+    sans-serif;
+  min-height: 27px;
+  min-width: 31px;
+  padding: 0 7px;
+}
+
+.recovery-language-switcher button[aria-pressed='true'] {
+  background: #184d35;
+  color: white;
+  box-shadow: 0 1px 2px rgb(18 57 38 / 20%);
+}
+
+.recovery-language-switcher.is-floating {
+  position: fixed;
+  right: 24px;
+  top: 22px;
+  z-index: 20;
+}
+
+/* Keep Recovery's utility controls as one calm, bordered topbar group. */
+.backup-topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.backup-topbar-actions .vista-help-trigger,
+.backup-setup-status,
+.backup-account-control {
+  border: 1px solid #d9e1db;
+  background: #fff;
+  box-shadow: 0 1px 2px rgb(21 47 31 / 4%);
+}
+
+.backup-topbar-actions .vista-help-trigger {
+  min-height: 2.55rem;
+  border-radius: 0.7rem;
+}
+
+.backup-setup-status {
+  min-height: 2.55rem;
+  padding: 0.45rem 0.7rem;
+  border-radius: 0.7rem;
+  color: #58685e;
+  white-space: nowrap;
+}
+
+.backup-account-control {
+  display: grid;
+  min-width: 14.5rem;
+  min-height: 2.7rem;
+  overflow: hidden;
+  align-items: center;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 0.55rem;
+  padding-left: 0.3rem;
+  border-radius: 0.75rem;
+}
+
+.backup-account-avatar {
+  display: grid;
+  width: 2.05rem;
+  height: 2.05rem;
+  place-items: center;
+  border: 1px solid #d6e4d8;
+  border-radius: 0.58rem;
+  color: #285c3a;
+  background: #edf6ee;
+  font-size: 0.63rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.backup-account-copy {
+  display: grid;
+  min-width: 0;
+  gap: 0.08rem;
+  line-height: 1.15;
+}
+
+.backup-account-copy strong,
+.backup-account-copy small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.backup-account-copy strong {
+  color: #22372a;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.backup-account-copy small {
+  color: #78857c;
+  font-size: 0.62rem;
+}
+
+.backup-account-control .backup-sign-out.vista-button {
+  display: inline-flex;
+  align-self: stretch;
+  min-height: 100%;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0 0.7rem;
+  border: 0;
+  border-left: 1px solid #e0e6e1;
+  border-radius: 0;
+  color: #7a3939;
+  background: #fffafa;
+  font-weight: 700;
+  box-shadow: none;
+}
+
+.backup-account-control .backup-sign-out .backup-icon {
+  width: 1rem;
+  height: 1rem;
+  stroke-width: 1.85;
+}
+
+.backup-account-control .backup-sign-out.vista-button:hover:not(:disabled) {
+  color: #692929;
+  background: #fbeeee;
+}
+
+@media (max-width: 1040px) {
+  .backup-setup-status {
+    display: none;
+  }
+}
+
+@media (max-width: 720px) {
+  .backup-account-control {
+    min-width: 0;
+  }
+
+  .backup-account-copy {
+    display: none;
+  }
+}
+
+@media (max-width: 560px) {
+  .backup-area-picker {
+    width: min(11rem, 38vw);
+  }
+
+  .backup-topbar-actions {
+    gap: 0.35rem;
+  }
+
+  .backup-topbar-actions .vista-help-trigger {
+    width: 2.55rem;
+    padding-inline: 0;
+    font-size: 0;
+  }
+
+  .backup-topbar-actions .vista-help-trigger::before {
+    content: '?';
+    font-size: 0.8rem;
+    font-weight: 800;
+  }
+
+  .backup-account-control .backup-sign-out.vista-button {
+    padding-inline: 0.55rem;
+  }
+}

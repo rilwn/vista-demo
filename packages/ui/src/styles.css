@@ -2047,6 +2047,24 @@ select.vista-searchable-multi-select {
   font-size: 14px;
   font-weight: 600;
 }
+
+.vista-help-topic summary {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.vista-help-topic summary small {
+  background: #e7f2ea;
+  border-radius: 999px;
+  color: #24613d;
+  flex: 0 0 auto;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  padding: 4px 8px;
+}
 .vista-help-topic ol {
   padding: 0 22px 0 36px;
   margin: 0 0 16px;

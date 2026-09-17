@@ -10,6 +10,7 @@ import {
   type SavedCheckout,
 } from './checkout-store';
 import { definitelyRejected } from './checkout-recovery';
+import { getPosDateLocale } from './i18n/LocalizationProvider';
 
 export function CheckoutRecovery({
   accountId,
@@ -171,7 +172,7 @@ export function CheckoutRecovery({
         {pending ? (
           <small>
             Saved{' '}
-            {new Intl.DateTimeFormat('en-GB', {
+            {new Intl.DateTimeFormat(getPosDateLocale(), {
               dateStyle: 'medium',
               timeStyle: 'short',
               timeZone: 'Europe/Sofia',

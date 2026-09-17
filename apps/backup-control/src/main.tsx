@@ -7,6 +7,8 @@ import './styles.css';
 import './workspace-theme.css';
 
 import { App } from './App';
+import { LocalizationProvider } from './i18n/LocalizationProvider';
+import { TranslationBoundary } from './i18n/TranslationBoundary';
 
 const root = document.querySelector<HTMLDivElement>('#root');
 
@@ -16,6 +18,10 @@ if (!root) {
 
 createRoot(root).render(
   <StrictMode>
-    <App />
+    <LocalizationProvider>
+      <TranslationBoundary>
+        <App />
+      </TranslationBoundary>
+    </LocalizationProvider>
   </StrictMode>,
 );

@@ -4,6 +4,7 @@ import { AuthenticationForm, Button, SearchableSelects, VistaMark } from '@vista
 
 import { ApiClientError, authenticate, getCurrentAccount, revokeSession } from './api/auth';
 import { PosTerminal } from './PosTerminal';
+import { LanguageSwitcher } from './i18n/LanguageSwitcher';
 
 export function App() {
   return (
@@ -32,15 +33,18 @@ function Application() {
     return <ApplicationLoading label="Restoring POS access" />;
   if (authentication.status === 'anonymous') {
     return (
-      <AuthenticationForm
-        applicationName="Vista POS"
-        eyebrow="Cashier terminal"
-        errorMessage={signInError}
-        onAuthenticate={authentication.login}
-        subtitle="Use your assigned cashier account."
-        supportText="Need help? Contact your Vista Service administrator."
-        variant="pos"
-      />
+      <>
+        <LanguageSwitcher floating />
+        <AuthenticationForm
+          applicationName="Vista POS"
+          eyebrow="Cashier terminal"
+          errorMessage={signInError}
+          onAuthenticate={authentication.login}
+          subtitle="Use your assigned cashier account."
+          supportText="Need help? Contact your Vista Service administrator."
+          variant="pos"
+        />
+      </>
     );
   }
   if (!session) return <ApplicationLoading label="Preparing POS access" />;

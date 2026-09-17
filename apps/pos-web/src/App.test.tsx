@@ -417,7 +417,9 @@ describe('POS application', () => {
     fireEvent.click(screen.getByRole('link', { name: 'Shifts' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Open cashier shift' }));
     fireEvent.click(await screen.findByRole('link', { name: 'Shifts' }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Close cashier shift' }));
+    const closeShift = await screen.findByRole('button', { name: 'Close cashier shift' });
+    await waitFor(() => expect(closeShift.hasAttribute('disabled')).toBe(false));
+    fireEvent.click(closeShift);
 
     expect(await screen.findByRole('button', { name: 'Open cashier shift' })).toBeTruthy();
     expect(

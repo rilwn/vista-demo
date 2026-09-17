@@ -6,6 +6,9 @@ import { useState } from 'react';
 
 import { ApiClientError, authenticate, getCurrentAccount, revokeSession } from './api/auth';
 import { messages } from './messages';
+import { bg } from './i18n/catalog';
+import { LanguageSwitcher } from './i18n/LanguageSwitcher';
+import { useLocalization } from './i18n/LocalizationProvider';
 
 type BackupScreen =
   'approvals' | 'audit' | 'dr-tests' | 'jobs' | 'overview' | 'policies' | 'sources';
@@ -103,15 +106,18 @@ function Application() {
   }
   if (authentication.status === 'anonymous') {
     return (
-      <AuthenticationForm
-        applicationName="Vista Recovery"
-        eyebrow="Backup and recovery"
-        errorMessage={signInError}
-        onAuthenticate={authentication.login}
-        subtitle="Use your assigned recovery account."
-        supportText="Need help? Contact your Vista Service administrator."
-        variant="recovery"
-      />
+      <>
+        <LanguageSwitcher floating />
+        <AuthenticationForm
+          applicationName="Vista Recovery"
+          eyebrow="Backup and recovery"
+          errorMessage={signInError}
+          onAuthenticate={authentication.login}
+          subtitle="Use your assigned recovery account."
+          supportText="Need help? Contact your Vista Service administrator."
+          variant="recovery"
+        />
+      </>
     );
   }
   if (!session) {
@@ -145,6 +151,7 @@ function BackupConsole({
   onSignOut: () => Promise<void>;
 }) {
   const [screen, setScreen] = useState<BackupScreen>('overview');
+  const { locale } = useLocalization();
   const active = screens[screen];
   const navigation = useActiveItemVisibility<HTMLElement>(screen);
 
@@ -207,14 +214,29 @@ function BackupConsole({
             </select>
           </label>
           <div className="backup-topbar-actions">
-            <Help app="recovery" />
-            <span>
+            <Help app="recovery" context={screen} locale={locale} />
+            <LanguageSwitcher />
+            <span className="backup-setup-status">
               <i className="backup-risk-dot" /> Setup incomplete
             </span>
-            <span className="backup-signed-in">{employeeName}</span>
-            <Button className="backup-sign-out" onClick={() => void onSignOut()} variant="quiet">
-              Sign out
-            </Button>
+            <div className="backup-account-control">
+              <span aria-hidden="true" className="backup-account-avatar">
+                {employeeName
+                  .split(/\s+/u)
+                  .filter(Boolean)
+                  .slice(0, 2)
+                  .map((part) => part[0]?.toUpperCase())
+                  .join('') || 'VR'}
+              </span>
+              <span className="backup-account-copy">
+                <strong>{employeeName}</strong>
+                <small>Recovery access</small>
+              </span>
+              <Button className="backup-sign-out" onClick={() => void onSignOut()} variant="quiet">
+                <BackupIcon name="logout" />
+                Sign out
+              </Button>
+            </div>
           </div>
         </header>
         <section className="backup-page-heading">
@@ -247,7 +269,14 @@ function BackupConsole({
           <div className="backup-list-controls">
             <label>
               <span>Search</span>
-              <input disabled placeholder={`Search ${active.title.toLowerCase()}`} />
+              <input
+                disabled
+                placeholder={
+                  locale === 'bg'
+                    ? `Търсене: ${bg(active.title).toLocaleLowerCase('bg-BG')}`
+                    : `Search ${active.title.toLowerCase()}`
+                }
+              />
             </label>
             <button disabled type="button">
               All states
@@ -332,7 +361,15 @@ function signInError(error: unknown): string {
 }
 
 type BackupIconName =
-  'approvals' | 'audit' | 'brand' | 'dr-tests' | 'jobs' | 'overview' | 'policies' | 'sources';
+  | 'approvals'
+  | 'audit'
+  | 'brand'
+  | 'dr-tests'
+  | 'jobs'
+  | 'logout'
+  | 'overview'
+  | 'policies'
+  | 'sources';
 
 function screenIcon(screen: BackupScreen): BackupIconName {
   return screen;
@@ -363,6 +400,7 @@ const backupIconPaths: Record<BackupIconName, React.ReactNode> = {
   brand: <path d="M4.5 6.5 10.5 19 19.5 5m-10 1.5 4 8.5 6-10" />,
   'dr-tests': <path d="M4 19h16M6 16V8l6-4 6 4v8M9 12h6M12 9v6" />,
   jobs: <path d="M5 5h14v14H5zM8 9h8m-8 4h5m-5 4h8" />,
+  logout: <path d="M10 5H5v14h5m4-4 4-3-4-3m4 3H9" />,
   overview: <path d="M4 13h6V4H4zm10 7h6v-9h-6zM4 20h6v-3H4zm10-13h6V4h-6z" />,
   policies: <path d="M6 3h9l3 3v15H6zM14 3v4h4M9 11h6m-6 4h6" />,
   sources: <path d="M4 5h16v6H4zm0 8h16v6H4zM7 8h.01M7 16h.01" />,

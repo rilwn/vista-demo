@@ -14,7 +14,7 @@ import { Link, useRouter } from '../routing/Router';
 
 export function WorkspaceLayout({ children }: PropsWithChildren) {
   const { hasPermission, logout, session } = useAuth();
-  const { t } = useLocalization();
+  const { locale, t } = useLocalization();
   const { location } = useRouter();
   const [navigationOpen, setNavigationOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
@@ -129,6 +129,8 @@ export function WorkspaceLayout({ children }: PropsWithChildren) {
           <div className="topbar-actions">
             <Help
               app="operations"
+              context={location.pathname}
+              locale={locale}
               modules={session.context.permissions
                 .filter((item) => item.action === 'view')
                 .map((item) => item.module)}

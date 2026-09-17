@@ -31,4 +31,34 @@ describe('workspace help', () => {
       expect(topics.every((topic) => topic.steps.length === 3)).toBe(true);
     }
   });
+  it('provides complete Bulgarian topics for every application', () => {
+    const modules = [
+      'erp.finance',
+      'erp.sales',
+      'erp.service',
+      'erp.warehouse',
+      'erp.procurement',
+      'erp.logistics',
+      'crm',
+    ];
+    for (const app of ['operations', 'pos', 'recovery'] as const) {
+      const english = helpTopics(app, modules);
+      const bulgarian = helpTopics(app, modules, 'bg');
+      expect(bulgarian).toHaveLength(english.length);
+      expect(bulgarian.every((topic, index) => topic.title !== english[index]?.title)).toBe(true);
+      expect(bulgarian.every((topic) => topic.steps.length === 3)).toBe(true);
+    }
+  });
+  it('shows the relevant page guide without adding unrelated page guides', () => {
+    const finance = helpTopics('operations', ['erp.finance'], 'en', '/modules/erp.finance/cash');
+    expect(finance[0]?.id).toBe('cash-bank');
+    expect(finance.some((topic) => topic.id === 'subscriptions')).toBe(false);
+
+    const pos = helpTopics('pos', [], 'bg', 'reports');
+    expect(pos[0]?.id).toBe('pos-reports');
+    expect(pos[0]?.title).toBe('Преглед и експорт на POS отчети');
+
+    const recovery = helpTopics('recovery', [], 'en', 'jobs');
+    expect(recovery[0]?.id).toBe('recovery-area');
+  });
 });

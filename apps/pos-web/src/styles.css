@@ -4684,3 +4684,96 @@
   border-left: 1px solid #ccd5cd;
   background: #edf1ed;
 }
+.pos-language-switcher {
+  align-items: center;
+  background: #f2f6f1;
+  border: 1px solid #d3ddd2;
+  border-radius: 9px;
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+}
+
+.pos-language-switcher button {
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  color: #667268;
+  cursor: pointer;
+  font:
+    700 11px/1 system-ui,
+    sans-serif;
+  min-height: 26px;
+  min-width: 30px;
+  padding: 0 7px;
+}
+
+.pos-language-switcher button[aria-pressed='true'] {
+  background: #174a31;
+  color: #fff;
+  box-shadow: 0 1px 2px rgb(18 54 37 / 20%);
+}
+
+.pos-language-switcher.is-floating {
+  position: fixed;
+  right: 24px;
+  top: 22px;
+  z-index: 20;
+}
+
+/* Match Vista Operations' bordered utility controls in the POS topbar. */
+.pos-account {
+  gap: 0.45rem;
+}
+
+.pos-account .vista-help-trigger,
+.pos-account-trigger {
+  min-height: 2.55rem;
+  border: 1px solid #d9e1db;
+  background: #fff;
+  box-shadow: 0 1px 2px rgb(21 47 31 / 4%);
+}
+
+.pos-account .vista-help-trigger {
+  border-radius: 0.7rem;
+}
+
+.pos-account-trigger {
+  padding: 0.24rem 0.48rem 0.24rem 0.28rem;
+  border-radius: 0.7rem;
+  transition:
+    border-color 130ms ease,
+    background-color 130ms ease,
+    box-shadow 130ms ease;
+}
+
+.pos-account-trigger:hover,
+.pos-account-trigger[aria-expanded='true'] {
+  border-color: #b8cbbd;
+  background: #f6faf7;
+  box-shadow: 0 1px 3px rgb(21 47 31 / 7%);
+}
+
+.pos-account-trigger > span {
+  border: 1px solid #d6e4d8;
+  color: #285c3a;
+  background: #edf6ee;
+}
+
+@media (max-width: 680px) {
+  .pos-account .vista-help-trigger {
+    width: 2.55rem;
+    padding-inline: 0;
+    font-size: 0;
+  }
+
+  .pos-account .vista-help-trigger::before {
+    content: '?';
+    font-size: 0.8rem;
+    font-weight: 800;
+  }
+
+  .pos-account-trigger {
+    padding-inline: 0.28rem;
+  }
+}

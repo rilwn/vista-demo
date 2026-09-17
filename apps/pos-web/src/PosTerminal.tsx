@@ -47,6 +47,8 @@ import { CheckoutRecovery } from './CheckoutRecovery';
 import { submitDurableCheckout } from './checkout-recovery';
 import { readCheckout } from './checkout-store';
 import { CheckoutHistory } from './CheckoutHistory';
+import { LanguageSwitcher } from './i18n/LanguageSwitcher';
+import { getPosDateLocale, useLocalization } from './i18n/LocalizationProvider';
 
 type PosScreen = 'reports' | 'returns' | 'sales' | 'sell' | 'shifts' | 'checkouts';
 type Notice = { kind: 'error' | 'info' | 'success'; text: string };
@@ -113,6 +115,7 @@ export function PosTerminal({
   const [recoveryContainer, setRecoveryContainer] = useState<HTMLElement | null>(null);
   const [soundEnabled, setSoundEnabled] = useState(() => readSoundPreference(accountId));
   const accountMenu = useRef<HTMLDivElement>(null);
+  const { locale } = useLocalization();
   const navigation = useActiveItemVisibility<HTMLElement>(screen);
 
   useEffect(() => {
@@ -219,7 +222,8 @@ export function PosTerminal({
           </button>
         </div>
         <div className="pos-account" ref={accountMenu}>
-          <Help app="pos" />
+          <Help app="pos" context={screen} locale={locale} />
+          <LanguageSwitcher />
           <button
             aria-expanded={accountMenuOpen}
             aria-haspopup="true"
@@ -3464,13 +3468,14 @@ function trackingLabel(item: PosCatalogItem) {
       : 'Standard item';
 }
 function dateTime(value: string) {
-  return new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium', timeStyle: 'short' }).format(
-    new Date(value),
-  );
+  return new Intl.DateTimeFormat(getPosDateLocale(), {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  }).format(new Date(value));
 }
 
 function shortDate(value: string) {
-  return new Intl.DateTimeFormat('en-GB', {
+  return new Intl.DateTimeFormat(getPosDateLocale(), {
     day: 'numeric',
     month: 'short',
     year: 'numeric',

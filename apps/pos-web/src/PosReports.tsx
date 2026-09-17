@@ -15,6 +15,7 @@ import type {
 import type { ReactNode } from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { PosSavedReports } from './PosSavedReports';
+import { getPosDateLocale } from './i18n/LocalizationProvider';
 import { savedReportText, exportHistoryText as historyText } from './pos-saved-reports.messages';
 
 import {
@@ -878,9 +879,10 @@ function quantity(value: string): string {
 }
 
 function dateTime(value: string): string {
-  return new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium', timeStyle: 'short' }).format(
-    new Date(value),
-  );
+  return new Intl.DateTimeFormat(getPosDateLocale(), {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  }).format(new Date(value));
 }
 
 function exportStatus(status: PosReportExport['status']): string {

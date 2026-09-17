@@ -1,12 +1,29 @@
 import { useId, useRef, useState } from 'react';
-import { helpText, helpTopics, type HelpApp } from './help-content';
+import {
+  bulgarianHelpText,
+  helpText,
+  helpTopics,
+  type HelpApp,
+  type HelpLocale,
+} from './help-content';
 
-export function Help({ app, modules = [] }: { app: HelpApp; modules?: readonly string[] }) {
+export function Help({
+  app,
+  context = '',
+  locale = 'en',
+  modules = [],
+}: {
+  app: HelpApp;
+  context?: string;
+  locale?: HelpLocale;
+  modules?: readonly string[];
+}) {
   const dialog = useRef<HTMLDialogElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   const [query, setQuery] = useState('');
   const titleId = useId();
-  const topics = helpTopics(app, modules).filter((topic) =>
+  const text = locale === 'bg' ? bulgarianHelpText : helpText;
+  const topics = helpTopics(app, modules, locale, context).filter((topic) =>
     [topic.title, ...topic.steps, topic.note ?? '']
       .join(' ')
       .toLowerCase()
@@ -23,7 +40,7 @@ export function Help({ app, modules = [] }: { app: HelpApp; modules?: readonly s
           dialog.current?.showModal();
         }}
       >
-        {helpText.open}
+        {text.open}
       </button>
       <dialog
         ref={dialog}
@@ -41,21 +58,21 @@ export function Help({ app, modules = [] }: { app: HelpApp; modules?: readonly s
       >
         <header className="vista-help-header">
           <div>
-            <h2 id={titleId}>{helpText.title}</h2>
-            <p>{helpText.intro}</p>
+            <h2 id={titleId}>{text.title}</h2>
+            <p>{text.intro}</p>
           </div>
-          <button type="button" aria-label={helpText.close} onClick={() => dialog.current?.close()}>
+          <button type="button" aria-label={text.close} onClick={() => dialog.current?.close()}>
             ×
           </button>
         </header>
         <div className="vista-help-body">
           <label className="vista-help-search">
-            {helpText.search}
+            {text.search}
             <input
               type="search"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder={helpText.placeholder}
+              placeholder={text.placeholder}
             />
           </label>
           {topics.length ? (
@@ -65,7 +82,10 @@ export function Help({ app, modules = [] }: { app: HelpApp; modules?: readonly s
                 className="vista-help-topic"
                 open={query.trim() ? true : undefined}
               >
-                <summary>{topic.title}</summary>
+                <summary>
+                  <span>{topic.title}</span>
+                  {topic.contexts ? <small>{text.current}</small> : null}
+                </summary>
                 <ol>
                   {topic.steps.map((step) => (
                     <li key={step}>{step}</li>
@@ -75,12 +95,12 @@ export function Help({ app, modules = [] }: { app: HelpApp; modules?: readonly s
               </details>
             ))
           ) : (
-            <p role="status">{helpText.empty}</p>
+            <p role="status">{text.empty}</p>
           )}
         </div>
         <footer className="vista-help-footer">
           <button type="button" onClick={() => dialog.current?.close()}>
-            {helpText.back}
+            {text.back}
           </button>
         </footer>
       </dialog>

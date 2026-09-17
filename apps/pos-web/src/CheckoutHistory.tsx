@@ -8,6 +8,7 @@ import {
   type CheckoutEvent,
   type SavedCheckout,
 } from './checkout-store';
+import { getPosDateLocale } from './i18n/LocalizationProvider';
 
 const labels: Record<CheckoutEvent['kind'], string> = {
   saved: 'Checkout saved',
@@ -163,7 +164,7 @@ export function CheckoutHistory({
 }
 
 function formatDate(value: string) {
-  return new Intl.DateTimeFormat('en-GB', {
+  return new Intl.DateTimeFormat(getPosDateLocale(), {
     dateStyle: 'medium',
     timeStyle: 'short',
     timeZone: 'Europe/Sofia',
