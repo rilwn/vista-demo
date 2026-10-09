@@ -4,6 +4,8 @@ COPY package.json package-lock.json tsconfig.base.json .prettierrc.json ./
 COPY packages ./packages
 COPY apps ./apps
 RUN npm ci --no-audit --no-fund
+ARG VITE_POS_APP_URL
+ENV VITE_POS_APP_URL=${VITE_POS_APP_URL}
 RUN npm run build
 
 FROM build AS production-dependencies

@@ -332,6 +332,7 @@ export class AuditEventRecordDto implements AuditEventRecord {
   @ApiPropertyOptional({ type: String }) previousEventHash?: string;
   @ApiPropertyOptional({ type: String }) sourceIp?: string;
   @ApiPropertyOptional({ format: 'uuid', type: String }) targetId?: string;
+  @ApiPropertyOptional({ type: String }) targetDisplayName?: string;
   @ApiProperty({ type: String }) targetType!: string;
   @ApiPropertyOptional({ type: String }) userAgent?: string;
 }

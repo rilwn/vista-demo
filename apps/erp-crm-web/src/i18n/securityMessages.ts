@@ -1,5 +1,9 @@
 import { getOperationsLocale } from './LocalizationProvider';
 
+function titleCase(value: string): string {
+  return value.replace(/\b\w/gu, (character) => character.toUpperCase());
+}
+
 const en = {
   loadTitle: 'Security settings could not be loaded',
   connection: 'Check your connection and try again.',
@@ -13,6 +17,7 @@ const en = {
   employees: 'Employees',
   roles: 'Roles',
   sessions: 'Sessions',
+  activeSessionCount: (n: number) => `Sessions · ${n} active`,
   activity: 'Activity log',
   addEmployee: 'Add employee',
   addRole: 'Add role',
@@ -35,6 +40,8 @@ const en = {
   employeeHint: 'Try a different name, email, or employee number.',
   roleDirectory: 'Role directory',
   roleDirectoryHint: 'Each role defines the access an employee can be assigned.',
+  noRolesHint: 'Add a role to define what employees can view and change.',
+  rolePageAccessRequired: 'Only an administrator with role-management access can change roles.',
   administrator: 'Administrator',
   permission: 'permission',
   permissions: 'permissions',
@@ -51,6 +58,8 @@ const en = {
   signInsHint: 'Employee sign-ins will appear here.',
   checkedEntries: (n: number) => `${n} entries checked`,
   system: 'System',
+  signInAttemptFor: (name: string) => `Failed sign-in for ${name}`,
+  unrecognizedAccount: 'unrecognized account',
   noActivity: 'No activity yet',
   activityHint: 'Account and access changes will appear here.',
   cancel: 'Cancel',
@@ -64,16 +73,64 @@ const en = {
   registerPages: 'Register pages',
   roleName: 'Role name',
   roleCode: 'Role code',
+  roleCodeHint: 'Use lowercase letters, numbers, dots, dashes, or underscores.',
   description: 'Description',
+  createRoleHint: 'Choose which modules this role can access and what actions it can perform.',
+  editRoleTitle: (name: string) => `Edit ${name}`,
+  editRoleHint: 'Update the role name, description, and access.',
   adminRole: 'Administrator role',
   adminRoleHint: 'Only an administrator signed in with two-factor authentication can select this.',
+  administrativeRole: 'Administrative role',
+  administrativeRoleHint: 'Changing this role requires an administrator with two-factor sign-in.',
+  administrativeRoleRequired: 'Verify your authenticator before changing this role.',
   createAccount: 'Creating account',
   createRole: 'Creating role',
   saveRole: 'Saving role',
   saveAccess: 'Save access',
   permissionsTitle: 'Permissions',
-  permissionsHint: 'Choose only the actions this role needs for daily work.',
+  permissionsHint: 'Choose the actions employees need for their assigned work.',
   module: 'Module',
+  roleManageSummary: (modules: string) => `Access to: ${modules}.`,
+  roleViewSummary: (modules: string) => `View only: ${modules}.`,
+  roleLimitedSummary: (modules: string) => `Actions without screen access: ${modules}.`,
+  roleNoPermissions: 'No module access is assigned yet.',
+  fixtureRoleDescription: (key: string) =>
+    ({
+      'backup-operator': 'Reviews backup jobs, protected sources, and recovery readiness.',
+      crm: 'Manages customer and lead records, tickets, referrals, and Service request handoffs.',
+      dispatcher: 'Receives Service requests, schedules technicians, and approves completed work.',
+      finance:
+        'Prepares finance documents, collections, payments, cash activity, and customer accounts.',
+      manager:
+        'Broad access across ERP, CRM, reports, and POS review. Cashier actions remain with the POS Operator role.',
+      'platform-manager': 'Maintains branches, business locations, operators, and cash registers.',
+      'pos-operator': 'Processes counter sales, returns, and shift work at the POS.',
+      procurement:
+        'Maintains suppliers and purchasing, including orders, receipts, claims, and supplier invoices.',
+      sales: 'Creates and follows quotations, sales orders, shipments, and subscriptions.',
+      technician: 'Reviews assigned Service work and records visits, parts, and working time.',
+      viewer: 'Read-only access to customer records, ERP registers, and reports.',
+      warehouse:
+        'Receives and tracks stock, moves inventory, reviews reservations, and completes stocktakes.',
+    })[key] ?? '',
+  permissionWithoutView: (modules: string) =>
+    `Selected actions have no View access for ${modules}. Employees with this role cannot open those module screens. Add View if they need normal access.`,
+  moduleName: (module: string) =>
+    ({
+      backup: 'Backup & recovery',
+      crm: 'CRM',
+      'erp.finance': 'Finance',
+      'erp.logistics': 'Logistics',
+      'erp.procurement': 'Procurement',
+      'erp.sales': 'Sales',
+      'erp.service': 'Service',
+      'erp.warehouse': 'Warehouse',
+      platform: 'Platform',
+      'platform.organization': 'Business structure',
+      pos: 'POS',
+      reports: 'Reports',
+    })[module] ?? module,
+  actionName: (action: string) => titleCase(action),
   signInProtection: 'Sign-in protection',
   factorHint: 'Authenticator status for this employee.',
   factorSet: 'Authenticator set up',
@@ -106,6 +163,7 @@ const bg = {
   employees: 'Служители',
   roles: 'Роли',
   sessions: 'Сесии',
+  activeSessionCount: (n: number) => `Сесии · активни: ${n}`,
   activity: 'Журнал на активността',
   addEmployee: 'Добавяне на служител',
   addRole: 'Добавяне на роля',
@@ -128,6 +186,8 @@ const bg = {
   employeeHint: 'Опитайте с друго име, имейл или служебен номер.',
   roleDirectory: 'Регистър на ролите',
   roleDirectoryHint: 'Всяка роля определя достъпа, който може да бъде зададен на служител.',
+  noRolesHint: 'Добавете роля, за да определите какво могат да преглеждат и променят служителите.',
+  rolePageAccessRequired: 'Само администратор с право за управление на роли може да ги променя.',
   administrator: 'Администратор',
   permission: 'право',
   permissions: 'права',
@@ -144,6 +204,8 @@ const bg = {
   signInsHint: 'Влизанията на служителите ще се показват тук.',
   checkedEntries: (n: number) => `Проверени записи: ${n}`,
   system: 'Система',
+  signInAttemptFor: (name: string) => `Неуспешен опит за вход за ${name}`,
+  unrecognizedAccount: 'неразпознат профил',
   noActivity: 'Все още няма активност',
   activityHint: 'Промените по профили и достъп ще се показват тук.',
   cancel: 'Отказ',
@@ -157,16 +219,74 @@ const bg = {
   registerPages: 'Страници на регистъра',
   roleName: 'Име на ролята',
   roleCode: 'Код на ролята',
+  roleCodeHint: 'Използвайте малки латински букви, цифри, точка, тире или долна черта.',
   description: 'Описание',
+  createRoleHint: 'Изберете до кои модули има достъп ролята и какви действия може да извършва.',
+  editRoleTitle: (name: string) => `Редактиране на ${name}`,
+  editRoleHint: 'Променете името, описанието и достъпа на ролята.',
   adminRole: 'Администраторска роля',
   adminRoleHint: 'Само администратор с потвърдено двуфакторно удостоверяване може да избере това.',
+  administrativeRole: 'Административна роля',
+  administrativeRoleHint: 'Промяната изисква администратор с потвърден двуфакторен вход.',
+  administrativeRoleRequired:
+    'Потвърдете приложението за удостоверяване, преди да промените ролята.',
   createAccount: 'Създаване на профила',
   createRole: 'Създаване на ролята',
   saveRole: 'Запазване на ролята',
   saveAccess: 'Запазване на достъпа',
   permissionsTitle: 'Права',
-  permissionsHint: 'Изберете само действията, необходими за ежедневната работа.',
+  permissionsHint: 'Изберете действията, необходими за възложената работа.',
   module: 'Модул',
+  roleManageSummary: (modules: string) => `Достъп до: ${modules}.`,
+  roleViewSummary: (modules: string) => `Само преглед: ${modules}.`,
+  roleLimitedSummary: (modules: string) =>
+    `Ограничени действия без достъп до страниците: ${modules}.`,
+  roleNoPermissions: 'Все още няма зададен достъп до модули.',
+  fixtureRoleDescription: (key: string) =>
+    ({
+      'backup-operator':
+        'Преглежда архивните задачи, защитените източници и готовността за възстановяване.',
+      crm: 'Управлява клиенти и потенциални клиенти, сигнали, препоръки и заявки към сервиза.',
+      dispatcher: 'Приема сервизни заявки, планира техници и одобрява приключената работа.',
+      finance:
+        'Подготвя финансови документи, събирания, плащания, касови операции и клиентски сметки.',
+      manager:
+        'Широк достъп до ERP, CRM, справки и преглед на POS. Касовите операции са за ролята POS оператор.',
+      'platform-manager': 'Поддържа клонове, търговски обекти, оператори и касови апарати.',
+      'pos-operator': 'Обработва продажби на гише, връщания и работата по касовата смяна.',
+      procurement: 'Управлява доставчици и поръчки, включително получаване, рекламации и фактури.',
+      sales: 'Създава и проследява оферти, поръчки, доставки и абонаменти.',
+      technician:
+        'Преглежда възложената сервизна работа и записва посещения, части и работно време.',
+      viewer: 'Достъп само за преглед на клиенти, ERP регистри и справки.',
+      warehouse:
+        'Получава и проследява стоки, мести наличности, проверява резервации и прави инвентаризации.',
+    })[key] ?? '',
+  permissionWithoutView: (modules: string) =>
+    `За ${modules} има избрани действия без право за преглед. Служителите с тази роля няма да могат да отварят страниците на тези модули. Добавете „Преглед“, ако им е необходим обичаен достъп.`,
+  moduleName: (module: string) =>
+    ({
+      backup: 'Архивиране и възстановяване',
+      crm: 'CRM',
+      'erp.finance': 'Финанси',
+      'erp.logistics': 'Логистика',
+      'erp.procurement': 'Доставки',
+      'erp.sales': 'Продажби',
+      'erp.service': 'Сервиз',
+      'erp.warehouse': 'Склад',
+      platform: 'Платформа',
+      'platform.organization': 'Бизнес структура',
+      pos: 'POS',
+      reports: 'Справки',
+    })[module] ?? module,
+  actionName: (action: string) =>
+    ({
+      approve: 'Одобряване',
+      create: 'Създаване',
+      delete: 'Изтриване',
+      edit: 'Редактиране',
+      view: 'Преглед',
+    })[action] ?? titleCase(action),
   signInProtection: 'Защита при вход',
   factorHint: 'Състояние на удостоверяването за този служител.',
   factorSet: 'Удостоверяването е настроено',
@@ -186,7 +306,7 @@ const bg = {
 };
 
 export const securityText = new Proxy(en, {
-  get(target, property, receiver) {
+  get(target, property, receiver): unknown {
     return Reflect.get(getOperationsLocale() === 'bg' ? bg : target, property, receiver);
   },
 });

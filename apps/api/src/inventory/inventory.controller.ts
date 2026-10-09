@@ -8,6 +8,7 @@ import {
   Inject,
   Param,
   Post,
+  Query,
   Req,
 } from '@nestjs/common';
 import {
@@ -17,8 +18,10 @@ import {
   ApiHeader,
   ApiOkResponse,
   ApiParam,
+  ApiQuery,
   ApiTags,
 } from '@nestjs/swagger';
+import { stockMovementTypes } from '@vista/contracts';
 import { RequirePermissions } from '../auth/auth.decorators.js';
 import type {
   AuthenticatedRequest,
@@ -36,10 +39,14 @@ import {
   ReplenishmentStatusDto,
   SerialTraceabilityDto,
   StockBalanceDto,
+  StockMovementJournalPageDto,
+  StockMovementJournalQueryDto,
   StockIssueDto,
   StockReceiptDto,
   StockReturnDto,
   StockReservationDto,
+  StockReservationPageDto,
+  StockReservationQueryDto,
   StockSettingsDto,
   StockTransferDto,
   StocktakeDto,
@@ -82,6 +89,28 @@ export class InventoryController {
   @ApiOkResponse({ isArray: true, type: StockBalanceDto })
   balances(): Promise<StockBalanceDto[]> {
     return this.inventory.balances();
+  }
+  @Get('stock-movements')
+  @RateLimitPolicy('read')
+  @RequirePermissions({ module: 'erp.warehouse', action: 'view' })
+  @ApiQuery({ name: 'movementType', required: false, enum: stockMovementTypes })
+  @ApiQuery({ default: 1, minimum: 1, name: 'page', required: false, type: Number })
+  @ApiQuery({
+    default: 25,
+    maximum: 100,
+    minimum: 1,
+    name: 'pageSize',
+    required: false,
+    type: Number,
+  })
+  @ApiQuery({ name: 'productId', required: false, type: String, format: 'uuid' })
+  @ApiQuery({ name: 'search', required: false, type: String, maxLength: 120 })
+  @ApiQuery({ name: 'warehouseId', required: false, type: String, format: 'uuid' })
+  @ApiOkResponse({ type: StockMovementJournalPageDto })
+  stockMovements(
+    @Query() query: StockMovementJournalQueryDto,
+  ): Promise<StockMovementJournalPageDto> {
+    return this.inventory.stockMovements(query);
   }
   @Post('stock-receipts')
   @HttpCode(HttpStatus.CREATED)
@@ -195,6 +224,24 @@ export class InventoryController {
     @Req() request: AuthenticatedRequest,
   ): Promise<StockReservationDto> {
     return this.inventory.reserve(input, key, request.authentication, metadata(request));
+  }
+  @Get('stock-reservations')
+  @RateLimitPolicy('read')
+  @RequirePermissions({ module: 'erp.warehouse', action: 'view' })
+  @ApiQuery({ default: 1, minimum: 1, name: 'page', required: false, type: Number })
+  @ApiQuery({
+    default: 25,
+    maximum: 100,
+    minimum: 1,
+    name: 'pageSize',
+    required: false,
+    type: Number,
+  })
+  @ApiOkResponse({ type: StockReservationPageDto })
+  listStockReservations(
+    @Query() query: StockReservationQueryDto,
+  ): Promise<StockReservationPageDto> {
+    return this.inventory.stockReservations(query);
   }
   @Post('stock-reservations/:id/release')
   @HttpCode(HttpStatus.OK)

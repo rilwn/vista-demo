@@ -12,6 +12,11 @@ import {
 import { ApiClientError } from '../api/client';
 import { Icon } from '../components/Icon';
 import { messages } from '../i18n/legacyMessages';
+import {
+  formatOperationsDate,
+  formatOperationsNumber,
+  useLocalization,
+} from '../i18n/LocalizationProvider';
 
 export function PartnerDocumentsPanel({
   canEdit,
@@ -90,6 +95,7 @@ function ScopedManagedFilesPanel({
   parentType: ManagedFileParentType;
   token: string;
 }) {
+  useLocalization();
   const [files, setFiles] = useState<ManagedFile[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -333,9 +339,9 @@ function errorText(error: unknown, fallback: string): string {
 function formatBytes(bytes: number): string {
   return bytes < 1024 * 1024
     ? `${Math.max(1, Math.round(bytes / 1024))} KB`
-    : `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+    : `${formatOperationsNumber(bytes / 1024 / 1024, { minimumFractionDigits: 1, maximumFractionDigits: 1 })} MB`;
 }
 
 function formatDate(value: string): string {
-  return new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium' }).format(new Date(value));
+  return formatOperationsDate(new Date(value), { dateStyle: 'medium' });
 }

@@ -1,12 +1,14 @@
 import { createHash, randomUUID } from 'node:crypto';
 
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
+import { hasPermission } from '@vista/auth';
 import type { AppEnvironment } from '@vista/config';
 import type {
   CreateCrmInteractionRequest,
   CreateCrmTaskRequest,
   CrmInteraction,
   CrmInteractionType,
+  CrmTimelineOperationalEvent,
   CrmTask,
   CrmTaskPriority,
   CrmTaskStatus,
@@ -74,10 +76,18 @@ interface TaskHistoryRow {
 }
 
 interface TimelineEventRow {
+  actor_name: string | null;
+  description: string | null;
   event_id: string;
-  kind: 'interaction' | 'task_event';
+  event_type: string | null;
+  kind: 'interaction' | 'operational_event' | 'task_event';
+  location_name: string | null;
   occurred_at: Date | string;
+  reference_number: string | null;
+  record_status: string | null;
+  source_kind: CrmTimelineOperationalEvent['source'] | null;
   source_id: string;
+  title: string | null;
 }
 
 type Queryable = Pool | PoolClient;
@@ -145,7 +155,10 @@ export class CrmTimelineService {
     };
   }
 
-  async list(query: ListCrmTimelineQueryDto): Promise<CrmTimelinePage> {
+  async list(
+    query: ListCrmTimelineQueryDto,
+    auth: AuthenticationContext,
+  ): Promise<CrmTimelinePage> {
     validateDateRange(query.dateFrom, query.dateTo);
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 25;
@@ -157,7 +170,7 @@ export class CrmTimelineService {
     ];
     const pool = this.database.getPool();
     await this.requireCustomerLocation(pool, query.customerPartnerId, query.customerLocationId);
-    const eventsSql = timelineEventsSql();
+    const eventsSql = timelineEventsSql(auth);
     const [count, events, interactionCount, openTaskRows, taskSummary] = await Promise.all([
       pool.query<{ total: string }>(
         `SELECT count(*)::text AS total FROM (${eventsSql}) event`,
@@ -171,7 +184,8 @@ export class CrmTimelineService {
       pool.query<{ total: string }>(
         `SELECT count(*)::text AS total FROM crm.interactions interaction
          WHERE interaction.customer_partner_id = $1
-           AND ($2::uuid IS NULL OR interaction.customer_location_id = $2)
+           AND ($2::uuid IS NULL OR interaction.customer_location_id IS NULL
+             OR interaction.customer_location_id = $2)
            AND ($3::timestamptz IS NULL OR interaction.occurred_at >= $3)
            AND ($4::timestamptz IS NULL OR interaction.occurred_at <= $4)`,
         parameters,
@@ -179,7 +193,8 @@ export class CrmTimelineService {
       pool.query<TaskRow>(
         `${taskQuery()}
          WHERE task.customer_partner_id = $1
-           AND ($2::uuid IS NULL OR task.customer_location_id = $2)
+           AND ($2::uuid IS NULL OR task.customer_location_id IS NULL
+             OR task.customer_location_id = $2)
            AND task.status = 'open'
          ORDER BY task.due_at, task.id LIMIT 100`,
         parameters.slice(0, 2),
@@ -189,7 +204,8 @@ export class CrmTimelineService {
                 count(*) FILTER (WHERE status = 'open' AND due_at < now())::text AS overdue_tasks
          FROM crm.tasks task
          WHERE task.customer_partner_id = $1
-           AND ($2::uuid IS NULL OR task.customer_location_id = $2)`,
+           AND ($2::uuid IS NULL OR task.customer_location_id IS NULL
+             OR task.customer_location_id = $2)`,
         parameters.slice(0, 2),
       ),
     ]);
@@ -197,6 +213,14 @@ export class CrmTimelineService {
     const taskCache = new Map<string, CrmTask>();
     const items: CrmTimelineItem[] = [];
     for (const event of events.rows) {
+      if (event.kind === 'operational_event') {
+        items.push({
+          kind: 'operational_event',
+          occurredAt: iso(event.occurred_at),
+          operationalEvent: mapOperationalEvent(event),
+        });
+        continue;
+      }
       if (event.kind === 'interaction') {
         const interaction = await this.loadInteraction(pool, event.source_id);
         items.push({ interaction, kind: 'interaction', occurredAt: iso(event.occurred_at) });
@@ -674,23 +698,157 @@ function taskQuery(): string {
   ) reminder ON true`;
 }
 
-function timelineEventsSql(): string {
-  return `SELECT 'interaction'::text AS kind, interaction.id AS source_id,
-      interaction.id AS event_id, interaction.occurred_at
-    FROM crm.interactions interaction
-    WHERE interaction.customer_partner_id = $1
-      AND ($2::uuid IS NULL OR interaction.customer_location_id = $2)
-      AND ($3::timestamptz IS NULL OR interaction.occurred_at >= $3)
-      AND ($4::timestamptz IS NULL OR interaction.occurred_at <= $4)
-    UNION ALL
-    SELECT 'task_event'::text AS kind, task.id AS source_id,
-      history.id AS event_id, history.changed_at AS occurred_at
-    FROM crm.task_history history
-    JOIN crm.tasks task ON task.id = history.task_id
-    WHERE task.customer_partner_id = $1
-      AND ($2::uuid IS NULL OR task.customer_location_id = $2)
-      AND ($3::timestamptz IS NULL OR history.changed_at >= $3)
-      AND ($4::timestamptz IS NULL OR history.changed_at <= $4)`;
+function timelineEventsSql(auth: AuthenticationContext): string {
+  const queries = [
+    `SELECT 'interaction'::text AS kind, interaction.id AS source_id,
+        interaction.id AS event_id, interaction.occurred_at,
+        NULL::text AS source_kind, NULL::text AS event_type,
+        NULL::text AS reference_number, NULL::text AS title,
+        NULL::text AS description, NULL::text AS record_status,
+        NULL::text AS location_name, NULL::text AS actor_name
+      FROM crm.interactions interaction
+      WHERE interaction.customer_partner_id = $1
+        AND ($2::uuid IS NULL OR interaction.customer_location_id IS NULL
+          OR interaction.customer_location_id = $2)
+        AND ($3::timestamptz IS NULL OR interaction.occurred_at >= $3)
+        AND ($4::timestamptz IS NULL OR interaction.occurred_at <= $4)`,
+    `SELECT 'task_event'::text AS kind, task.id AS source_id,
+        history.id AS event_id, history.changed_at AS occurred_at,
+        NULL::text AS source_kind, NULL::text AS event_type,
+        NULL::text AS reference_number, NULL::text AS title,
+        NULL::text AS description, NULL::text AS record_status,
+        NULL::text AS location_name, NULL::text AS actor_name
+      FROM crm.task_history history
+      JOIN crm.tasks task ON task.id = history.task_id
+      WHERE task.customer_partner_id = $1
+        AND ($2::uuid IS NULL OR task.customer_location_id IS NULL
+          OR task.customer_location_id = $2)
+        AND ($3::timestamptz IS NULL OR history.changed_at >= $3)
+        AND ($4::timestamptz IS NULL OR history.changed_at <= $4)`,
+    `SELECT 'operational_event'::text AS kind, ticket.id AS source_id,
+        history.id AS event_id, history.changed_at AS occurred_at,
+        'ticket'::text AS source_kind, history.event_type,
+        ticket.ticket_number AS reference_number, ticket.subject AS title,
+        history.note AS description, history.status AS record_status,
+        location.name AS location_name, employee.display_name AS actor_name
+      FROM crm.ticket_history history
+      JOIN crm.tickets ticket ON ticket.id = history.ticket_id
+      LEFT JOIN master_data.customer_locations location
+        ON location.id = ticket.customer_location_id
+      LEFT JOIN identity.user_accounts account ON account.id = history.changed_by
+      LEFT JOIN identity.employees employee ON employee.id = account.employee_id
+      WHERE ticket.customer_partner_id = $1
+        AND ($2::uuid IS NULL OR ticket.customer_location_id IS NULL
+          OR ticket.customer_location_id = $2)
+        AND ($3::timestamptz IS NULL OR history.changed_at >= $3)
+        AND ($4::timestamptz IS NULL OR history.changed_at <= $4)`,
+  ];
+
+  if (hasPermission(auth.permissions, { action: 'view', module: 'erp.service' }))
+    queries.push(
+      `SELECT 'operational_event'::text AS kind, request.id AS source_id,
+          request.id AS event_id, request.created_at AS occurred_at,
+          'service_request'::text AS source_kind, 'request_received'::text AS event_type,
+          request.request_number AS reference_number, equipment.device_name AS title,
+          request.problem_description AS description, 'new'::text AS record_status,
+          location.name AS location_name, employee.display_name AS actor_name
+        FROM service.requests request
+        JOIN master_data.customer_locations location ON location.id = request.customer_location_id
+        JOIN master_data.customer_equipment equipment ON equipment.id = request.customer_equipment_id
+        JOIN identity.user_accounts account ON account.id = request.created_by
+        JOIN identity.employees employee ON employee.id = account.employee_id
+        WHERE request.customer_partner_id = $1
+          AND ($2::uuid IS NULL OR request.customer_location_id IS NULL
+            OR request.customer_location_id = $2)
+          AND ($3::timestamptz IS NULL OR request.created_at >= $3)
+          AND ($4::timestamptz IS NULL OR request.created_at <= $4)
+        UNION ALL
+        SELECT 'operational_event'::text AS kind, request.id AS source_id,
+          history.id AS event_id, history.changed_at AS occurred_at,
+          'service_request'::text AS source_kind,
+          CASE history.next_status
+            WHEN 'scheduled' THEN 'visit_scheduled'
+            WHEN 'in_progress' THEN 'work_started'
+            WHEN 'completed' THEN 'work_completed'
+            WHEN 'cancelled' THEN 'work_cancelled'
+          END AS event_type,
+          request.request_number AS reference_number, equipment.device_name AS title,
+          history.reason AS description, history.next_status AS record_status,
+          location.name AS location_name, employee.display_name AS actor_name
+        FROM service.work_order_status_history history
+        JOIN service.work_orders work_order ON work_order.id = history.work_order_id
+        JOIN service.requests request ON request.id = work_order.service_request_id
+        JOIN master_data.customer_locations location ON location.id = request.customer_location_id
+        JOIN master_data.customer_equipment equipment ON equipment.id = request.customer_equipment_id
+        LEFT JOIN identity.user_accounts account ON account.id = history.changed_by
+        LEFT JOIN identity.employees employee ON employee.id = account.employee_id
+        WHERE request.customer_partner_id = $1
+          AND ($2::uuid IS NULL OR request.customer_location_id IS NULL
+            OR request.customer_location_id = $2)
+          AND ($3::timestamptz IS NULL OR history.changed_at >= $3)
+          AND ($4::timestamptz IS NULL OR history.changed_at <= $4)`,
+    );
+
+  if (hasPermission(auth.permissions, { action: 'view', module: 'erp.sales' }))
+    queries.push(
+      `SELECT 'operational_event'::text AS kind, quotation.id AS source_id,
+          quotation.id AS event_id, quotation.updated_at AS occurred_at,
+          'quotation'::text AS source_kind,
+          CASE WHEN quotation.created_at = quotation.updated_at
+            THEN 'quotation_created' ELSE 'quotation_updated' END AS event_type,
+          quotation.quotation_number AS reference_number, 'Sales quotation'::text AS title,
+          quotation.currency_code::text AS description,
+          quotation.status AS record_status, NULL::text AS location_name,
+          employee.display_name AS actor_name
+        FROM sales.quotations quotation
+        JOIN identity.user_accounts account ON account.id = quotation.created_by
+        JOIN identity.employees employee ON employee.id = account.employee_id
+        WHERE quotation.customer_partner_id = $1
+          AND ($3::timestamptz IS NULL OR quotation.updated_at >= $3)
+          AND ($4::timestamptz IS NULL OR quotation.updated_at <= $4)`,
+    );
+
+  if (hasPermission(auth.permissions, { action: 'view', module: 'erp.finance' }))
+    queries.push(
+      `SELECT 'operational_event'::text AS kind, payment.id AS source_id,
+          payment.id AS event_id, payment.recorded_at AS occurred_at,
+          'payment'::text AS source_kind, 'payment_recorded'::text AS event_type,
+          payment.payment_number AS reference_number, 'Payment received'::text AS title,
+          payment.payment_method AS description, 'recorded'::text AS record_status,
+          NULL::text AS location_name, employee.display_name AS actor_name
+        FROM finance.payments payment
+        JOIN identity.user_accounts account ON account.id = payment.recorded_by
+        JOIN identity.employees employee ON employee.id = account.employee_id
+        WHERE payment.customer_partner_id = $1
+          AND ($3::timestamptz IS NULL OR payment.recorded_at >= $3)
+          AND ($4::timestamptz IS NULL OR payment.recorded_at <= $4)`,
+    );
+
+  return queries.join('\nUNION ALL\n');
+}
+
+function mapOperationalEvent(row: TimelineEventRow): CrmTimelineOperationalEvent {
+  if (
+    !row.source_kind ||
+    !row.event_type ||
+    !row.reference_number ||
+    !row.title ||
+    !row.record_status
+  ) {
+    throw new Error('An operational customer timeline entry is incomplete.');
+  }
+  return {
+    ...(row.actor_name ? { actorName: row.actor_name } : {}),
+    ...(row.description ? { description: row.description } : {}),
+    eventId: row.event_id,
+    eventType: row.event_type,
+    ...(row.location_name ? { locationName: row.location_name } : {}),
+    recordId: row.source_id,
+    referenceNumber: row.reference_number,
+    source: row.source_kind,
+    status: row.record_status,
+    title: row.title,
+  };
 }
 
 function mapInteraction(row: InteractionRow): CrmInteraction {

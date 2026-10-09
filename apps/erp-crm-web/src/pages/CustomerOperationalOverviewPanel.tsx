@@ -10,6 +10,11 @@ import { useEffect, useState, type ReactNode } from 'react';
 
 import { getCustomerOperationalOverview } from '../api/partners';
 import { Icon } from '../components/Icon';
+import {
+  formatOperationsCurrency,
+  formatOperationsDate,
+  useLocalization,
+} from '../i18n/LocalizationProvider';
 
 export function CustomerOperationalOverviewPanel({
   partnerId,
@@ -18,6 +23,7 @@ export function CustomerOperationalOverviewPanel({
   partnerId: string;
   token: string;
 }) {
+  useLocalization();
   const [data, setData] = useState<CustomerOperationalOverview | null>(null);
   const [error, setError] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -305,20 +311,15 @@ function OverviewSkeleton() {
 }
 
 function money(value: string, currencyCode: string): string {
-  const amount = Number(value);
-  if (!Number.isFinite(amount)) return `${currencyCode} ${value}`;
-  return new Intl.NumberFormat(undefined, {
-    currency: currencyCode,
-    currencyDisplay: 'code',
-    style: 'currency',
-  }).format(amount);
+  if (!/^-?\d+(?:\.\d+)?$/u.test(value)) return `${currencyCode} ${value}`;
+  return formatOperationsCurrency(value, currencyCode);
 }
 
 function date(value: string): string {
   const parsed = new Date(value);
   return Number.isNaN(parsed.valueOf())
     ? '—'
-    : new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(parsed);
+    : formatOperationsDate(parsed, { dateStyle: 'medium' });
 }
 
 function statusLabel(value: string): string {

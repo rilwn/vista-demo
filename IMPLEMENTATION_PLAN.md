@@ -1,6 +1,6 @@
 # Vista Integrated Information System — Remaining Implementation Plan
 
-Status date: 2026-09-10
+Status date: 2026-10-09
 Project: `BG16RFPR001-1.012-1324-C01`
 
 [`AGENTS.md`](AGENTS.md) is authoritative. This file contains only unfinished
@@ -35,6 +35,32 @@ done. Use plain UI text and a short, navigation-based `TESTME.md` with sample
 values; verify each complete UI/API flow before asking the user to test.
 
 ## A. Work that can proceed without Vista's team
+
+### A1. Operations QA remediation
+
+- Follow the QA finding register in report order; CRM-06 warranty-register
+  reconciliation, CRM-07 survey follow-up, CRM-08 practical telephone
+  validation, CRM-09 quotation-stage guidance, POS-01 cross-app management
+  reports, UI-01 bilingual workflow statuses/actions, and UI-02 locale-consistent
+  dates, quantities, currency and VAT, plus UI-03 technical-identifier display
+  are locally verified. UI-04 tablet-width layout and drawer overflow is next.
+  CRM-10 requires Vista's approved business-hours and holiday rules. Hosted
+  retests remain open. The POS image rehearsal must be retried after the npm
+  registry read timeout.
+- Complete the remaining in-progress work recorded in the register: worker and
+  notification recovery evidence, Finance provider readiness, authentic serial
+  source for WH-01, and approved quotation email delivery. Hosted retests remain
+  open for locally verified findings.
+- Keep client decisions in Section B and never fabricate serial or financial
+  history to make a test pass.
+- Verify each fix with regression tests and an end-to-end flow. Recheck hosted
+  failures after deployment; local passing tests do not close hosted findings.
+
+**Depends on:** the QA report and existing requirement/decision register. Client
+decisions stay in Section B; preserve existing business records and audit trails.
+
+**Accept when:** every finding has verified evidence or an explicit unresolved
+dependency, with no claimed completion for untested or approval-dependent work.
 
 ### A3. Hosted security verification
 
@@ -134,7 +160,7 @@ concurrency; no production topology or tracking rule is inferred.
   INT-002 supplies the selected products, credentials, environments, and
   operating rules.
 
-**Depends on:** FIN-001, FIN-002, FIN-003, DOC-001, INT-001, INT-002, BUS-002,
+**Depends on:** FIN-001 through FIN-005, DOC-001, INT-001, INT-002, BUS-002,
 and the approved business timezone.
 
 **Accept when:** posted documents are immutable and linked; sequences,
@@ -248,7 +274,7 @@ Full decision detail is maintained in
 [`docs/architecture/decisions/README.md`](docs/architecture/decisions/README.md).
 
 - Organization and master data: BUS-001, BUS-002, CAT-001, CRM-002, OPT-001.
-- Finance, documents, and logistics: FIN-001, FIN-002, FIN-003, DOC-001,
+- Finance, documents, and logistics: FIN-001, FIN-002, FIN-003, FIN-004, FIN-005, DOC-001,
   INT-002.
 - Identity, files, providers, and deployment: IAM-001, IAM-002, IAM-003,
   FILE-001, INT-001, DEP-001.

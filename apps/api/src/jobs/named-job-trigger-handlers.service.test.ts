@@ -52,6 +52,7 @@ describe('NamedJobTriggerHandlersService', () => {
       jobName: 'backup.verify',
       queuedAt: '2026-08-10T08:00:00.000Z',
     });
+    expect(firstParameters[5]).toBe('pending');
   });
 
   it('runs overdue detection before recording the durable scheduled-job handoff', async () => {
@@ -81,6 +82,44 @@ describe('NamedJobTriggerHandlersService', () => {
     });
     expect(detectPaymentStatuses).toHaveBeenCalledWith(context);
     expect(query).toHaveBeenCalledTimes(1);
+    expect(query.mock.calls[0]?.[1]?.[5]).toBe('completed');
+  });
+
+  it('does not record completion when the domain operation fails', async () => {
+    const query = vi.fn();
+    const detect = vi.fn().mockRejectedValue(new Error('Database unavailable'));
+    const { service } = createSubject(query, detect);
+    await expect(
+      service.handle({
+        attemptNumber: 1,
+        correlationId: 'failure',
+        enqueuedAt: '2026-10-08T10:00:00Z',
+        idempotencyKey: 'failure',
+        jobId: 'failure',
+        maxAttempts: 5,
+        name: 'finance.payment-status.detect',
+        payload: {},
+        retryAllowed: true,
+      }),
+    ).rejects.toThrow('Database unavailable');
+    expect(query).not.toHaveBeenCalled();
+  });
+
+  it('prepares payment reminders through the retry-safe finance handler', async () => {
+    const query = vi.fn().mockResolvedValue({ rowCount: 1 });
+    const { service } = createSubject(query);
+    await service.handle({
+      attemptNumber: 1,
+      correlationId: 'reminders',
+      enqueuedAt: '2026-10-08T10:00:00Z',
+      idempotencyKey: 'reminders',
+      jobId: 'reminders',
+      maxAttempts: 5,
+      name: 'finance.payment-notification.prepare',
+      payload: {},
+      retryAllowed: true,
+    });
+    expect(query.mock.calls[0]?.[1]?.[5]).toBe('completed');
   });
 
   it('completes a requested report before recording the durable handoff', async () => {

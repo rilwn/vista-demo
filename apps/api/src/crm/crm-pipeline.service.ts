@@ -19,6 +19,7 @@ import type {
   PartnerKind,
   QualifyCrmLeadRequest,
 } from '@vista/contracts';
+import { isValidTelephoneNumber } from '@vista/domain';
 import type { Pool, PoolClient } from 'pg';
 
 import { AuditService } from '../audit/audit.service.js';
@@ -27,6 +28,7 @@ import type {
   RequestSecurityMetadata,
 } from '../auth/authentication.types.js';
 import { ApiErrorException } from '../common/api-error.exception.js';
+import { assertBusinessIdentifiers } from '../common/business-identifiers.js';
 import { APP_ENVIRONMENT } from '../config/config.module.js';
 import { DatabaseService } from '../database/database.service.js';
 import type { ListCrmLeadsQueryDto, ListCrmOpportunitiesQueryDto } from './crm-pipeline.dto.js';
@@ -498,6 +500,18 @@ export class CrmPipelineService {
         );
         if (before.stage === normalized.stage)
           throw conflict('CRM_OPPORTUNITY_STAGE_UNCHANGED', 'Choose a different pipeline stage.');
+        if (normalized.stage === 'quotation_sent') {
+          const quotationLink = await client.query(
+            `SELECT 1 FROM crm.opportunity_quotation_links
+             WHERE opportunity_id = $1 LIMIT 1`,
+            [id],
+          );
+          if (!quotationLink.rowCount)
+            throw conflict(
+              'CRM_OPPORTUNITY_QUOTATION_REQUIRED',
+              'Link a Sales quotation before moving this opportunity to Quotation sent.',
+            );
+        }
         const closedAt = ['won', 'lost'].includes(normalized.stage)
           ? new Date().toISOString()
           : null;
@@ -1068,6 +1082,19 @@ function crmAssigneesSql(): string {
 function normalizeLead(input: CreateCrmLeadRequest) {
   const telephone = optionalText(input.telephone, 100);
   const email = optionalText(input.email, 320)?.toLowerCase();
+  if (telephone && !isValidTelephoneNumber(telephone))
+    throw new ApiErrorException(
+      'CRM_LEAD_TELEPHONE_INVALID',
+      'Review the telephone number.',
+      HttpStatus.BAD_REQUEST,
+      [
+        {
+          field: 'telephone',
+          message:
+            'Enter 7–15 digits. An optional leading +, spaces, parentheses, hyphens or dots are allowed.',
+        },
+      ],
+    );
   if (!telephone && !email)
     throw badRequest(
       'CRM_LEAD_CONTACT_REQUIRED',
@@ -1121,6 +1148,7 @@ function normalizeConversion(input: ConvertCrmLeadRequest) {
           : {}),
       }
     : undefined;
+  if (newCustomer?.kind === 'legal_entity') assertBusinessIdentifiers(newCustomer);
   return {
     createOpportunity: input.createOpportunity,
     ...(input.existingCustomerPartnerId?.trim()

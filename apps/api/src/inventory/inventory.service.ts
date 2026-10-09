@@ -12,8 +12,14 @@ import type {
   SerialTraceability,
   SerialTraceEvent,
   StockBalance,
+  StockMovementJournalItem,
+  StockMovementJournalPage,
+  StockMovementJournalQuery,
+  StockMovementType,
   StockReceipt,
   StockReservation,
+  StockReservationPage,
+  StockReservationQuery,
   StockReturn,
   StockSettings,
   StockTransfer,
@@ -53,6 +59,25 @@ type ReservationRow = {
   remaining_quantity: string;
   status: StockReservation['status'];
   warehouse_id: string;
+};
+type ReservationListRow = ReservationRow & { reference_label: string };
+type ReservationSource = { id: string; label: string };
+type StockMovementJournalRow = {
+  actor_display_name: string;
+  id: string;
+  movement_type: StockMovementType;
+  occurred_at: string;
+  product_code: string;
+  product_id: string;
+  product_name: string;
+  quantity: string;
+  reference_label: string;
+  reference_type: string;
+  source_href: string | null;
+  total_cost_bgn: string;
+  unit_cost_bgn: string;
+  warehouse_id: string;
+  warehouse_name: string;
 };
 type Replay = { request_hash: string; status: string; response_body: unknown };
 type TraceMovementRow = {
@@ -262,6 +287,129 @@ export class InventoryService {
       reservedQuantity: row.reserved_quantity,
     }));
   }
+  async stockMovements(query: StockMovementJournalQuery): Promise<StockMovementJournalPage> {
+    const page = query.page ?? 1;
+    const pageSize = query.pageSize ?? 25;
+    const parameters: unknown[] = [];
+    const filters: string[] = [];
+    const addParameter = (value: unknown) => {
+      parameters.push(value);
+      return `$${parameters.length}`;
+    };
+    if (query.warehouseId)
+      filters.push(`movement.warehouse_id = ${addParameter(query.warehouseId)}`);
+    if (query.productId) filters.push(`movement.product_id = ${addParameter(query.productId)}`);
+    if (query.movementType)
+      filters.push(`movement.movement_type = ${addParameter(query.movementType)}`);
+    if (query.search?.trim()) {
+      const search = addParameter(`%${query.search.trim()}%`);
+      filters.push(`(
+        product.product_code ILIKE ${search}
+        OR product.name ILIKE ${search}
+        OR movement.reference_id ILIKE ${search}
+        OR goods_receipt.supplier_delivery_reference ILIKE ${search}
+        OR shipment.shipment_number ILIKE ${search}
+        OR reverse_return.return_number ILIKE ${search}
+        OR stocktake.reference_id ILIKE ${search}
+        OR work_order.work_order_number ILIKE ${search}
+        OR pos_sale.sale_number ILIKE ${search}
+        OR pos_return.return_number ILIKE ${search}
+      )`);
+    }
+    const where = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
+    const from = `FROM inventory.stock_movements movement
+      JOIN master_data.products product ON product.id = movement.product_id
+      JOIN master_data.warehouses warehouse ON warehouse.id = movement.warehouse_id
+      JOIN identity.user_accounts actor ON actor.id = movement.actor_account_id
+      JOIN identity.employees employee ON employee.id = actor.employee_id
+      LEFT JOIN procurement.goods_receipt_lines goods_receipt_line
+        ON goods_receipt_line.stock_movement_id = movement.id
+      LEFT JOIN procurement.goods_receipts goods_receipt
+        ON goods_receipt.id = goods_receipt_line.goods_receipt_id
+      LEFT JOIN sales.shipment_lines shipment_line
+        ON shipment_line.stock_movement_id = movement.id
+      LEFT JOIN sales.shipments shipment ON shipment.id = shipment_line.shipment_id
+      LEFT JOIN logistics.reverse_return_lines reverse_return_line
+        ON reverse_return_line.inventory_return_movement_id = movement.id
+      LEFT JOIN logistics.reverse_returns reverse_return
+        ON reverse_return.id = reverse_return_line.reverse_return_id
+      LEFT JOIN inventory.stocktakes stocktake
+        ON movement.reference_type = 'stocktake'
+        AND stocktake.id::text = movement.reference_id
+      LEFT JOIN service.work_order_part_usages service_part
+        ON service_part.stock_issue_movement_id = movement.id
+      LEFT JOIN service.work_orders work_order ON work_order.id = service_part.work_order_id
+      LEFT JOIN pos.sale_lines pos_line ON pos_line.stock_movement_id = movement.id
+      LEFT JOIN pos.sales pos_sale ON pos_sale.id = pos_line.sale_id
+      LEFT JOIN pos.return_lines pos_return_line ON pos_return_line.stock_movement_id = movement.id
+      LEFT JOIN pos.returns pos_return ON pos_return.id = pos_return_line.return_id`;
+    const client = this.database.getPool();
+    const count = await client.query<{ total: string }>(
+      `SELECT count(DISTINCT movement.id)::text AS total ${from} ${where}`,
+      parameters,
+    );
+    const total = Number(count.rows[0]?.total ?? 0);
+    const rows = await client.query<StockMovementJournalRow>(
+      `SELECT movement.id::text AS id, movement.occurred_at::text AS occurred_at,
+         movement.movement_type,
+         (CASE WHEN movement.movement_type IN ('issue', 'transfer_out', 'stocktake_out')
+           THEN -movement.quantity ELSE movement.quantity END)::text AS quantity,
+         movement.unit_cost_bgn::text AS unit_cost_bgn,
+         movement.total_cost_bgn::text AS total_cost_bgn,
+         product.id::text AS product_id, product.product_code, product.name AS product_name,
+         warehouse.id::text AS warehouse_id, warehouse.name AS warehouse_name,
+         employee.display_name AS actor_display_name,
+         CASE
+           WHEN pos_sale.id IS NOT NULL THEN pos_sale.sale_number
+           WHEN pos_return.id IS NOT NULL THEN pos_return.return_number
+           WHEN shipment.id IS NOT NULL THEN shipment.shipment_number
+           WHEN reverse_return.id IS NOT NULL THEN reverse_return.return_number
+           WHEN goods_receipt.id IS NOT NULL THEN COALESCE(goods_receipt.supplier_delivery_reference, 'Goods receipt')
+           WHEN stocktake.id IS NOT NULL THEN stocktake.reference_id
+           WHEN work_order.id IS NOT NULL THEN work_order.work_order_number
+           WHEN movement.reference_id ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+             THEN 'Source unavailable'
+           ELSE movement.reference_id
+         END AS reference_label,
+         movement.reference_type,
+         CASE
+           WHEN goods_receipt.id IS NOT NULL THEN '/modules/erp.procurement/goods-receipts'
+           WHEN shipment.id IS NOT NULL THEN '/modules/erp.sales/shipments'
+           WHEN reverse_return.id IS NOT NULL THEN '/modules/erp.logistics/returns'
+           WHEN stocktake.id IS NOT NULL THEN '/modules/erp.warehouse/stocktakes'
+           WHEN work_order.id IS NOT NULL THEN '/modules/erp.service/work-orders'
+           ELSE NULL
+         END AS source_href
+       ${from} ${where}
+       ORDER BY movement.occurred_at DESC, movement.id DESC
+       LIMIT ${addParameter(pageSize)} OFFSET ${addParameter((page - 1) * pageSize)}`,
+      parameters,
+    );
+    const items: StockMovementJournalItem[] = rows.rows.map((row) => ({
+      actorDisplayName: row.actor_display_name,
+      id: row.id,
+      occurredAt: row.occurred_at,
+      movementType: row.movement_type,
+      productCode: row.product_code,
+      productId: row.product_id,
+      productName: row.product_name,
+      quantity: row.quantity,
+      referenceLabel: row.reference_label,
+      referenceType: humanToken(row.reference_type),
+      ...(row.source_href ? { sourceHref: row.source_href } : {}),
+      totalCostBgn: row.total_cost_bgn,
+      unitCostBgn: row.unit_cost_bgn,
+      warehouseId: row.warehouse_id,
+      warehouseName: row.warehouse_name,
+    }));
+    return {
+      items,
+      page,
+      pageSize,
+      total,
+      totalPages: Math.ceil(total / pageSize),
+    };
+  }
   async replenishment(): Promise<ReplenishmentStatus[]> {
     const result = await this.database.getPool().query<{
       available_quantity: string;
@@ -295,8 +443,8 @@ export class InventoryService {
   async serialTraceability(serialNumber: string): Promise<SerialTraceability> {
     const normalized = cleanCode(serialNumber, 'SERIAL_NUMBER_REQUIRED');
     const item = await this.database.getPool().query<{
-      current_warehouse_id: string;
-      current_warehouse_name: string;
+      current_warehouse_id: string | null;
+      current_warehouse_name: string | null;
       customer_equipment_id: string | null;
       customer_equipment_status: 'active' | 'retired' | 'under_repair' | null;
       customer_id: string | null;
@@ -304,10 +452,10 @@ export class InventoryService {
       customer_location_name: string | null;
       customer_name: string | null;
       issued_movement_id: string | null;
-      product_id: string;
-      product_name: string;
-      received_movement_id: string;
-      serial_item_id: string;
+      product_id: string | null;
+      product_name: string | null;
+      received_movement_id: string | null;
+      serial_item_id: string | null;
       serial_number: string;
       status: SerialTraceability['status'];
       stocktake_movement_id: string | null;
@@ -334,13 +482,61 @@ export class InventoryService {
        WHERE upper(item.serial_number) = $1`,
       [normalized],
     );
-    const row = item.rows[0];
-    if (!row)
-      throw new ApiErrorException(
-        'SERIAL_NOT_FOUND',
-        'The serial number was not found',
-        HttpStatus.NOT_FOUND,
+    let row = item.rows[0];
+    if (!row) {
+      const registered = await this.database.getPool().query<{
+        customer_equipment_id: string;
+        customer_equipment_status: 'active' | 'retired' | 'under_repair';
+        customer_id: string;
+        customer_location_id: string;
+        customer_location_name: string;
+        customer_name: string;
+        device_name: string;
+        product_id: string | null;
+        product_name: string | null;
+        serial_number: string;
+      }>(
+        `SELECT equipment.id AS customer_equipment_id, equipment.status AS customer_equipment_status,
+           equipment.device_name, equipment.serial_number,
+           product.id AS product_id, product.name AS product_name,
+           location.id AS customer_location_id, location.name AS customer_location_name,
+           customer.id AS customer_id, customer.display_name AS customer_name
+         FROM master_data.customer_equipment equipment
+         JOIN master_data.customer_locations location
+           ON location.id = equipment.customer_location_id
+         JOIN master_data.partners customer ON customer.id = location.partner_id
+         LEFT JOIN master_data.products product ON product.id = equipment.product_id
+         WHERE upper(equipment.serial_number) = $1
+         ORDER BY equipment.active DESC, equipment.updated_at DESC, equipment.created_at DESC
+         LIMIT 1`,
+        [normalized],
       );
+      const equipment = registered.rows[0];
+      if (!equipment)
+        throw new ApiErrorException(
+          'SERIAL_NOT_FOUND',
+          'The serial number was not found',
+          HttpStatus.NOT_FOUND,
+        );
+      row = {
+        current_warehouse_id: null,
+        current_warehouse_name: null,
+        customer_equipment_id: equipment.customer_equipment_id,
+        customer_equipment_status: equipment.customer_equipment_status,
+        customer_id: equipment.customer_id,
+        customer_location_id: equipment.customer_location_id,
+        customer_location_name: equipment.customer_location_name,
+        customer_name: equipment.customer_name,
+        issued_movement_id: null,
+        product_id: equipment.product_id,
+        product_name: equipment.product_name ?? equipment.device_name,
+        received_movement_id: null,
+        serial_item_id: null,
+        serial_number: equipment.serial_number,
+        status: 'issued',
+        stocktake_movement_id: null,
+      };
+    }
     const returnEvents = await this.database.getPool().query<{
       original_issue_movement_id: string;
       return_movement_id: string;
@@ -461,8 +657,9 @@ export class InventoryService {
          ) parts ON true
          WHERE equipment.serialized_item_id = $2
             OR (equipment.product_id = $3 AND upper(equipment.serial_number) = $1)
+            OR equipment.id = $4
          ORDER BY request.created_at, request.id`,
-        [normalized, row.serial_item_id, row.product_id],
+        [normalized, row.serial_item_id, row.product_id, row.customer_equipment_id],
       ),
     ]);
     const events: SerialTraceEvent[] = [
@@ -479,18 +676,30 @@ export class InventoryService {
     const currentCustody: SerialTraceability['currentCustody'] =
       row.customer_equipment_status === 'under_repair'
         ? {
-            displayName: `Service · ${row.current_warehouse_name}`,
+            displayName: row.current_warehouse_name
+              ? `Service · ${row.current_warehouse_name}`
+              : 'Service',
             type: 'service',
           }
-        : row.status === 'issued'
+        : row.status === 'issued' || row.serial_item_id === null
           ? {
               displayName:
                 row.customer_location_name ?? recordedCustomer?.displayName ?? 'Customer',
               type: 'customer',
             }
-          : { displayName: row.current_warehouse_name, type: 'warehouse' };
+          : {
+              displayName: row.current_warehouse_name ?? 'Warehouse',
+              type: 'warehouse',
+            };
     return {
-      currentWarehouse: { id: row.current_warehouse_id, displayName: row.current_warehouse_name },
+      ...(row.current_warehouse_id && row.current_warehouse_name
+        ? {
+            currentWarehouse: {
+              id: row.current_warehouse_id,
+              displayName: row.current_warehouse_name,
+            },
+          }
+        : {}),
       currentCustody,
       ...(recordedCustomer ? { customer: recordedCustomer } : {}),
       ...(row.customer_equipment_id &&
@@ -509,8 +718,12 @@ export class InventoryService {
           }
         : {}),
       events,
-      product: { id: row.product_id, displayName: row.product_name },
-      serialItemId: row.serial_item_id,
+      inventoryRecordLinked: row.serial_item_id !== null,
+      product: {
+        ...(row.product_id ? { id: row.product_id } : {}),
+        displayName: row.product_name ?? 'Registered device',
+      },
+      ...(row.serial_item_id ? { serialItemId: row.serial_item_id } : {}),
       serialNumber: row.serial_number,
       status: row.status,
     };
@@ -951,7 +1164,14 @@ export class InventoryService {
          WHERE product_id = $1 AND batch_number = $2 FOR KEY SHARE`,
         [normalized.productId, normalized.batchNumber],
       );
-      batchId = required(batch.rows[0], 'Batch was not found');
+      const selectedBatch = batch.rows[0];
+      if (!selectedBatch)
+        throw new ApiErrorException(
+          'INVENTORY_BATCH_NOT_FOUND',
+          'The selected batch is not registered for this product.',
+          HttpStatus.NOT_FOUND,
+        );
+      batchId = selectedBatch;
       await client.query('UPDATE inventory.stock_movements SET batch_id = $2 WHERE id = $1', [
         movementId,
         batchId.id,
@@ -1297,6 +1517,11 @@ export class InventoryService {
       serialNumbers: normalizedSerialNumbers(input.serialNumbers),
     };
     return this.command('stock-reservation.create', key, normalized, async (client) => {
+      const source = await requireReservationSource(
+        client,
+        normalized.referenceType,
+        normalized.referenceId,
+      );
       const product = await activeProduct(client, normalized.productId);
       await requireActiveWarehouse(client, normalized.warehouseId);
       await ensureWarehousesNotUnderStocktake(client, [normalized.warehouseId]);
@@ -1318,14 +1543,14 @@ export class InventoryService {
           normalized.warehouseId,
           normalized.productId,
           normalized.referenceType,
-          normalized.referenceId,
+          source.id,
           normalized.quantity,
           auth.accountId,
         ],
       );
       const row = required(inserted.rows[0], 'Stock reservation insert failed');
       const serialItemIds = await reserveSerials(client, normalized, row.id);
-      const result = reservation(row, serialItemIds);
+      const result = reservation(row, serialItemIds, source.label);
       await this.sideEffects(
         client,
         'stock_reservation',
@@ -1344,6 +1569,76 @@ export class InventoryService {
       );
       return result;
     });
+  }
+  async stockReservations(query: StockReservationQuery): Promise<StockReservationPage> {
+    const page = Number(query.page ?? 1);
+    const pageSize = Number(query.pageSize ?? 25);
+    const pool = this.database.getPool();
+    const countResult = await pool.query<{ total: string }>(
+      `SELECT count(*)::text AS total
+       FROM inventory.stock_reservations WHERE status = 'active'`,
+    );
+    const total = Number(countResult.rows[0]?.total ?? '0');
+    const reservations = await pool.query<ReservationListRow>(
+      `SELECT reservation.id, reservation.warehouse_id, reservation.product_id,
+           reservation.reference_type, reservation.reference_id,
+           reservation.initial_quantity::text, reservation.remaining_quantity::text,
+           reservation.status,
+           COALESCE(
+             CASE reservation.reference_type
+               WHEN 'sales_order' THEN (
+                 SELECT source.order_number FROM sales.orders source
+                 WHERE source.id::text = reservation.reference_id
+                    OR source.order_number = reservation.reference_id
+               )
+               WHEN 'quotation' THEN (
+                 SELECT source.quotation_number FROM sales.quotations source
+                 WHERE source.id::text = reservation.reference_id
+                    OR source.quotation_number = reservation.reference_id
+               )
+               WHEN 'service_request' THEN (
+                 SELECT source.request_number FROM service.requests source
+                 WHERE source.id::text = reservation.reference_id
+                    OR source.request_number = reservation.reference_id
+             )
+             END,
+             CASE
+               WHEN reservation.reference_id ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+                 THEN 'Source unavailable'
+               ELSE reservation.reference_id
+             END
+           ) AS reference_label
+         FROM inventory.stock_reservations reservation
+         WHERE reservation.status = 'active'
+         ORDER BY reservation.created_at DESC, reservation.id DESC
+         LIMIT $1 OFFSET $2`,
+      [pageSize, (page - 1) * pageSize],
+    );
+    const ids = reservations.rows.map((row) => row.id);
+    const serials = ids.length
+      ? await pool.query<{ reservation_id: string; serialized_item_id: string }>(
+          `SELECT reservation_id, serialized_item_id
+           FROM inventory.stock_reservation_serials
+           WHERE active AND reservation_id = ANY($1::uuid[])
+           ORDER BY reservation_id, serialized_item_id`,
+          [ids],
+        )
+      : { rows: [] as Array<{ reservation_id: string; serialized_item_id: string }> };
+    const serialsByReservation = new Map<string, string[]>();
+    for (const serial of serials.rows) {
+      const values = serialsByReservation.get(serial.reservation_id) ?? [];
+      values.push(serial.serialized_item_id);
+      serialsByReservation.set(serial.reservation_id, values);
+    }
+    return {
+      items: reservations.rows.map((row) =>
+        reservation(row, serialsByReservation.get(row.id) ?? [], row.reference_label),
+      ),
+      page,
+      pageSize,
+      total,
+      totalPages: Math.ceil(total / pageSize),
+    };
   }
   async releaseReservation(
     reservationId: string,
@@ -1371,6 +1666,9 @@ export class InventoryService {
           'Only an active stock reservation can be released',
           HttpStatus.CONFLICT,
         );
+      const referenceLabel =
+        (await findReservationSource(client, row.reference_type, row.reference_id))?.label ??
+        reservationReferenceFallback(row.reference_id);
       await client.query(
         `UPDATE inventory.stock_reservations
            SET status = 'released', ended_by = $2, ended_at = now(), version = version + 1
@@ -1387,6 +1685,7 @@ export class InventoryService {
       const result = reservation(
         { ...row, status: 'released' },
         serials.rows.map((serial) => serial.serialized_item_id),
+        referenceLabel,
       );
       await this.sideEffects(
         client,
@@ -1855,6 +2154,12 @@ export class InventoryService {
           'One or more serial numbers are already registered. Enter the serial number printed on each device being received.',
           HttpStatus.CONFLICT,
         );
+      if (uniqueConstraint(error) === 'stock_reservation_active_reference_unique')
+        throw new ApiErrorException(
+          'STOCK_RESERVATION_ALREADY_EXISTS',
+          'This document already has an active reservation for this product in the selected warehouse.',
+          HttpStatus.CONFLICT,
+        );
       if (unique(error))
         throw new ApiErrorException(
           'INVENTORY_DUPLICATE',
@@ -1915,18 +2220,60 @@ function warehouse(row: WarehouseRow): Warehouse {
     version: row.version,
   };
 }
-function reservation(row: ReservationRow, serialItemIds: string[]): StockReservation {
+async function findReservationSource(
+  client: PoolClient,
+  referenceType: StockReservation['referenceType'],
+  referenceId: string,
+): Promise<ReservationSource | null> {
+  const queries: Record<StockReservation['referenceType'], string> = {
+    sales_order: `SELECT id::text, order_number AS label FROM sales.orders
+      WHERE id::text = $1 OR order_number = $1 LIMIT 1`,
+    quotation: `SELECT id::text, quotation_number AS label FROM sales.quotations
+      WHERE id::text = $1 OR quotation_number = $1 LIMIT 1`,
+    service_request: `SELECT id::text, request_number AS label FROM service.requests
+      WHERE id::text = $1 OR request_number = $1 LIMIT 1`,
+  };
+  const found = await client.query<ReservationSource>(queries[referenceType], [referenceId]);
+  return found.rows[0] ?? null;
+}
+
+async function requireReservationSource(
+  client: PoolClient,
+  referenceType: StockReservation['referenceType'],
+  referenceId: string,
+): Promise<ReservationSource> {
+  const source = await findReservationSource(client, referenceType, referenceId);
+  if (!source)
+    throw new ApiErrorException(
+      'STOCK_RESERVATION_SOURCE_NOT_FOUND',
+      'This reservation reference does not match an existing sales order, quotation, or service request. Check the document type and reference number.',
+      HttpStatus.NOT_FOUND,
+    );
+  return source;
+}
+
+function reservation(
+  row: ReservationRow,
+  serialItemIds: string[],
+  referenceLabel: string,
+): StockReservation {
   return {
     id: row.id,
     initialQuantity: row.initial_quantity,
     productId: row.product_id,
     referenceId: row.reference_id,
+    referenceLabel,
     referenceType: row.reference_type,
     remainingQuantity: row.remaining_quantity,
     serialItemIds,
     status: row.status,
     warehouseId: row.warehouse_id,
   };
+}
+function reservationReferenceFallback(referenceId: string): string {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu.test(referenceId)
+    ? 'Source unavailable'
+    : referenceId;
 }
 function traceMovement(row: TraceMovementRow): SerialTraceEvent {
   const details: SerialTraceEvent['details'] = [];

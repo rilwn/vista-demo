@@ -17,6 +17,7 @@ import type {
   CreateCustomerAdvanceRequest,
   CustomerAccountEntry,
   CustomerAdvance,
+  CustomerOpenReceivable,
   CustomerPaymentAccount,
   CustomerPaymentAccountReferenceData,
   CustomerPaymentTerms,
@@ -122,6 +123,18 @@ export class CustomerAccountEntryDto implements CustomerAccountEntry {
   @ApiPropertyOptional({ type: String }) returnNumber?: string;
 }
 
+class CustomerOpenReceivableDto implements CustomerOpenReceivable {
+  @ApiProperty({ type: String }) allocatedTotal!: string;
+  @ApiProperty({ format: 'date', type: String }) dueDate!: string;
+  @ApiProperty({ format: 'uuid', type: String }) id!: string;
+  @ApiProperty({ type: String }) number!: string;
+  @ApiProperty({ type: String }) outstandingTotal!: string;
+  @ApiProperty({ enum: ['unpaid', 'partially_paid', 'paid', 'overdue'] })
+  paymentStatus!: CustomerOpenReceivable['paymentStatus'];
+  @ApiProperty({ type: String }) sourceInvoiceNumber!: string;
+  @ApiProperty({ type: String }) total!: string;
+}
+
 export class CustomerPaymentAccountDto implements CustomerPaymentAccount {
   @ApiProperty({ type: String }) advanceBalance!: string;
   @ApiProperty({ isArray: true, type: CustomerAdvanceDto }) advances!: CustomerAdvance[];
@@ -129,6 +142,8 @@ export class CustomerPaymentAccountDto implements CustomerPaymentAccount {
   @ApiProperty({ type: String }) customerName!: string;
   @ApiProperty({ format: 'uuid', type: String }) customerPartnerId!: string;
   @ApiProperty({ isArray: true, type: CustomerAccountEntryDto }) entries!: CustomerAccountEntry[];
+  @ApiProperty({ isArray: true, type: CustomerOpenReceivableDto })
+  openReceivables!: CustomerOpenReceivable[];
   @ApiProperty({ type: String }) outstandingBalance!: string;
   @ApiPropertyOptional({ type: CustomerPaymentTermsDto }) terms?: CustomerPaymentTerms;
   @ApiPropertyOptional({ type: String }) uic?: string;

@@ -102,9 +102,59 @@ test('received serial reaches handover and its collection is settled in two paym
   await dialog.getByRole('button', { name: 'Record customer acceptance' }).click();
   await expect(dialog.getByText('Accepted by Browser Test Customer')).toBeVisible();
   await expect(dialog.getByText(/Serial BROWSER-FR-001/)).toBeVisible();
+  const handoverNumber = await dialog.locator('.sales-handover-card h3').innerText();
+  const quotation = await dialog.locator('h2').innerText();
+  await dialog.getByRole('button', { name: 'Back to sales list' }).click();
+  await sidebar.getByRole('link', { name: 'Customers & CRM', exact: true }).click();
+  await page.getByRole('link', { name: /Warranty, feedback & referrals/ }).click();
+  const warrantySearch = page.getByRole('textbox', { name: 'Search warranty cards' });
+  await warrantySearch.fill('BROWSER-FR-001');
+  const warrantyRecord = page
+    .locator('.crm-care-card-list > button')
+    .filter({ hasText: 'BROWSER-FR-001' });
+  await expect(warrantyRecord).toHaveCount(1);
+  await expect(warrantyRecord).toContainText('Alfa Market Demo Ltd.');
+  await warrantyRecord.click();
+  const warrantyPreview = page.getByRole('dialog');
+  await expect(warrantyPreview).toContainText('BROWSER-FR-001');
+  await warrantyPreview.getByRole('button', { name: 'Back' }).click();
+  await page.getByRole('tab', { name: 'Feedback & NPS' }).click();
+  const surveySource = page.locator('.crm-care-survey-source').filter({ hasText: handoverNumber });
+  await expect(surveySource).toHaveCount(1);
+  await surveySource.getByRole('button', { name: 'Prepare survey' }).click();
+  const surveyDialog = page.getByRole('dialog', { name: 'Prepare customer survey' });
+  await expect(surveyDialog).toContainText('How likely are you to recommend Vista Service?');
+  await expect(surveyDialog.locator('select option:checked')).toContainText(handoverNumber);
+  await surveyDialog.getByRole('button', { name: 'Record invitation shared' }).click();
+  const surveyRecord = page
+    .locator('.crm-care-survey-list > button')
+    .filter({ hasText: handoverNumber });
+  await expect(surveyRecord).toHaveCount(1);
+  await surveyRecord.click();
+  const responseDialog = page.getByRole('dialog');
+  await responseDialog.locator('.crm-score-picker label:has(input[value="9"])').click();
+  await responseDialog
+    .getByLabel('Customer comment (optional)')
+    .fill('Very satisfied with the delivery.');
+  await responseDialog.getByRole('button', { name: 'Save response' }).click();
+  await expect(
+    page.locator('.crm-care-survey-list > button').filter({ hasText: handoverNumber }),
+  ).toContainText('Responded');
+  await expect(
+    page
+      .locator('.crm-care-survey-list > button')
+      .filter({ hasText: handoverNumber })
+      .locator('.crm-survey-score'),
+  ).toContainText('9');
+  await sidebar.getByRole('link', { name: 'Sales', exact: true }).click();
+  await page.getByRole('link', { name: /Quotations/ }).click();
+  await page
+    .locator('.sales-register-row')
+    .filter({ hasText: quotation })
+    .getByRole('button', { name: 'Preview' })
+    .click();
   await dialog.getByRole('button', { name: 'Prepare invoice draft' }).click();
   await expect(dialog.getByText('Ready for final review and issuance in Finance.')).toBeVisible();
-  const quotation = await dialog.locator('h2').innerText();
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await dialog.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
   await page.screenshot({ path: testInfo.outputPath('sales-handover-mobile.png') });

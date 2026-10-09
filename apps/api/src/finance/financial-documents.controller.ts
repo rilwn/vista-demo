@@ -26,6 +26,8 @@ import { RequirePermissions } from '../auth/auth.decorators.js';
 import type { AuthenticatedRequest } from '../auth/authentication.types.js';
 import type { CorrelatedRequest } from '../common/correlation-id.middleware.js';
 import { RateLimitPolicy } from '../security/rate-limit.decorator.js';
+import { SalesPricingService } from '../sales/sales-pricing.service.js';
+import { ResolveSalesPriceQueryDto, SalesResolvedPriceDto } from '../sales/sales-pricing.dto.js';
 import {
   CancelFinancialDocumentDto,
   CreateFinancialDocumentDto,
@@ -43,6 +45,7 @@ import { FinancialDocumentsService } from './financial-documents.service.js';
 export class FinancialDocumentsController {
   constructor(
     @Inject(FinancialDocumentsService) private readonly documents: FinancialDocumentsService,
+    @Inject(SalesPricingService) private readonly pricing: SalesPricingService,
   ) {}
 
   @Get('reference-data')
@@ -51,6 +54,23 @@ export class FinancialDocumentsController {
   @ApiOkResponse({ type: FinancialDocumentReferenceDataDto })
   referenceData(): Promise<FinancialDocumentReferenceDataDto> {
     return this.documents.referenceData();
+  }
+
+  @Get('prices/resolve')
+  @RateLimitPolicy('read')
+  @RequirePermissions({ action: 'view', module: 'erp.finance' })
+  @ApiOkResponse({ type: SalesResolvedPriceDto })
+  @ApiQuery({ format: 'date', name: 'asOf', type: String })
+  @ApiQuery({ format: 'uuid', name: 'customerPartnerId', type: String })
+  @ApiQuery({ example: 'BGN', name: 'currencyCode', type: String })
+  @ApiQuery({ format: 'uuid', name: 'productId', type: String })
+  resolvePrice(@Query() query: ResolveSalesPriceQueryDto): Promise<SalesResolvedPriceDto> {
+    return this.pricing.resolvePrice(
+      query.customerPartnerId,
+      query.productId,
+      query.asOf,
+      query.currencyCode,
+    );
   }
 
   @Get()

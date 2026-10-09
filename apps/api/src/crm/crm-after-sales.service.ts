@@ -11,6 +11,7 @@ import type {
   CrmSurveySourceKind,
   CrmSurveySourceReference,
   CrmWarrantyCard,
+  CrmWarrantyCardReconciliationResult,
   RecordCrmSurveyResponseRequest,
   SendCrmCustomerSurveyRequest,
   TransitionWarrantyClaimRequest,
@@ -48,6 +49,23 @@ interface WarrantyCardRow {
   serial_number: string;
   warranty_ends_on: string;
   warranty_starts_on: string;
+}
+
+interface WarrantyCardReconciliationCandidate {
+  customer_equipment_id: string;
+  customer_location_id: string;
+  customer_partner_id: string;
+  handover_certificate_id: string | null;
+  issued_by: string;
+  pos_sale_id: string | null;
+  warranty_ends_on: string;
+  warranty_starts_on: string;
+}
+
+interface WarrantyCardReconciliationCountRow {
+  eligible_sold_serials: string;
+  missing_cards: string;
+  registered_sold_serials: string;
 }
 
 interface SurveyRow {
@@ -90,7 +108,7 @@ export class CrmAfterSalesService {
 
   async overview(auth: AuthenticationContext): Promise<CrmAfterSalesOverview> {
     const pool = this.database.getPool();
-    const [cards, serviceCare, surveys, referrals, customers, assignees, sources] =
+    const [cards, serviceCare, surveys, referrals, customers, assignees, sources, reconciliation] =
       await Promise.all([
         pool.query<WarrantyCardRow>(warrantyCardsSql(this.environment.BUSINESS_TIMEZONE)),
         this.care.overviewForCrm(auth),
@@ -99,8 +117,10 @@ export class CrmAfterSalesService {
         pool.query<{ id: string; name: string }>(customersSql()),
         pool.query<{ display_name: string; id: string }>(assigneesSql()),
         this.surveySources(pool),
+        pool.query<WarrantyCardReconciliationCountRow>(warrantyCardReconciliationCountsSql()),
       ]);
     const mappedSurveys = surveys.rows.map(mapSurvey);
+    const reconciliationCounts = reconciliation.rows[0];
     return {
       assignees: assignees.rows.map((row) => ({ displayName: row.display_name, id: row.id })),
       businessTimezone: this.environment.BUSINESS_TIMEZONE,
@@ -110,8 +130,73 @@ export class CrmAfterSalesService {
       referrals: referrals.rows.map(mapReferral),
       surveySources: sources,
       surveys: mappedSurveys,
+      warrantyCardReconciliation: {
+        eligibleSoldSerials: Number(reconciliationCounts?.eligible_sold_serials ?? 0),
+        missingCards: Number(reconciliationCounts?.missing_cards ?? 0),
+        registeredSoldSerials: Number(reconciliationCounts?.registered_sold_serials ?? 0),
+      },
       warrantyCards: cards.rows.map(mapWarrantyCard),
     };
+  }
+
+  reconcileWarrantyCards(
+    key: string | undefined,
+    auth: AuthenticationContext,
+    metadata: RequestSecurityMetadata,
+  ): Promise<CrmWarrantyCardReconciliationResult> {
+    return this.command(
+      'crm.warranty-cards.reconcile',
+      key,
+      {},
+      HttpStatus.OK,
+      async (client, commandKey) => {
+        await client.query(
+          `SELECT pg_advisory_xact_lock(hashtextextended('crm.warranty-cards.reconcile', 0))`,
+        );
+        const candidates =
+          await client.query<WarrantyCardReconciliationCandidate>(missingWarrantyCardsSql());
+        let cardsCreated = 0;
+        for (const candidate of candidates.rows) {
+          const id = randomUUID();
+          const number = await this.allocateNumber(client, 'warranty_card', 'WCR');
+          const inserted = await client.query<{ id: string }>(
+            `INSERT INTO crm.warranty_cards (
+               id, card_number, customer_partner_id, customer_location_id,
+               customer_equipment_id, handover_certificate_id, pos_sale_id,
+               warranty_starts_on, warranty_ends_on, issued_by
+             ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+             ON CONFLICT (customer_equipment_id) DO NOTHING
+             RETURNING id`,
+            [
+              id,
+              number,
+              candidate.customer_partner_id,
+              candidate.customer_location_id,
+              candidate.customer_equipment_id,
+              candidate.handover_certificate_id,
+              candidate.pos_sale_id,
+              candidate.warranty_starts_on,
+              candidate.warranty_ends_on,
+              candidate.issued_by,
+            ],
+          );
+          if (!inserted.rowCount) continue;
+          const card = await this.loadWarrantyCard(client, id);
+          await this.sideEffects(
+            client,
+            'crm_warranty_card',
+            id,
+            'crm.warranty-card.issued',
+            card,
+            commandKey,
+            auth,
+            metadata,
+          );
+          cardsCreated += 1;
+        }
+        return { cardsCreated };
+      },
+    );
   }
 
   createClaim(
@@ -406,7 +491,8 @@ export class CrmAfterSalesService {
        JOIN service.requests request ON request.id = work_order.service_request_id
        JOIN master_data.partners partner ON partner.id = request.customer_partner_id
        LEFT JOIN crm.customer_surveys survey ON survey.service_work_order_id = work_order.id
-       WHERE work_order.status = 'completed' AND survey.id IS NULL
+       WHERE work_order.status = 'completed' AND request.customer_location_id IS NOT NULL
+         AND survey.id IS NULL
        ORDER BY customer_name, label`,
     );
     return result.rows.map((row) => ({
@@ -426,11 +512,24 @@ export class CrmAfterSalesService {
   ): Promise<CrmSurveySourceReference> {
     const sources = await this.surveySources(queryable);
     const source = sources.find((item) => item.sourceKind === kind && item.id === id);
-    if (!source)
+    if (!source) {
+      const sourceColumn =
+        kind === 'delivery' ? 'handover_certificate_id' : 'service_work_order_id';
+      const existingSurvey = await queryable.query<{ id: string }>(
+        `SELECT id FROM crm.customer_surveys WHERE ${sourceColumn} = $1 LIMIT 1`,
+        [id],
+      );
+      if (existingSurvey.rowCount)
+        throw new ApiErrorException(
+          'CRM_SURVEY_ALREADY_SENT',
+          'A survey has already been recorded for this work.',
+          HttpStatus.CONFLICT,
+        );
       throw badRequest(
         'CRM_SURVEY_SOURCE_UNAVAILABLE',
         'Choose completed work that has not already received a survey.',
       );
+    }
     return source;
   }
 
@@ -617,6 +716,71 @@ function warrantyCardsSql(timezone: string, where = '') {
   GROUP BY card.id, partner.display_name, location.name, equipment.device_name,
            equipment.serial_number, handover.certificate_number
   ORDER BY card.warranty_ends_on, partner.display_name, card.id`;
+}
+
+function warrantyCardReconciliationCountsSql() {
+  return `${eligibleWarrantyCardsCte()}
+  SELECT count(*)::text AS eligible_sold_serials,
+         count(card.id)::text AS registered_sold_serials,
+         count(*) FILTER (WHERE card.id IS NULL)::text AS missing_cards
+  FROM eligible_warranties eligible
+  LEFT JOIN crm.warranty_cards card
+    ON card.customer_equipment_id = eligible.customer_equipment_id`;
+}
+
+function missingWarrantyCardsSql() {
+  return `${eligibleWarrantyCardsCte()}
+  SELECT eligible.customer_equipment_id, eligible.customer_location_id,
+         eligible.customer_partner_id, eligible.handover_certificate_id,
+         eligible.issued_by, eligible.pos_sale_id,
+         eligible.warranty_ends_on, eligible.warranty_starts_on
+  FROM eligible_warranties eligible
+  WHERE NOT EXISTS (
+    SELECT 1 FROM crm.warranty_cards card
+    WHERE card.customer_equipment_id = eligible.customer_equipment_id
+  )
+  ORDER BY eligible.customer_equipment_id
+  LIMIT 100`;
+}
+
+function eligibleWarrantyCardsCte() {
+  return `WITH source_candidates AS (
+    SELECT equipment.id AS customer_equipment_id,
+           sale.customer_partner_id, sale.completed_by AS issued_by,
+           sale.id AS pos_sale_id, NULL::uuid AS handover_certificate_id,
+           0 AS source_priority, sale.id AS source_id
+    FROM master_data.customer_equipment equipment
+    JOIN pos.sales sale ON sale.id = equipment.source_pos_sale_id
+    WHERE sale.status = 'completed' AND sale.customer_partner_id IS NOT NULL
+    UNION ALL
+    SELECT equipment.id AS customer_equipment_id,
+           certificate.customer_partner_id, certificate.prepared_by AS issued_by,
+           NULL::uuid AS pos_sale_id, certificate.id AS handover_certificate_id,
+           1 AS source_priority, certificate.id AS source_id
+    FROM sales.handover_certificates certificate
+    JOIN sales.handover_certificate_lines line
+      ON line.certificate_id = certificate.id
+    CROSS JOIN LATERAL unnest(line.serial_numbers) selected(serial_number)
+    JOIN master_data.customer_equipment equipment
+      ON upper(equipment.serial_number) = upper(selected.serial_number)
+     AND (equipment.product_id IS NULL OR equipment.product_id = line.product_id)
+    WHERE certificate.status = 'accepted'
+  ), eligible_warranties AS (
+    SELECT DISTINCT ON (equipment.id)
+           equipment.id AS customer_equipment_id,
+           equipment.customer_location_id, location.partner_id AS customer_partner_id,
+           source.handover_certificate_id, source.issued_by, source.pos_sale_id,
+           equipment.warranty_start_date::text AS warranty_starts_on,
+           equipment.warranty_end_date::text AS warranty_ends_on
+    FROM source_candidates source
+    JOIN master_data.customer_equipment equipment
+      ON equipment.id = source.customer_equipment_id
+    JOIN master_data.customer_locations location
+      ON location.id = equipment.customer_location_id
+     AND location.partner_id = source.customer_partner_id
+    WHERE equipment.warranty_end_date IS NOT NULL
+    ORDER BY equipment.id, source.source_priority, source.source_id
+  )`;
 }
 
 function surveysSql(where = '') {

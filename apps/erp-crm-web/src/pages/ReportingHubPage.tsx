@@ -17,8 +17,9 @@ import { Icon } from '../components/Icon';
 import { reportingHubApi as api, downloadLibraryExport } from '../api/reporting-hub';
 import { hubCopy as copy } from './reporting-hub.messages';
 import { OperationsOverview } from './OperationsOverview';
+import { formatOperationsDate, useLocalization } from '../i18n/LocalizationProvider';
 import './reporting-hub.css';
-const paths: Record<ReportingScope, string> = {
+const paths: Record<Exclude<ReportingScope, 'pos'>, string> = {
   finance: '/modules/erp.finance/registers',
   procurement: '/modules/erp.procurement/reports',
   warehouse: '/modules/erp.warehouse/reports',
@@ -26,7 +27,6 @@ const paths: Record<ReportingScope, string> = {
   logistics: '/modules/erp.logistics/reports',
   service: '/modules/erp.service/reports',
   crm: '/modules/crm/analytics',
-  pos: '/modules/pos',
 };
 export type ReportingHubView = 'report-library' | 'scheduled-exports' | 'dashboards';
 export function ReportingHubPage({ view }: { view: ReportingHubView }) {
@@ -53,6 +53,7 @@ export function ReportingHub({
   token: string;
   showOverview?: boolean;
 }) {
+  useLocalization();
   const [definitions, setDefinitions] = useState<LibraryDefinition[]>([]),
     [timezone, setTimezone] = useState(''),
     [error, setError] = useState(false),
@@ -831,11 +832,11 @@ function ReportLink({ scope, children }: { scope: ReportingScope; children: Reac
   return <span className="hub-hint">Open Reports in Vista POS.</span>;
 }
 function dateTime(value: string, timezone: string) {
-  return new Intl.DateTimeFormat('en-GB', {
+  return formatOperationsDate(new Date(value), {
     timeZone: timezone,
     dateStyle: 'medium',
     timeStyle: 'short',
-  }).format(new Date(value));
+  });
 }
 function localDateTime(value: Date, timezone: string) {
   const parts = new Intl.DateTimeFormat('en-CA', {

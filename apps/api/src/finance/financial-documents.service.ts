@@ -68,6 +68,8 @@ interface HeaderRow {
   source_pos_sale_id: string | null;
   source_pos_sale_number: string | null;
   source_sales_invoice_id: string | null;
+  source_subscription_draft_id: string | null;
+  source_subscription_draft_number: string | null;
   source_service_work_order_id: string | null;
   source_service_work_order_number: string | null;
   status: FinancialDocumentStatus;
@@ -102,6 +104,31 @@ export class FinancialDocumentsService {
 
   async referenceData(): Promise<FinancialDocumentReferenceData> {
     const pool = this.database.getPool();
+    const subscriptions = await pool.query<{
+      id: string;
+      draft_number: string;
+      contract_number: string;
+      customer_partner_id: string;
+      customer_name: string;
+      currency_code: string;
+      amount: string;
+      billing_date: string;
+      service_period_start: string;
+      service_period_end: string;
+      linked_document_id: string | null;
+    }>(
+      `SELECT draft.id, draft.draft_number, contract.contract_number,
+              draft.customer_partner_id, customer.display_name AS customer_name,
+              draft.currency_code, draft.amount::text, draft.billing_date::text,
+              draft.service_period_start::text, draft.service_period_end::text,
+              document.id AS linked_document_id
+       FROM sales.subscription_invoice_drafts draft
+       JOIN sales.service_subscription_contracts contract ON contract.id = draft.contract_id
+       JOIN master_data.partners customer ON customer.id = draft.customer_partner_id
+       LEFT JOIN finance.financial_documents document
+         ON document.source_subscription_draft_id = draft.id AND document.status <> 'cancelled'
+       ORDER BY draft.billing_date DESC, draft.id DESC`,
+    );
     const [
       scopes,
       customers,
@@ -295,6 +322,19 @@ export class FinancialDocumentsService {
       : [{ rows: [] }, { rows: [] }];
     return {
       businessTimezone: this.environment.BUSINESS_TIMEZONE,
+      subscriptionDrafts: subscriptions.rows.map((row) => ({
+        id: row.id,
+        number: row.draft_number,
+        contractNumber: row.contract_number,
+        customerPartnerId: row.customer_partner_id,
+        customerName: row.customer_name,
+        currencyCode: row.currency_code,
+        amount: row.amount,
+        billingDate: row.billing_date,
+        servicePeriodStart: row.service_period_start,
+        servicePeriodEnd: row.service_period_end,
+        ...(row.linked_document_id ? { linkedDocumentId: row.linked_document_id } : {}),
+      })),
       correctionDocuments: corrections.rows.map((row) => ({
         currencyCode: row.currency_code,
         customerName: row.customer_name,
@@ -512,11 +552,13 @@ export class FinancialDocumentsService {
           : undefined;
         const lines = posSource
           ? posSource.lines
-          : normalized.sourceSalesInvoiceId
-            ? await salesDraftLines(client, normalized, customer.id)
-            : normalized.sourceServiceWorkOrderId
-              ? await serviceDraftLines(client, normalized, customer.id)
-              : await manualLines(client, normalized.lines ?? []);
+          : normalized.sourceSubscriptionDraftId
+            ? await subscriptionDraftLines(client, normalized, customer.id)
+            : normalized.sourceSalesInvoiceId
+              ? await salesDraftLines(client, normalized, customer.id)
+              : normalized.sourceServiceWorkOrderId
+                ? await serviceDraftLines(client, normalized, customer.id)
+                : await manualLines(client, normalized.lines ?? []);
         if (!lines.length)
           throw inputError('FINANCE_DOCUMENT_LINES_REQUIRED', 'Add at least one document line.');
         const existingSourceDocumentId = await findExistingSourceDocument(client, normalized);
@@ -531,8 +573,17 @@ export class FinancialDocumentsService {
             error instanceof Error ? error.message : 'The document totals could not be calculated.',
           );
         }
+        if (normalized.documentType === 'credit_note' && correction) {
+          await requireCreditCapacity(client, correction.id, calculation, lines);
+        }
         const id = randomUUID();
-        const number = await nextDraftNumber(client, normalized, scope.locationCode);
+        const number = await nextDraftNumber(
+          client,
+          normalized,
+          scope.locationCode,
+          scope.cashRegisterCode,
+          scope.operatorCode,
+        );
         await client.query(
           `INSERT INTO finance.financial_documents (
            id, draft_number, document_type, legal_entity_id, branch_id, business_location_id,
@@ -544,10 +595,10 @@ export class FinancialDocumentsService {
            issuer_name, issuer_uic, issuer_vat_number, issuer_address,
            customer_name, customer_uic, customer_vat_number, customer_address,
            net_total, vat_total, gross_total, bgn_net_total, bgn_vat_total, bgn_gross_total,
-           notes, created_by
+           notes, created_by, source_subscription_draft_id
          ) VALUES (
            $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,
-           $21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38
+           $21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39
          )`,
           [
             id,
@@ -588,6 +639,7 @@ export class FinancialDocumentsService {
             calculation.bgnGrossTotal,
             normalized.notes ?? null,
             auth.accountId,
+            normalized.sourceSubscriptionDraftId ?? null,
           ],
         );
         for (const [index, line] of lines.entries()) {
@@ -815,6 +867,12 @@ export class FinancialDocumentsService {
       rateSource: row.rate_source,
       ...(row.source_sales_invoice_id ? { sourceSalesInvoiceId: row.source_sales_invoice_id } : {}),
       ...(row.source_invoice_number ? { sourceSalesInvoiceNumber: row.source_invoice_number } : {}),
+      ...(row.source_subscription_draft_id
+        ? { sourceSubscriptionDraftId: row.source_subscription_draft_id }
+        : {}),
+      ...(row.source_subscription_draft_number
+        ? { sourceSubscriptionDraftNumber: row.source_subscription_draft_number }
+        : {}),
       ...(row.source_pos_sale_id ? { sourcePosSaleId: row.source_pos_sale_id } : {}),
       ...(row.source_pos_sale_number ? { sourcePosSaleNumber: row.source_pos_sale_number } : {}),
       ...(row.source_fiscal_receipt_number
@@ -926,6 +984,11 @@ function normalizeInput(input: CreateFinancialDocumentRequest) {
       'FINANCE_RATE_SOURCE_REQUIRED',
       'Enter the source of the captured currency rate.',
     );
+  if (currencyCode !== 'BGN' && rateSource.toLowerCase() === 'internal_bgn')
+    throw inputError(
+      'FINANCE_RATE_SOURCE_INVALID',
+      'Enter the exchange rate and its source for the selected currency.',
+    );
   const issueDate = normalizeDate(input.issueDate);
   const dueDate = input.dueDate ? normalizeDate(input.dueDate) : undefined;
   if (dueDate && dueDate < issueDate)
@@ -948,9 +1011,20 @@ function normalizeInput(input: CreateFinancialDocumentRequest) {
     input.sourceSalesInvoiceId,
     input.sourceServiceWorkOrderId,
     input.sourcePosSaleId,
+    input.sourceSubscriptionDraftId,
   ].filter(Boolean).length;
   if (sourceCount > 1)
     throw inputError('FINANCE_DOCUMENT_SOURCE_CONFLICT', 'Choose one document source.');
+  if (input.sourceSubscriptionDraftId && documentType !== 'invoice')
+    throw inputError(
+      'FINANCE_SUBSCRIPTION_TYPE_INVALID',
+      'Prepare an invoice from the subscription billing record.',
+    );
+  if (input.sourceSubscriptionDraftId && input.lines?.length !== 1)
+    throw inputError(
+      'FINANCE_SUBSCRIPTION_LINES_REQUIRED',
+      'Review the subscription charge and select its VAT treatment.',
+    );
   if (sourceCount === 0 && !input.lines?.length)
     throw inputError(
       'FINANCE_DOCUMENT_LINES_REQUIRED',
@@ -981,6 +1055,9 @@ function normalizeInput(input: CreateFinancialDocumentRequest) {
     rateDate: normalizeDate(input.rateDate),
     rateSource,
     ...(input.sourceSalesInvoiceId ? { sourceSalesInvoiceId: input.sourceSalesInvoiceId } : {}),
+    ...(input.sourceSubscriptionDraftId
+      ? { sourceSubscriptionDraftId: input.sourceSubscriptionDraftId }
+      : {}),
     ...(input.sourcePosSaleId ? { sourcePosSaleId: input.sourcePosSaleId } : {}),
     ...(input.sourceServiceWorkOrderId
       ? { sourceServiceWorkOrderId: input.sourceServiceWorkOrderId }
@@ -1031,14 +1108,16 @@ async function requireScope(client: PoolClient, input: ReturnType<typeof normali
     [input.businessLocationId, input.legalEntityId],
   );
   const row = result.rows[0];
+  let cashRegisterCode: string | null = null;
+  let operatorCode: string | null = null;
   if (!row)
     throw inputError(
       'FINANCE_DOCUMENT_SCOPE_INVALID',
       'Select an active legal entity and business location from the same branch.',
     );
   if (input.cashRegisterId) {
-    const register = await client.query(
-      `SELECT id FROM organization.cash_registers
+    const register = await client.query<{ code: string }>(
+      `SELECT code FROM organization.cash_registers
        WHERE id = $1 AND business_location_id = $2 AND active FOR KEY SHARE`,
       [input.cashRegisterId, input.businessLocationId],
     );
@@ -1047,10 +1126,11 @@ async function requireScope(client: PoolClient, input: ReturnType<typeof normali
         'FINANCE_CASH_REGISTER_INVALID',
         'Select an active cash register at this business location.',
       );
+    cashRegisterCode = register.rows[0]?.code ?? null;
   }
   if (input.operatorId) {
-    const operator = await client.query(
-      `SELECT id FROM organization.operators
+    const operator = await client.query<{ code: string }>(
+      `SELECT code FROM organization.operators
        WHERE id = $1 AND business_location_id = $2 AND active FOR KEY SHARE`,
       [input.operatorId, input.businessLocationId],
     );
@@ -1059,16 +1139,68 @@ async function requireScope(client: PoolClient, input: ReturnType<typeof normali
         'FINANCE_OPERATOR_INVALID',
         'Select an active operator at this business location.',
       );
+    operatorCode = operator.rows[0]?.code ?? null;
   }
   return {
     branchId: row.branch_id,
+    cashRegisterCode,
     issuerAddress: row.issuer_address,
     issuerName: row.issuer_name,
     issuerUic: row.issuer_uic,
     issuerVatNumber: row.issuer_vat_number,
     legalEntityId: row.legal_entity_id,
     locationCode: row.location_code,
+    operatorCode,
   };
+}
+
+async function subscriptionDraftLines(
+  client: PoolClient,
+  input: ReturnType<typeof normalizeInput>,
+  customerId: string,
+) {
+  const result = await client.query<{
+    amount: string;
+    customer_partner_id: string;
+    currency_code: string;
+    draft_number: string;
+    service_period_start: string;
+    service_period_end: string;
+  }>(
+    `SELECT amount::text, customer_partner_id, currency_code, draft_number,
+            service_period_start::text, service_period_end::text
+     FROM sales.subscription_invoice_drafts WHERE id = $1 FOR UPDATE`,
+    [input.sourceSubscriptionDraftId],
+  );
+  const source = result.rows[0];
+  if (
+    !source ||
+    source.customer_partner_id !== customerId ||
+    source.currency_code !== input.currencyCode
+  )
+    throw inputError(
+      'FINANCE_SUBSCRIPTION_SOURCE_INVALID',
+      'Select a subscription billing record for this customer and currency.',
+    );
+  const line = input.lines?.[0];
+  if (
+    !line ||
+    line.productId ||
+    decimalUnits(line.quantity, 4) !== 10000n ||
+    decimalUnits(line.unitPrice, 4) !== decimalUnits(source.amount, 4) ||
+    decimalUnits(line.discountPercent, 4) !== 0n
+  )
+    throw inputError(
+      'FINANCE_SUBSCRIPTION_CHARGE_CHANGED',
+      'The subscription charge must match the saved billing record.',
+    );
+  return [
+    {
+      ...line,
+      description: `${source.draft_number} · ${source.service_period_start} / ${source.service_period_end}`,
+      unitCode: 'SERVICE',
+    },
+  ];
 }
 
 async function requireCustomer(client: PoolClient, id: string) {
@@ -1119,7 +1251,7 @@ async function requireCorrection(client: PoolClient, input: ReturnType<typeof no
     id: string;
   }>(
     `SELECT id, customer_partner_id, currency_code FROM finance.financial_documents
-     WHERE id = $1 AND document_type = 'invoice' AND status = 'draft' FOR KEY SHARE`,
+     WHERE id = $1 AND document_type = 'invoice' AND status = 'draft' FOR UPDATE`,
     [input.correctionOfDocumentId],
   );
   const row = result.rows[0];
@@ -1137,6 +1269,81 @@ async function requireCorrection(client: PoolClient, input: ReturnType<typeof no
       'A correction must use the original invoice customer and currency.',
     );
   return row;
+}
+
+async function requireCreditCapacity(
+  client: PoolClient,
+  originalId: string,
+  calculation: ReturnType<typeof calculateFinancialDocument>,
+  lines: CreateFinancialDocumentLineRequest[],
+) {
+  // requireCorrection locks the original invoice, serializing concurrent notes.
+  // Cancelled notes release capacity; posted/draft notes must never double-credit.
+  const capacity = await client.query<{
+    remaining_net: string;
+    remaining_vat: string;
+    remaining_gross: string;
+  }>(
+    `SELECT (original.net_total - coalesce(sum(credit.net_total), 0))::text AS remaining_net,
+            (original.vat_total - coalesce(sum(credit.vat_total), 0))::text AS remaining_vat,
+            (original.gross_total - coalesce(sum(credit.gross_total), 0))::text AS remaining_gross
+     FROM finance.financial_documents original
+     LEFT JOIN finance.financial_documents credit
+       ON credit.correction_of_document_id = original.id
+      AND credit.document_type = 'credit_note' AND credit.status <> 'cancelled'
+     WHERE original.id = $1
+     GROUP BY original.id`,
+    [originalId],
+  );
+  const remaining = capacity.rows[0];
+  if (
+    !remaining ||
+    decimalUnits(calculation.netTotal, 4) > decimalUnits(remaining.remaining_net, 4) ||
+    decimalUnits(calculation.vatTotal, 4) > decimalUnits(remaining.remaining_vat, 4) ||
+    decimalUnits(calculation.grossTotal, 4) > decimalUnits(remaining.remaining_gross, 4)
+  )
+    throw inputError(
+      'FINANCE_CREDIT_EXCEEDS_ORIGINAL',
+      'The credit exceeds the amount remaining on the original invoice. Review earlier credit notes.',
+    );
+  const originalLines = await client.query<{
+    product_id: string | null;
+    description: string;
+    unit_code: string;
+    quantity: string;
+    direction: number;
+  }>(
+    `SELECT line.product_id, line.description, line.unit_code, line.quantity::text,
+            CASE WHEN document.id = $1 THEN 1 ELSE -1 END AS direction
+     FROM finance.financial_document_lines line
+     JOIN finance.financial_documents document ON document.id = line.financial_document_id
+     WHERE document.id = $1 OR (
+       document.correction_of_document_id = $1 AND document.document_type = 'credit_note'
+       AND document.status <> 'cancelled'
+     )`,
+    [originalId],
+  );
+  const quantities = new Map<string, bigint>();
+  const lineKey = (productId: string | null | undefined, description: string, unitCode: string) =>
+    JSON.stringify([productId ?? description, unitCode]);
+  for (const line of originalLines.rows) {
+    const key = lineKey(line.product_id, line.description, line.unit_code);
+    quantities.set(
+      key,
+      (quantities.get(key) ?? 0n) + BigInt(line.direction) * decimalUnits(line.quantity, 4),
+    );
+  }
+  for (const line of lines) {
+    const key = lineKey(line.productId, line.description, line.unitCode);
+    const available = quantities.get(key) ?? 0n;
+    const quantity = decimalUnits(line.quantity, 4);
+    if (quantity > available)
+      throw inputError(
+        'FINANCE_CREDIT_QUANTITY_EXCEEDS_ORIGINAL',
+        'A credit line exceeds the quantity remaining on the original invoice. Use the original product and unit.',
+      );
+    quantities.set(key, available - quantity);
+  }
 }
 
 async function salesDraftLines(
@@ -1463,6 +1670,8 @@ async function nextDraftNumber(
   client: PoolClient,
   input: ReturnType<typeof normalizeInput>,
   locationCode: string,
+  cashRegisterCode: string | null,
+  operatorCode: string | null,
 ) {
   const year = Number(input.issueDate.slice(0, 4));
   await client.query(
@@ -1508,7 +1717,23 @@ async function nextDraftNumber(
     .digest('hex')
     .slice(0, 12)
     .toUpperCase();
-  return `${prefix}-${locationCode}-${scopeFingerprint}-${year}-${allocated.padStart(6, '0')}`;
+  const readableScope = [
+    readableReferencePart(locationCode, 'LOCATION', 12),
+    readableReferencePart(cashRegisterCode, 'ALL-REG', 8),
+    readableReferencePart(operatorCode, 'ALL-OPS', 8),
+  ].join('-');
+  return `${prefix}-${readableScope}-${scopeFingerprint}-${year}-${allocated.padStart(6, '0')}`;
+}
+
+function readableReferencePart(value: string | null, fallback: string, maxLength: number) {
+  const part = (value ?? fallback)
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/gu, '-')
+    .replace(/^-+|-+$/gu, '')
+    .slice(0, maxLength)
+    .replace(/-+$/gu, '');
+  return part || fallback;
 }
 
 async function findExistingSourceDocument(
@@ -1517,13 +1742,18 @@ async function findExistingSourceDocument(
 ): Promise<string | undefined> {
   const sourceColumn = input.sourceSalesInvoiceId
     ? 'source_sales_invoice_id'
-    : input.sourceServiceWorkOrderId
-      ? 'source_service_work_order_id'
-      : input.sourcePosSaleId
-        ? 'source_pos_sale_id'
-        : undefined;
+    : input.sourceSubscriptionDraftId
+      ? 'source_subscription_draft_id'
+      : input.sourceServiceWorkOrderId
+        ? 'source_service_work_order_id'
+        : input.sourcePosSaleId
+          ? 'source_pos_sale_id'
+          : undefined;
   const sourceId =
-    input.sourceSalesInvoiceId ?? input.sourceServiceWorkOrderId ?? input.sourcePosSaleId;
+    input.sourceSalesInvoiceId ??
+    input.sourceSubscriptionDraftId ??
+    input.sourceServiceWorkOrderId ??
+    input.sourcePosSaleId;
   if (!sourceColumn || !sourceId) return undefined;
   const result = await client.query<{ id: string }>(
     `SELECT id FROM finance.financial_documents
@@ -1541,6 +1771,8 @@ function headerQuery() {
                  location.name AS business_location_name, register.name AS cash_register_name,
                  employee.display_name AS operator_name, document.customer_partner_id,
                  document.source_sales_invoice_id, source.invoice_number AS source_invoice_number,
+                 document.source_subscription_draft_id,
+                 subscription_source.draft_number AS source_subscription_draft_number,
                  document.source_pos_sale_id, pos_source.sale_number AS source_pos_sale_number,
                  document.source_fiscal_receipt_number,
                  document.source_service_work_order_id,
@@ -1563,6 +1795,8 @@ function headerQuery() {
           LEFT JOIN identity.user_accounts account ON account.id = operator.account_id
           LEFT JOIN identity.employees employee ON employee.id = account.employee_id
           LEFT JOIN sales.invoices source ON source.id = document.source_sales_invoice_id
+          LEFT JOIN sales.subscription_invoice_drafts subscription_source
+            ON subscription_source.id = document.source_subscription_draft_id
           LEFT JOIN pos.sales pos_source ON pos_source.id = document.source_pos_sale_id
           LEFT JOIN service.work_orders service_source
             ON service_source.id = document.source_service_work_order_id`;

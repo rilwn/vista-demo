@@ -115,6 +115,9 @@ export class AuthenticationContextDto implements AuthenticationContextResponse {
   @ApiProperty({ type: [ApiPermissionDto] })
   permissions!: ApiPermissionDto[];
 
+  @ApiProperty({ type: [String] })
+  roleNames!: string[];
+
   @ApiProperty({ format: 'uuid', type: String })
   sessionId!: string;
 

@@ -5,6 +5,8 @@ import type {
   CrmCustomerSurvey,
   CrmNpsSummary,
   CrmReferral,
+  CrmWarrantyCardReconciliationResult,
+  CrmWarrantyCardReconciliationStatus,
   CrmSurveySourceReference,
   CrmWarrantyCard,
   RecordCrmSurveyResponseRequest,
@@ -185,6 +187,16 @@ class CrmAfterSalesCustomerDto {
   @ApiProperty({ type: String }) name!: string;
 }
 
+class CrmWarrantyCardReconciliationStatusDto implements CrmWarrantyCardReconciliationStatus {
+  @ApiProperty({ type: Number }) eligibleSoldSerials!: number;
+  @ApiProperty({ type: Number }) missingCards!: number;
+  @ApiProperty({ type: Number }) registeredSoldSerials!: number;
+}
+
+export class CrmWarrantyCardReconciliationResultDto implements CrmWarrantyCardReconciliationResult {
+  @ApiProperty({ type: Number }) cardsCreated!: number;
+}
+
 export class CrmAfterSalesOverviewDto implements CrmAfterSalesOverview {
   @ApiProperty({ isArray: true, type: CrmAfterSalesAssigneeDto })
   assignees!: CrmAfterSalesOverview['assignees'];
@@ -197,6 +209,8 @@ export class CrmAfterSalesOverviewDto implements CrmAfterSalesOverview {
   @ApiProperty({ isArray: true, type: CrmSurveySourceReferenceDto })
   surveySources!: CrmSurveySourceReference[];
   @ApiProperty({ isArray: true, type: CrmCustomerSurveyDto }) surveys!: CrmCustomerSurvey[];
+  @ApiProperty({ type: CrmWarrantyCardReconciliationStatusDto })
+  warrantyCardReconciliation!: CrmWarrantyCardReconciliationStatus;
   @ApiProperty({ isArray: true, type: CrmWarrantyCardDto }) warrantyCards!: CrmWarrantyCard[];
 }
 

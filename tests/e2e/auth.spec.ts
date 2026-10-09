@@ -317,7 +317,7 @@ test('password change, expiry and administrator recovery revoke sessions and rej
       .click();
     await second.getByLabel('Find an employee').fill(email);
     await second.getByRole('button', { name: 'Manage', exact: true }).click();
-    await second.getByRole('button', { name: 'Issue recovery handoff' }).click();
+    await second.getByRole('button', { name: 'Issue code' }).click();
     await second
       .getByLabel('Identity verification note')
       .fill('Browser acceptance: employee identity confirmed in person.');
@@ -375,7 +375,7 @@ test('administrator recovery requires a new authenticator and safely retries the
       .click();
     await issuer.getByLabel('Find an employee').fill(email);
     await issuer.getByRole('button', { name: 'Manage', exact: true }).click();
-    await issuer.getByRole('button', { name: 'Issue recovery handoff' }).click();
+    await issuer.getByRole('button', { name: 'Issue code' }).click();
     await issuer
       .getByLabel('Identity verification note')
       .fill('Administrator identity confirmed in person for browser acceptance.');

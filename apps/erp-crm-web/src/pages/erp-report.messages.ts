@@ -1,4 +1,4 @@
-import { getOperationsLocale } from '../i18n/LocalizationProvider';
+import { formatOperationsNumber, getOperationsLocale } from '../i18n/LocalizationProvider';
 
 const english = {
   scopes: {
@@ -21,7 +21,7 @@ const english = {
   retry: 'Try again',
   empty: 'No records match these filters.',
   count: (count: number) =>
-    `${count.toLocaleString('en-GB')} ${count === 1 ? 'record' : 'records'}`,
+    `${formatOperationsNumber(count)} ${count === 1 ? 'record' : 'records'}`,
   previous: 'Previous',
   next: 'Next',
   page: (page: number, total: number) => `Page ${page} of ${Math.max(1, total)}`,
@@ -89,7 +89,7 @@ const bulgarian = {
   error: 'Справката не може да бъде заредена. Опитайте отново.',
   retry: 'Опитайте отново',
   empty: 'Няма записи за избраните филтри.',
-  count: (count: number) => `${count.toLocaleString('bg-BG')} ${count === 1 ? 'запис' : 'записа'}`,
+  count: (count: number) => `${formatOperationsNumber(count)} ${count === 1 ? 'запис' : 'записа'}`,
   previous: 'Предишна',
   next: 'Следваща',
   page: (page: number, total: number) => `Страница ${page} от ${Math.max(1, total)}`,
@@ -138,7 +138,7 @@ const bulgarian = {
 } as const;
 
 export const erpReportMessages = new Proxy(english, {
-  get(target, property, receiver) {
+  get(target, property, receiver): unknown {
     return Reflect.get(getOperationsLocale() === 'bg' ? bulgarian : target, property, receiver);
   },
 });

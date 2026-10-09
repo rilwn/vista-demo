@@ -94,6 +94,7 @@ interface AuditRow {
   previous_event_hash: string | null;
   source_ip: string | null;
   target_id: string | null;
+  target_display_name: string | null;
   target_type: string;
   user_agent: string | null;
 }
@@ -655,10 +656,13 @@ export class SecurityAdministrationService {
               event.target_type, event.target_id, event.correlation_id,
               host(event.source_ip) AS source_ip, event.user_agent, event.before_data,
               event.after_data, event.metadata, event.previous_event_hash,
-              event.event_hash
+              event.event_hash, target_employee.display_name AS target_display_name
        FROM audit.events event
        LEFT JOIN identity.user_accounts account ON account.id = event.actor_account_id
        LEFT JOIN identity.employees employee ON employee.id = account.employee_id
+       LEFT JOIN identity.user_accounts target_account
+         ON event.target_type = 'user_account' AND event.target_id = target_account.id
+       LEFT JOIN identity.employees target_employee ON target_employee.id = target_account.employee_id
        ${where}
        ORDER BY event.occurred_at DESC, event.id DESC
        LIMIT ${limit} OFFSET ${offset}`,
@@ -958,6 +962,7 @@ function mapAuditEvent(row: AuditRow): AuditEventRecord {
     ...(row.previous_event_hash ? { previousEventHash: row.previous_event_hash } : {}),
     ...(row.source_ip ? { sourceIp: row.source_ip } : {}),
     ...(row.target_id ? { targetId: row.target_id } : {}),
+    ...(row.target_display_name ? { targetDisplayName: row.target_display_name } : {}),
     targetType: row.target_type,
     ...(row.user_agent ? { userAgent: row.user_agent } : {}),
   };

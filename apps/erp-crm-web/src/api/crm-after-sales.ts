@@ -6,6 +6,7 @@ import type {
   CrmCustomerSurvey,
   CrmReferral,
   CrmWarrantyCard,
+  CrmWarrantyCardReconciliationResult,
   RecordCrmSurveyResponseRequest,
   SendCrmCustomerSurveyRequest,
   TransitionWarrantyClaimRequest,
@@ -17,6 +18,13 @@ import { ApiClientError, apiV1BaseUrl, authorizationHeaders } from './client';
 
 export function getCrmAfterSalesOverview(token: string): Promise<CrmAfterSalesOverview> {
   return request<CrmAfterSalesOverview>(`${apiV1BaseUrl}/crm/after-sales`, token);
+}
+
+export function reconcileCrmWarrantyCards(
+  token: string,
+  key: string,
+): Promise<CrmWarrantyCardReconciliationResult> {
+  return command(`${apiV1BaseUrl}/crm/after-sales/warranty-cards/reconcile`, token, key, {});
 }
 
 export function updateCrmWarrantyOffer(

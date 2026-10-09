@@ -16,6 +16,7 @@ import {
   createCrmReferral,
   createCrmWarrantyClaim,
   getCrmAfterSalesOverview,
+  reconcileCrmWarrantyCards,
   recordCrmSurveyResponse,
   sendCrmSurvey,
   transitionCrmWarrantyClaim,
@@ -25,6 +26,11 @@ import { ApiClientError } from '../api/client';
 import { downloadManagedFile, uploadManagedFile } from '../api/files';
 import { useAuth } from '../auth/AuthProvider';
 import { Icon } from '../components/Icon';
+import {
+  formatOperationsDate,
+  formatOperationsNumber,
+  useLocalization,
+} from '../i18n/LocalizationProvider';
 import { Link } from '../routing/Router';
 import { CrmTabs } from './CrmTicketsPage';
 
@@ -33,12 +39,13 @@ type Drawer =
   | { card: CrmWarrantyCard; type: 'card' }
   | { card?: CrmWarrantyCard; type: 'new_claim' }
   | { claim: WarrantyClaim; type: 'claim' }
-  | { type: 'new_survey' }
+  | { sourceKey?: string; type: 'new_survey' }
   | { survey: CrmCustomerSurvey; type: 'survey' }
   | { type: 'new_referral' };
 
 export function CrmAfterSalesPage() {
   const { hasPermission, session } = useAuth();
+  const { t } = useLocalization();
   const token = session?.sessionToken ?? '';
   const canCreate = hasPermission('crm', 'create');
   const canEdit = hasPermission('crm', 'edit');
@@ -49,6 +56,7 @@ export function CrmAfterSalesPage() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [revision, setRevision] = useState(0);
+  const [reconciling, setReconciling] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -74,11 +82,31 @@ export function CrmAfterSalesPage() {
     setRevision((current) => current + 1);
   }
 
+  async function reconcileWarrantyRegister() {
+    setReconciling(true);
+    setError(null);
+    try {
+      const result = await reconcileCrmWarrantyCards(token, crypto.randomUUID());
+      setNotice(
+        result.cardsCreated === 0
+          ? t('crm.warranty.reconcileUpToDate')
+          : result.cardsCreated === 1
+            ? t('crm.warranty.reconcileOneAdded')
+            : t('crm.warranty.reconcileManyAdded', { count: result.cardsCreated }),
+      );
+      setRevision((current) => current + 1);
+    } catch (caught) {
+      setError(errorText(caught, t('crm.warranty.reconcileError')));
+    } finally {
+      setReconciling(false);
+    }
+  }
+
   const action =
     tab === 'warranties'
       ? { label: 'New warranty claim', open: () => setDrawer({ type: 'new_claim' }) }
       : tab === 'feedback'
-        ? { label: 'Send survey', open: () => setDrawer({ type: 'new_survey' }) }
+        ? { label: 'Prepare survey', open: () => setDrawer({ type: 'new_survey' }) }
         : { label: 'Record referral', open: () => setDrawer({ type: 'new_referral' }) };
 
   return (
@@ -137,10 +165,16 @@ export function CrmAfterSalesPage() {
 
       {loading && !overview ? <CareState title="Loading customer care" /> : null}
       {!loading && overview && tab === 'warranties' ? (
-        <WarrantyView overview={overview} onOpen={setDrawer} />
+        <WarrantyView
+          canEdit={canEdit}
+          onOpen={setDrawer}
+          onReconcile={() => void reconcileWarrantyRegister()}
+          overview={overview}
+          reconciling={reconciling}
+        />
       ) : null}
       {!loading && overview && tab === 'feedback' ? (
-        <FeedbackView overview={overview} onOpen={setDrawer} />
+        <FeedbackView canCreate={canCreate} overview={overview} onOpen={setDrawer} />
       ) : null}
       {!loading && overview && tab === 'referrals' ? <ReferralView overview={overview} /> : null}
 
@@ -180,8 +214,9 @@ export function CrmAfterSalesPage() {
       ) : null}
       {drawer?.type === 'new_survey' && overview ? (
         <NewSurveyDrawer
+          {...(drawer.sourceKey ? { initialSourceKey: drawer.sourceKey } : {})}
           onBack={() => setDrawer(null)}
-          onSaved={(survey) => refresh(`${survey.number} was sent.`)}
+          onSaved={() => refresh(t('crm.survey.invitationRecorded'))}
           sources={overview.surveySources}
           token={token}
         />
@@ -212,12 +247,19 @@ export function CrmAfterSalesPage() {
 }
 
 function WarrantyView({
+  canEdit,
+  onReconcile,
   overview,
   onOpen,
+  reconciling,
 }: {
+  canEdit: boolean;
+  onReconcile: () => void;
   overview: CrmAfterSalesOverview;
   onOpen: (drawer: Drawer) => void;
+  reconciling: boolean;
 }) {
+  const { t } = useLocalization();
   const [search, setSearch] = useState('');
   const normalized = search.trim().toLowerCase();
   const cards = overview.warrantyCards.filter(
@@ -232,8 +274,27 @@ function WarrantyView({
     (card) => card.remainingDays >= 0 && card.remainingDays <= 60,
   ).length;
   const openClaims = overview.claims.filter((claim) => claim.status !== 'closed').length;
+  const missingCards = overview.warrantyCardReconciliation.missingCards;
   return (
     <div className="crm-care-view">
+      {missingCards > 0 ? (
+        <InlineAlert tone="warning">
+          <div className="crm-care-reconcile">
+            <span>
+              {missingCards === 1
+                ? t('crm.warranty.reconcileGapOne')
+                : t('crm.warranty.reconcileGapMany', { count: missingCards })}
+            </span>
+            {canEdit ? (
+              <button disabled={reconciling} onClick={onReconcile} type="button">
+                {reconciling
+                  ? t('crm.warranty.reconcileRunning')
+                  : t('crm.warranty.reconcileAction')}
+              </button>
+            ) : null}
+          </div>
+        </InlineAlert>
+      ) : null}
       <section aria-label="Warranty summary" className="crm-care-summary">
         <Metric label="Warranty cards" value={overview.warrantyCards.length} />
         <Metric label="Active coverage" value={active} />
@@ -331,9 +392,11 @@ function WarrantyView({
 }
 
 function FeedbackView({
+  canCreate,
   overview,
   onOpen,
 }: {
+  canCreate: boolean;
   overview: CrmAfterSalesOverview;
   onOpen: (drawer: Drawer) => void;
 }) {
@@ -373,13 +436,51 @@ function FeedbackView({
       <section className="crm-care-register">
         <header className="crm-care-register-head">
           <div>
+            <h2>Completed work awaiting a survey</h2>
+            <p>Choose a completed Service job or delivery to prepare its customer survey.</p>
+          </div>
+          <span className="crm-care-count">{overview.surveySources.length}</span>
+        </header>
+        {!overview.surveySources.length ? (
+          <CareEmpty title="No completed Service jobs or deliveries are waiting for a survey." />
+        ) : (
+          <div className="crm-care-survey-source-list">
+            {overview.surveySources.map((source) => {
+              const sourceKey = `${source.sourceKind}:${source.id}`;
+              const openSurvey = () => onOpen({ sourceKey, type: 'new_survey' });
+              return (
+                <article className="crm-care-survey-source" key={sourceKey}>
+                  <span className="crm-care-record-icon">
+                    <Icon
+                      name={source.sourceKind === 'service' ? 'service' : 'logistics'}
+                      size={18}
+                    />
+                  </span>
+                  <span>
+                    <strong>{source.customerName}</strong>
+                    <small>{source.label}</small>
+                  </span>
+                  {canCreate ? (
+                    <Button onClick={openSurvey} type="button">
+                      Prepare survey
+                    </Button>
+                  ) : null}
+                </article>
+              );
+            })}
+          </div>
+        )}
+      </section>
+      <section className="crm-care-register">
+        <header className="crm-care-register-head">
+          <div>
             <h2>Customer surveys</h2>
-            <p>Send one NPS survey after a completed delivery or Service job.</p>
+            <p>Record invitations shared with customers and enter their responses here.</p>
           </div>
           <span className="crm-care-count">{overview.surveys.length}</span>
         </header>
         {!overview.surveys.length ? (
-          <CareEmpty title="No customer surveys have been sent." />
+          <CareEmpty title="No survey invitations have been recorded." />
         ) : (
           <div className="crm-care-survey-list">
             {overview.surveys.map((survey) => (
@@ -912,18 +1013,20 @@ function ClaimDrawer({
 }
 
 function NewSurveyDrawer({
+  initialSourceKey,
   onBack,
   onSaved,
   sources,
   token,
 }: {
+  initialSourceKey?: string;
   onBack: () => void;
   onSaved: (survey: CrmCustomerSurvey) => void;
   sources: CrmAfterSalesOverview['surveySources'];
   token: string;
 }) {
   const [sourceKey, setSourceKey] = useState(
-    sources[0] ? `${sources[0].sourceKind}:${sources[0].id}` : '',
+    initialSourceKey ?? (sources[0] ? `${sources[0].sourceKind}:${sources[0].id}` : ''),
   );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -951,13 +1054,13 @@ function NewSurveyDrawer({
       busy={busy}
       onBack={onBack}
       subtitle="Completed customer work"
-      title="Send customer survey"
+      title="Prepare customer survey"
     >
       <form className="crm-care-form" onSubmit={(event) => void submit(event)}>
         {error ? <InlineAlert tone="error">{error}</InlineAlert> : null}
         <FormSection index="1" title="Choose completed work">
           {!sources.length ? (
-            <CareEmpty title="Every completed delivery and Service job already has a survey." />
+            <CareEmpty title="No completed work is waiting for a survey." />
           ) : (
             <label className="crm-care-field">
               <span>Delivery or Service job</span>
@@ -992,13 +1095,22 @@ function NewSurveyDrawer({
           ) : null}
         </FormSection>
         <FormSection index="2" title="Survey question">
+          <p className="crm-survey-instructions">
+            Share this question with the customer using your usual contact method, then record the
+            invitation.
+          </p>
           <div className="crm-survey-question">
             <strong>How likely are you to recommend Vista Service?</strong>
             <span>0 — Not at all likely</span>
             <span>10 — Extremely likely</span>
           </div>
         </FormSection>
-        <DrawerActions busy={busy} disabled={!selected} onBack={onBack} submit="Send survey" />
+        <DrawerActions
+          busy={busy}
+          disabled={!selected}
+          onBack={onBack}
+          submit="Record invitation shared"
+        />
       </form>
     </CareDrawer>
   );
@@ -1461,21 +1573,22 @@ function statusLabel(value: string) {
   );
 }
 function formatDate(value: string, timezone: string) {
-  return new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium', timeZone: timezone }).format(
-    new Date(`${value}T12:00:00Z`),
-  );
+  return formatOperationsDate(new Date(`${value}T12:00:00Z`), {
+    dateStyle: 'medium',
+    timeZone: timezone,
+  });
 }
 function formatDateTime(value: string, timezone: string) {
-  return new Intl.DateTimeFormat('en-GB', {
+  return formatOperationsDate(new Date(value), {
     dateStyle: 'medium',
     timeStyle: 'short',
     timeZone: timezone,
-  }).format(new Date(value));
+  });
 }
 function formatBytes(value: number) {
   return value < 1024 * 1024
     ? `${Math.max(1, Math.round(value / 1024))} KB`
-    : `${(value / 1024 / 1024).toFixed(1)} MB`;
+    : `${formatOperationsNumber(value / 1024 / 1024, { minimumFractionDigits: 1, maximumFractionDigits: 1 })} MB`;
 }
 function errorText(error: unknown, fallback: string) {
   return error instanceof ApiClientError ? error.message : fallback;

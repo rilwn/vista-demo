@@ -28,6 +28,7 @@ import type {
   RequestSecurityMetadata,
 } from '../auth/authentication.types.js';
 import { ApiErrorException } from '../common/api-error.exception.js';
+import { assertBusinessIdentifiers } from '../common/business-identifiers.js';
 import { APP_ENVIRONMENT } from '../config/config.module.js';
 import { DatabaseService } from '../database/database.service.js';
 import type { PartnerDuplicateQueryDto, PartnerListQueryDto } from './partners.dto.js';
@@ -414,6 +415,10 @@ export class PartnersService {
       }
       const before = mapPartner(await lockPartner(client, partnerId));
       requireVersion(before.version, input.expectedVersion, 'PARTNER_VERSION_CONFLICT');
+      assertBusinessIdentifiers({
+        ...(normalized.uic !== before.uic ? { uic: normalized.uic } : {}),
+        ...(normalized.vatNumber !== before.vatNumber ? { vatNumber: normalized.vatNumber } : {}),
+      });
       const duplicateName =
         normalized.kind === 'legal_entity' ? normalizedName(normalized.displayName) : undefined;
       const lockKeys = [
@@ -553,6 +558,7 @@ export class PartnersService {
   ): Promise<PartnerSummary> {
     const key = validateIdempotencyKey(idempotencyKey);
     const normalized = normalizePartnerInput(input);
+    if (normalized.kind === 'legal_entity') assertBusinessIdentifiers(normalized);
     const requestHash = createHash('sha256').update(JSON.stringify(normalized)).digest('hex');
     const client = await this.database.getPool().connect();
     try {
@@ -961,7 +967,7 @@ function normalizePartnerInput(input: CreatePartnerRequest): NormalizedPartnerIn
   const roles = [...new Set(input.roles)].sort();
   const companyRepresentative = normalizeOptionalText(input.companyRepresentative);
   const uic = normalizeOptionalIdentifier(input.uic);
-  const vatNumber = normalizeOptionalIdentifier(input.vatNumber);
+  const vatNumber = normalizeOptionalIdentifier(input.vatNumber)?.replace(/\s+/gu, '');
   if (roles.length === 0) {
     throw new ApiErrorException(
       'PARTNER_ROLE_REQUIRED',

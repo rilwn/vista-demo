@@ -33,6 +33,7 @@ import {
 import {
   CreateCrmReferralDto,
   CrmAfterSalesOverviewDto,
+  CrmWarrantyCardReconciliationResultDto,
   CrmCustomerSurveyDto,
   CrmReferralDto,
   CrmWarrantyCardDto,
@@ -54,6 +55,19 @@ export class CrmAfterSalesController {
   @ApiOkResponse({ type: CrmAfterSalesOverviewDto })
   overview(@Req() request: AuthenticatedRequest): Promise<CrmAfterSalesOverviewDto> {
     return this.afterSales.overview(request.authentication);
+  }
+
+  @Post('warranty-cards/reconcile')
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissions({ action: 'edit', module: 'crm' })
+  @RateLimitPolicy('write')
+  @ApiOkResponse({ type: CrmWarrantyCardReconciliationResultDto })
+  @ApiHeader({ name: 'Idempotency-Key', required: true })
+  reconcileWarrantyCards(
+    @Headers('idempotency-key') key: string | undefined,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<CrmWarrantyCardReconciliationResultDto> {
+    return this.afterSales.reconcileWarrantyCards(key, request.authentication, metadata(request));
   }
 
   @Post('warranty-cards/:id/offer')

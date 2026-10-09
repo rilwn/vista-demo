@@ -85,7 +85,12 @@ services:
       minio: { condition: service_healthy }
   operations:
     image: vista-operations:${VISTA_IMAGE_TAG:?Set VISTA_IMAGE_TAG}
-    build: { context: ../.., dockerfile: infrastructure/deployment/Dockerfile, target: operations }
+    build:
+      context: ../..
+      dockerfile: infrastructure/deployment/Dockerfile
+      target: operations
+      args:
+        VITE_POS_APP_URL: ${VITE_POS_APP_URL:-http://localhost:5474}
     ports: ['127.0.0.1:${OPERATIONS_PORT:-5473}:8080']
     read_only: true
     tmpfs: [/tmp]

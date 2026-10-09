@@ -31,10 +31,10 @@ const english = {
   collectionsLink: 'Open collections',
   asOf: (date: string) => `As of ${date}`,
   nextDays: (days: number) => `Within the next ${days} days`,
-  revenueNote: 'Revenue includes prepared documents, before VAT, not posted accounting revenue.',
+  revenueNote: 'Revenue includes issued documents before VAT. Drafts are excluded.',
   details: 'How these figures are calculated',
   revenueDetails:
-    'Invoices and debit notes less credit notes, before VAT, for the selected period. Proformas and cancelled documents are excluded.',
+    'Issued invoices and debit notes less credit notes, before VAT, for the selected period. Drafts, proformas and cancelled documents are excluded.',
   serviceDetails: 'New, scheduled and in-progress requests at the current date.',
   warrantyDetails:
     'Active equipment whose warranty ends within the selected window, starting today.',
@@ -72,10 +72,10 @@ const bulgarian = {
   collectionsLink: 'Отваряне на вземанията',
   asOf: (date: string) => `Към ${date}`,
   nextDays: (days: number) => `През следващите ${days} дни`,
-  revenueNote: 'Приходите включват подготвени документи преди ДДС, а не осчетоводени приходи.',
+  revenueNote: 'Приходите включват издадени документи преди ДДС. Черновите не се включват.',
   details: 'Как се изчисляват тези стойности',
   revenueDetails:
-    'Фактури и дебитни известия минус кредитни известия, преди ДДС, за избрания период. Проформи и анулирани документи не се включват.',
+    'Издадени фактури и дебитни известия минус кредитни известия, преди ДДС, за избрания период. Чернови, проформи и анулирани документи не се включват.',
   serviceDetails: 'Нови, планирани и текущи заявки към настоящата дата.',
   warrantyDetails: 'Активно оборудване с гаранция, изтичаща в избрания период от днес.',
   overdueDetails:
@@ -83,7 +83,7 @@ const bulgarian = {
 } as const;
 
 export const overviewMessages = new Proxy(english, {
-  get(target, property, receiver) {
+  get(target, property, receiver): unknown {
     return Reflect.get(getOperationsLocale() === 'bg' ? bulgarian : target, property, receiver);
   },
 });

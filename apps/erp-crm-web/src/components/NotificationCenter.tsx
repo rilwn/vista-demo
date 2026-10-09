@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { ApiClientError } from '../api/client';
 import { listNotifications, markNotificationRead } from '../api/notifications';
 import { useAuth } from '../auth/AuthProvider';
-import { useLocalization } from '../i18n/LocalizationProvider';
+import { formatOperationsCurrency, useLocalization } from '../i18n/LocalizationProvider';
 import { Icon } from './Icon';
 
 export function NotificationCenter() {
@@ -164,7 +164,7 @@ function notificationDetail(
   ) {
     const number = value(notification.payload, 'number');
     const counterparty = value(notification.payload, 'counterpartyName');
-    const amount = money(value(notification.payload, 'outstandingBgn'), dateLocale);
+    const amount = money(value(notification.payload, 'outstandingBgn'));
     const dueDate = dateValue(notification.payload, 'dueDate', dateLocale);
     return t('notifications.paymentDetail', { amount, counterparty, date: dueDate, number });
   }
@@ -226,10 +226,9 @@ function dateValue(payload: Record<string, unknown>, key: string, locale: string
       }).format(date);
 }
 
-function money(candidate: string, locale: string): string {
-  const amount = Number(candidate);
-  return Number.isFinite(amount)
-    ? new Intl.NumberFormat(locale, { style: 'currency', currency: 'BGN' }).format(amount)
+function money(candidate: string): string {
+  return /^-?\d+(?:\.\d+)?$/u.test(candidate)
+    ? formatOperationsCurrency(candidate, 'BGN')
     : 'BGN —';
 }
 

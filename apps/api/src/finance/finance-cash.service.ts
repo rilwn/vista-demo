@@ -331,6 +331,15 @@ export class FinanceCashService {
             'Choose an active operator assigned to the selected cash register.',
           );
 
+        await lockCashLedger(client, normalized.cashRegisterId);
+        if (normalized.direction === 'payment')
+          await requireAvailableCash(
+            client,
+            normalized.cashRegisterId,
+            normalized.voucherDate,
+            normalized.amount,
+          );
+
         let counterpartyPartnerId = normalized.counterpartyPartnerId;
         let counterpartyName = normalized.counterpartyName;
         const customerDocumentId = normalized.customerDocumentId;
@@ -546,6 +555,14 @@ export class FinanceCashService {
             'FINANCE_CASH_LINKED_REVERSAL_REQUIRED',
             'A receipt allocated to a customer collection requires the approved payment-reversal workflow and cannot be cancelled here.',
           );
+        await lockCashLedger(client, before.cashRegisterId);
+        if (before.direction === 'receipt')
+          await requireAvailableCash(
+            client,
+            before.cashRegisterId,
+            before.voucherDate,
+            before.amount,
+          );
         await client.query(
           `UPDATE finance.cash_vouchers
            SET status = 'cancelled', cancellation_reason = $2, cancelled_at = now(),
@@ -729,6 +746,44 @@ interface CollectionRow {
   payment_status: FinancePaymentStatus;
   review_state: string;
   total: string;
+}
+
+async function lockCashLedger(client: PoolClient, cashRegisterId: string): Promise<void> {
+  await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [
+    `finance.cash-ledger:${cashRegisterId}`,
+  ]);
+}
+
+async function requireAvailableCash(
+  client: PoolClient,
+  cashRegisterId: string,
+  voucherDate: string,
+  amount: string,
+): Promise<void> {
+  // Check the posting date AND later closing balances so a backdated payment
+  // or receipt cancellation cannot make an already recorded day negative.
+  const result = await client.query<{ available: string }>(
+    `WITH daily AS (
+       SELECT voucher_date,
+              sum(CASE WHEN direction = 'receipt' THEN amount ELSE -amount END) AS delta
+       FROM finance.cash_vouchers
+       WHERE cash_register_id = $1 AND status = 'issued'
+       GROUP BY voucher_date
+     ), balances AS (
+       SELECT voucher_date, sum(delta) OVER (ORDER BY voucher_date) AS balance FROM daily
+     ), candidates AS (
+       SELECT coalesce(sum(delta), 0) AS balance FROM daily WHERE voucher_date <= $2::date
+       UNION ALL
+       SELECT balance FROM balances WHERE voucher_date > $2::date
+     )
+     SELECT min(balance)::text AS available FROM candidates`,
+    [cashRegisterId, voucherDate],
+  );
+  if (decimalUnits(result.rows[0]?.available ?? '0') < decimalUnits(amount))
+    throw conflict(
+      'FINANCE_CASH_INSUFFICIENT_BALANCE',
+      'There is not enough cash in this register for this payment or cancellation.',
+    );
 }
 
 function voucherQuery() {

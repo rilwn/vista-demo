@@ -13,6 +13,7 @@ import {
 } from 'class-validator';
 import {
   financePaymentMethods,
+  type AllocateCustomerAdvanceRequest,
   type CancelFinanceCustomerDocumentRequest,
   type CreateFinanceCustomerDocumentRequest,
   type CreateFinancePaymentRequest,
@@ -63,6 +64,17 @@ export class CreateFinancePaymentDto implements CreateFinancePaymentRequest {
   paymentReference?: string;
 }
 
+export class AllocateCustomerAdvanceDto implements AllocateCustomerAdvanceRequest {
+  @ApiProperty({ example: '125.0000', type: String })
+  @IsString()
+  @Matches(decimalPattern)
+  amount!: string;
+
+  @ApiProperty({ format: 'uuid', type: String })
+  @IsUUID('loose')
+  customerAdvanceId!: string;
+}
+
 export class CancelFinanceCustomerDocumentDto implements CancelFinanceCustomerDocumentRequest {
   @ApiProperty({ maxLength: 1000, type: String })
   @IsString()
@@ -100,6 +112,7 @@ class FinancePaymentDto implements FinancePayment {
   @ApiProperty({ format: 'date', type: String }) paymentDate!: string;
   @ApiProperty({ enum: financePaymentMethods }) paymentMethod!: FinancePayment['paymentMethod'];
   @ApiPropertyOptional({ type: String }) paymentReference?: string;
+  @ApiPropertyOptional({ type: String }) sourceCustomerAdvanceNumber?: string;
   @ApiProperty({ format: 'date-time', type: String }) recordedAt!: string;
 }
 

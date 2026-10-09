@@ -475,27 +475,29 @@ const analyticsDefinitions: CrmAnalyticsDefinition[] = [
       'Active customers are distinct invoiced customers. Purchase frequency is invoice count divided by active customers. Average transaction value is the average stored BGN gross invoice total.',
     key: 'customer-activity',
     label: 'Customer activity',
-    statusFilters: ['Non-cancelled invoices only.'],
+    statusFilters: ['Issued invoices only; drafts and cancelled documents excluded.'],
   },
   {
     dataSources: ['finance.financial_documents'],
     dateWindow: 'Selected issue-date period compared with the immediately preceding equal period.',
     formula:
-      'Customers with a non-cancelled invoice in both periods divided by customers with an invoice in the previous period.',
+      'Customers with an issued invoice in both periods divided by customers with an issued invoice in the previous period.',
     key: 'customer-retention',
     label: 'Customer retention and churn',
     statusFilters: [
-      'Non-cancelled invoices; proformas and correction notes excluded from activity.',
+      'Issued invoices only; drafts, cancelled documents, proformas and correction notes excluded from activity.',
     ],
   },
   {
     dataSources: ['finance.financial_documents'],
-    dateWindow: 'All non-cancelled financial documents up to the selected end date.',
+    dateWindow: 'All issued financial documents up to the selected end date.',
     formula:
       'Net recorded BGN value excluding VAT per customer averaged across customers; credit notes reduce value.',
     key: 'observed-clv',
     label: 'Observed customer lifetime value',
-    statusFilters: ['Invoices and debit notes less credit notes; proformas excluded.'],
+    statusFilters: [
+      'Issued invoices and debit notes less credit notes; drafts, cancelled documents and proformas excluded.',
+    ],
   },
   {
     dataSources: [
@@ -510,7 +512,7 @@ const analyticsDefinitions: CrmAnalyticsDefinition[] = [
     key: 'customer-preferences',
     label: 'Preferred products and services',
     statusFilters: [
-      'Non-cancelled invoices and debit notes less credit notes; proformas excluded.',
+      'Issued invoices and debit notes less credit notes; drafts, cancelled documents and proformas excluded.',
     ],
   },
   {
@@ -534,7 +536,7 @@ const analyticsDefinitions: CrmAnalyticsDefinition[] = [
       'Stored net BGN value excluding VAT for invoices and debit notes less credit notes, grouped by each dimension.',
     key: 'recorded-revenue',
     label: 'Recorded revenue',
-    statusFilters: ['Non-cancelled documents; proformas excluded.'],
+    statusFilters: ['Issued documents only; drafts, cancelled documents and proformas excluded.'],
   },
   {
     dataSources: ['service.requests', 'crm.tickets', 'sales.shipments', 'identity.employees'],
@@ -551,12 +553,14 @@ const customerMetricsQuery = `
 WITH invoice_activity AS (
   SELECT customer_partner_id, issue_date, bgn_gross_total
   FROM finance.financial_documents
-  WHERE status <> 'cancelled' AND document_type = 'invoice'
+  WHERE status NOT IN ('draft', 'cancelled') AND official_number IS NOT NULL
+    AND document_type = 'invoice'
 ), document_value AS (
   SELECT customer_partner_id, issue_date,
          CASE WHEN document_type = 'credit_note' THEN -bgn_net_total ELSE bgn_net_total END AS value_bgn
   FROM finance.financial_documents
-  WHERE status <> 'cancelled' AND document_type IN ('invoice', 'credit_note', 'debit_note')
+  WHERE status NOT IN ('draft', 'cancelled') AND official_number IS NOT NULL
+    AND document_type IN ('invoice', 'credit_note', 'debit_note')
 ), current_customers AS (
   SELECT DISTINCT customer_partner_id FROM invoice_activity WHERE issue_date BETWEEN $1::date AND $2::date
 ), previous_customers AS (
@@ -685,7 +689,8 @@ const preferenceQuery = `
 WITH document AS (
   SELECT id, source_service_work_order_id, document_type, exchange_rate
   FROM finance.financial_documents
-  WHERE status <> 'cancelled' AND document_type IN ('invoice', 'credit_note', 'debit_note')
+  WHERE status NOT IN ('draft', 'cancelled') AND official_number IS NOT NULL
+    AND document_type IN ('invoice', 'credit_note', 'debit_note')
     AND issue_date BETWEEN $1::date AND $2::date
 ), product_preference AS (
   SELECT 'product'::text AS kind, product.name AS label,
@@ -738,7 +743,7 @@ WITH document AS (
   LEFT JOIN sales.orders sales_order ON sales_order.id = sales_invoice.order_id
   LEFT JOIN sales.quotations quotation ON quotation.id = sales_order.quotation_id
   LEFT JOIN service.work_orders work_order ON work_order.id = financial.source_service_work_order_id
-  WHERE financial.status <> 'cancelled'
+  WHERE financial.status NOT IN ('draft', 'cancelled') AND financial.official_number IS NOT NULL
     AND financial.document_type IN ('invoice', 'credit_note', 'debit_note')
     AND financial.issue_date BETWEEN $1::date AND $2::date
 ), dimension_rows AS (

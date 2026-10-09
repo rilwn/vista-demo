@@ -1211,6 +1211,11 @@ export class FinancePayablesService {
       supplierPartnerId: string;
     },
   ) {
+    if (input.paymentDate > (await this.businessDate(client)))
+      throw badRequest(
+        'FINANCE_PAYMENT_FUTURE_DATE_INVALID',
+        'The payment date cannot be after the current business date.',
+      );
     const id = randomUUID();
     const type = input.kind === 'advance' ? 'supplier_advance' : 'supplier_payment';
     const prefix = input.kind === 'advance' ? 'SADV' : 'SPAY';

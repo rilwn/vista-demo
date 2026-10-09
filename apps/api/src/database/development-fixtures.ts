@@ -92,6 +92,7 @@ export interface DevelopmentFixtureAccount {
   employeeNumber: string;
   key: DevelopmentFixtureAccountKey;
   permissions: readonly PermissionGrant[];
+  roleDescription: string;
   roleCode: string;
   roleName: string;
 }
@@ -106,6 +107,8 @@ const allOperationalPermissions: readonly PermissionGrant[] = [
   grant('platform', 'view'),
   grant('platform.organization', 'view'),
   grant('platform.organization', 'create'),
+  grant('platform.organization', 'edit'),
+  grant('platform.organization', 'delete'),
   grant('crm', 'view'),
   grant('crm', 'create'),
   grant('crm', 'edit'),
@@ -131,6 +134,7 @@ const allOperationalPermissions: readonly PermissionGrant[] = [
   grant('erp.logistics', 'view'),
   grant('erp.logistics', 'create'),
   grant('erp.logistics', 'edit'),
+  grant('pos', 'view'),
   grant('pos', 'approve'),
   grant('reports', 'view'),
 ];
@@ -152,6 +156,7 @@ export const developmentFixtureAccounts: readonly DevelopmentFixtureAccount[] = 
     'Vista Demo Manager',
     'manager@vista.local',
     allOperationalPermissions,
+    'Broad access across ERP, CRM, reports, and POS review. Cashier actions remain with the POS Operator role.',
   ),
   account(
     'platform-manager',
@@ -162,24 +167,41 @@ export const developmentFixtureAccounts: readonly DevelopmentFixtureAccount[] = 
       grant('platform', 'view'),
       grant('platform.organization', 'view'),
       grant('platform.organization', 'create'),
+      grant('platform.organization', 'edit'),
+      grant('platform.organization', 'delete'),
     ],
+    'Maintains branches, business locations, operators, and cash registers.',
   ),
-  account('crm', 'DEV-CRM', 'Vista Demo CRM Coordinator', 'crm@vista.local', [
-    grant('crm', 'view'),
-    grant('crm', 'create'),
-    grant('crm', 'edit'),
-    grant('crm', 'delete'),
-    grant('crm', 'approve'),
-    grant('erp.service', 'view'),
-    grant('erp.service', 'create'),
-  ]),
-  account('warehouse', 'DEV-WAREHOUSE', 'Vista Demo Warehouse Operator', 'warehouse@vista.local', [
-    grant('platform.organization', 'view'),
-    grant('erp.warehouse', 'view'),
-    grant('erp.warehouse', 'create'),
-    grant('erp.warehouse', 'edit'),
-    grant('erp.warehouse', 'approve'),
-  ]),
+  account(
+    'crm',
+    'DEV-CRM',
+    'Vista Demo CRM Coordinator',
+    'crm@vista.local',
+    [
+      grant('crm', 'view'),
+      grant('crm', 'create'),
+      grant('crm', 'edit'),
+      grant('crm', 'delete'),
+      grant('crm', 'approve'),
+      grant('erp.service', 'view'),
+      grant('erp.service', 'create'),
+    ],
+    'Manages customer and lead records, tickets, referrals, and Service request handoffs.',
+  ),
+  account(
+    'warehouse',
+    'DEV-WAREHOUSE',
+    'Vista Demo Warehouse Operator',
+    'warehouse@vista.local',
+    [
+      grant('platform.organization', 'view'),
+      grant('erp.warehouse', 'view'),
+      grant('erp.warehouse', 'create'),
+      grant('erp.warehouse', 'edit'),
+      grant('erp.warehouse', 'approve'),
+    ],
+    'Receives and tracks stock, moves inventory, reviews reservations, and completes stocktakes.',
+  ),
   account(
     'procurement',
     'DEV-PROCUREMENT',
@@ -190,17 +212,24 @@ export const developmentFixtureAccounts: readonly DevelopmentFixtureAccount[] = 
       grant('erp.procurement', 'create'),
       grant('erp.procurement', 'edit'),
     ],
+    'Maintains suppliers and purchasing, including orders, receipts, claims, and supplier invoices.',
   ),
-  account('sales', 'DEV-SALES', 'Vista Demo Sales Coordinator', 'sales@vista.local', [
-    grant('erp.sales', 'view'),
-    grant('erp.sales', 'create'),
-    grant('erp.sales', 'edit'),
-  ]),
-  account('finance', 'DEV-FINANCE', 'Vista Demo Finance Officer', 'finance@vista.local', [
-    grant('erp.finance', 'view'),
-    grant('erp.finance', 'create'),
-    grant('erp.finance', 'edit'),
-  ]),
+  account(
+    'sales',
+    'DEV-SALES',
+    'Vista Demo Sales Coordinator',
+    'sales@vista.local',
+    [grant('erp.sales', 'view'), grant('erp.sales', 'create'), grant('erp.sales', 'edit')],
+    'Creates and follows quotations, sales orders, shipments, and subscriptions.',
+  ),
+  account(
+    'finance',
+    'DEV-FINANCE',
+    'Vista Demo Finance Officer',
+    'finance@vista.local',
+    [grant('erp.finance', 'view'), grant('erp.finance', 'create'), grant('erp.finance', 'edit')],
+    'Prepares finance documents, collections, payments, cash activity, and customer accounts.',
+  ),
   account(
     'dispatcher',
     'DEV-DISPATCHER',
@@ -212,6 +241,7 @@ export const developmentFixtureAccounts: readonly DevelopmentFixtureAccount[] = 
       grant('erp.service', 'edit'),
       grant('erp.service', 'approve'),
     ],
+    'Receives Service requests, schedules technicians, and approves completed work.',
   ),
   account(
     'technician',
@@ -219,18 +249,23 @@ export const developmentFixtureAccounts: readonly DevelopmentFixtureAccount[] = 
     'Vista Demo Service Technician',
     'technician@vista.local',
     [grant('erp.service', 'view'), grant('erp.service', 'edit')],
+    'Reviews assigned Service work and records visits, parts, and working time.',
   ),
-  account('pos-operator', 'DEV-POS', 'Vista Demo POS Operator', 'pos.operator@vista.local', [
-    grant('pos', 'view'),
-    grant('pos', 'create'),
-    grant('pos', 'edit'),
-  ]),
+  account(
+    'pos-operator',
+    'DEV-POS',
+    'Vista Demo POS Operator',
+    'pos.operator@vista.local',
+    [grant('pos', 'view'), grant('pos', 'create'), grant('pos', 'edit')],
+    'Processes counter sales, returns, and shift work at the POS.',
+  ),
   account(
     'backup-operator',
     'DEV-BACKUP',
     'Vista Demo Backup Operator',
     'backup.operator@vista.local',
     [grant('backup', 'view')],
+    'Reviews backup jobs, protected sources, and recovery readiness.',
   ),
   account(
     'viewer',
@@ -238,6 +273,7 @@ export const developmentFixtureAccounts: readonly DevelopmentFixtureAccount[] = 
     'Vista Demo Read-only Reviewer',
     'viewer@vista.local',
     viewerPermissions,
+    'Read-only access to customer records, ERP registers, and reports.',
   ),
 ];
 
@@ -335,6 +371,7 @@ function account(
   displayName: string,
   email: string,
   permissions: readonly PermissionGrant[],
+  roleDescription: string,
 ): DevelopmentFixtureAccount {
   return {
     displayName,
@@ -342,6 +379,7 @@ function account(
     employeeNumber,
     key,
     permissions,
+    roleDescription,
     roleCode: `dev-fixture-${key}`,
     roleName: `Development fixture: ${displayName}`,
   };
@@ -542,12 +580,7 @@ async function ensureFixtureRoles(
         `INSERT INTO iam.roles (
            id, code, name, description, is_administrative, is_system_role
          ) VALUES ($1, $2, $3, $4, false, true)`,
-        [
-          roleId,
-          definition.roleCode,
-          definition.roleName,
-          'Local development fixture role. It is never an administrative role.',
-        ],
+        [roleId, definition.roleCode, definition.roleName, definition.roleDescription],
       );
     } else {
       await client.query(
@@ -555,11 +588,7 @@ async function ensureFixtureRoles(
          SET name = $2, description = $3, is_administrative = false, is_system_role = true,
              updated_at = now()
          WHERE id = $1`,
-        [
-          roleId,
-          definition.roleName,
-          'Local development fixture role. It is never an administrative role.',
-        ],
+        [roleId, definition.roleName, definition.roleDescription],
       );
     }
 

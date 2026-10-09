@@ -9,6 +9,7 @@ import {
   type SavedCheckout,
 } from './checkout-store';
 import { getPosDateLocale } from './i18n/LocalizationProvider';
+import { CheckoutReference } from './CheckoutReference';
 
 const labels: Record<CheckoutEvent['kind'], string> = {
   saved: 'Checkout saved',
@@ -118,7 +119,9 @@ export function CheckoutHistory({
                 </div>
                 <div>
                   <dt>Reference</dt>
-                  <dd>{pending.request.clientTransactionId}</dd>
+                  <dd>
+                    <CheckoutReference value={pending.request.clientTransactionId} />
+                  </dd>
                 </div>
               </dl>
             ) : null}
@@ -137,10 +140,9 @@ export function CheckoutHistory({
                   <li key={`${event.transactionId}-${event.occurredAt}-${index}`}>
                     <div>
                       <strong>{labels[event.kind]}</strong>
-                      <span>
-                        {event.saleNumber ?? `Reference ${event.transactionId.slice(0, 8)}`}
-                      </span>
+                      {event.saleNumber ? <span>{event.saleNumber}</span> : null}
                       <time dateTime={event.occurredAt}>{formatDate(event.occurredAt)}</time>
+                      {!event.saleNumber ? <CheckoutReference value={event.transactionId} /> : null}
                     </div>
                     {event.kind === 'confirmed' ? (
                       <button

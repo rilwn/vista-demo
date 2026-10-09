@@ -32,6 +32,12 @@ import {
 import { ApiClientError } from '../api/client';
 import { useAuth } from '../auth/AuthProvider';
 import { Icon } from '../components/Icon';
+import {
+  formatOperationsCurrency,
+  formatOperationsDate,
+  formatOperationsNumber,
+  useLocalization,
+} from '../i18n/LocalizationProvider';
 import { salesPricingMessages as copy } from '../i18n/legacyMessages';
 
 type PricingTab = 'price-lists' | 'pos-offers' | 'groups' | 'campaigns';
@@ -50,6 +56,7 @@ const emptyReferences: SalesPricingReferenceData = {
 };
 
 export function SalesPricingPage() {
+  useLocalization();
   const { hasPermission, session } = useAuth();
   const token = session?.sessionToken ?? '';
   const [tab, setTab] = useState<PricingTab>('price-lists');
@@ -389,12 +396,15 @@ function PosOffersRegister({
               <div className="pricing-member-preview">
                 <strong>
                   {rule.discountType === 'percentage'
-                    ? `${Number(rule.discountValue).toFixed(2)}% off`
+                    ? `${formatOperationsNumber(Number(rule.discountValue), { minimumFractionDigits: 2, maximumFractionDigits: 2 })}% off`
                     : `${formatMoney(rule.discountValue, 'BGN')} off`}
                 </strong>
                 <span>
                   {rule.items
-                    .map((item) => `${Number(item.requiredQuantity)} × ${item.productName}`)
+                    .map(
+                      (item) =>
+                        `${formatOperationsNumber(Number(item.requiredQuantity), { maximumFractionDigits: 4 })} × ${item.productName}`,
+                    )
                     .join(' + ')}
                 </span>
               </div>
@@ -1455,13 +1465,11 @@ function futureDate(days: number) {
 }
 
 function formatDate(value: string) {
-  return new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium' }).format(
-    new Date(`${value}T00:00:00Z`),
-  );
+  return formatOperationsDate(new Date(`${value}T00:00:00Z`), { dateStyle: 'medium' });
 }
 
 function formatMoney(value: string, currency: string) {
-  return new Intl.NumberFormat('en-GB', { currency, style: 'currency' }).format(Number(value));
+  return formatOperationsCurrency(value, currency);
 }
 
 function errorText(error: unknown) {

@@ -5,6 +5,7 @@ import type { AppEnvironment } from '@vista/config';
 import type {
   CreateCustomerAdvanceRequest,
   CustomerAdvance,
+  CustomerOpenReceivable,
   CustomerPaymentAccount,
   CustomerPaymentAccountReferenceData,
   UpsertCustomerPaymentTermsRequest,
@@ -208,6 +209,12 @@ export class FinanceCustomerAccountsService {
       HttpStatus.CREATED,
       async (client, idempotencyKey) => {
         await this.requireCustomer(client, normalized.customerPartnerId);
+        if (normalized.receivedOn > (await this.businessDate(client)))
+          throw new ApiErrorException(
+            'FINANCE_PAYMENT_FUTURE_DATE_INVALID',
+            'The payment date cannot be after the current business date.',
+            HttpStatus.BAD_REQUEST,
+          );
         const id = randomUUID();
         const number = await this.nextNumber(client);
         await client.query(
@@ -306,6 +313,29 @@ export class FinanceCustomerAccountsService {
        ORDER BY entry.occurred_at DESC, entry.id DESC LIMIT 50`,
       [customerPartnerId],
     );
+    const openReceivables = await client.query<{
+      allocated_total: string;
+      due_date: string;
+      id: string;
+      number: string;
+      outstanding_total: string;
+      payment_status: CustomerOpenReceivable['paymentStatus'];
+      source_invoice_number: string;
+      total: string;
+    }>(
+      `SELECT document.id, document.document_number AS number,
+         source.invoice_number AS source_invoice_number,
+         document.total::text, document.allocated_total::text,
+         document.outstanding_total::text, document.due_date::text,
+         document.payment_status
+       FROM finance.customer_documents document
+       JOIN sales.invoices source ON source.id = document.source_sales_invoice_id
+       WHERE document.customer_partner_id = $1
+         AND document.review_state = 'pending_finance_review'
+         AND document.outstanding_total > 0
+       ORDER BY document.due_date, document.document_date, document.id`,
+      [customerPartnerId],
+    );
     const businessDate = await this.businessDate(client);
     const outstandingBalance = decimalString(units(balance.rows[0]?.outstanding_balance ?? '0'));
     const termsCurrent =
@@ -337,6 +367,16 @@ export class FinanceCustomerAccountsService {
         occurredAt: iso(entry.occurred_at),
         saleNumber: entry.sale_number,
         ...(entry.return_number ? { returnNumber: entry.return_number } : {}),
+      })),
+      openReceivables: openReceivables.rows.map((receivable) => ({
+        allocatedTotal: receivable.allocated_total,
+        dueDate: receivable.due_date,
+        id: receivable.id,
+        number: receivable.number,
+        outstandingTotal: receivable.outstanding_total,
+        paymentStatus: receivable.payment_status,
+        sourceInvoiceNumber: receivable.source_invoice_number,
+        total: receivable.total,
       })),
       outstandingBalance,
       ...(row.terms_id

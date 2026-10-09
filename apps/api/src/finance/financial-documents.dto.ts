@@ -171,6 +171,11 @@ export class CreateFinancialDocumentDto implements CreateFinancialDocumentReques
   @IsUUID(postgresUuid)
   sourceServiceWorkOrderId?: string;
 
+  @ApiPropertyOptional({ format: 'uuid', type: String })
+  @IsOptional()
+  @IsUUID(postgresUuid)
+  sourceSubscriptionDraftId?: string;
+
   @ApiProperty({ format: 'date', type: String })
   @IsDateString()
   taxEventDate!: string;
@@ -305,6 +310,8 @@ export class FinancialDocumentDto implements FinancialDocument {
   @ApiProperty({ type: String }) rateSource!: string;
   @ApiPropertyOptional({ format: 'uuid', type: String }) sourceSalesInvoiceId?: string;
   @ApiPropertyOptional({ type: String }) sourceSalesInvoiceNumber?: string;
+  @ApiPropertyOptional({ format: 'uuid', type: String }) sourceSubscriptionDraftId?: string;
+  @ApiPropertyOptional({ type: String }) sourceSubscriptionDraftNumber?: string;
   @ApiPropertyOptional({ type: String }) sourceFiscalReceiptNumber?: string;
   @ApiPropertyOptional({ format: 'uuid', type: String }) sourcePosSaleId?: string;
   @ApiPropertyOptional({ type: String }) sourcePosSaleNumber?: string;
@@ -405,6 +412,20 @@ class FinancialDocumentServiceDraftReferenceDto {
   @ApiProperty({ type: String }) total!: string;
 }
 
+class FinancialDocumentSubscriptionDraftReferenceDto {
+  @ApiProperty({ format: 'uuid', type: String }) id!: string;
+  @ApiProperty({ type: String }) number!: string;
+  @ApiProperty({ type: String }) contractNumber!: string;
+  @ApiProperty({ format: 'uuid', type: String }) customerPartnerId!: string;
+  @ApiProperty({ type: String }) customerName!: string;
+  @ApiProperty({ type: String }) currencyCode!: string;
+  @ApiProperty({ type: String }) amount!: string;
+  @ApiProperty({ format: 'date', type: String }) billingDate!: string;
+  @ApiProperty({ format: 'date', type: String }) servicePeriodStart!: string;
+  @ApiProperty({ format: 'date', type: String }) servicePeriodEnd!: string;
+  @ApiPropertyOptional({ format: 'uuid', type: String }) linkedDocumentId?: string;
+}
+
 export class FinancialDocumentReferenceDataDto implements FinancialDocumentReferenceData {
   @ApiProperty({ example: 'Europe/Sofia', type: String }) businessTimezone!: string;
   @ApiProperty({ isArray: true, type: FinancialDocumentCorrectionReferenceDto })
@@ -417,6 +438,8 @@ export class FinancialDocumentReferenceDataDto implements FinancialDocumentRefer
   salesDrafts!: FinancialDocumentReferenceData['salesDrafts'];
   @ApiProperty({ isArray: true, type: FinancialDocumentServiceDraftReferenceDto })
   serviceDrafts!: FinancialDocumentReferenceData['serviceDrafts'];
+  @ApiProperty({ isArray: true, type: FinancialDocumentSubscriptionDraftReferenceDto })
+  subscriptionDrafts!: FinancialDocumentReferenceData['subscriptionDrafts'];
   @ApiProperty({ isArray: true, type: FinancialDocumentScopeReferenceDto })
   scopes!: FinancialDocumentReferenceData['scopes'];
 }

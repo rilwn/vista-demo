@@ -51,7 +51,7 @@ describe('HTTP rate-limit coverage', () => {
       })),
     );
 
-    expect(assignments).toHaveLength(131);
+    expect(assignments).toHaveLength(151);
     expect(assignments.filter(({ policy }) => policy === undefined)).toEqual([]);
     expect(assignments).toEqual(
       expect.arrayContaining([
@@ -85,6 +85,31 @@ describe('HTTP rate-limit coverage', () => {
           controller: 'InventoryController',
           name: 'completeStocktake',
           policy: 'sensitive',
+        }),
+        expect.objectContaining({
+          controller: 'InventoryController',
+          name: 'listStockReservations',
+          policy: 'read',
+        }),
+        expect.objectContaining({
+          controller: 'InventoryController',
+          name: 'stockMovements',
+          policy: 'read',
+        }),
+        expect.objectContaining({
+          controller: 'SalesController',
+          name: 'updateQuotation',
+          policy: 'write',
+        }),
+        expect.objectContaining({
+          controller: 'SalesController',
+          name: 'cancelQuotation',
+          policy: 'write',
+        }),
+        expect.objectContaining({
+          controller: 'SalesController',
+          name: 'quotationPdf',
+          policy: 'read',
         }),
         expect.objectContaining({
           controller: 'PartnersController',

@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
-import { asEntityId, calculateFinancialDocument } from './index';
+import {
+  asEntityId,
+  businessIdentifierIssues,
+  calculateFinancialDocument,
+  isValidBulgarianUic,
+  isValidEuVatNumber,
+  isValidTelephoneNumber,
+} from './index';
 
 describe('asEntityId', () => {
   it('accepts an immutable UUID identifier', () => {
@@ -11,6 +18,49 @@ describe('asEntityId', () => {
 
   it('rejects business values as identifiers', () => {
     expect(() => asEntityId('customer-name')).toThrow('Entity identifiers must be UUIDs');
+  });
+});
+
+describe('Bulgarian UIC and EU VAT formats', () => {
+  it('checks 9-digit and 13-digit Bulgarian UIC check digits', () => {
+    expect(isValidBulgarianUic('131282355')).toBe(true);
+    expect(isValidBulgarianUic('1312823551232')).toBe(true);
+    expect(isValidBulgarianUic('131282354')).toBe(false);
+    expect(isValidBulgarianUic('1312823551235')).toBe(false);
+    expect(isValidBulgarianUic('12AB')).toBe(false);
+  });
+
+  it('checks VAT country prefixes and country-specific identifier shapes', () => {
+    expect(isValidEuVatNumber('BG 131282355')).toBe(true);
+    expect(isValidEuVatNumber('DE123456789')).toBe(true);
+    expect(isValidEuVatNumber('ATU12345678')).toBe(true);
+    expect(isValidEuVatNumber('BG123')).toBe(false);
+    expect(isValidEuVatNumber('XYZ')).toBe(false);
+    expect(isValidEuVatNumber('US123456789')).toBe(false);
+  });
+
+  it('reports only the invalid fields and allows identifiers to remain optional', () => {
+    expect(businessIdentifierIssues({})).toEqual([]);
+    expect(businessIdentifierIssues({ uic: '12AB', vatNumber: 'XYZ' })).toEqual([
+      { field: 'uic', reason: 'invalid_bulgarian_uic' },
+      { field: 'vatNumber', reason: 'invalid_eu_vat_number' },
+    ]);
+  });
+});
+
+describe('international telephone format', () => {
+  it('accepts readable local and international numbers without assuming a country', () => {
+    expect(isValidTelephoneNumber('+359 888 200 300')).toBe(true);
+    expect(isValidTelephoneNumber('(02) 123-45-67')).toBe(true);
+    expect(isValidTelephoneNumber('00359888200300')).toBe(true);
+  });
+
+  it('rejects text, malformed punctuation, and numbers outside the supported digit range', () => {
+    expect(isValidTelephoneNumber('abc')).toBe(false);
+    expect(isValidTelephoneNumber('+359 88 CALL ME')).toBe(false);
+    expect(isValidTelephoneNumber('(02 123 45 67')).toBe(false);
+    expect(isValidTelephoneNumber('123456')).toBe(false);
+    expect(isValidTelephoneNumber('1234567890123456')).toBe(false);
   });
 });
 

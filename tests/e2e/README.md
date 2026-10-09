@@ -29,6 +29,26 @@ all four timeline tests. Hosted security and external acceptance remain pending.
 
 ## Setup and isolation
 
+For the October Operations QA batch, run:
+
+```sh
+PLAYWRIGHT_EXECUTABLE_PATH=/usr/bin/chromium npm run test:e2e -- --qa-integration --migration-rehearsal tests/e2e/qa-finance.spec.ts tests/e2e/operations.spec.ts tests/e2e/trade.spec.ts
+```
+
+`--qa-integration` enables the partner/platform, real worker, scheduled-evidence
+migration and connected Sales/Finance API suites. The Finance browser case checks
+explicit foreign-rate inputs, original-line prefill, excessive-credit rejection,
+tablet overflow and authenticated notification loading. Its supplied exchange
+rate is disposable test data, not approved automatic BNB retrieval. It also
+checks Finance-only customer-price lookup, delayed-response protection of a
+manually entered price, and Sales subscription billing through Finance review
+and reopen. The browser runner accelerates the actual subscription scheduler to
+five seconds only in its disposable environment; production cadence is unchanged.
+
+This batch does not close every finding in `docs/qa/operations-2026-10.md` or
+verify the hosted notification failure. Run validation and browser acceptance
+sequentially, as described above.
+
 Run `npm run test:e2e` from the repository root after `npm ci` and
 `npx playwright install chromium`. Docker Compose is required. On Linux, install
 browser OS dependencies with `npx playwright install --with-deps chromium` if needed.
@@ -84,6 +104,12 @@ with the same key, retaining one customer/opportunity and one history entry.
 The customer/contact remains in the shared partner registry. Duplicate detection
 preserves the form and supports an explicit switch to the existing customer.
 Phone screenshots cover conversion and the reopened Lost preview.
+
+`organization.spec.ts` creates a temporary legal entity through Business
+Structure, edits it, deactivates and restores it as the Manager account, using
+the actual API. The QA integration suite separately covers all five organization
+record types, dependency guards, audit evidence and Edit/Delete permission
+separation.
 
 ```sh
 PLAYWRIGHT_EXECUTABLE_PATH=/usr/bin/chromium npm run test:e2e -- --crm-integration tests/e2e/crm.spec.ts

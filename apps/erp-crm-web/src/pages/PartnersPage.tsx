@@ -11,6 +11,7 @@ import type {
   PartnerSummary,
   UpdatePartnerRequest,
 } from '@vista/contracts';
+import { businessIdentifierIssues, type BusinessIdentifierField } from '@vista/domain';
 import { type FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 
 import {
@@ -26,7 +27,10 @@ import {
 import { ApiClientError } from '../api/client';
 import { useAuth } from '../auth/AuthProvider';
 import { Icon } from '../components/Icon';
+import { TechnicalIdentifier } from '../components/TechnicalIdentifier';
+import { formatOperationsDate, useLocalization } from '../i18n/LocalizationProvider';
 import { messages } from '../i18n/legacyMessages';
+import { businessIdentifierIssueMessage } from '../i18n/businessIdentifierMessages';
 import { CustomerAssetsPanel } from './CustomerAssetsPanel';
 import { CustomerOperationalOverviewPanel } from './CustomerOperationalOverviewPanel';
 import { PartnerDocumentsPanel } from './PartnerDocumentsPanel';
@@ -54,6 +58,7 @@ const emptyDraft: PartnerDraft = {
 
 export function PartnersPage() {
   const { hasPermission, session } = useAuth();
+  useLocalization();
   const [data, setData] = useState<PartnerPage | null>(null);
   const [error, setError] = useState(false);
   const [kind, setKind] = useState<OptionalKind>('');
@@ -243,6 +248,7 @@ export function PartnersPage() {
         <PartnerDetailDrawer
           canDelete={hasPermission('crm', 'delete')}
           canEdit={hasPermission('crm', 'edit')}
+          canViewService={hasPermission('erp.service')}
           onClose={() => setSelected(null)}
           onMaintained={(maintained) => {
             setSelected(maintained);
@@ -290,7 +296,13 @@ function PartnerTable({
                   </span>
                   <span>
                     <strong>{partner.displayName}</strong>
-                    <small>{partner.vatNumber ?? partner.id.slice(0, 8)}</small>
+                    <small
+                      className={
+                        partner.vatNumber ? 'partner-vat-number' : 'partner-secondary-detail'
+                      }
+                    >
+                      {partner.vatNumber ?? messages.partners.noVatNumber}
+                    </small>
                   </span>
                 </button>
               </td>
@@ -331,7 +343,14 @@ function CreatePartnerDrawer({
   const [roleError, setRoleError] = useState('');
   const [saveError, setSaveError] = useState<ApiClientError | null>(null);
   const [saving, setSaving] = useState(false);
+  const [showIdentifierErrors, setShowIdentifierErrors] = useState(false);
   const lastAttempt = useRef<{ fingerprint: string; key: string } | null>(null);
+  const identifierIssues =
+    draft.kind === 'legal_entity'
+      ? businessIdentifierIssues({ uic: draft.uic, vatNumber: draft.vatNumber })
+      : [];
+  const uicIssue = identifierIssues.find((issue) => issue.field === 'uic');
+  const vatIssue = identifierIssues.find((issue) => issue.field === 'vatNumber');
 
   useDrawerEscape(onClose);
 
@@ -354,7 +373,8 @@ function CreatePartnerDrawer({
     const displayName = draft.displayName.trim();
     setNameError(displayName ? '' : `${messages.partners.name} is required.`);
     setRoleError(draft.roles.length > 0 ? '' : 'Choose at least one role.');
-    if (!displayName || draft.roles.length === 0) return;
+    if (identifierIssues.length) setShowIdentifierErrors(true);
+    if (!displayName || draft.roles.length === 0 || identifierIssues.length > 0) return;
 
     const input: CreatePartnerRequest = {
       displayName,
@@ -436,6 +456,9 @@ function CreatePartnerDrawer({
           <>
             <div className="partner-form-row">
               <TextField
+                {...(showIdentifierErrors && uicIssue
+                  ? { error: businessIdentifierIssueMessage(uicIssue) }
+                  : {})}
                 id="partner-uic"
                 label={messages.partners.uic}
                 maxLength={50}
@@ -443,6 +466,9 @@ function CreatePartnerDrawer({
                 value={draft.uic}
               />
               <TextField
+                {...(showIdentifierErrors && vatIssue
+                  ? { error: businessIdentifierIssueMessage(vatIssue) }
+                  : {})}
                 id="partner-vat-number"
                 label={messages.partners.vatNumber}
                 maxLength={50}
@@ -493,9 +519,10 @@ function CreatePartnerDrawer({
           <InlineAlert title={messages.partners.saveError} tone="error">
             <p>{saveError.message}</p>
             {saveError.correlationId ? (
-              <small>
-                {messages.partners.reference}: {saveError.correlationId.slice(0, 12)}
-              </small>
+              <div className="partner-error-reference">
+                <small>{messages.partners.reference}</small>
+                <TechnicalIdentifier kind="signInRequest" value={saveError.correlationId} />
+              </div>
             ) : null}
           </InlineAlert>
         ) : null}
@@ -516,6 +543,7 @@ function CreatePartnerDrawer({
 function PartnerDetailDrawer({
   canDelete,
   canEdit,
+  canViewService,
   onClose,
   onMaintained,
   partner,
@@ -523,6 +551,7 @@ function PartnerDetailDrawer({
 }: {
   canDelete: boolean;
   canEdit: boolean;
+  canViewService: boolean;
   onClose: () => void;
   onMaintained: (partner: PartnerSummary) => void;
   partner: PartnerSummary;
@@ -783,14 +812,15 @@ function PartnerDetailDrawer({
         <CustomerAssetsPanel
           canDelete={canDelete}
           canEdit={canEdit}
+          canViewService={canViewService}
           contacts={profile.contacts}
           partnerId={current.id}
           token={token}
         />
       ) : null}
       <div className="partner-record-reference">
-        <span>{messages.partners.reference}</span>
-        <code>{current.id}</code>
+        <span>{messages.partners.recordId}</span>
+        <TechnicalIdentifier kind="partnerRecord" value={current.id} />
       </div>
       {adding && token ? (
         <ProfileRecordForm
@@ -829,12 +859,29 @@ function PartnerMaintenanceForm({
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [identifierErrors, setIdentifierErrors] = useState<
+    Partial<Record<BusinessIdentifierField, string>>
+  >({});
   const attempt = useRef<{ fingerprint: string; key: string } | null>(null);
   function change<K extends keyof PartnerDraft>(field: K, value: PartnerDraft[K]) {
     setDraft((current) => ({ ...current, [field]: value }));
+    if (field === 'uic' || field === 'vatNumber')
+      setIdentifierErrors((current) => ({ ...current, [field]: undefined }));
   }
   async function submit(event: FormEvent) {
     event.preventDefault();
+    const changedUic = draft.uic.trim() !== (partner.uic ?? '');
+    const changedVatNumber =
+      draft.vatNumber.replace(/\s+/gu, '').toUpperCase() !== (partner.vatNumber ?? '');
+    const identifierIssues = businessIdentifierIssues({
+      ...(changedUic ? { uic: draft.uic } : {}),
+      ...(changedVatNumber ? { vatNumber: draft.vatNumber } : {}),
+    });
+    const nextIdentifierErrors = Object.fromEntries(
+      identifierIssues.map((issue) => [issue.field, businessIdentifierIssueMessage(issue)]),
+    ) as Partial<Record<BusinessIdentifierField, string>>;
+    setIdentifierErrors(nextIdentifierErrors);
+    if (identifierIssues.length) return;
     const input: UpdatePartnerRequest = {
       displayName: draft.displayName.trim(),
       expectedVersion: partner.version,
@@ -889,15 +936,17 @@ function PartnerMaintenanceForm({
       </div>
       <div className="partner-form-row">
         <TextField
+          {...(identifierErrors.uic ? { error: identifierErrors.uic } : {})}
           id="maintain-partner-uic"
-          label="UIC"
+          label={messages.partners.uic}
           maxLength={50}
           onChange={(event) => change('uic', event.target.value)}
           value={draft.uic}
         />
         <TextField
+          {...(identifierErrors.vatNumber ? { error: identifierErrors.vatNumber } : {})}
           id="maintain-partner-vat"
-          label="VAT number"
+          label={messages.partners.vatNumber}
           maxLength={50}
           onChange={(event) => change('vatNumber', event.target.value)}
           value={draft.vatNumber}
@@ -1381,7 +1430,5 @@ function monogram(name: string): string {
 
 function formatDate(value: string): string {
   const date = new Date(value);
-  return Number.isNaN(date.getTime())
-    ? '—'
-    : new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(date);
+  return Number.isNaN(date.getTime()) ? '—' : formatOperationsDate(date, { dateStyle: 'medium' });
 }

@@ -13,6 +13,7 @@ const env: NodeJS.ProcessEnv = {
   S3_SECRET_ACCESS_KEY: randomBytes(32).toString('hex'),
   SESSION_SECRET: randomBytes(32).toString('hex'),
   TOTP_ENCRYPTION_KEY: randomBytes(32).toString('hex'),
+  VITE_POS_APP_URL: 'http://127.0.0.1:5474',
 };
 const prefix = [
   'compose',
@@ -44,7 +45,9 @@ async function check() {
     const html = await page.text();
     const asset = html.match(/src="(\/assets\/[^"]+\.js)"/u)?.[1];
     assert.ok(asset, 'A deep link must load the built application');
-    assert.equal((await request(base + asset)).status, 200);
+    const bundle = await request(base + asset);
+    assert.equal(bundle.status, 200);
+    if (port === 5473) assert.match(await bundle.text(), /http:\/\/127\.0\.0\.1:5474/u);
     assert.equal((await request(base + '/api/v1/health/ready')).status, 200);
     assert.equal((await request(base + '/api/v1/auth/me')).status, 401);
     assert.equal((await request(base + '/api/v1/not-a-route')).status, 404);

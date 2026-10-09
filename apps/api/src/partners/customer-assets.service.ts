@@ -487,6 +487,8 @@ export class CustomerAssetsService {
           input.expectedVersion,
           'CUSTOMER_EQUIPMENT_VERSION_CONFLICT',
         );
+        if (normalized.status !== before.status)
+          await requireNoOpenServiceWorkOrder(client, equipmentId);
         await client.query(
           `UPDATE master_data.customer_equipment SET device_name = $3, purchase_date = $4,
              warranty_start_date = $5, warranty_end_date = $6, status = $7,
@@ -545,6 +547,7 @@ export class CustomerAssetsService {
           input.expectedVersion,
           'CUSTOMER_EQUIPMENT_VERSION_CONFLICT',
         );
+        if (!active && before.active) await requireNoOpenServiceWorkOrder(client, equipmentId);
         if (before.active === active) return mapEquipment(before);
         await client.query(
           `UPDATE master_data.customer_equipment SET active = $2, version = version + 1,
@@ -609,6 +612,24 @@ export class CustomerAssetsService {
       client.release();
     }
   }
+}
+
+async function requireNoOpenServiceWorkOrder(client: PoolClient, equipmentId: string) {
+  const openWorkOrder = await client.query<{ id: string }>(
+    `SELECT work_order.id
+     FROM service.work_orders work_order
+     JOIN service.requests request ON request.id = work_order.service_request_id
+     WHERE request.customer_equipment_id = $1
+       AND work_order.status IN ('scheduled', 'in_progress')
+     ORDER BY work_order.created_at DESC, work_order.id DESC LIMIT 1`,
+    [equipmentId],
+  );
+  if (openWorkOrder.rowCount)
+    throw new ApiErrorException(
+      'CUSTOMER_EQUIPMENT_SERVICE_WORK_OPEN',
+      'This device has scheduled or in-progress Service work. Complete the repair or cancel scheduled work before changing its status or deactivating it.',
+      HttpStatus.CONFLICT,
+    );
 }
 
 async function lockLocation(

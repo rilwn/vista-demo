@@ -20,7 +20,12 @@ import {
 } from '../api/finance';
 import { useAuth } from '../auth/AuthProvider';
 import { Icon } from '../components/Icon';
-import { Link } from '../routing/Router';
+import {
+  formatOperationsCurrency,
+  formatOperationsDate,
+  useLocalization,
+} from '../i18n/LocalizationProvider';
+import { Link, useRouter } from '../routing/Router';
 import { FinanceTabs } from './FinanceBankPage';
 import { FinancialDocumentsPage } from './FinancialDocumentsPage';
 
@@ -39,6 +44,8 @@ export function FinancePage({ view }: { view: FinanceView }) {
 }
 
 function FinanceCollectionsPage({ view }: { view: FinanceView }) {
+  useLocalization();
+  const { location, navigate } = useRouter();
   const { hasPermission, session } = useAuth();
   const token = session?.sessionToken ?? '';
   const data = useFinanceData(token);
@@ -48,11 +55,28 @@ function FinanceCollectionsPage({ view }: { view: FinanceView }) {
   const canCreate = hasPermission('erp.finance', 'create');
   const canEdit = hasPermission('erp.finance', 'edit');
   const canPrepareSales = hasPermission('erp.sales', 'create');
+  const canViewSales = hasPermission('erp.sales');
+  const routeState =
+    location.state && typeof location.state === 'object'
+      ? (location.state as { paymentId?: unknown })
+      : undefined;
+  const requestedPaymentId =
+    typeof routeState?.paymentId === 'string' ? routeState.paymentId : undefined;
   const pageTitle = view === 'invoices' ? 'Invoices' : 'Collections & payments';
   const pageDescription =
     view === 'invoices'
       ? 'Review sales invoice drafts, follow balances, and keep each customer collection record together.'
       : 'Review every customer collection, then record and follow its payment allocations.';
+
+  useEffect(() => {
+    if (!requestedPaymentId || data.loading || data.error) return;
+    navigate(location.pathname, { replace: true });
+    const document = data.documents.find((item) =>
+      item.payments.some((payment) => payment.id === requestedPaymentId),
+    );
+    if (document) setSelected(document);
+    else setNotice('The linked payment could not be found in the customer collection register.');
+  }, [data.documents, data.error, data.loading, location.pathname, navigate, requestedPaymentId]);
 
   if (data.loading) return <FinanceState title="Loading finance records" />;
   if (data.error)
@@ -113,6 +137,17 @@ function FinanceCollectionsPage({ view }: { view: FinanceView }) {
           canCreate={canCreate}
           canEdit={canEdit}
           document={selected}
+          {...(canViewSales
+            ? {
+                onOpenSalesSource: () =>
+                  navigate('/modules/erp.sales/shipments', {
+                    state: {
+                      returnTo: location.pathname,
+                      sourceSalesInvoiceId: selected.sourceSalesInvoiceId,
+                    },
+                  }),
+              }
+            : {})}
           onBack={() => setSelected(null)}
           onSaved={(document, message) => {
             setSelected(document);
@@ -341,6 +376,7 @@ function FinancePreviewDrawer({
   canCreate,
   canEdit,
   document,
+  onOpenSalesSource,
   onBack,
   onSaved,
   token,
@@ -348,6 +384,7 @@ function FinancePreviewDrawer({
   canCreate: boolean;
   canEdit: boolean;
   document: FinanceCustomerDocument;
+  onOpenSalesSource?: () => void;
   onBack: () => void;
   onSaved: (document: FinanceCustomerDocument, message: string) => void;
   token: string;
@@ -463,6 +500,11 @@ function FinancePreviewDrawer({
             </div>
             <strong>{formatMoney(document.total)}</strong>
           </div>
+          {onOpenSalesSource ? (
+            <Button className="finance-source-open" onClick={onOpenSalesSource} variant="quiet">
+              Open in Sales
+            </Button>
+          ) : null}
         </section>
 
         <section className="finance-preview-section">
@@ -485,6 +527,9 @@ function FinancePreviewDrawer({
                     </span>
                     {payment.paymentReference ? (
                       <small>Ref. {payment.paymentReference}</small>
+                    ) : null}
+                    {payment.sourceCustomerAdvanceNumber ? (
+                      <small>Advance from {payment.sourceCustomerAdvanceNumber}</small>
                     ) : null}
                   </div>
                   <strong>{formatMoney(payment.amount)}</strong>
@@ -857,21 +902,15 @@ function daysFromToday(days: number) {
 }
 
 function formatDate(value: string) {
-  return new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium' }).format(
-    new Date(`${value}T00:00:00Z`),
-  );
+  return formatOperationsDate(new Date(`${value}T00:00:00Z`), { dateStyle: 'medium' });
 }
 
 function formatDateTime(value: string) {
-  return new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium', timeStyle: 'short' }).format(
-    new Date(value),
-  );
+  return formatOperationsDate(new Date(value), { dateStyle: 'medium', timeStyle: 'short' });
 }
 
 function formatMoney(value: string) {
-  return new Intl.NumberFormat('en-GB', { currency: 'BGN', style: 'currency' }).format(
-    Number(value),
-  );
+  return formatOperationsCurrency(value, 'BGN');
 }
 
 function errorText(error: unknown, fallback: string) {

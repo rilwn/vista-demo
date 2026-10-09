@@ -904,7 +904,7 @@ export class CrmTicketsService {
   }
 
   private async mapTicket(queryable: Queryable, row: TicketRow): Promise<CrmTicket> {
-    const [history, link] = await Promise.all([
+    const [history, link, slaEvents] = await Promise.all([
       queryable.query<{
         changed_at: Date | string;
         changed_by_name: string | null;
@@ -931,6 +931,25 @@ export class CrmTicketsService {
          FROM crm.ticket_service_links link
          JOIN service.requests request ON request.id = link.service_request_id
          WHERE link.ticket_id = $1`,
+        [row.id],
+      ),
+      queryable.query<{
+        created_at: Date | string;
+        delivery_status: CrmTicket['slaEvents'][number]['deliveryStatus'];
+        event_type: CrmTicket['slaEvents'][number]['eventType'];
+        id: string;
+        recipient_name: string;
+        timer_type: CrmTicket['slaEvents'][number]['timerType'];
+      }>(
+        `SELECT event.id, event.created_at, event.event_type, event.timer_type,
+                notification.status AS delivery_status,
+                COALESCE(employee.display_name, 'CRM team member') AS recipient_name
+         FROM crm.sla_events event
+         JOIN notifications.messages notification ON notification.id = event.notification_id
+         LEFT JOIN identity.user_accounts account ON account.id = event.recipient_account_id
+         LEFT JOIN identity.employees employee ON employee.id = account.employee_id
+         WHERE event.ticket_id = $1
+         ORDER BY event.created_at DESC, event.id DESC`,
         [row.id],
       ),
     ]);
@@ -979,6 +998,14 @@ export class CrmTicketsService {
         row.sla_resolution_minutes,
         await this.riskThreshold(queryable, row.id),
       ),
+      slaEvents: slaEvents.rows.map((item) => ({
+        createdAt: iso(item.created_at),
+        deliveryStatus: item.delivery_status,
+        eventType: item.event_type,
+        id: item.id,
+        recipientName: item.recipient_name,
+        timerType: item.timer_type,
+      })),
       ...(row.resolved_at ? { resolvedAt: iso(row.resolved_at) } : {}),
       ...(link.rows[0]
         ? {

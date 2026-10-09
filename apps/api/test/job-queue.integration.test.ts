@@ -5,7 +5,11 @@ import { randomUUID } from 'node:crypto';
 import { Test, type TestingModule } from '@nestjs/testing';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { VistaConfigModule } from '../src/config/config.module.js';
+import { APP_ENVIRONMENT, VistaConfigModule } from '../src/config/config.module.js';
+import type { AppEnvironment } from '@vista/config';
+import { StructuredLogger } from '../src/logging/structured-logger.service.js';
+import { JobHandlerRegistry } from '../src/jobs/job-handler-registry.service.js';
+import { PlatformJobWorkerService } from '../src/jobs/platform-job-worker.service.js';
 import { JobQueueService } from '../src/jobs/job-queue.service.js';
 import { JobsModule } from '../src/jobs/jobs.module.js';
 import { LoggingModule } from '../src/logging/logging.module.js';
@@ -75,6 +79,53 @@ describe.skipIf(!runInfrastructureTests)('Redis job queue guarantees', () => {
     expect(replay).toEqual({ deduplicated: true, jobId: first.jobId });
     expect(await queue.getJobState(first.jobId)).toBe('waiting');
     await expect(queue.getTelemetry()).resolves.toMatchObject({ waiting: 1 });
+  });
+
+  it('executes a real Redis worker, retries once and deduplicates a completed replay', async () => {
+    const environment = {
+      ...module.get<AppEnvironment>(APP_ENVIRONMENT),
+      NODE_ENV: 'development' as const,
+      JOB_QUEUE_NAME: `qa-worker-${randomUUID()}`,
+      JOB_BACKOFF_DELAY_MS: 10,
+    };
+    const logger = module.get(StructuredLogger);
+    const subject = new JobQueueService(environment, logger);
+    const handlers = new JobHandlerRegistry();
+    let attempts = 0;
+    let effects = 0;
+    handlers.register('qa.retry-safe', {
+      handle: () => {
+        attempts += 1;
+        if (attempts === 1) throw new Error('Transient test failure');
+        effects += 1;
+        return Promise.resolve({ completed: true });
+      },
+    });
+    const worker = new PlatformJobWorkerService(environment, handlers, logger);
+    let id: string | undefined;
+    try {
+      worker.onApplicationBootstrap();
+      const input = {
+        correlationId: randomUUID(),
+        idempotencyKey: randomUUID(),
+        name: 'qa.retry-safe',
+        payload: {},
+      };
+      const queued = await subject.enqueue(input);
+      id = queued.jobId;
+      const deadline = Date.now() + 8000;
+      while ((await subject.getJobState(id)) !== 'completed' && Date.now() < deadline)
+        await new Promise((resolve) => setTimeout(resolve, 25));
+      expect(await subject.getJobState(id)).toBe('completed');
+      expect(attempts).toBe(2);
+      expect(effects).toBe(1);
+      expect(await subject.enqueue(input)).toEqual({ deduplicated: true, jobId: id });
+      expect(effects).toBe(1);
+    } finally {
+      await worker.onApplicationShutdown();
+      if (id) await subject.remove(id);
+      await subject.onApplicationShutdown();
+    }
   });
 
   it('upserts a recurring schedule without duplicating it across application restarts', async () => {

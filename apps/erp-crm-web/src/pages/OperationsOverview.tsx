@@ -7,6 +7,12 @@ import { Icon, type IconName } from '../components/Icon';
 import { overviewMessages as copy } from './operations-overview.messages';
 import './report-workspace.css';
 import { OverviewPreferences } from './OverviewPreferences';
+import {
+  formatOperationsCurrency,
+  formatOperationsDate,
+  formatOperationsDateRange,
+  useLocalization,
+} from '../i18n/LocalizationProvider';
 
 export function OperationsOverview({
   token,
@@ -15,6 +21,7 @@ export function OperationsOverview({
   token: string;
   warrantyPath: string;
 }) {
+  useLocalization();
   const [dates, setDates] = useState(() => {
     const today = new Intl.DateTimeFormat('en-CA', {
       timeZone: 'Europe/Sofia',
@@ -266,26 +273,23 @@ function Metric({
 }
 
 function displayDate(value: string): string {
-  return new Intl.DateTimeFormat('en-GB', {
+  return formatOperationsDate(new Date(`${value}T12:00:00Z`), {
     day: 'numeric',
     month: 'short',
     year: 'numeric',
     timeZone: 'UTC',
-  }).format(new Date(`${value}T12:00:00Z`));
+  });
 }
 
 function dateRange(from: string, to: string): string {
-  return new Intl.DateTimeFormat('en-GB', {
+  return formatOperationsDateRange(new Date(`${from}T12:00:00Z`), new Date(`${to}T12:00:00Z`), {
     day: 'numeric',
     month: 'short',
     year: 'numeric',
     timeZone: 'UTC',
-  }).formatRange(new Date(`${from}T12:00:00Z`), new Date(`${to}T12:00:00Z`));
+  });
 }
 
 function money(value: string): string {
-  // Only display formatting uses Number; all monetary calculations stay in PostgreSQL numeric.
-  return new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'BGN' }).format(
-    Number(value),
-  );
+  return formatOperationsCurrency(value, 'BGN');
 }

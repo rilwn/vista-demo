@@ -143,6 +143,7 @@ export function WorkspaceLayout({ children }: PropsWithChildren) {
               email={session.context.email}
               hasPermission={hasPermission}
               initials={initials}
+              roleNames={session.context.roleNames ?? []}
               onLogout={() => void signOut()}
               signingOut={signingOut}
             />
@@ -176,6 +177,7 @@ function AccountMenu({
   email,
   hasPermission,
   initials,
+  roleNames,
   onLogout,
   signingOut,
 }: {
@@ -184,6 +186,7 @@ function AccountMenu({
   email: string;
   hasPermission: (module: string, action?: string) => boolean;
   initials: string;
+  roleNames: string[];
   onLogout: () => void;
   signingOut: boolean;
 }) {
@@ -229,7 +232,12 @@ function AccountMenu({
         </span>
         <span className="topbar-account-copy">
           <strong>{displayName}</strong>
-          <small>{administrative ? t('account.administrative') : t('account.standard')}</small>
+          <small>
+            {formatAccountRoles(
+              roleNames,
+              administrative ? t('account.administrative') : t('account.standard'),
+            )}
+          </small>
         </span>
         <Icon name="chevron" size={16} />
       </button>
@@ -284,6 +292,19 @@ function AccountMenu({
       ) : null}
     </div>
   );
+}
+
+function formatAccountRoles(roleNames: string[], fallback: string): string {
+  const visibleRoles = roleNames
+    .map((name) =>
+      name
+        .replace(/^Development fixture:\s*/iu, '')
+        .replace(/^Vista Demo\s+/iu, '')
+        .replace(/^Vista bootstrap\s+/iu, ''),
+    )
+    .filter(Boolean);
+  if (visibleRoles.length) return visibleRoles.join(' · ');
+  return fallback;
 }
 
 function AccountMenuLink({

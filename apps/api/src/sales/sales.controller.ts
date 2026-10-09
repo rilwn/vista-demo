@@ -11,6 +11,7 @@ import {
   Put,
   Query,
   Req,
+  Res,
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
@@ -19,9 +20,11 @@ import {
   ApiHeader,
   ApiOkResponse,
   ApiParam,
+  ApiProduces,
   ApiQuery,
   ApiTags,
 } from '@nestjs/swagger';
+import type { Response } from 'express';
 
 import { RequirePermissions } from '../auth/auth.decorators.js';
 import type { AuthenticatedRequest } from '../auth/authentication.types.js';
@@ -47,11 +50,13 @@ import {
 import { SalesPricingService } from './sales-pricing.service.js';
 import {
   AcceptSalesHandoverDto,
+  CancelSalesQuotationDto,
   ConfirmSalesQuotationDto,
   CreateSalesQuotationDto,
   CreateSalesShipmentDto,
   SalesReferenceDataDto,
   SalesWorkflowDto,
+  UpdateSalesQuotationDto,
 } from './sales.dto.js';
 import {
   CreateServiceSubscriptionDto,
@@ -110,6 +115,64 @@ export class SalesController {
     @Req() request: AuthenticatedRequest,
   ): Promise<SalesWorkflowDto> {
     return this.sales.createQuotation(input, key, request.authentication, metadata(request));
+  }
+
+  @Put('quotations/:id')
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissions({ action: 'edit', module: 'erp.sales' })
+  @ApiBody({ type: UpdateSalesQuotationDto })
+  @ApiOkResponse({ type: SalesWorkflowDto })
+  @ApiHeader({ name: 'Idempotency-Key', required: true })
+  @ApiParam({ format: 'uuid', name: 'id' })
+  updateQuotation(
+    @Param('id') id: string,
+    @Body() input: UpdateSalesQuotationDto,
+    @Headers('idempotency-key') key: string | undefined,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<SalesWorkflowDto> {
+    return this.sales.updateQuotation(id, input, key, request.authentication, metadata(request));
+  }
+
+  @Post('quotations/:id/cancel')
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissions({ action: 'edit', module: 'erp.sales' })
+  @ApiBody({ type: CancelSalesQuotationDto })
+  @ApiOkResponse({ type: SalesWorkflowDto })
+  @ApiHeader({ name: 'Idempotency-Key', required: true })
+  @ApiParam({ format: 'uuid', name: 'id' })
+  cancelQuotation(
+    @Param('id') id: string,
+    @Body() input: CancelSalesQuotationDto,
+    @Headers('idempotency-key') key: string | undefined,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<SalesWorkflowDto> {
+    return this.sales.cancelQuotation(id, input, key, request.authentication, metadata(request));
+  }
+
+  @Get('quotations/:id/pdf')
+  @RateLimitPolicy('read')
+  @RequirePermissions({ action: 'view', module: 'erp.sales' })
+  @ApiParam({ format: 'uuid', name: 'id' })
+  @ApiProduces('application/pdf')
+  @ApiOkResponse({
+    content: { 'application/pdf': { schema: { format: 'binary', type: 'string' } } },
+    description: 'Printable customer quotation, not a tax invoice.',
+  })
+  async quotationPdf(
+    @Param('id') id: string,
+    @Req() request: AuthenticatedRequest,
+    @Res() response: Response,
+  ): Promise<void> {
+    const content = await this.sales.quotationPdf(id, request.authentication, metadata(request));
+    response.setHeader('Cache-Control', 'private, no-store');
+    response.setHeader(
+      'Content-Disposition',
+      `attachment; filename*=UTF-8''${encodeURIComponent(content.fileName)}`,
+    );
+    response.setHeader('Content-Length', String(content.buffer.length));
+    response.setHeader('Content-Type', content.mediaType);
+    response.setHeader('X-Content-Type-Options', 'nosniff');
+    response.status(HttpStatus.OK).send(content.buffer);
   }
 
   @Post('quotations/:id/confirm')

@@ -63,10 +63,10 @@ test('platform manager reads monitoring through navigation', async ({ page }) =>
     .locator('.workspace-sidebar')
     .getByRole('link', { name: 'System activity', exact: true })
     .click();
-  await expect(page.getByRole('heading', { name: 'Background processing' })).toBeVisible();
-  await expect(page.locator('.job-monitor-status')).toContainText('Queue is not paused');
-  await page.getByRole('button', { name: 'Refresh processing status' }).click();
-  await expect(page.locator('.job-monitor-status')).toContainText('Queue is not paused');
+  await expect(page.getByRole('heading', { name: 'Scheduled work' })).toBeVisible();
+  await expect(page.locator('.job-monitor-status')).toContainText('Ready for new work');
+  await page.getByRole('button', { name: 'Refresh scheduled work' }).click();
+  await expect(page.locator('.job-monitor-status')).toContainText('Ready for new work');
 });
 
 test('viewer cannot enter platform monitoring', async ({ page }) => {

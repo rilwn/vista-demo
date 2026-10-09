@@ -1,3 +1,4 @@
+import { createElement } from 'react';
 import { describe, expect, it } from 'vitest';
 import {
   defaultReportColumns,
@@ -6,6 +7,15 @@ import {
   reportDecimal,
 } from './erp-report-display';
 import type { ErpReportDefinition } from '@vista/contracts';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { afterEach } from 'vitest';
+import { LanguageSwitcher } from '../components/LanguageSwitcher';
+import { LocalizationProvider } from '../i18n/LocalizationProvider';
+
+afterEach(() => {
+  cleanup();
+  window.localStorage.clear();
+});
 
 describe('Report display', () => {
   it('formats decimal strings without losing large values or fractional precision', () => {
@@ -19,6 +29,12 @@ describe('Report display', () => {
     expect(reportDate('2026-09-08')).toBe('8 Sept 2026');
     expect(isReportUuid('98765432-1234-4567-89ab-123456789abc')).toBe(true);
     expect(isReportUuid('PO-2026-000001')).toBe(false);
+  });
+  it('formats report decimals and dates using the selected Bulgarian locale', () => {
+    render(createElement(LocalizationProvider, null, createElement(LanguageSwitcher)));
+    fireEvent.click(screen.getByRole('button', { name: 'BG' }));
+    expect(reportDecimal('12345.60', true).replace(/[\u00a0\u202f]/gu, ' ')).toBe('12 345,60');
+    expect(reportDate('2026-09-08')).not.toContain('Sept');
   });
   it('starts with a focused view without removing any available fields', () => {
     const keys = [

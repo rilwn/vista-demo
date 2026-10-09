@@ -8,6 +8,12 @@ All dates are interpreted in the configured business timezone. Monetary results
 use the BGN snapshot stored on each financial document; later currency or tax
 changes do not alter an earlier result.
 
+Eligibility requires a non-draft, non-cancelled financial document with an
+official number. Preparation drafts are excluded from revenue, purchase activity,
+retention, customer value and preferences. Until approved legal issuance is
+implemented, these invoice-derived values can legitimately be zero. Operational
+Service, ticket, shipment and pipeline counts remain independent of issuance.
+
 ## Customer activity
 
 - **Active customers:** distinct customers with a non-cancelled invoice issued

@@ -76,6 +76,7 @@ interface InspectionRow {
   equipment_id: string;
   id: string;
   inspection_type: ServiceInspectionPlan['inspectionType'];
+  is_overdue: boolean;
   interval_months: number;
   last_completed_on: string | null;
   next_due_date: string;
@@ -149,15 +150,15 @@ export class ServiceCareService {
       ),
       pool.query<InspectionRow>(
         `${inspectionQuery()}
-         WHERE ($1::uuid IS NULL OR EXISTS (
+         WHERE ($2::uuid IS NULL OR EXISTS (
            SELECT 1 FROM service.requests scope_request
            JOIN service.work_orders scope_work_order
              ON scope_work_order.service_request_id = scope_request.id
            WHERE scope_request.customer_equipment_id = equipment.id
-             AND scope_work_order.assigned_technician_account_id = $1
+             AND scope_work_order.assigned_technician_account_id = $2
          ))
          ORDER BY plan.next_due_date, partner.display_name, equipment.device_name, plan.id`,
-        [visibilityAccountId],
+        [this.environment.BUSINESS_TIMEZONE, visibilityAccountId],
       ),
     ]);
     return {
@@ -807,7 +808,8 @@ export class ServiceCareService {
   }
 
   private async loadInspection(client: PoolClient, id: string): Promise<ServiceInspectionPlan> {
-    const result = await client.query<InspectionRow>(`${inspectionQuery()} WHERE plan.id = $1`, [
+    const result = await client.query<InspectionRow>(`${inspectionQuery()} WHERE plan.id = $2`, [
+      this.environment.BUSINESS_TIMEZONE,
       id,
     ]);
     const row = result.rows[0];
@@ -833,6 +835,7 @@ export class ServiceCareService {
       equipmentId: row.equipment_id,
       id: row.id,
       inspectionType: row.inspection_type,
+      isOverdue: row.is_overdue,
       intervalMonths: row.interval_months,
       ...(row.last_completed_on ? { lastCompletedOn: row.last_completed_on } : {}),
       nextDueDate: row.next_due_date,
@@ -962,6 +965,7 @@ function claimQuery() {
 
 function inspectionQuery() {
   return `SELECT plan.id, plan.customer_equipment_id AS equipment_id, plan.inspection_type,
+                 (plan.active AND plan.next_due_date < (now() AT TIME ZONE $1)::date) AS is_overdue,
                  plan.interval_months, plan.next_due_date::text, plan.reminder_lead_days,
                  plan.last_completed_on::text, plan.active, plan.version,
                  equipment.device_name, equipment.serial_number,

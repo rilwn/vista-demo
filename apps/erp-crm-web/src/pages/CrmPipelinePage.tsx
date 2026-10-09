@@ -13,6 +13,7 @@ import type {
   CrmPipelineReferenceData,
   PartnerKind,
 } from '@vista/contracts';
+import { businessIdentifierIssues, isValidTelephoneNumber } from '@vista/domain';
 import {
   type DragEvent,
   type FormEvent,
@@ -38,8 +39,25 @@ import {
 } from '../api/crm-pipeline';
 import { useAuth } from '../auth/AuthProvider';
 import { Icon } from '../components/Icon';
+import {
+  formatOperationsCurrency,
+  getOperationsLocale,
+  useLocalization,
+} from '../i18n/LocalizationProvider';
 import { Link } from '../routing/Router';
 import { CrmTabs } from './CrmTicketsPage';
+import { businessIdentifierIssueMessage } from '../i18n/businessIdentifierMessages';
+import {
+  crmLeadHistoryLabel,
+  crmLeadStatusLabel,
+  crmOpportunityHistoryLabel,
+  crmOpportunityMovedNotice,
+  crmOpportunityStageLabel,
+  crmLeadCountSummary,
+  crmOpportunityCountSummary,
+  formatCrmPipelineDate,
+  formatCrmPipelineDateTime,
+} from './crm-pipeline.messages';
 
 const stages: CrmOpportunityStage[] = [
   'new',
@@ -88,10 +106,15 @@ type DrawerState =
   | { kind: 'lead'; lead: CrmLead }
   | { kind: 'new_lead' }
   | { kind: 'new_opportunity' }
-  | { kind: 'opportunity'; opportunity: CrmOpportunity };
+  | {
+      kind: 'opportunity';
+      opportunity: CrmOpportunity;
+      requestedStage?: CrmOpportunityStage;
+    };
 
 export function CrmPipelinePage() {
   const { hasPermission, session } = useAuth();
+  const { locale } = useLocalization();
   const token = session?.sessionToken ?? '';
   const canCreate = hasPermission('crm', 'create');
   const canEdit = hasPermission('crm', 'edit');
@@ -173,9 +196,13 @@ export function CrmPipelinePage() {
   useEffect(() => void loadLeads(), [loadLeads]);
   useEffect(() => void loadOpportunities(), [loadOpportunities]);
 
-  async function openOpportunity(id: string) {
+  async function openOpportunity(id: string, requestedStage?: CrmOpportunityStage) {
     try {
-      setDrawer({ kind: 'opportunity', opportunity: await getCrmOpportunity(token, id) });
+      setDrawer({
+        kind: 'opportunity',
+        opportunity: await getCrmOpportunity(token, id),
+        ...(requestedStage ? { requestedStage } : {}),
+      });
     } catch (caught) {
       setNotice(errorText(caught, 'The sales opportunity could not be opened.'));
     }
@@ -183,6 +210,10 @@ export function CrmPipelinePage() {
 
   async function changeStage(opportunity: CrmOpportunity, stage: CrmOpportunityStage) {
     if (!canEdit || stage === opportunity.stage || movingId) return;
+    if (stage === 'quotation_sent' && opportunity.quotations.length === 0) {
+      void openOpportunity(opportunity.id, stage);
+      return;
+    }
     setMovingId(opportunity.id);
     setError(null);
     try {
@@ -202,7 +233,7 @@ export function CrmPipelinePage() {
         ...current,
         items: current.items.map((item) => (item.id === saved.id ? saved : item)),
       }));
-      setNotice(`${saved.number} moved to ${stageLabel(stage)}.`);
+      setNotice(crmOpportunityMovedNotice(saved.number, stage, locale));
       void loadOpportunities();
     } catch (caught) {
       setError(errorText(caught, 'The opportunity could not be moved.'));
@@ -389,6 +420,7 @@ export function CrmPipelinePage() {
             void loadOpportunities();
           }}
           opportunity={drawer.opportunity}
+          {...(drawer.requestedStage ? { requestedStage: drawer.requestedStage } : {})}
           references={references}
           token={token}
         />
@@ -422,6 +454,7 @@ function LeadDesk({
   source: CrmLeadSource | '';
   status: CrmLeadStatus | '';
 }) {
+  const { locale } = useLocalization();
   return (
     <div className="crm-lead-desk">
       <section aria-label="Lead summary" className="crm-pipeline-summary">
@@ -433,9 +466,7 @@ function LeadDesk({
         <header>
           <div>
             <h2>Lead desk</h2>
-            <p>
-              {leads.total} {leads.total === 1 ? 'lead' : 'leads'} in this view
-            </p>
+            <p>{crmLeadCountSummary(leads.total, locale)}</p>
           </div>
           <form
             className="crm-pipeline-filters"
@@ -461,7 +492,7 @@ function LeadDesk({
               <option value="">All statuses</option>
               {leadStatuses.map((item) => (
                 <option key={item} value={item}>
-                  {leadStatusLabel(item)}
+                  {crmLeadStatusLabel(item, locale)}
                 </option>
               ))}
             </select>
@@ -510,7 +541,7 @@ function LeadDesk({
                   <small>Updated {formatDate(lead.updatedAt)}</small>
                 </span>
                 <span className={`crm-lead-status is-${lead.status}`}>
-                  {leadStatusLabel(lead.status)}
+                  {crmLeadStatusLabel(lead.status, locale)}
                 </span>
                 <Icon name="arrow" size={15} />
               </button>
@@ -564,6 +595,7 @@ function PipelineBoard({
   opportunities: CrmOpportunityPage;
   searchDraft: string;
 }) {
+  const { locale } = useLocalization();
   const byStage = Object.fromEntries(
     stages.map((stage) => [stage, opportunities.items.filter((item) => item.stage === stage)]),
   ) as Record<CrmOpportunityStage, CrmOpportunity[]>;
@@ -599,10 +631,7 @@ function PipelineBoard({
         <header>
           <div>
             <h2>Sales pipeline</h2>
-            <p>
-              {opportunities.total} {opportunities.total === 1 ? 'opportunity' : 'opportunities'}{' '}
-              shown
-            </p>
+            <p>{crmOpportunityCountSummary(opportunities.total, locale)}</p>
           </div>
           <form
             className="crm-pipeline-filters"
@@ -643,7 +672,7 @@ function PipelineBoard({
                   <header>
                     <div>
                       <span aria-hidden="true" />
-                      <h3>{stageLabel(stage)}</h3>
+                      <h3>{crmOpportunityStageLabel(stage, locale)}</h3>
                     </div>
                     <strong>{items.length}</strong>
                     <p>{formatBgn(total)}</p>
@@ -717,6 +746,7 @@ function NewLeadDrawer({
   const [organizationName, setOrganizationName] = useState('');
   const [contactName, setContactName] = useState('');
   const [telephone, setTelephone] = useState('');
+  const [telephoneTouched, setTelephoneTouched] = useState(false);
   const [email, setEmail] = useState('');
   const [source, setSource] = useState<CrmLeadSource>('telephone');
   const [sourceDetails, setSourceDetails] = useState('');
@@ -724,6 +754,11 @@ function NewLeadDrawer({
   const [notes, setNotes] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const telephoneInvalid = Boolean(telephone.trim()) && !isValidTelephoneNumber(telephone);
+  const telephoneError =
+    telephoneTouched && telephoneInvalid
+      ? 'Enter a valid telephone number using 7–15 digits. An optional leading +, spaces, parentheses, hyphens or dots are allowed.'
+      : null;
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setBusy(true);
@@ -773,14 +808,29 @@ function NewLeadDrawer({
               />
             </Field>
             <div className="crm-timeline-form-grid">
-              <Field label="Telephone">
-                <input
-                  maxLength={100}
-                  onChange={(event) => setTelephone(event.target.value)}
-                  placeholder="+359 ..."
-                  value={telephone}
-                />
-              </Field>
+              <div className="crm-phone-field">
+                <Field label="Telephone">
+                  <input
+                    aria-describedby="crm-lead-telephone-help"
+                    aria-invalid={telephoneTouched && telephoneInvalid}
+                    autoComplete="tel"
+                    maxLength={100}
+                    onBlur={() => setTelephoneTouched(true)}
+                    onChange={(event) => setTelephone(event.target.value)}
+                    placeholder="+359 888 200 300"
+                    type="tel"
+                    value={telephone}
+                  />
+                </Field>
+                <p
+                  className={telephoneError ? 'crm-phone-error' : 'crm-field-hint'}
+                  id="crm-lead-telephone-help"
+                  role={telephoneError ? 'alert' : undefined}
+                >
+                  {telephoneError ??
+                    'Use 7–15 digits. An optional leading +, spaces, parentheses, hyphens or dots are allowed.'}
+                </p>
+              </div>
               <Field label="Email">
                 <input
                   maxLength={320}
@@ -853,6 +903,7 @@ function NewLeadDrawer({
             !organizationName.trim() ||
             !contactName.trim() ||
             (!telephone.trim() && !email.trim()) ||
+            telephoneInvalid ||
             !ownerAccountId
           }
           onBack={onBack}
@@ -878,6 +929,7 @@ function LeadDrawer({
   onQualified: (lead: CrmLead) => void;
   token: string;
 }) {
+  const { locale } = useLocalization();
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -908,7 +960,7 @@ function LeadDrawer({
         {error ? <InlineAlert tone="error">{error}</InlineAlert> : null}
         <section className="crm-lead-preview-hero">
           <span className={`crm-lead-status is-${lead.status}`}>
-            {leadStatusLabel(lead.status)}
+            {crmLeadStatusLabel(lead.status, locale)}
           </span>
           <h3>{lead.organizationName}</h3>
           <p>
@@ -978,7 +1030,7 @@ function LeadDrawer({
             <li key={item.id}>
               <span aria-hidden="true" />
               <div>
-                <strong>{leadHistoryLabel(item.type)}</strong>
+                <strong>{crmLeadHistoryLabel(item.type, locale)}</strong>
                 {item.note ? <p>{item.note}</p> : null}
                 <small>
                   {formatDateTime(item.changedAt)} · {item.changedByName}
@@ -1028,6 +1080,14 @@ function ConvertLeadDrawer({
   const [error, setError] = useState<string | null>(null);
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const identifierIssue =
+      customerMode === 'new' && kind === 'legal_entity'
+        ? businessIdentifierIssues({ uic, vatNumber })[0]
+        : undefined;
+    if (identifierIssue) {
+      setError(businessIdentifierIssueMessage(identifierIssue));
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -1427,6 +1487,7 @@ function OpportunityDrawer({
   onBack,
   onSaved,
   opportunity,
+  requestedStage,
   references,
   token,
 }: {
@@ -1434,11 +1495,13 @@ function OpportunityDrawer({
   onBack: () => void;
   onSaved: (opportunity: CrmOpportunity, message: string) => void;
   opportunity: CrmOpportunity;
+  requestedStage?: CrmOpportunityStage;
   references: CrmPipelineReferenceData;
   token: string;
 }) {
+  const { locale } = useLocalization();
   const retryKey = useRetryKey();
-  const [stage, setStage] = useState<CrmOpportunityStage>(opportunity.stage);
+  const [stage, setStage] = useState<CrmOpportunityStage>(requestedStage ?? opportunity.stage);
   const [probabilityPercent, setProbabilityPercent] = useState(opportunity.probabilityPercent);
   const [note, setNote] = useState('');
   const availableQuotations = references.quotations.filter(
@@ -1449,6 +1512,7 @@ function OpportunityDrawer({
   const [quotationId, setQuotationId] = useState(availableQuotations[0]?.id ?? '');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const quotationRequired = stage === 'quotation_sent' && opportunity.quotations.length === 0;
   function chooseStage(value: CrmOpportunityStage) {
     setStage(value);
     if (
@@ -1470,7 +1534,7 @@ function OpportunityDrawer({
         stage,
       };
       const saved = await moveCrmOpportunity(token, opportunity.id, retryKey(input), input);
-      onSaved(saved, `${saved.number} moved to ${stageLabel(saved.stage)}.`);
+      onSaved(saved, crmOpportunityMovedNotice(saved.number, saved.stage, locale));
       setNote('');
     } catch (caught) {
       setError(errorText(caught, 'The pipeline stage could not be changed.'));
@@ -1504,7 +1568,7 @@ function OpportunityDrawer({
         {error ? <InlineAlert tone="error">{error}</InlineAlert> : null}
         <section className={`crm-opportunity-preview-hero is-${opportunity.stage}`}>
           <div>
-            <span>{stageLabel(opportunity.stage)}</span>
+            <span>{crmOpportunityStageLabel(opportunity.stage, locale)}</span>
             <h3>{formatBgn(opportunity.estimatedRevenueBgn)}</h3>
             <p>
               {opportunity.probabilityPercent}% probability ·{' '}
@@ -1581,7 +1645,7 @@ function OpportunityDrawer({
               </Button>
             </div>
           ) : null}
-          {canEdit && !availableQuotations.length ? (
+          {canEdit && !opportunity.quotations.length && !availableQuotations.length ? (
             <p className="crm-empty-copy">
               Create the customer quotation in{' '}
               <Link to="/modules/erp.sales/quotations">ERP → Sales</Link>, then return here to link
@@ -1595,6 +1659,12 @@ function OpportunityDrawer({
               <h3>Move through the pipeline</h3>
               <p>Every change records its previous stage, probability, employee, and time.</p>
             </div>
+            {quotationRequired ? (
+              <div className="crm-stage-prerequisite" role="status">
+                <p>Link a Sales quotation before moving this opportunity to Quotation sent.</p>
+                <Link to="/modules/erp.sales/quotations">Create or find a quotation</Link>
+              </div>
+            ) : null}
             <div className="crm-timeline-form-grid">
               <Field label="Next stage">
                 <select
@@ -1603,7 +1673,7 @@ function OpportunityDrawer({
                 >
                   {stages.map((item) => (
                     <option key={item} value={item}>
-                      {stageLabel(item)}
+                      {crmOpportunityStageLabel(item, locale)}
                     </option>
                   ))}
                 </select>
@@ -1630,7 +1700,11 @@ function OpportunityDrawer({
                 value={note}
               />
             </Field>
-            <Button busy={busy} disabled={stage === opportunity.stage} onClick={() => void move()}>
+            <Button
+              busy={busy}
+              disabled={stage === opportunity.stage || quotationRequired}
+              onClick={() => void move()}
+            >
               Update stage
             </Button>
           </section>
@@ -1640,7 +1714,7 @@ function OpportunityDrawer({
             <li key={item.id}>
               <span aria-hidden="true" />
               <div>
-                <strong>{opportunityHistoryLabel(item)}</strong>
+                <strong>{crmOpportunityHistoryLabel(item, locale)}</strong>
                 {item.note ? <p>{item.note}</p> : null}
                 <small>
                   {formatDateTime(item.changedAt)} · {item.changedByName} ·{' '}
@@ -1873,31 +1947,6 @@ function sourceLabel(value: CrmLeadSource): string {
     website: 'Website',
   }[value];
 }
-function leadStatusLabel(value: CrmLeadStatus): string {
-  return { converted: 'Converted', new: 'New', qualified: 'Qualified' }[value];
-}
-function stageLabel(value: CrmOpportunityStage): string {
-  return {
-    lost: 'Lost',
-    negotiation: 'Negotiation',
-    new: 'New',
-    qualified: 'Qualified',
-    quotation_sent: 'Quotation sent',
-    won: 'Won',
-  }[value];
-}
-function leadHistoryLabel(value: CrmLead['history'][number]['type']): string {
-  return value === 'created'
-    ? 'Lead registered'
-    : value === 'qualified'
-      ? 'Lead qualified'
-      : 'Lead converted';
-}
-function opportunityHistoryLabel(item: CrmOpportunity['history'][number]): string {
-  if (item.type === 'created') return `Added to ${stageLabel(item.nextStage)}`;
-  if (item.type === 'quotation_linked') return 'Sales quotation linked';
-  return `Moved from ${stageLabel(item.previousStage!)} to ${stageLabel(item.nextStage)}`;
-}
 function sourceInitial(value: CrmLeadSource): string {
   return { referral: 'R', telephone: 'T', trade_exhibition: 'E', website: 'W' }[value];
 }
@@ -1909,18 +1958,13 @@ function initials(value: string): string {
     .join('');
 }
 function formatDate(value: string): string {
-  const date = /^\d{4}-\d{2}-\d{2}$/u.test(value) ? new Date(`${value}T00:00:00`) : new Date(value);
-  return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(date);
+  return formatCrmPipelineDate(value, getOperationsLocale());
 }
 function formatDateTime(value: string): string {
-  return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(
-    new Date(value),
-  );
+  return formatCrmPipelineDateTime(value, getOperationsLocale());
 }
 function formatBgn(value: string): string {
-  const [whole = '0', fraction = ''] = value.split('.');
-  const normalizedWhole = whole.replace(/^0+(?=\d)/u, '') || '0';
-  return `BGN ${new Intl.NumberFormat().format(BigInt(normalizedWhole))}.${fraction.padEnd(2, '0').slice(0, 2)}`;
+  return formatOperationsCurrency(value, 'BGN');
 }
 function sumMoney(values: string[]): string {
   const cents = values.reduce((total, value) => {

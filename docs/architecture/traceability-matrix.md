@@ -1,5 +1,69 @@
 # Requirement Traceability Matrix
 
+Operations QA CRM/POS follow-up, 9 October 2026 (AGENTS §§7.3, 8.7, 11–13):
+CRM-08 telephone format validation and CRM-09 quotation-stage prerequisites
+are covered by shared-domain/API/browser regressions. POS-01 verifies the
+Manager's read-only report access from Operations through to Vista POS, while
+the POS Operator retains export creation. The Operations build requires the
+public POS URL; isolated API/browser coverage passes. Its Docker image rehearsal
+did not reach app compilation because npm registry access timed out during
+`npm ci`. UI-01 covers bilingual workflow statuses/actions and context-correct
+CRM pipeline history, descriptions, source options, count summaries, and
+date language. Component tests plus Bulgarian-to-English CRM browser coverage
+pass. Evidence and
+remaining hosted acceptance are tracked in
+`docs/qa/operations-2026-10.md` and `TESTME.md`. UI-02 centralizes locale-aware
+date, quantity, decimal, currency and VAT presentation across Operations
+workflows; exact financial decimal strings and machine date values remain
+unchanged. Component, type and production-build checks pass locally; hosted
+visual acceptance remains open. UI-03 replaces UUID fragments with human
+context and bilingual copy controls across Operations, Procurement, Warehouse
+and POS checkout recovery. No purchase-order numbering is introduced before
+BUS-002 approval; local UI regressions and workspace validation pass, with
+hosted retest pending.
+
+Operations QA second Finance batch, 9 October 2026 (AGENTS §§4.1–4.4, 6.1,
+6.4, 11–13, 15, 17): FIN-06 future-payment regressions now cover supplier
+payments, incoming/outgoing bank matching and offsets without posting allocations.
+FIN-08 connects recurring subscription billing periods to Finance VAT review,
+preserving the saved net charge and source relationship. Migration 0066 adds the
+restricted source FK and one-active-document index; source row locking prevents
+concurrent different-key preparation from creating duplicate drafts. Finance
+reference data and permission-aware Sales links reopen the same review document.
+FIN-09 uses the existing shared customer/date/currency price resolver through a
+Finance-protected endpoint. No matching price remains blank; delayed lookups do
+not overwrite manual prices. API contracts/OpenAPI and EN/BG workflow copy are
+updated. Tablet search overflow and precise form labels were corrected.
+`npm run validate` passed all checks/builds and 354 enabled workspace tests;
+all 255 enabled API tests and eight selected browser journeys passed in isolated
+infrastructure. Migration 0066 rollback/reapply, browser types, final lint/format
+and summary-label translation regression passed; tablet screenshots reviewed.
+These are review drafts, not legal invoice issuance or subscription collection
+posting. FIN-10/11, Administration and later QA findings remain open, along with
+hosted platform checks and approved business/provider/hardware dependencies.
+
+Operations QA first batch, 8 October 2026 (AGENTS §§4.3–4.6, 6.1, 6.7,
+7.6, 10–13, 15, 17): `docs/qa/operations-2026-10.md` preserves all 52 report
+findings in source order and distinguishes local evidence from hosted acceptance
+and required decisions. Implemented scheduler calls now record completed
+execution evidence; unsupported handoffs remain pending. Migration 0065 repairs
+only eligible historical markers, retains immutable event content and supports
+scoped rollback. Notification failure attempts/recovery and bounded Redis
+reconnection remain fail-closed. Finance enforces explicit foreign-rate sources,
+concurrency-safe cumulative credit/quantity limits, per-register cash protection
+including backdating/cancellation, and future-payment guards. The correction form
+loads original lines with race-safe state and precise accessible labels. Revenue,
+sales journal/output VAT and invoice-derived CRM metrics exclude unissued drafts;
+negative trend comparisons no longer imply improvement against a zero baseline.
+`npm run validate` passed 354 enabled workspace tests plus all checks/builds. An
+isolated all-integration run passed all 255 API tests; six selected browser
+journeys passed, including the new QA Finance flow and delayed-read switch,
+notification loading, platform permissions, attachments and connected trade.
+Migration 0065 rolled back/reapplied and the tablet drawer screenshot was reviewed.
+The existing Operations bundle-size warning remains. Hosted 503/backlog review,
+dedicated future bank/offset cases, later findings, legal issuance, approved BNB,
+base-currency decisions and physical/provider acceptance are not claimed complete.
+
 A4 preparation (AGENTS §§3.2–3.4, 17, 18): shared `packages/ui/src/help.tsx`
 provides searchable, module-filtered help in all three authenticated shells.
 `help-content.ts` keeps the guides and unavailable-feature warnings separate
@@ -378,6 +442,16 @@ phase-level placeholders as each vertical slice begins.
 
 ## Matrix maintenance
 
+### CRM QA verification update (2026-10-09)
+
+CRM-AFS-03 survey proposals after completed Service or accepted delivery and
+CRM-LEAD-01 lead telephone format validation and quotation-stage prerequisites
+are locally verified in the QA register. The survey invitation is recorded
+after staff share the question; automatic email remains subject to INT-001.
+Telephone validation supports common international formatting without a
+country-specific assumption. An opportunity cannot enter Quotation sent until
+a customer quotation is linked; the API enforces the same rule as the UI.
+
 ### Service photo acceptance (2026-09-10)
 
 AGENTS §§4.5, 6.5, 11, 15 and 17: `tests/e2e/service.spec.ts` exercises invalid
@@ -495,6 +569,18 @@ These results close local cross-app acceptance for implemented workflows only.
 Hosted vulnerability scans, production capacity, official/fiscal hardware,
 full offline selling, operational Backup/DR and client-data acceptance remain
 pending. Development accounts, credentials and records were not modified.
+
+Finance QA FIN-10 evidence, 9 October 2026: migration `0067` links advance
+ledger applications to Finance collections and their payment allocations.
+The protected customer-account workflow caps application at both available
+advance and receivable balances, retains the original payment date/method and
+advance reference, and updates both balances atomically. API coverage verifies
+authorization, over-allocation rejection, two concurrent partial applications,
+idempotent replay, ledger/payment linkage and zero remaining advance. All 22
+Sales/Finance API integration tests, all 54 ERP/CRM component tests and all five
+Finance browser journeys passed; migration rollback/reapply also passed on a
+clean disposable schema. Browser acceptance used the installed system Chromium.
+The QA register records FIN-10 as verified locally; hosted retest remains open.
 
 For an active vertical slice, split the relevant group row into individual
 requirements and add concrete identifiers, for example migration timestamp,

@@ -37,12 +37,19 @@ import {
 import { useAuth } from '../auth/AuthProvider';
 import { Icon } from '../components/Icon';
 import { Link } from '../routing/Router';
+import {
+  formatOperationsCurrency,
+  formatOperationsDate,
+  formatOperationsNumber,
+  useLocalization,
+} from '../i18n/LocalizationProvider';
 import { FinanceTabs } from './FinanceBankPage';
 
 type ReportView = 'aging' | 'turnover' | 'journals' | 'vat';
 
 export function FinanceReportsPage() {
   const { session } = useAuth();
+  useLocalization();
   const token = session?.sessionToken ?? '';
   const [view, setView] = useState<ReportView>('aging');
   const [agingKind, setAgingKind] = useState<FinanceAgingKind>('receivable');
@@ -83,8 +90,8 @@ export function FinanceReportsPage() {
       <FinanceTabs />
 
       <InlineAlert tone="info">
-        These are review reports, not official accounting or VAT filing documents. Sales values
-        include prepared documents.
+        These reports are not accounting or VAT filings. Sales journals and output VAT include
+        issued documents only. Drafts remain available in Financial documents.
       </InlineAlert>
 
       <div aria-label="Finance report" className="finance-report-switch" role="tablist">
@@ -643,16 +650,16 @@ function formatDescription(format: ReportExportFormat): string {
 }
 
 function formatExportDate(value: string): string {
-  return new Intl.DateTimeFormat(undefined, {
+  return formatOperationsDate(new Date(value), {
     dateStyle: 'medium',
     timeStyle: 'short',
-  }).format(new Date(value));
+  });
 }
 
 function formatFileSize(value: number): string {
   if (value < 1024) return `${value} B`;
   if (value < 1024 * 1024) return `${Math.round(value / 1024)} KB`;
-  return `${(value / (1024 * 1024)).toFixed(1)} MB`;
+  return `${formatOperationsNumber(value / (1024 * 1024), { minimumFractionDigits: 1, maximumFractionDigits: 1 })} MB`;
 }
 
 function AgingView({
@@ -1421,7 +1428,7 @@ function vatTreatmentLabel(
 function formatRate(value: string): string {
   const rate = Number(value);
   return Number.isFinite(rate)
-    ? `${rate.toLocaleString(undefined, { maximumFractionDigits: 4 })}%`
+    ? `${formatOperationsNumber(rate, { maximumFractionDigits: 4 })}%`
     : value;
 }
 
@@ -1443,15 +1450,12 @@ function reportDates(): { dateFrom: string; dateTo: string } {
 }
 
 function formatDate(value: string): string {
-  return new Intl.DateTimeFormat(undefined, {
+  return formatOperationsDate(new Date(`${value}T12:00:00+03:00`), {
     dateStyle: 'medium',
     timeZone: 'Europe/Sofia',
-  }).format(new Date(`${value}T12:00:00+03:00`));
+  });
 }
 
 function formatMoney(value: string): string {
-  const amount = Number(value);
-  return new Intl.NumberFormat(undefined, { currency: 'BGN', style: 'currency' }).format(
-    Number.isFinite(amount) ? amount : 0,
-  );
+  return formatOperationsCurrency(/^-?\d+(?:\.\d+)?$/u.test(value) ? value : '0', 'BGN');
 }

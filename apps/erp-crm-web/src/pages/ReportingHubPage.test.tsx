@@ -62,6 +62,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   cleanup();
+  vi.unstubAllEnvs();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
@@ -73,6 +74,26 @@ function mount(view: 'report-library' | 'scheduled-exports' = 'report-library') 
     </RouterProvider>,
   );
 }
+it('opens read-only POS reports from Operations at the configured POS Reports address', async () => {
+  const posDefinition: LibraryDefinition = {
+    ...definition,
+    canCreate: false,
+    key: 'pos.shift-register',
+    name: 'Shift register',
+    scope: 'pos',
+  };
+  vi.stubEnv('VITE_POS_APP_URL', 'https://vista-pos.example.com/');
+  vi.mocked(api.definitions).mockResolvedValue([definition, posDefinition]);
+  mount();
+
+  const posHeading = await screen.findByText('POS', { selector: 'strong' });
+  const posRow = posHeading.closest('li');
+  expect(posRow).not.toBeNull();
+  expect(within(posRow!).getByRole('link', { name: 'Open reports' }).getAttribute('href')).toBe(
+    'https://vista-pos.example.com/reports',
+  );
+});
+
 it('reviews a saved view and retains its submission id after a lost schedule response', async () => {
   vi.mocked(api.schedule).mockRejectedValueOnce(Error('Lost response')).mockResolvedValueOnce({
     id: 'schedule',

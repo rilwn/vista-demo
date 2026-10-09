@@ -6,8 +6,12 @@ import { ApiClientError } from '../api/client';
 import { getSerialTraceability } from '../api/inventory';
 import { useAuth } from '../auth/AuthProvider';
 import { Icon } from '../components/Icon';
+import { TechnicalIdentifier } from '../components/TechnicalIdentifier';
+import { formatOperationsDate, useLocalization } from '../i18n/LocalizationProvider';
+import { isReportUuid } from './erp-report-display';
 
 export function SerialTraceabilityPage({ compact = false }: { compact?: boolean }) {
+  useLocalization();
   const { session } = useAuth();
   const [serialNumber, setSerialNumber] = useState('');
   const [trace, setTrace] = useState<SerialTraceability | null>(null);
@@ -27,7 +31,7 @@ export function SerialTraceabilityPage({ compact = false }: { compact?: boolean 
       setTrace(null);
       setError(
         caught instanceof ApiClientError && caught.code === 'SERIAL_NOT_FOUND'
-          ? 'No inventory record matches this serial number.'
+          ? 'No inventory or customer equipment record matches this serial number.'
           : 'The serial history could not be loaded. Try again.',
       );
     } finally {
@@ -121,10 +125,20 @@ export function SerialTraceabilityPage({ compact = false }: { compact?: boolean 
               </div>
             </section>
           ) : null}
+          {!trace.inventoryRecordLinked ? (
+            <InlineAlert tone="info">
+              This device is registered to a customer but is not linked to inventory. Supplier
+              receipt and stock-movement history cannot be shown.
+            </InlineAlert>
+          ) : null}
           <section className="trace-timeline" aria-label="Serial lifecycle history">
-            {trace.events.map((event) => (
-              <TraceEventCard event={event} key={event.eventId} />
-            ))}
+            {trace.events.length ? (
+              trace.events.map((event) => <TraceEventCard event={event} key={event.eventId} />)
+            ) : (
+              <InlineAlert tone="info">
+                No trace events are recorded for this serial yet.
+              </InlineAlert>
+            )}
           </section>
         </>
       ) : null}
@@ -145,10 +159,20 @@ function TraceEventCard({ event }: { event: SerialTraceEvent }) {
       <div>
         <div className="trace-event-heading">
           <strong>{eventLabel(event)}</strong>
-          <time>{new Date(event.occurredAt).toLocaleString()}</time>
+          <time>
+            {formatOperationsDate(new Date(event.occurredAt), {
+              dateStyle: 'medium',
+              timeStyle: 'short',
+            })}
+          </time>
         </div>
         <p>
-          {event.referenceType} · {event.referenceId}
+          {event.referenceType} ·{' '}
+          {isReportUuid(event.referenceId) ? (
+            <TechnicalIdentifier kind="targetRecord" value={event.referenceId} />
+          ) : (
+            event.referenceId
+          )}
         </p>
         {event.description ? <p className="trace-event-description">{event.description}</p> : null}
         <dl>
@@ -224,7 +248,9 @@ function eventIcon(
 }
 
 function detailValue(label: string, value: string) {
-  return label === 'Appointment' ? new Date(value).toLocaleString() : value;
+  return label === 'Appointment'
+    ? formatOperationsDate(new Date(value), { dateStyle: 'medium', timeStyle: 'short' })
+    : value;
 }
 
 function statusLabel(value: string) {

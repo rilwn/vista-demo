@@ -8,6 +8,7 @@ import type {
   CrmTaskPriority,
   CrmTaskStatus,
   CrmTimelineItem,
+  CrmTimelineOperationalEvent,
   CrmTimelinePage,
   CrmTimelineReferenceData,
   TransitionCrmTaskRequest,
@@ -284,10 +285,35 @@ export class CrmTaskDto implements CrmTask {
   version!: number;
 }
 
+class CrmTimelineOperationalEventDto implements CrmTimelineOperationalEvent {
+  @ApiPropertyOptional({ type: String })
+  actorName?: string;
+  @ApiPropertyOptional({ type: String })
+  description?: string;
+  @ApiProperty({ format: 'uuid', type: String })
+  eventId!: string;
+  @ApiProperty({ type: String })
+  eventType!: string;
+  @ApiPropertyOptional({ type: String })
+  locationName?: string;
+  @ApiProperty({ format: 'uuid', type: String })
+  recordId!: string;
+  @ApiProperty({ type: String })
+  referenceNumber!: string;
+  @ApiProperty({ enum: ['payment', 'quotation', 'service_request', 'ticket'] })
+  source!: CrmTimelineOperationalEvent['source'];
+  @ApiProperty({ type: String })
+  status!: string;
+  @ApiProperty({ type: String })
+  title!: string;
+}
+
 class CrmTimelineItemDto {
   @ApiPropertyOptional({ type: () => CrmInteractionDto })
   interaction?: CrmInteraction;
-  @ApiProperty({ enum: ['interaction', 'task_event'] })
+  @ApiPropertyOptional({ type: () => CrmTimelineOperationalEventDto })
+  operationalEvent?: CrmTimelineOperationalEvent;
+  @ApiProperty({ enum: ['interaction', 'operational_event', 'task_event'] })
   kind!: CrmTimelineItem['kind'];
   @ApiProperty({ format: 'date-time', type: String })
   occurredAt!: string;

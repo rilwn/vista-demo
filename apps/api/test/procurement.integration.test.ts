@@ -196,7 +196,7 @@ describe.skipIf(!runInfrastructureTests)('purchase order to warehouse receipt', 
       'Serial product order line was not returned',
     );
     const firstReceiptInput = {
-      lines: [{ orderLineId: ordinaryLine.id, quantity: '2' }],
+      lines: [{ orderLineId: ordinaryLine.id, quantity: '2', unitCostBgn: '20' }],
       supplierDeliveryReference: `DEL-${runId.slice(0, 8)}-1`,
     };
     const firstReceiptKey = `goods-receipt-1-${runId}`;
@@ -210,7 +210,7 @@ describe.skipIf(!runInfrastructureTests)('purchase order to warehouse receipt', 
     expect(firstReceipt.lines[0]).toMatchObject({
       productId: ordinaryProductId,
       quantity: '2.0000',
-      unitCostBgn: '10.0000',
+      unitCostBgn: '20.0000',
     });
     const receiptReplay = await request(application.getHttpServer())
       .post(`/api/v1/procurement/purchase-orders/${created.id}/receipts`)
@@ -277,17 +277,27 @@ describe.skipIf(!runInfrastructureTests)('purchase order to warehouse receipt', 
     expect(list.body).toMatchObject({ page: 1, total: 1, totalPages: 1 });
 
     const balances = await database.query<{
+      average_unit_cost_bgn: string;
       product_id: string;
       quantity: string;
     }>(
-      `SELECT product_id, quantity::text FROM inventory.stock_balances
+      `SELECT product_id, quantity::text, average_unit_cost_bgn::text
+       FROM inventory.stock_balances
        WHERE warehouse_id = $1 ORDER BY product_id`,
       [warehouseId],
     );
     expect(balances.rows).toEqual(
       expect.arrayContaining([
-        { product_id: ordinaryProductId, quantity: '5.0000' },
-        { product_id: serialProductId, quantity: '1.0000' },
+        {
+          average_unit_cost_bgn: '14.0000',
+          product_id: ordinaryProductId,
+          quantity: '5.0000',
+        },
+        {
+          average_unit_cost_bgn: '250.0000',
+          product_id: serialProductId,
+          quantity: '1.0000',
+        },
       ]),
     );
     const evidence = await database.query<{

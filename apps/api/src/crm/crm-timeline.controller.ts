@@ -56,8 +56,11 @@ export class CrmTimelineController {
   @RequirePermissions({ action: 'view', module: 'crm' })
   @RateLimitPolicy('read')
   @ApiOkResponse({ type: CrmTimelinePageDto })
-  list(@Query() query: ListCrmTimelineQueryDto): Promise<CrmTimelinePageDto> {
-    return this.timeline.list(query);
+  list(
+    @Query() query: ListCrmTimelineQueryDto,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<CrmTimelinePageDto> {
+    return this.timeline.list(query, request.authentication);
   }
 
   @Post('interactions')

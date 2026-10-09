@@ -2,6 +2,49 @@ import { expect, test } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import { signIn } from './sign-in.js';
 
+test('Operations opens POS reports for a read-only Manager account', async ({ page }) => {
+  test.setTimeout(180000);
+  await page.goto('http://127.0.0.1:5373/');
+  await signIn(page, 'manager@vista.local');
+  await page
+    .locator('.workspace-sidebar')
+    .getByRole('link', { name: 'Reports', exact: true })
+    .click();
+  await page
+    .getByRole('navigation', { name: 'Choose an area', exact: true })
+    .getByRole('link', { name: /^Report library / })
+    .click();
+  const posHeading = page.getByText('POS', { exact: true });
+  await expect(posHeading).toBeVisible();
+  const posRow = posHeading.locator('xpath=ancestor::li');
+  const openReports = posRow.getByRole('link', { name: 'Open reports', exact: true });
+  await expect(openReports).toHaveAttribute('href', 'http://127.0.0.1:5374/reports');
+  await openReports.click();
+  await expect(page).toHaveURL('http://127.0.0.1:5374/reports');
+  await signIn(page, 'manager@vista.local');
+  await expect(page.getByRole('heading', { name: 'Reports', exact: true })).toBeVisible();
+  const reports = page.getByRole('tablist', { name: 'POS report views' });
+  for (const report of [
+    'Shifts',
+    'Cashiers',
+    'Products',
+    'Categories',
+    'Payments',
+    'Locations',
+    'Compare locations',
+  ]) {
+    await reports.getByRole('tab', { name: report, exact: true }).click();
+    await expect(reports.getByRole('tab', { name: report, exact: true })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+  }
+  const exports = page.getByLabel('Export current report');
+  const exportButtons = exports.getByRole('button');
+  await expect(exportButtons).toHaveCount(3);
+  for (let index = 0; index < 3; index++) await expect(exportButtons.nth(index)).toBeDisabled();
+});
+
 test('POS retains older exports, safely retries a lost response and allows a fresh report', async ({
   page,
 }) => {

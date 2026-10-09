@@ -4,7 +4,18 @@ import type {
   SalesSubscriptionReferenceData,
   ServiceSubscriptionContract,
 } from '@vista/contracts';
-import { type FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  Children,
+  cloneElement,
+  isValidElement,
+  type FormEvent,
+  type ReactElement,
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useState,
+} from 'react';
 
 import { ApiClientError } from '../api/client';
 import {
@@ -15,6 +26,12 @@ import {
 } from '../api/sales-subscriptions';
 import { useAuth } from '../auth/AuthProvider';
 import { Icon } from '../components/Icon';
+import {
+  formatOperationsCurrency,
+  formatOperationsDate,
+  useLocalization,
+} from '../i18n/LocalizationProvider';
+import { useRouter } from '../routing/Router';
 
 const emptyReferences: SalesSubscriptionReferenceData = {
   customers: [],
@@ -27,6 +44,7 @@ interface SubscriptionFormState extends CreateServiceSubscriptionRequest {
 }
 
 export function SalesSubscriptionsPage() {
+  useLocalization();
   const { hasPermission, session } = useAuth();
   const token = session?.sessionToken ?? '';
   const data = useSubscriptions(token);
@@ -187,6 +205,8 @@ function SubscriptionPreview({
   onBack: () => void;
   onEdit: () => void;
 }) {
+  const { navigate } = useRouter();
+  const { hasPermission } = useAuth();
   return (
     <SubscriptionDrawer onBack={onBack} subtitle={contract.customerName} title={contract.number}>
       <div className="subscription-preview-hero">
@@ -277,6 +297,18 @@ function SubscriptionPreview({
                   </span>
                 </div>
                 <strong>{formatMoney(draft.amount, draft.currencyCode)}</strong>
+                {hasPermission('erp.finance', 'view') ? (
+                  <Button
+                    variant="secondary"
+                    onClick={() =>
+                      navigate('/modules/erp.finance/invoices', {
+                        state: { subscriptionDraftId: draft.id },
+                      })
+                    }
+                  >
+                    Open in Finance
+                  </Button>
+                ) : null}
               </div>
             ))}
           </div>
@@ -579,6 +611,7 @@ function SubscriptionEditor({
                 type="number"
                 value={form.billingAmount}
               />
+              <small>Before VAT. Finance reviews the tax treatment for each billing period.</small>
             </SubscriptionField>
             <SubscriptionField label="Currency">
               <input
@@ -685,10 +718,17 @@ function SubscriptionDrawer({
 }
 
 function SubscriptionField({ children, label }: { children: React.ReactNode; label: string }) {
+  const labelId = useId();
   return (
     <label className="sales-field">
-      <span>{label}</span>
-      {children}
+      <span id={labelId}>{label}</span>
+      {Children.map(children, (child) =>
+        isValidElement(child) && ['input', 'select', 'textarea'].includes(String(child.type))
+          ? cloneElement(child as ReactElement<{ 'aria-labelledby'?: string }>, {
+              'aria-labelledby': labelId,
+            })
+          : child,
+      )}
     </label>
   );
 }
@@ -803,13 +843,14 @@ function today() {
 }
 
 function formatDate(value: string) {
-  return new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium' }).format(
-    new Date(`${value.slice(0, 10)}T12:00:00Z`),
-  );
+  return formatOperationsDate(new Date(`${value.slice(0, 10)}T12:00:00Z`), {
+    dateStyle: 'medium',
+    timeZone: 'UTC',
+  });
 }
 
 function formatMoney(value: string, currency: string) {
-  return new Intl.NumberFormat('en-GB', { currency, style: 'currency' }).format(Number(value));
+  return formatOperationsCurrency(value, currency);
 }
 
 function errorText(error: unknown) {

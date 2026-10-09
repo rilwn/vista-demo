@@ -11,6 +11,7 @@ import {
 } from './checkout-store';
 import { definitelyRejected } from './checkout-recovery';
 import { getPosDateLocale } from './i18n/LocalizationProvider';
+import { CheckoutReference } from './CheckoutReference';
 
 export function CheckoutRecovery({
   accountId,
@@ -177,7 +178,7 @@ export function CheckoutRecovery({
               timeStyle: 'short',
               timeZone: 'Europe/Sofia',
             }).format(new Date(pending.savedAt))}{' '}
-            · Reference {pending.request.clientTransactionId.slice(0, 8)}
+            · <CheckoutReference value={pending.request.clientTransactionId} />
           </small>
         ) : null}
       </div>

@@ -19,7 +19,7 @@ const bulgarian = {
 };
 
 export const exportHistoryText = new Proxy(english, {
-  get(target, property, receiver) {
+  get(target, property, receiver): unknown {
     return Reflect.get(getOperationsLocale() === 'bg' ? bulgarian : target, property, receiver);
   },
 });

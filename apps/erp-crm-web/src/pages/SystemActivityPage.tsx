@@ -16,6 +16,8 @@ import {
 } from '../api/integrations';
 import { useAuth } from '../auth/AuthProvider';
 import { Icon } from '../components/Icon';
+import { TechnicalIdentifier } from '../components/TechnicalIdentifier';
+import { formatOperationsDate, useLocalization } from '../i18n/LocalizationProvider';
 import { messages } from '../i18n/legacyMessages';
 import { JobMonitor } from './JobMonitor';
 
@@ -24,6 +26,7 @@ const activityPageSize = 12;
 
 export function SystemActivityPage() {
   const { hasPermission, session } = useAuth();
+  useLocalization();
   const token = session?.sessionToken ?? '';
   const [events, setEvents] = useState<IntegrationEventSummary[]>([]);
   const [telemetry, setTelemetry] = useState<IntegrationEventTelemetry | null>(null);
@@ -150,7 +153,6 @@ export function SystemActivityPage() {
                     <tr key={event.id}>
                       <td>
                         <strong>{eventLabel(event.eventType)}</strong>
-                        <span>{shortReference(event.id)}</span>
                       </td>
                       <td>
                         <StatusBadge status={event.status} />
@@ -228,7 +230,11 @@ function ActivitySummary({
 }) {
   const cards = [
     [messages.operations.completed, telemetry?.completed ?? 0, 'is-positive'],
-    [messages.operations.inProgress, (telemetry?.pending ?? 0) + (telemetry?.published ?? 0), ''],
+    [
+      messages.operations.inProgress,
+      (telemetry?.pending ?? 0) + (telemetry?.publishing ?? 0) + (telemetry?.published ?? 0),
+      '',
+    ],
     [messages.operations.needsAttention, telemetry?.deadLetter ?? 0, 'is-warning'],
     [messages.operations.failedSteps, telemetry?.failedDeliveries ?? 0, ''],
   ] as const;
@@ -328,7 +334,11 @@ function ActivityDrawer({
           </button>
           <div>
             <h2>{event ? eventLabel(event.eventType) : messages.operations.details}</h2>
-            <p>{event ? shortReference(event.id) : messages.operations.loading}</p>
+            {event ? (
+              <TechnicalIdentifier kind="event" value={event.id} />
+            ) : (
+              <p>{messages.operations.loading}</p>
+            )}
           </div>
         </header>
         <div className="security-drawer-body system-activity-detail">
@@ -347,7 +357,9 @@ function ActivityDrawer({
                 </div>
                 <div>
                   <dt>{messages.operations.requestReference}</dt>
-                  <dd>{event.correlationId}</dd>
+                  <dd>
+                    <TechnicalIdentifier kind="request" value={event.correlationId} />
+                  </dd>
                 </div>
                 <div>
                   <dt>{messages.operations.sequence}</dt>
@@ -470,14 +482,8 @@ function statusLabel(
   return messages.operations.statuses[status];
 }
 
-function shortReference(value: string): string {
-  return messages.operations.reference(value.slice(0, 8).toUpperCase());
-}
-
 function dateTime(value: string): string {
-  return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(
-    new Date(value),
-  );
+  return formatOperationsDate(new Date(value), { dateStyle: 'medium', timeStyle: 'short' });
 }
 
 function lastEventDate(event: IntegrationEventDetail): string {

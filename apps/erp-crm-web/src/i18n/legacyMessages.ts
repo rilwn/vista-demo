@@ -192,6 +192,7 @@ const bulgarianMessages = {
     currencyHint: 'Трибуквен код',
     delivered: 'Доставено',
     deliveryReference: 'Референция на доставчика',
+    goodsReceiptRecord: 'Складово приемане',
     emptyOrders: 'Все още няма поръчки',
     emptyOrdersHint:
       'Създайте първата поръчка, когато доставчикът, продуктите и складът са готови.',
@@ -232,6 +233,8 @@ const bulgarianMessages = {
     receiveSubtitle: 'Въведете само получените сега количества. Остатъкът остава отворен.',
     receiveSuccess: 'Доставката е приета и складовата наличност е актуализирана.',
     receiveTitle: 'Приемане по поръчка',
+    priceVariance: (orderPrice: string, receiptCost: string) =>
+      `Единичната себестойност на доставката (${receiptCost}) се различава от цената по поръчката (${orderPrice}). Въведената стойност ще се използва при оценката на наличността. Проверете я преди осчетоводяване.`,
     received: 'Прието',
     receipts: 'Складови приемания',
     receiptDestination: 'Място на доставка',
@@ -308,6 +311,8 @@ const bulgarianMessages = {
     created: 'Партньорът е добавен в общия регистър.',
     detailsEyebrow: 'Запис за партньор',
     detailsTitle: 'Данни за партньора',
+    noVatNumber: 'Няма регистриран ДДС номер',
+    recordId: 'Идентификатор на записа',
     duplicateDescription:
       'Създаването е спряно, защото е намерено възможно съвпадение. Записите не се обединяват автоматично.',
     duplicateTitle: 'Възможен дублиран запис',

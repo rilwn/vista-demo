@@ -1948,6 +1948,74 @@
   flex: 0 0 auto;
 }
 
+.pos-checkout-reference {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 0;
+  max-width: 100%;
+  vertical-align: middle;
+}
+
+.pos-checkout-reference > button {
+  display: inline-grid;
+  width: 1.75rem;
+  height: 1.75rem;
+  flex: 0 0 auto;
+  place-items: center;
+  padding: 0;
+  border: 1px solid #cbd7cc;
+  border-radius: 0.42rem;
+  color: #53645a;
+  background: #fff;
+  cursor: pointer;
+}
+
+.pos-checkout-reference > button:hover {
+  border-color: #709477;
+  color: #205a37;
+  background: #eef5ed;
+}
+
+.pos-checkout-reference > button:focus-visible {
+  outline: 2px solid #5d8b65;
+  outline-offset: 2px;
+}
+
+.pos-checkout-reference svg {
+  width: 1rem;
+  height: 1rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.7;
+}
+
+.pos-checkout-reference > [role='status'] {
+  color: #205a37;
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.pos-checkout-reference-fallback {
+  display: grid;
+  gap: 0.2rem;
+  max-width: min(24rem, 75vw);
+  color: #52645a;
+  white-space: normal;
+}
+
+.pos-checkout-reference-fallback code {
+  padding: 0.25rem 0.4rem;
+  border: 1px solid #d2ddd2;
+  border-radius: 0.35rem;
+  color: #203c2a;
+  background: #f2f6f2;
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+
 @media (max-width: 600px) {
   .pos-recovery {
     flex-direction: column;

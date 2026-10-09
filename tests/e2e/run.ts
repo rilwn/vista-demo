@@ -17,6 +17,7 @@ const env: NodeJS.ProcessEnv = {
   API_PORT: '5300',
   VISTA_API_PROXY_URL: 'http://127.0.0.1:5300',
   CORS_ORIGINS: 'http://127.0.0.1:5373,http://127.0.0.1:5374,http://127.0.0.1:5375',
+  VITE_POS_APP_URL: 'http://127.0.0.1:5374',
   BUSINESS_TIMEZONE: 'Europe/Sofia',
   DATABASE_URL: 'postgresql://vista_e2e:local-e2e-only@127.0.0.1:58432/vista_e2e',
   REDIS_URL: 'redis://127.0.0.1:58379/0',
@@ -34,6 +35,9 @@ const env: NodeJS.ProcessEnv = {
   DEV_FIXTURES_ENABLED: 'true',
   DEV_FIXTURES_PASSWORD: 'Vista-Browser-Test-7!',
   REQUEST_LOGGING_ENABLED: 'false',
+  LOG_LEVEL: 'error',
+  // Accelerate the real recurring worker only inside disposable browser runs.
+  SALES_SUBSCRIPTION_INVOICE_CRON: '*/5 * * * * *',
 };
 let active: ChildProcess | undefined;
 let interrupted = false;
@@ -72,15 +76,28 @@ try {
   await run('npm', ['run', 'build:packages']);
   await run('npm', ['run', 'build', '-w', '@vista/api']);
   await run('node', ['--import', 'tsx', 'apps/api/src/database/migrate.ts', 'up']);
+  if (process.argv.includes('--migration-rehearsal')) {
+    // Rehearse reversals on the empty disposable schema before fixtures and tests add records.
+    await run('node', ['--import', 'tsx', 'apps/api/src/database/migrate.ts', 'down']);
+    await run('node', ['--import', 'tsx', 'apps/api/src/database/migrate.ts', 'up']);
+  }
   await run('node', ['apps/api/dist/database/seed-dev.js']);
   const allIntegration = process.argv.includes('--all-integration');
   const integrationTests = allIntegration
     ? ['test']
     : [
         ...(process.argv.includes('--crm-integration')
-          ? ['test/crm-pipeline.integration.test.ts']
+          ? ['test/crm-pipeline.integration.test.ts', 'test/crm-timeline.integration.test.ts']
           : []),
         ...(process.argv.includes('--files-integration') ? ['test/files.integration.test.ts'] : []),
+        ...(process.argv.includes('--qa-integration')
+          ? [
+              'test/partners.integration.test.ts',
+              'test/job-queue.integration.test.ts',
+              'test/scheduled-evidence.integration.test.ts',
+              'test/sales.integration.test.ts',
+            ]
+          : []),
         ...(process.argv.includes('--sales-integration') ? ['test/sales.integration.test.ts'] : []),
         ...(process.argv.includes('--pos-integration') ? ['test/pos.integration.test.ts'] : []),
         ...(process.argv.includes('--auth-integration')
@@ -91,7 +108,15 @@ try {
     env['RUN_INFRASTRUCTURE_TESTS'] = 'true';
     if (allIntegration) env['RUN_DATABASE_TESTS'] = 'true';
     try {
-      await run('npm', ['run', 'test', '-w', '@vista/api', '--', ...integrationTests]);
+      await run('npm', [
+        'run',
+        'test',
+        '-w',
+        '@vista/api',
+        '--',
+        ...integrationTests,
+        '--hookTimeout=30000',
+      ]);
     } finally {
       delete env['RUN_INFRASTRUCTURE_TESTS'];
       delete env['RUN_DATABASE_TESTS'];
@@ -112,16 +137,12 @@ try {
             '--auth-integration',
             '--sales-integration',
             '--files-integration',
+            '--qa-integration',
             '--migration-rehearsal',
             '--all-integration',
           ].includes(argument),
       ),
   ]);
-  if (process.argv.includes('--migration-rehearsal')) {
-    // Browser servers have stopped. Only this run's disposable database is used.
-    await run('node', ['--import', 'tsx', 'apps/api/src/database/migrate.ts', 'down']);
-    await run('node', ['--import', 'tsx', 'apps/api/src/database/migrate.ts', 'up']);
-  }
 } catch (error) {
   console.error(error instanceof Error ? error.message : 'Browser acceptance failed');
   process.exitCode = 1;

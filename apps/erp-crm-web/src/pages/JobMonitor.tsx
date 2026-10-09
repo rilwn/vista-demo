@@ -3,9 +3,15 @@ import type { BackgroundJobTelemetry } from '@vista/contracts';
 import { useEffect, useState } from 'react';
 import { apiV1BaseUrl, authorizationHeaders } from '../api/client';
 import { jobMonitorMessages as copy } from '../i18n/legacyMessages';
+import {
+  formatOperationsDate,
+  formatOperationsNumber,
+  useLocalization,
+} from '../i18n/LocalizationProvider';
 import './job-monitor.css';
 
 export function JobMonitor({ token }: { token: string }) {
+  useLocalization();
   const [data, setData] = useState<BackgroundJobTelemetry | null>(null);
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
@@ -80,7 +86,11 @@ export function JobMonitor({ token }: { token: string }) {
           <p className="job-monitor-status">
             {data.paused ? copy.paused : copy.accepting}
             <span>
-              {copy.updated} {new Date(data.timestamp).toLocaleString()}
+              {copy.updated}{' '}
+              {formatOperationsDate(new Date(data.timestamp), {
+                dateStyle: 'medium',
+                timeStyle: 'short',
+              })}
             </span>
           </p>
           {data.failed > 0 ? <InlineAlert tone="warning">{copy.failureHint}</InlineAlert> : null}
@@ -88,7 +98,7 @@ export function JobMonitor({ token }: { token: string }) {
             {(['waiting', 'active', 'delayed', 'completed', 'failed'] as const).map((state) => (
               <div key={state}>
                 <dt>{copy.states[state]}</dt>
-                <dd>{data[state].toLocaleString()}</dd>
+                <dd>{formatOperationsNumber(data[state])}</dd>
               </div>
             ))}
           </dl>

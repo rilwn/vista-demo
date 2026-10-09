@@ -20,8 +20,10 @@ import {
   type ConfirmSalesQuotationLineRequest,
   type ConfirmSalesQuotationRequest,
   type AcceptSalesHandoverRequest,
+  type CancelSalesQuotationRequest,
   type CreateSalesQuotationLineRequest,
   type CreateSalesQuotationRequest,
+  type UpdateSalesQuotationRequest,
   type CreateSalesShipmentLineRequest,
   type CreateSalesShipmentRequest,
   type SalesHandoverCertificate,
@@ -95,6 +97,31 @@ export class CreateSalesQuotationDto implements CreateSalesQuotationRequest {
   @ApiProperty({ format: 'uuid', type: String })
   @IsUUID('loose')
   warehouseId!: string;
+}
+
+export class UpdateSalesQuotationDto
+  extends CreateSalesQuotationDto
+  implements UpdateSalesQuotationRequest
+{
+  @ApiProperty({ minimum: 1, type: Number })
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  expectedVersion!: number;
+}
+
+export class CancelSalesQuotationDto implements CancelSalesQuotationRequest {
+  @ApiProperty({ minimum: 1, type: Number })
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  expectedVersion!: number;
+
+  @ApiPropertyOptional({ maxLength: 500, type: String })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  reason?: string;
 }
 
 export class ConfirmSalesQuotationLineDto implements ConfirmSalesQuotationLineRequest {
@@ -193,7 +220,16 @@ class SalesBatchOptionDto {
   @ApiProperty({ format: 'uuid', type: String }) warehouseId!: string;
 }
 
+class SalesAvailabilityOptionDto {
+  @ApiProperty({ format: 'uuid', type: String }) productId!: string;
+  @ApiProperty({ type: String }) quantity!: string;
+  @ApiProperty({ format: 'uuid', type: String }) warehouseId!: string;
+}
+
 export class SalesReferenceDataDto implements SalesReferenceData {
+  @ApiProperty({ type: String }) businessTimezone!: string;
+  @ApiProperty({ isArray: true, type: SalesAvailabilityOptionDto })
+  availability!: SalesReferenceData['availability'];
   @ApiProperty({ isArray: true, type: SalesBatchOptionDto })
   batches!: SalesReferenceData['batches'];
   @ApiProperty({ isArray: true, type: SalesCustomerOptionDto })
@@ -302,6 +338,8 @@ export class SalesInvoiceDto implements SalesInvoice {
 }
 
 export class SalesWorkflowDto implements SalesWorkflow {
+  @ApiPropertyOptional({ format: 'date-time', type: String }) cancelledAt?: string;
+  @ApiPropertyOptional({ type: String }) cancellationReason?: string;
   @ApiProperty({ format: 'date-time', type: String }) createdAt!: string;
   @ApiProperty({ type: String }) currencyCode!: string;
   @ApiProperty({ type: String }) customerName!: string;
@@ -315,8 +353,9 @@ export class SalesWorkflowDto implements SalesWorkflow {
   @ApiPropertyOptional({ type: SalesOrderDto }) order?: SalesOrder;
   @ApiProperty({ type: String }) overallDiscountPercent!: string;
   @ApiPropertyOptional({ type: SalesShipmentDto }) shipment?: SalesShipment;
-  @ApiProperty({ enum: ['draft', 'confirmed', 'shipped', 'invoiced'] })
+  @ApiProperty({ enum: ['cancelled', 'draft', 'expired', 'confirmed', 'shipped', 'invoiced'] })
   status!: SalesWorkflow['status'];
+  @ApiProperty({ minimum: 1, type: Number }) version!: number;
   @ApiProperty({ type: String }) subtotal!: string;
   @ApiProperty({ type: String }) total!: string;
   @ApiProperty({ format: 'date', type: String }) validUntil!: string;

@@ -9,6 +9,7 @@ export interface AuthenticationContext {
   employeeId: string;
   isAdministrative: boolean;
   permissions: Permission[];
+  roleNames?: string[];
   sessionId: string;
   twoFactorVerified: boolean;
 }

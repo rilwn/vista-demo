@@ -15,6 +15,12 @@ import type {
   LegalBusinessEntity,
   OrganizationMember,
   OrganizationTopology,
+  RecordVersionRequest,
+  UpdateBusinessBranchRequest,
+  UpdateBusinessLocationRequest,
+  UpdateBusinessOperatorRequest,
+  UpdateCashRegisterRequest,
+  UpdateLegalBusinessEntityRequest,
 } from '@vista/contracts';
 import type { PoolClient } from 'pg';
 
@@ -24,6 +30,7 @@ import type {
   RequestSecurityMetadata,
 } from '../auth/authentication.types.js';
 import { ApiErrorException } from '../common/api-error.exception.js';
+import { assertBusinessIdentifiers } from '../common/business-identifiers.js';
 import { APP_ENVIRONMENT } from '../config/config.module.js';
 import { DatabaseService } from '../database/database.service.js';
 
@@ -89,12 +96,18 @@ interface ReplayRow {
 }
 
 interface CommandResult<T> {
+  before?: T;
+  changed?: boolean;
   event: string;
-  payload: T;
+  payload: unknown;
   result: T;
   targetId: string;
   targetType: string;
 }
+
+type OrganizationRecordKind = 'branch' | 'entity' | 'location' | 'operator' | 'register';
+type OrganizationRecord =
+  BusinessBranch | BusinessLocation | BusinessOperator | CashRegister | LegalBusinessEntity;
 
 @Injectable()
 export class OrganizationService {
@@ -109,16 +122,16 @@ export class OrganizationService {
     const [entities, branches, locations, operators, registers] = await Promise.all([
       pool.query<EntityRow>(
         `SELECT id, code, name, uic, vat_number, active, version
-         FROM organization.legal_entities WHERE active ORDER BY upper(code), id`,
+         FROM organization.legal_entities ORDER BY upper(code), id`,
       ),
       pool.query<BranchRow>(
         `SELECT id, legal_entity_id, code, name, active, version
-         FROM organization.branches WHERE active ORDER BY upper(code), id`,
+         FROM organization.branches ORDER BY upper(code), id`,
       ),
       pool.query<LocationRow>(
         `SELECT id, branch_id, code, name, location_type, address_line_1,
            address_line_2, city, postal_code, country_code, active, version
-         FROM organization.business_locations WHERE active ORDER BY upper(code), id`,
+         FROM organization.business_locations ORDER BY upper(code), id`,
       ),
       pool.query<OperatorRow>(
         `SELECT operator.id, operator.business_location_id, operator.account_id,
@@ -127,17 +140,18 @@ export class OrganizationService {
          FROM organization.operators operator
          JOIN identity.user_accounts account ON account.id = operator.account_id
          JOIN identity.employees employee ON employee.id = account.employee_id
-         WHERE operator.active ORDER BY upper(operator.code), operator.id`,
+         ORDER BY upper(operator.code), operator.id`,
       ),
       pool.query<RegisterRow>(
         `SELECT register.id, register.business_location_id, register.code,
            register.name, register.active, register.version,
            COALESCE(array_agg(assignment.operator_id ORDER BY assignment.operator_id)
-             FILTER (WHERE assignment.active), '{}'::uuid[]) AS operator_ids
+             FILTER (WHERE assignment.active AND assigned_operator.active), '{}'::uuid[]) AS operator_ids
          FROM organization.cash_registers register
          LEFT JOIN organization.cash_register_operators assignment
            ON assignment.cash_register_id = register.id
-         WHERE register.active
+         LEFT JOIN organization.operators assigned_operator
+           ON assigned_operator.id = assignment.operator_id
          GROUP BY register.id
          ORDER BY upper(register.code), register.id`,
       ),
@@ -180,8 +194,12 @@ export class OrganizationService {
       code: code(input.code, 'LEGAL_ENTITY_CODE_REQUIRED'),
       name: text(input.name, 'LEGAL_ENTITY_NAME_REQUIRED'),
       uic: optional(input.uic),
-      vatNumber: optional(input.vatNumber)?.toUpperCase(),
+      vatNumber: optional(input.vatNumber)?.replace(/\s+/gu, '').toUpperCase(),
     };
+    assertBusinessIdentifiers({
+      ...(normalized.uic ? { uic: normalized.uic } : {}),
+      ...(normalized.vatNumber ? { vatNumber: normalized.vatNumber } : {}),
+    });
     return this.command(
       'organization.legal-entity.create',
       key,
@@ -438,6 +456,415 @@ export class OrganizationService {
     );
   }
 
+  async updateLegalEntity(
+    id: string,
+    input: UpdateLegalBusinessEntityRequest,
+    key: string | undefined,
+    authentication: AuthenticationContext,
+    metadata: RequestSecurityMetadata,
+  ): Promise<LegalBusinessEntity> {
+    const normalized = {
+      code: code(input.code, 'LEGAL_ENTITY_CODE_REQUIRED'),
+      name: text(input.name, 'LEGAL_ENTITY_NAME_REQUIRED'),
+      uic: optional(input.uic),
+      vatNumber: optional(input.vatNumber)?.replace(/\s+/gu, '').toUpperCase(),
+    };
+    return this.command(
+      `organization.legal-entity.update:${id}`,
+      key,
+      { ...normalized, expectedVersion: input.expectedVersion, id },
+      authentication,
+      metadata,
+      'LEGAL_ENTITY_DUPLICATE',
+      'A legal entity with this code or UIC already exists',
+      async (client) => {
+        const before = mapEntity(await lockEntity(client, id));
+        requireVersion(before.version, input.expectedVersion);
+        assertBusinessIdentifiers({
+          ...(normalized.uic && normalized.uic !== before.uic ? { uic: normalized.uic } : {}),
+          ...(normalized.vatNumber && normalized.vatNumber !== before.vatNumber
+            ? { vatNumber: normalized.vatNumber }
+            : {}),
+        });
+        const result = await client.query<EntityRow>(
+          `UPDATE organization.legal_entities
+           SET code = $2, name = $3, uic = $4, vat_number = $5,
+             version = version + 1, updated_by = $6, updated_at = now()
+           WHERE id = $1
+           RETURNING id, code, name, uic, vat_number, active, version`,
+          [
+            id,
+            normalized.code,
+            normalized.name,
+            normalized.uic ?? null,
+            normalized.vatNumber ?? null,
+            authentication.accountId,
+          ],
+        );
+        return change(
+          'organization.legal_entity.updated',
+          'legal_business_entity',
+          mapEntity(required(result.rows[0], 'Legal entity update failed')),
+          before,
+        );
+      },
+      HttpStatus.OK,
+    );
+  }
+
+  async updateBranch(
+    id: string,
+    input: UpdateBusinessBranchRequest,
+    key: string | undefined,
+    authentication: AuthenticationContext,
+    metadata: RequestSecurityMetadata,
+  ): Promise<BusinessBranch> {
+    const normalized = {
+      code: code(input.code, 'BRANCH_CODE_REQUIRED'),
+      name: text(input.name, 'BRANCH_NAME_REQUIRED'),
+    };
+    return this.command(
+      `organization.branch.update:${id}`,
+      key,
+      { ...normalized, expectedVersion: input.expectedVersion, id },
+      authentication,
+      metadata,
+      'BRANCH_DUPLICATE',
+      'A branch with this code already exists in the legal entity',
+      async (client) => {
+        const before = mapBranch(await lockBranch(client, id));
+        requireVersion(before.version, input.expectedVersion);
+        const result = await client.query<BranchRow>(
+          `UPDATE organization.branches
+           SET code = $2, name = $3, version = version + 1,
+             updated_by = $4, updated_at = now()
+           WHERE id = $1
+           RETURNING id, legal_entity_id, code, name, active, version`,
+          [id, normalized.code, normalized.name, authentication.accountId],
+        );
+        return change(
+          'organization.branch.updated',
+          'business_branch',
+          mapBranch(required(result.rows[0], 'Branch update failed')),
+          before,
+        );
+      },
+      HttpStatus.OK,
+    );
+  }
+
+  async updateLocation(
+    id: string,
+    input: UpdateBusinessLocationRequest,
+    key: string | undefined,
+    authentication: AuthenticationContext,
+    metadata: RequestSecurityMetadata,
+  ): Promise<BusinessLocation> {
+    const countryCode = (optional(input.countryCode) ?? 'BG').toUpperCase();
+    if (!/^[A-Z]{2}$/u.test(countryCode)) {
+      throw new ApiErrorException(
+        'BUSINESS_LOCATION_COUNTRY_INVALID',
+        'The country code must use two letters',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    const normalized = normalizeLocation(input, countryCode);
+    return this.command(
+      `organization.location.update:${id}`,
+      key,
+      { ...normalized, expectedVersion: input.expectedVersion, id },
+      authentication,
+      metadata,
+      'BUSINESS_LOCATION_DUPLICATE',
+      'A business location with this code already exists',
+      async (client) => {
+        const before = mapLocation(await lockLocation(client, id));
+        requireVersion(before.version, input.expectedVersion);
+        const result = await client.query<LocationRow>(
+          `UPDATE organization.business_locations
+           SET code = $2, name = $3, location_type = $4, address_line_1 = $5,
+             address_line_2 = $6, city = $7, postal_code = $8, country_code = $9,
+             version = version + 1, updated_by = $10, updated_at = now()
+           WHERE id = $1
+           RETURNING id, branch_id, code, name, location_type, address_line_1,
+             address_line_2, city, postal_code, country_code, active, version`,
+          [
+            id,
+            normalized.code,
+            normalized.name,
+            normalized.locationType,
+            normalized.addressLine1,
+            normalized.addressLine2 ?? null,
+            normalized.city,
+            normalized.postalCode ?? null,
+            normalized.countryCode,
+            authentication.accountId,
+          ],
+        );
+        return change(
+          'organization.business_location.updated',
+          'business_location',
+          mapLocation(required(result.rows[0], 'Business location update failed')),
+          before,
+        );
+      },
+      HttpStatus.OK,
+    );
+  }
+
+  async updateOperator(
+    id: string,
+    input: UpdateBusinessOperatorRequest,
+    key: string | undefined,
+    authentication: AuthenticationContext,
+    metadata: RequestSecurityMetadata,
+  ): Promise<BusinessOperator> {
+    const normalized = { code: code(input.code, 'OPERATOR_CODE_REQUIRED') };
+    return this.command(
+      `organization.operator.update:${id}`,
+      key,
+      { ...normalized, expectedVersion: input.expectedVersion, id },
+      authentication,
+      metadata,
+      'OPERATOR_DUPLICATE',
+      'This operator code already exists at the business location',
+      async (client) => {
+        const before = mapOperator(await lockOperator(client, id));
+        requireVersion(before.version, input.expectedVersion);
+        const result = await client.query<OperatorRow>(
+          `WITH updated AS (
+             UPDATE organization.operators
+             SET code = $2, version = version + 1, updated_by = $3, updated_at = now()
+             WHERE id = $1
+             RETURNING id, business_location_id, account_id, code, active, version
+           )
+           SELECT updated.*, employee.display_name, employee.email
+           FROM updated
+           JOIN identity.user_accounts account ON account.id = updated.account_id
+           JOIN identity.employees employee ON employee.id = account.employee_id`,
+          [id, normalized.code, authentication.accountId],
+        );
+        return change(
+          'organization.operator.updated',
+          'business_operator',
+          mapOperator(required(result.rows[0], 'Operator update failed')),
+          before,
+        );
+      },
+      HttpStatus.OK,
+    );
+  }
+
+  async updateRegister(
+    id: string,
+    input: UpdateCashRegisterRequest,
+    key: string | undefined,
+    authentication: AuthenticationContext,
+    metadata: RequestSecurityMetadata,
+  ): Promise<CashRegister> {
+    const operatorIds = [...new Set(input.operatorIds ?? [])].sort();
+    const normalized = {
+      code: code(input.code, 'CASH_REGISTER_CODE_REQUIRED'),
+      name: text(input.name, 'CASH_REGISTER_NAME_REQUIRED'),
+      operatorIds,
+    };
+    return this.command(
+      `organization.cash-register.update:${id}`,
+      key,
+      { ...normalized, expectedVersion: input.expectedVersion, id },
+      authentication,
+      metadata,
+      'CASH_REGISTER_DUPLICATE',
+      'A cash register with this code already exists at the location',
+      async (client) => {
+        const before = mapRegister(await lockRegister(client, id));
+        requireVersion(before.version, input.expectedVersion);
+        if (operatorIds.length) {
+          const operators = await client.query<{ id: string }>(
+            `SELECT id FROM organization.operators
+             WHERE business_location_id = $1 AND active AND id = ANY($2::uuid[])`,
+            [before.businessLocationId, operatorIds],
+          );
+          if (operators.rowCount !== operatorIds.length) {
+            throw new ApiErrorException(
+              'CASH_REGISTER_OPERATOR_INVALID',
+              'Every assigned operator must be active at the same business location',
+              HttpStatus.BAD_REQUEST,
+            );
+          }
+        }
+        await client.query<RegisterRow>(
+          `UPDATE organization.cash_registers
+           SET code = $2, name = $3, version = version + 1,
+             updated_by = $4, updated_at = now()
+           WHERE id = $1
+           RETURNING id, business_location_id, code, name, active, version,
+             '{}'::uuid[] AS operator_ids`,
+          [id, normalized.code, normalized.name, authentication.accountId],
+        );
+        await client.query(
+          `UPDATE organization.cash_register_operators
+           SET active = (operator_id = ANY($2::uuid[])),
+             assigned_by = $3,
+             assigned_at = CASE WHEN operator_id = ANY($2::uuid[]) THEN now() ELSE assigned_at END
+           WHERE cash_register_id = $1
+             AND active IS DISTINCT FROM (operator_id = ANY($2::uuid[]))`,
+          [id, operatorIds, authentication.accountId],
+        );
+        await client.query(
+          `INSERT INTO organization.cash_register_operators AS existing (
+             cash_register_id, operator_id, business_location_id, assigned_by
+           ) SELECT $1, selected.operator_id, $3, $4
+             FROM unnest($2::uuid[]) AS selected(operator_id)
+           ON CONFLICT (cash_register_id, operator_id) DO UPDATE
+             SET active = true, assigned_by = EXCLUDED.assigned_by, assigned_at = now()
+             WHERE existing.active = false`,
+          [id, operatorIds, before.businessLocationId, authentication.accountId],
+        );
+        const after = mapRegister(await loadRegister(client, id));
+        return change('organization.cash_register.updated', 'cash_register', after, before);
+      },
+      HttpStatus.OK,
+    );
+  }
+
+  setLegalEntityActive(
+    id: string,
+    active: boolean,
+    input: RecordVersionRequest,
+    key: string | undefined,
+    authentication: AuthenticationContext,
+    metadata: RequestSecurityMetadata,
+  ): Promise<LegalBusinessEntity> {
+    return this.setRecordActive(
+      'entity',
+      id,
+      active,
+      input,
+      key,
+      authentication,
+      metadata,
+    ) as Promise<LegalBusinessEntity>;
+  }
+
+  setBranchActive(
+    id: string,
+    active: boolean,
+    input: RecordVersionRequest,
+    key: string | undefined,
+    authentication: AuthenticationContext,
+    metadata: RequestSecurityMetadata,
+  ): Promise<BusinessBranch> {
+    return this.setRecordActive(
+      'branch',
+      id,
+      active,
+      input,
+      key,
+      authentication,
+      metadata,
+    ) as Promise<BusinessBranch>;
+  }
+
+  setLocationActive(
+    id: string,
+    active: boolean,
+    input: RecordVersionRequest,
+    key: string | undefined,
+    authentication: AuthenticationContext,
+    metadata: RequestSecurityMetadata,
+  ): Promise<BusinessLocation> {
+    return this.setRecordActive(
+      'location',
+      id,
+      active,
+      input,
+      key,
+      authentication,
+      metadata,
+    ) as Promise<BusinessLocation>;
+  }
+
+  setOperatorActive(
+    id: string,
+    active: boolean,
+    input: RecordVersionRequest,
+    key: string | undefined,
+    authentication: AuthenticationContext,
+    metadata: RequestSecurityMetadata,
+  ): Promise<BusinessOperator> {
+    return this.setRecordActive(
+      'operator',
+      id,
+      active,
+      input,
+      key,
+      authentication,
+      metadata,
+    ) as Promise<BusinessOperator>;
+  }
+
+  setRegisterActive(
+    id: string,
+    active: boolean,
+    input: RecordVersionRequest,
+    key: string | undefined,
+    authentication: AuthenticationContext,
+    metadata: RequestSecurityMetadata,
+  ): Promise<CashRegister> {
+    return this.setRecordActive(
+      'register',
+      id,
+      active,
+      input,
+      key,
+      authentication,
+      metadata,
+    ) as Promise<CashRegister>;
+  }
+
+  private async setRecordActive(
+    kind: OrganizationRecordKind,
+    id: string,
+    active: boolean,
+    input: RecordVersionRequest,
+    key: string | undefined,
+    authentication: AuthenticationContext,
+    metadata: RequestSecurityMetadata,
+  ): Promise<OrganizationRecord> {
+    return this.command(
+      `organization.${kind}.${active ? 'reactivate' : 'deactivate'}:${id}`,
+      key,
+      { active, expectedVersion: input.expectedVersion, id },
+      authentication,
+      metadata,
+      'ORGANIZATION_RECORD_DUPLICATE',
+      'The business structure record conflicts with an existing record',
+      async (client) => {
+        const before = await lockOrganizationRecord(client, kind, id);
+        requireVersion(before.version, input.expectedVersion);
+        if (before.active === active) {
+          return {
+            ...change(organizationEvent(kind, active), organizationTarget(kind), before),
+            changed: false,
+          };
+        }
+        if (active) await requireActiveParent(client, kind, before);
+        else await requireNoActiveDependents(client, kind, id);
+        const updated = await client.query(
+          `UPDATE ${organizationTable(kind)}
+           SET active = $2, version = version + 1, updated_by = $3, updated_at = now()
+           WHERE id = $1`,
+          [id, active, authentication.accountId],
+        );
+        if (updated.rowCount !== 1) throw organizationNotFound();
+        const after = await lockOrganizationRecord(client, kind, id);
+        return change(organizationEvent(kind, active), organizationTarget(kind), after, before);
+      },
+      HttpStatus.OK,
+    );
+  }
+
   private async command<T>(
     scope: string,
     keyValue: string | undefined,
@@ -447,6 +874,7 @@ export class OrganizationService {
     duplicateCode: string,
     duplicateMessage: string,
     work: (client: PoolClient) => Promise<CommandResult<T>>,
+    responseStatus = HttpStatus.CREATED,
   ): Promise<T> {
     const key = validKey(keyValue);
     const hash = createHash('sha256').update(JSON.stringify(input)).digest('hex');
@@ -479,39 +907,42 @@ export class OrganizationService {
         return replay.response_body as T;
       }
       const completed = await work(client);
-      await client.query(
-        `INSERT INTO integration.outbox_events (
+      if (completed.changed !== false) {
+        await client.query(
+          `INSERT INTO integration.outbox_events (
            id, aggregate_type, aggregate_id, event_type, event_version,
            correlation_id, idempotency_key, payload
          ) VALUES ($1, $2, $3, $4, 1, $5, $6, $7)`,
-        [
-          randomUUID(),
-          completed.targetType,
-          completed.targetId,
-          completed.event,
-          metadata.correlationId,
-          `${completed.event}:${key}`,
-          completed.payload,
-        ],
-      );
-      await this.audit.append(
-        {
-          action: completed.event,
-          actorAccountId: authentication.accountId,
-          after: completed.payload as Record<string, unknown>,
-          correlationId: metadata.correlationId,
-          ...(metadata.sourceIp ? { sourceIp: metadata.sourceIp } : {}),
-          targetId: completed.targetId,
-          targetType: completed.targetType,
-          ...(metadata.userAgent ? { userAgent: metadata.userAgent } : {}),
-        },
-        client,
-      );
+          [
+            randomUUID(),
+            completed.targetType,
+            completed.targetId,
+            completed.event,
+            metadata.correlationId,
+            `${completed.event}:${key}`,
+            completed.payload,
+          ],
+        );
+        await this.audit.append(
+          {
+            action: completed.event,
+            actorAccountId: authentication.accountId,
+            after: completed.result as Record<string, unknown>,
+            ...(completed.before ? { before: completed.before } : {}),
+            correlationId: metadata.correlationId,
+            ...(metadata.sourceIp ? { sourceIp: metadata.sourceIp } : {}),
+            targetId: completed.targetId,
+            targetType: completed.targetType,
+            ...(metadata.userAgent ? { userAgent: metadata.userAgent } : {}),
+          },
+          client,
+        );
+      }
       await client.query(
         `UPDATE platform.idempotency_keys
-         SET status = 'completed', response_status = 201, response_body = $3
+         SET status = 'completed', response_status = $4, response_body = $3
          WHERE scope = $1 AND idempotency_key = $2`,
-        [scope, key, completed.result],
+        [scope, key, completed.result, responseStatus],
       );
       await client.query('COMMIT');
       return completed.result;
@@ -596,8 +1027,273 @@ function change<T extends { id: string }>(
   event: string,
   targetType: string,
   result: T,
+  before?: T,
 ): CommandResult<T> {
-  return { event, payload: result, result, targetId: result.id, targetType };
+  return {
+    ...(before ? { before } : {}),
+    event,
+    payload: before ? { before, after: result } : result,
+    result,
+    targetId: result.id,
+    targetType,
+  };
+}
+
+async function lockEntity(client: PoolClient, id: string): Promise<EntityRow> {
+  return lockedRow(
+    await client.query<EntityRow>(
+      `SELECT id, code, name, uic, vat_number, active, version
+       FROM organization.legal_entities WHERE id = $1 FOR UPDATE`,
+      [id],
+    ),
+    'Legal entity',
+  );
+}
+
+async function lockBranch(client: PoolClient, id: string): Promise<BranchRow> {
+  return lockedRow(
+    await client.query<BranchRow>(
+      `SELECT id, legal_entity_id, code, name, active, version
+       FROM organization.branches WHERE id = $1 FOR UPDATE`,
+      [id],
+    ),
+    'Branch',
+  );
+}
+
+async function lockLocation(client: PoolClient, id: string): Promise<LocationRow> {
+  return lockedRow(
+    await client.query<LocationRow>(
+      `SELECT id, branch_id, code, name, location_type, address_line_1,
+         address_line_2, city, postal_code, country_code, active, version
+       FROM organization.business_locations WHERE id = $1 FOR UPDATE`,
+      [id],
+    ),
+    'Business location',
+  );
+}
+
+async function lockOperator(client: PoolClient, id: string): Promise<OperatorRow> {
+  return lockedRow(
+    await client.query<OperatorRow>(
+      `SELECT operator.id, operator.business_location_id, operator.account_id,
+         operator.code, operator.active, operator.version,
+         employee.display_name, employee.email
+       FROM organization.operators operator
+       JOIN identity.user_accounts account ON account.id = operator.account_id
+       JOIN identity.employees employee ON employee.id = account.employee_id
+       WHERE operator.id = $1 FOR UPDATE OF operator`,
+      [id],
+    ),
+    'Operator',
+  );
+}
+
+async function loadRegister(client: PoolClient, id: string): Promise<RegisterRow> {
+  const result = await client.query<RegisterRow>(
+    `SELECT register.id, register.business_location_id, register.code,
+       register.name, register.active, register.version,
+       COALESCE(array_agg(assignment.operator_id ORDER BY assignment.operator_id)
+         FILTER (WHERE assignment.active AND assigned_operator.active), '{}'::uuid[]) AS operator_ids
+     FROM organization.cash_registers register
+     LEFT JOIN organization.cash_register_operators assignment
+       ON assignment.cash_register_id = register.id
+     LEFT JOIN organization.operators assigned_operator
+       ON assigned_operator.id = assignment.operator_id
+     WHERE register.id = $1
+     GROUP BY register.id`,
+    [id],
+  );
+  return lockedRow(result, 'Cash register');
+}
+
+async function lockRegister(client: PoolClient, id: string): Promise<RegisterRow> {
+  const locked = await client.query(
+    'SELECT id FROM organization.cash_registers WHERE id = $1 FOR UPDATE',
+    [id],
+  );
+  if (!locked.rowCount) throw organizationNotFound('Cash register');
+  return loadRegister(client, id);
+}
+
+async function lockOrganizationRecord(
+  client: PoolClient,
+  kind: OrganizationRecordKind,
+  id: string,
+): Promise<OrganizationRecord> {
+  switch (kind) {
+    case 'entity':
+      return mapEntity(await lockEntity(client, id));
+    case 'branch':
+      return mapBranch(await lockBranch(client, id));
+    case 'location':
+      return mapLocation(await lockLocation(client, id));
+    case 'operator':
+      return mapOperator(await lockOperator(client, id));
+    case 'register':
+      return mapRegister(await lockRegister(client, id));
+  }
+}
+
+function organizationTable(kind: OrganizationRecordKind): string {
+  switch (kind) {
+    case 'entity':
+      return 'organization.legal_entities';
+    case 'branch':
+      return 'organization.branches';
+    case 'location':
+      return 'organization.business_locations';
+    case 'operator':
+      return 'organization.operators';
+    case 'register':
+      return 'organization.cash_registers';
+  }
+}
+
+function organizationTarget(kind: OrganizationRecordKind): string {
+  return {
+    branch: 'business_branch',
+    entity: 'legal_business_entity',
+    location: 'business_location',
+    operator: 'business_operator',
+    register: 'cash_register',
+  }[kind];
+}
+
+function organizationEvent(kind: OrganizationRecordKind, active: boolean): string {
+  const resource = {
+    branch: 'branch',
+    entity: 'legal_entity',
+    location: 'business_location',
+    operator: 'operator',
+    register: 'cash_register',
+  }[kind];
+  return `organization.${resource}.${active ? 'reactivated' : 'deactivated'}`;
+}
+
+async function requireActiveParent(
+  client: PoolClient,
+  kind: OrganizationRecordKind,
+  record: OrganizationRecord,
+): Promise<void> {
+  if (kind === 'branch')
+    await requireActive(
+      client,
+      'organization.legal_entities',
+      (record as BusinessBranch).legalEntityId,
+      'LEGAL_ENTITY_NOT_FOUND',
+    );
+  if (kind === 'location')
+    await requireActive(
+      client,
+      'organization.branches',
+      (record as BusinessLocation).branchId,
+      'BRANCH_NOT_FOUND',
+    );
+  if (kind === 'operator' || kind === 'register') {
+    const locationId = (record as BusinessOperator | CashRegister).businessLocationId;
+    await requireActive(
+      client,
+      'organization.business_locations',
+      locationId,
+      'BUSINESS_LOCATION_NOT_FOUND',
+    );
+  }
+  if (kind === 'operator') await requireAccount(client, (record as BusinessOperator).accountId);
+}
+
+async function requireNoActiveDependents(
+  client: PoolClient,
+  kind: OrganizationRecordKind,
+  id: string,
+): Promise<void> {
+  const checks: Partial<
+    Record<OrganizationRecordKind, { code: string; message: string; sql: string }>
+  > = {
+    entity: {
+      code: 'LEGAL_ENTITY_HAS_ACTIVE_BRANCHES',
+      message: 'Deactivate its active branches before deactivating this legal entity',
+      sql: 'SELECT id FROM organization.branches WHERE legal_entity_id = $1 AND active LIMIT 1',
+    },
+    branch: {
+      code: 'BRANCH_HAS_ACTIVE_LOCATIONS',
+      message: 'Deactivate its active locations before deactivating this branch',
+      sql: 'SELECT id FROM organization.business_locations WHERE branch_id = $1 AND active LIMIT 1',
+    },
+    location: {
+      code: 'BUSINESS_LOCATION_HAS_ACTIVE_RECORDS',
+      message:
+        'Deactivate its cash registers, operators, and warehouses before deactivating this location',
+      sql: `SELECT id FROM organization.cash_registers WHERE business_location_id = $1 AND active
+            UNION ALL
+            SELECT id FROM organization.operators WHERE business_location_id = $1 AND active
+            UNION ALL
+            SELECT id FROM master_data.warehouses WHERE business_location_id = $1 AND active
+            LIMIT 1`,
+    },
+    operator: {
+      code: 'OPERATOR_HAS_ACTIVE_ASSIGNMENTS',
+      message:
+        'Remove this operator from cash registers and technician warehouses before deactivating the assignment',
+      sql: `SELECT assignment.cash_register_id AS id
+            FROM organization.cash_register_operators assignment
+            WHERE assignment.operator_id = $1 AND assignment.active
+            UNION ALL
+            SELECT id FROM master_data.warehouses
+            WHERE technician_operator_id = $1 AND active
+            UNION ALL
+            SELECT id FROM pos.shifts WHERE operator_id = $1 AND status = 'open'
+            LIMIT 1`,
+    },
+    register: {
+      code: 'CASH_REGISTER_HAS_OPEN_SHIFT',
+      message: 'Close the active cashier shift before deactivating this cash register',
+      sql: "SELECT id FROM pos.shifts WHERE cash_register_id = $1 AND status = 'open' LIMIT 1",
+    },
+  };
+  const check = checks[kind];
+  if (!check) return;
+  const result = await client.query(check.sql, [id]);
+  if (result.rowCount) throw new ApiErrorException(check.code, check.message, HttpStatus.CONFLICT);
+}
+
+function normalizeLocation(
+  input: CreateBusinessLocationRequest | UpdateBusinessLocationRequest,
+  countryCode = (optional(input.countryCode) ?? 'BG').toUpperCase(),
+) {
+  return {
+    addressLine1: text(input.addressLine1, 'BUSINESS_LOCATION_ADDRESS_REQUIRED'),
+    addressLine2: optional(input.addressLine2),
+    city: text(input.city, 'BUSINESS_LOCATION_CITY_REQUIRED'),
+    code: code(input.code, 'BUSINESS_LOCATION_CODE_REQUIRED'),
+    countryCode,
+    locationType: text(input.locationType, 'BUSINESS_LOCATION_TYPE_REQUIRED'),
+    name: text(input.name, 'BUSINESS_LOCATION_NAME_REQUIRED'),
+    postalCode: optional(input.postalCode),
+  };
+}
+
+function requireVersion(actual: number, expected: number): void {
+  if (actual !== expected)
+    throw new ApiErrorException(
+      'ORGANIZATION_VERSION_CONFLICT',
+      'This record changed after it was opened. Refresh it and try again.',
+      HttpStatus.CONFLICT,
+    );
+}
+
+function lockedRow<T>(result: { rows: T[] }, resource: string): T {
+  const row = result.rows[0];
+  if (!row) throw organizationNotFound(resource);
+  return row;
+}
+
+function organizationNotFound(resource = 'Business structure record'): ApiErrorException {
+  return new ApiErrorException(
+    'ORGANIZATION_RECORD_NOT_FOUND',
+    `${resource} was not found`,
+    HttpStatus.NOT_FOUND,
+  );
 }
 
 async function requireActive(
@@ -612,7 +1308,9 @@ async function requireActive(
     'organization.business_locations',
   ]);
   if (!allowed.has(table)) throw new Error('Unexpected organization table');
-  const result = await client.query(`SELECT id FROM ${table} WHERE id = $1 AND active`, [id]);
+  const result = await client.query(`SELECT id FROM ${table} WHERE id = $1 AND active FOR SHARE`, [
+    id,
+  ]);
   if (!result.rows[0]) {
     throw new ApiErrorException(
       codeValue,

@@ -21,20 +21,26 @@ import {
   updateCustomerLocation,
 } from '../api/partners';
 import { Icon } from '../components/Icon';
+import { useLocalization } from '../i18n/LocalizationProvider';
+import { useRouter } from '../routing/Router';
 
 export function CustomerAssetsPanel({
   canDelete,
   canEdit,
+  canViewService,
   contacts,
   partnerId,
   token,
 }: {
   canDelete: boolean;
   canEdit: boolean;
+  canViewService: boolean;
   contacts: PartnerContact[];
   partnerId: string;
   token: string;
 }) {
+  const { dateLocale, t } = useLocalization();
+  const { navigate } = useRouter();
   const [data, setData] = useState<CustomerLocationProfile[] | null>(null);
   const [error, setError] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -87,7 +93,7 @@ export function CustomerAssetsPanel({
       );
       refresh();
     } catch (caught) {
-      setCommandError(apiMessage(caught, 'The location status could not be changed.'));
+      setCommandError(apiMessage(caught, t('crm.assets.locationStatusError')));
     }
   }
   async function changeEquipmentStatus(locationId: string, equipment: CustomerEquipment) {
@@ -110,17 +116,17 @@ export function CustomerAssetsPanel({
       );
       refresh();
     } catch (caught) {
-      setCommandError(apiMessage(caught, 'The equipment status could not be changed.'));
+      setCommandError(equipmentApiMessage(caught, t('crm.assets.equipmentStatusError'), t));
     }
   }
 
   return (
-    <section className="customer-assets" aria-label="Customer locations and equipment">
+    <section className="customer-assets" aria-label={t('crm.assetsPage.title')}>
       <div className="customer-assets-heading">
         <div>
-          <p className="page-eyebrow">Installed base</p>
-          <h3>Locations & equipment</h3>
-          <p>Customer sites, responsible contacts, installed equipment, and warranties.</p>
+          <p className="page-eyebrow">{t('crm.assets.installedBase')}</p>
+          <h3>{t('crm.assetsPage.title')}</h3>
+          <p>{t('crm.assets.description')}</p>
         </div>
         {canEdit ? (
           <Button
@@ -129,7 +135,7 @@ export function CustomerAssetsPanel({
             variant="quiet"
           >
             <Icon name="plus" size={14} />
-            Add location
+            {t('crm.assets.addLocation')}
           </Button>
         ) : null}
       </div>
@@ -152,9 +158,9 @@ export function CustomerAssetsPanel({
       {error ? (
         <InlineAlert tone="error">
           <div className="partners-inline-message">
-            <span>Customer locations could not be loaded.</span>
+            <span>{t('crm.assets.loadError')}</span>
             <button onClick={refresh} type="button">
-              Try again
+              {t('crm.assets.retry')}
             </button>
           </div>
         </InlineAlert>
@@ -163,8 +169,8 @@ export function CustomerAssetsPanel({
         <div className="customer-assets-empty">
           <Icon name="warehouse" size={20} />
           <div>
-            <strong>No customer locations yet</strong>
-            <p>Add the customer’s first real site before registering installed equipment.</p>
+            <strong>{t('crm.assets.noLocationsTitle')}</strong>
+            <p>{t('crm.assets.noLocationsHint')}</p>
           </div>
         </div>
       ) : null}
@@ -193,24 +199,23 @@ export function CustomerAssetsPanel({
                 </div>
                 <div className="customer-asset-record-actions">
                   <span className="location-device-count">
-                    {equipment.length} {equipment.length === 1 ? 'device' : 'devices'}
+                    {equipment.length}{' '}
+                    {t(equipment.length === 1 ? 'crm.assets.device' : 'crm.assets.devices')}
                   </span>
                   {canEdit ? (
                     <Button onClick={() => setEditingLocation(location)} variant="quiet">
-                      Edit
+                      {t('crm.assets.edit')}
                     </Button>
                   ) : null}
                   {(location.active ? canDelete : canEdit) ? (
                     <Button onClick={() => void changeLocationStatus(location)} variant="quiet">
-                      {location.active ? 'Deactivate' : 'Reactivate'}
+                      {t(location.active ? 'crm.assets.deactivate' : 'crm.assets.reactivate')}
                     </Button>
                   ) : null}
                 </div>
               </header>
               {!location.active ? (
-                <InlineAlert tone="info">
-                  This location is inactive. Its history and equipment remain visible.
-                </InlineAlert>
+                <InlineAlert tone="info">{t('crm.assets.inactiveLocation')}</InlineAlert>
               ) : null}
               {editingLocation?.id === location.id ? (
                 <LocationForm
@@ -229,7 +234,7 @@ export function CustomerAssetsPanel({
                 <div className="location-contact">
                   <Icon name="customers" size={15} />
                   <div>
-                    <span>Responsible contact</span>
+                    <span>{t('crm.assets.responsibleContact')}</span>
                     <strong>{location.responsibleContact.displayName}</strong>
                     <small>
                       {[location.responsibleContact.telephone, location.responsibleContact.email]
@@ -259,15 +264,22 @@ export function CustomerAssetsPanel({
                       <EquipmentRow
                         canDelete={canDelete}
                         canEdit={canEdit}
+                        canViewService={canViewService}
                         equipment={item}
                         key={item.id}
                         onEdit={() => setEditingEquipment(item)}
+                        onHistory={() =>
+                          navigate('/modules/erp.service/devices', {
+                            state: { equipmentId: item.id },
+                          })
+                        }
                         onStatus={() => void changeEquipmentStatus(location.id, item)}
+                        dateLocale={dateLocale}
                       />
                     ),
                   )
                 ) : (
-                  <p>No equipment registered at this location.</p>
+                  <p>{t('crm.assets.noEquipment')}</p>
                 )}
               </div>
               {equipmentLocationId === location.id ? (
@@ -288,7 +300,7 @@ export function CustomerAssetsPanel({
                   variant="quiet"
                 >
                   <Icon name="plus" size={14} />
-                  Register equipment
+                  {t('crm.assets.registerEquipment')}
                 </Button>
               ) : null}
             </article>
@@ -314,6 +326,7 @@ function LocationForm({
   partnerId: string;
   token: string;
 }) {
+  const { t } = useLocalization();
   const [name, setName] = useState(location?.name ?? '');
   const [locationType, setLocationType] = useState(location?.locationType ?? '');
   const [addressLine1, setAddressLine1] = useState(location?.addressLine1 ?? '');
@@ -354,7 +367,7 @@ function LocationForm({
       else await createCustomerLocation(token, partnerId, attempt(input), input);
       onCreated();
     } catch (caught) {
-      setError(apiMessage(caught, 'The customer location could not be saved.'));
+      setError(apiMessage(caught, t('crm.assets.locationSaveError')));
     } finally {
       setSaving(false);
     }
@@ -364,16 +377,16 @@ function LocationForm({
     <form className="customer-asset-form" onSubmit={(event) => void submit(event)}>
       <div className="customer-asset-form-heading panel-drawer-header">
         <button
-          aria-label="Back to customer details"
+          aria-label={t('crm.assets.backToDetails')}
           className="panel-back-button"
           onClick={onClose}
           type="button"
         >
           <Icon name="arrow" size={17} />
-          Back
+          {t('crm.assets.back')}
         </button>
         <button
-          aria-label="Close location form"
+          aria-label={t('crm.assets.closeLocationForm')}
           className="panel-close-button"
           onClick={onClose}
           type="button"
@@ -381,14 +394,14 @@ function LocationForm({
           <Icon name="close" size={15} />
         </button>
         <div>
-          <span>{location ? 'Edit customer site' : 'New customer site'}</span>
-          <strong>{location ? 'Edit customer location' : 'Customer location'}</strong>
+          <span>{t(location ? 'crm.assets.editSite' : 'crm.assets.newSite')}</span>
+          <strong>{t(location ? 'crm.assets.editLocation' : 'crm.assets.location')}</strong>
         </div>
       </div>
       <div className="customer-asset-form-grid">
         <TextField
           id="customer-location-name"
-          label="Location name"
+          label={t('crm.assets.locationName')}
           maxLength={255}
           onChange={(event) => setName(event.target.value)}
           required
@@ -396,16 +409,16 @@ function LocationForm({
         />
         <TextField
           id="customer-location-type"
-          label="Location type"
+          label={t('crm.assets.locationType')}
           maxLength={100}
           onChange={(event) => setLocationType(event.target.value)}
-          placeholder="Store, fuel station, office…"
+          placeholder={t('crm.assets.locationTypeHint')}
           required
           value={locationType}
         />
         <TextField
           id="customer-location-address"
-          label="Address line 1"
+          label={t('crm.assets.address1')}
           maxLength={255}
           onChange={(event) => setAddressLine1(event.target.value)}
           required
@@ -413,21 +426,21 @@ function LocationForm({
         />
         <TextField
           id="customer-location-address-2"
-          label="Address line 2"
+          label={t('crm.assets.address2')}
           maxLength={255}
           onChange={(event) => setAddressLine2(event.target.value)}
           value={addressLine2}
         />
         <TextField
           id="customer-location-postal"
-          label="Postal code"
+          label={t('crm.assets.postalCode')}
           maxLength={30}
           onChange={(event) => setPostalCode(event.target.value)}
           value={postalCode}
         />
         <TextField
           id="customer-location-city"
-          label="City"
+          label={t('crm.assets.city')}
           maxLength={150}
           onChange={(event) => setCity(event.target.value)}
           required
@@ -435,20 +448,20 @@ function LocationForm({
         />
         <TextField
           id="customer-location-country"
-          label="Country code"
+          label={t('crm.assets.countryCode')}
           maxLength={2}
           onChange={(event) => setCountryCode(event.target.value)}
           required
           value={countryCode}
         />
         <label className="customer-asset-select" htmlFor="customer-location-contact">
-          <span>Responsible contact</span>
+          <span>{t('crm.assets.responsibleContact')}</span>
           <select
             id="customer-location-contact"
             onChange={(event) => setResponsibleContactId(event.target.value)}
             value={responsibleContactId}
           >
-            <option value="">Not assigned</option>
+            <option value="">{t('crm.assets.notAssigned')}</option>
             {contacts.map((contact) => (
               <option key={contact.id} value={contact.id}>
                 {contact.displayName}
@@ -460,10 +473,10 @@ function LocationForm({
       {error ? <InlineAlert tone="error">{error}</InlineAlert> : null}
       <div className="customer-asset-actions">
         <Button onClick={onClose} variant="quiet">
-          Cancel
+          {t('crm.assets.cancel')}
         </Button>
         <Button busy={saving} type="submit">
-          {location ? 'Save location changes' : 'Save location'}
+          {t(location ? 'crm.assets.saveLocationChanges' : 'crm.assets.saveLocation')}
         </Button>
       </div>
     </form>
@@ -485,6 +498,7 @@ function EquipmentForm({
   partnerId: string;
   token: string;
 }) {
+  const { t } = useLocalization();
   const [deviceName, setDeviceName] = useState(equipment?.deviceName ?? '');
   const [serialNumber, setSerialNumber] = useState(equipment?.serialNumber ?? '');
   const [purchaseDate, setPurchaseDate] = useState(equipment?.purchaseDate ?? '');
@@ -527,7 +541,7 @@ function EquipmentForm({
       } else await createCustomerEquipment(token, partnerId, locationId, attempt(input), input);
       onCreated();
     } catch (caught) {
-      setError(apiMessage(caught, 'The equipment could not be registered.'));
+      setError(equipmentApiMessage(caught, t('crm.assets.equipmentSaveError'), t));
     } finally {
       setSaving(false);
     }
@@ -536,16 +550,16 @@ function EquipmentForm({
     <form className="customer-asset-form equipment-form" onSubmit={(event) => void submit(event)}>
       <div className="customer-asset-form-heading panel-drawer-header">
         <button
-          aria-label="Back to customer details"
+          aria-label={t('crm.assets.backToDetails')}
           className="panel-back-button"
           onClick={onClose}
           type="button"
         >
           <Icon name="arrow" size={17} />
-          Back
+          {t('crm.assets.back')}
         </button>
         <button
-          aria-label="Close equipment form"
+          aria-label={t('crm.assets.closeEquipmentForm')}
           className="panel-close-button"
           onClick={onClose}
           type="button"
@@ -553,14 +567,16 @@ function EquipmentForm({
           <Icon name="close" size={15} />
         </button>
         <div>
-          <span>{equipment ? 'Maintain installed asset' : 'Installed asset'}</span>
-          <strong>{equipment ? 'Edit equipment' : 'Register equipment'}</strong>
+          <span>{t(equipment ? 'crm.assets.maintainAsset' : 'crm.assets.asset')}</span>
+          <strong>
+            {t(equipment ? 'crm.assets.editEquipment' : 'crm.assets.registerEquipment')}
+          </strong>
         </div>
       </div>
       <div className="customer-asset-form-grid">
         <TextField
           id={`equipment-name-${locationId}`}
-          label="Device"
+          label={t('crm.assets.deviceName')}
           maxLength={255}
           onChange={(event) => setDeviceName(event.target.value)}
           required
@@ -568,7 +584,7 @@ function EquipmentForm({
         />
         <TextField
           id={`equipment-serial-${locationId}`}
-          label="Serial number"
+          label={t('crm.assets.serialNumber')}
           maxLength={120}
           onChange={(event) => setSerialNumber(event.target.value)}
           readOnly={Boolean(equipment)}
@@ -577,7 +593,7 @@ function EquipmentForm({
         />
         <TextField
           id={`equipment-purchase-${locationId}`}
-          label="Purchase date"
+          label={t('crm.assets.purchaseDate')}
           onChange={(event) => {
             setPurchaseDate(event.target.value);
             if (!warrantyStartsOn) setWarrantyStartsOn(event.target.value);
@@ -588,7 +604,7 @@ function EquipmentForm({
         />
         <TextField
           id={`equipment-warranty-start-${locationId}`}
-          label="Warranty starts"
+          label={t('crm.assets.warrantyStarts')}
           onChange={(event) => setWarrantyStartsOn(event.target.value)}
           required
           type="date"
@@ -596,32 +612,32 @@ function EquipmentForm({
         />
         <TextField
           id={`equipment-warranty-end-${locationId}`}
-          label="Warranty ends (if known)"
+          label={t('crm.assets.warrantyEnds')}
           min={warrantyStartsOn || undefined}
           onChange={(event) => setWarrantyEndsOn(event.target.value)}
           type="date"
           value={warrantyEndsOn}
         />
         <label className="customer-asset-select" htmlFor={`equipment-status-${locationId}`}>
-          <span>Status</span>
+          <span>{t('crm.assets.status')}</span>
           <select
             id={`equipment-status-${locationId}`}
             onChange={(event) => setStatus(event.target.value as CustomerEquipmentStatus)}
             value={status}
           >
-            <option value="active">Active</option>
-            <option value="under_repair">Under repair</option>
-            <option value="retired">Retired</option>
+            <option value="active">{t('crm.assets.status.active')}</option>
+            <option value="under_repair">{t('crm.assets.status.under_repair')}</option>
+            <option value="retired">{t('crm.assets.status.retired')}</option>
           </select>
         </label>
       </div>
       {error ? <InlineAlert tone="error">{error}</InlineAlert> : null}
       <div className="customer-asset-actions">
         <Button onClick={onClose} variant="quiet">
-          Cancel
+          {t('crm.assets.cancel')}
         </Button>
         <Button busy={saving} type="submit">
-          {equipment ? 'Save equipment changes' : 'Register equipment'}
+          {t(equipment ? 'crm.assets.saveEquipmentChanges' : 'crm.assets.registerEquipment')}
         </Button>
       </div>
     </form>
@@ -631,17 +647,30 @@ function EquipmentForm({
 function EquipmentRow({
   canDelete,
   canEdit,
+  canViewService,
+  dateLocale,
   equipment,
   onEdit,
+  onHistory,
   onStatus,
 }: {
   canDelete: boolean;
   canEdit: boolean;
+  canViewService: boolean;
+  dateLocale: string;
   equipment: CustomerEquipment;
   onEdit: () => void;
+  onHistory: () => void;
   onStatus: () => void;
 }) {
-  const warranty = warrantyState(equipment);
+  const { t } = useLocalization();
+  const warranty = warrantyState(equipment, t);
+  const statusKey =
+    equipment.status === 'under_repair'
+      ? 'crm.assets.status.under_repair'
+      : equipment.status === 'retired'
+        ? 'crm.assets.status.retired'
+        : 'crm.assets.status.active';
   return (
     <article className={`equipment-row${equipment.active ? '' : ' is-inactive'}`}>
       <span className={`equipment-status-dot status-${equipment.status}`} />
@@ -650,28 +679,35 @@ function EquipmentRow({
         <code>{equipment.serialNumber}</code>
       </div>
       <div>
-        <span className={`equipment-status-label status-${equipment.status}`}>
-          {equipment.status.replace('_', ' ')}
-        </span>
-        <small>Purchased {formatDate(equipment.purchaseDate)}</small>
+        <span className={`equipment-status-label status-${equipment.status}`}>{t(statusKey)}</span>
+        <small>
+          {t('crm.assets.purchased', { date: formatDate(equipment.purchaseDate, dateLocale) })}
+        </small>
       </div>
       <div className={`equipment-warranty warranty-${warranty.tone}`}>
         <span>{warranty.label}</span>
         <small>
           {equipment.warrantyEndsOn
-            ? `Until ${formatDate(equipment.warrantyEndsOn)}`
-            : 'End date not recorded'}
+            ? t('crm.assets.warranty.until', {
+                date: formatDate(equipment.warrantyEndsOn, dateLocale),
+              })
+            : t('crm.assets.warranty.noEndDate')}
         </small>
       </div>
       <div className="customer-asset-record-actions">
+        {canViewService ? (
+          <Button onClick={onHistory} variant="quiet">
+            {t('crm.assets.serviceHistory')}
+          </Button>
+        ) : null}
         {canEdit ? (
           <Button onClick={onEdit} variant="quiet">
-            Edit
+            {t('crm.assets.edit')}
           </Button>
         ) : null}
         {(equipment.active ? canDelete : canEdit) ? (
           <Button onClick={onStatus} variant="quiet">
-            {equipment.active ? 'Deactivate' : 'Reactivate'}
+            {t(equipment.active ? 'crm.assets.deactivate' : 'crm.assets.reactivate')}
           </Button>
         ) : null}
       </div>
@@ -679,19 +715,21 @@ function EquipmentRow({
   );
 }
 
-function warrantyState(equipment: CustomerEquipment) {
-  if (!equipment.warrantyEndsOn) return { label: 'Warranty unknown', tone: 'neutral' };
+function warrantyState(equipment: CustomerEquipment, t: ReturnType<typeof useLocalization>['t']) {
+  if (!equipment.warrantyEndsOn)
+    return { label: t('crm.assets.warranty.unknown'), tone: 'neutral' };
   const days = Math.ceil(
     (new Date(`${equipment.warrantyEndsOn}T00:00:00Z`).getTime() - Date.now()) / 86_400_000,
   );
-  if (days < 0) return { label: 'Warranty expired', tone: 'expired' };
-  if (days <= 60) return { label: `${days} days remaining`, tone: 'warning' };
-  return { label: 'Under warranty', tone: 'positive' };
+  if (days < 0) return { label: t('crm.assets.warranty.expired'), tone: 'expired' };
+  if (days <= 60) return { label: t('crm.assets.warranty.remaining', { days }), tone: 'warning' };
+  return { label: t('crm.assets.warranty.covered'), tone: 'positive' };
 }
 
 function AssetsSkeleton() {
+  const { t } = useLocalization();
   return (
-    <div className="customer-assets-skeleton" aria-label="Loading customer locations">
+    <div className="customer-assets-skeleton" aria-label={t('crm.assets.loadLocations')}>
       <span />
       <span />
     </div>
@@ -709,8 +747,17 @@ function useStableAttempt() {
 function apiMessage(error: unknown, fallback: string) {
   return error instanceof ApiClientError ? error.message : fallback;
 }
-function formatDate(value: string) {
-  return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeZone: 'UTC' }).format(
+function equipmentApiMessage(
+  error: unknown,
+  fallback: string,
+  t: ReturnType<typeof useLocalization>['t'],
+) {
+  if (error instanceof ApiClientError && error.code === 'CUSTOMER_EQUIPMENT_SERVICE_WORK_OPEN')
+    return t('crm.assets.serviceWorkOpen');
+  return apiMessage(error, fallback);
+}
+function formatDate(value: string, locale: string) {
+  return new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeZone: 'UTC' }).format(
     new Date(`${value}T00:00:00Z`),
   );
 }

@@ -1,6 +1,7 @@
 import type {
   ApiErrorResponse,
   CancelFinanceCustomerDocumentRequest,
+  AllocateCustomerAdvanceRequest,
   CancelFinanceCashVoucherRequest,
   CreateFinanceCustomerDocumentRequest,
   CreateCustomerAdvanceRequest,
@@ -22,6 +23,7 @@ import type {
   FinancialDocument,
   FinancialDocumentPage,
   FinancialDocumentReferenceData,
+  SalesResolvedPrice,
   FinanceReferenceData,
   FinanceAgingKind,
   FinanceAgingReport,
@@ -62,6 +64,18 @@ import {
   idempotencyParameters,
   unwrapApiResponse,
 } from './client';
+
+export function resolveFinancialDocumentPrice(
+  token: string,
+  input: { asOf: string; currencyCode: string; customerPartnerId: string; productId: string },
+): Promise<SalesResolvedPrice> {
+  return unwrapApiResponse(
+    apiClient.GET('/api/v1/finance/financial-documents/prices/resolve', {
+      headers: authorizationHeaders(token),
+      params: { query: input },
+    }),
+  );
+}
 
 export function getCustomerPaymentAccountReferenceData(
   token: string,
@@ -276,6 +290,21 @@ export function recordFinancePayment(
       body: input,
       headers: authorizationHeaders(token),
       params: { header: idempotencyParameters(key).header, path: { id } },
+    }),
+  );
+}
+
+export function allocateCustomerAdvance(
+  token: string,
+  documentId: string,
+  key: string,
+  input: AllocateCustomerAdvanceRequest,
+): Promise<FinanceCustomerDocument> {
+  return unwrapApiResponse(
+    apiClient.POST('/api/v1/finance/documents/{id}/advance-allocations', {
+      body: input,
+      headers: authorizationHeaders(token),
+      params: { header: idempotencyParameters(key).header, path: { id: documentId } },
     }),
   );
 }

@@ -10,6 +10,7 @@ import type {
   ManualServiceRequestChannel,
   ServiceCareOverview,
   ServiceEquipmentHistory,
+  ServiceEquipmentHistoryEvent,
   ServiceInspectionPlan,
   ServicePartUsageInput,
   ServicePriority,
@@ -71,7 +72,12 @@ import { serviceEvidenceText } from './service-evidence.messages';
 import { createCrmTicketFromServiceRequest, getCrmTicketReferenceData } from '../api/crm-tickets';
 import { useAuth } from '../auth/AuthProvider';
 import { Icon } from '../components/Icon';
-import { useLocalization } from '../i18n/LocalizationProvider';
+import {
+  formatOperationsCurrency,
+  formatOperationsDate,
+  formatOperationsNumber,
+  useLocalization,
+} from '../i18n/LocalizationProvider';
 import { Link, useRouter } from '../routing/Router';
 import { ServiceReportsView } from './ServiceReportsView';
 
@@ -363,6 +369,7 @@ function ServiceRequestsView({
   timezone: string;
   workOrders: ServiceWorkOrder[];
 }) {
+  const { t } = useLocalization();
   const { items: requests, summary } = page;
   return (
     <>
@@ -420,6 +427,9 @@ function ServiceRequestsView({
                 </div>
                 <span className="service-status-cell" data-label="Status" role="cell">
                   <ServiceStatus status={request.status} />
+                  {request.isOverdue ? (
+                    <span className="service-overdue-badge">{t('service.overdue')}</span>
+                  ) : null}
                 </span>
                 <div className="service-row-actions" role="cell">
                   {order ? (
@@ -458,6 +468,7 @@ function ServiceWorkOrdersView({
   timezone: string;
   workOrderPage: ServiceWorkOrderPage;
 }) {
+  const { t } = useLocalization();
   const [scope, setScope] = useState<'all' | 'mine'>(canApprove ? 'all' : 'mine');
   const showAllWork = canApprove && scope === 'all';
   const activePage = showAllWork ? workOrderPage : myWorkOrderPage;
@@ -508,6 +519,9 @@ function ServiceWorkOrdersView({
               <span className="service-work-order-card-top">
                 <ServiceStatus status={workOrder.status} />
                 <small>{workOrder.number}</small>
+                {workOrder.isOverdue ? (
+                  <span className="service-overdue-badge">{t('service.overdue')}</span>
+                ) : null}
               </span>
               <strong>{workOrder.customerName}</strong>
               <span>
@@ -785,6 +799,7 @@ function ServiceCalendarCell({
   onOpen: (workOrderId: string) => void;
   timezone: string;
 }) {
+  const { t } = useLocalization();
   return (
     <div
       className={`service-resource-day${day.capacityMinutes === undefined ? ' is-unavailable' : ''}`}
@@ -813,9 +828,14 @@ function ServiceCalendarCell({
             title={`${visit.customerName} · ${visit.deviceName}`}
             type="button"
           >
-            <span>
-              {formatTime(visit.scheduledStart, timezone)}–
-              {formatTime(visit.scheduledEnd, timezone)}
+            <span className="service-visit-time">
+              <span>
+                {formatTime(visit.scheduledStart, timezone)}–
+                {formatTime(visit.scheduledEnd, timezone)}
+              </span>
+              {visit.isOverdue ? (
+                <b className="service-overdue-badge">{t('service.overdue')}</b>
+              ) : null}
             </span>
             <strong>{visit.customerName}</strong>
             <small>{visit.customerLocationName}</small>
@@ -1047,10 +1067,35 @@ function ServiceDevicesView({
   timezone: string;
 }) {
   const { t } = useLocalization();
-  const [equipmentId, setEquipmentId] = useState(references.equipment[0]?.id ?? '');
+  const { location } = useRouter();
+  const requestedEquipmentId = serviceEquipmentIdFromNavigation(location.state);
+  const [equipmentId, setEquipmentId] = useState('');
   const [history, setHistory] = useState<ServiceEquipmentHistory | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const eventLabels: Record<ServiceEquipmentHistoryEvent['eventType'], string> = {
+    repair: t('service.historyEvent.repair'),
+    sale: t('service.historyEvent.sale'),
+    service_request: t('service.historyEvent.service_request'),
+    service_visit: t('service.historyEvent.service_visit'),
+    warranty_claim: t('service.historyEvent.warranty_claim'),
+  };
+
+  useEffect(() => {
+    if (!references.equipment.length) return;
+    if (
+      requestedEquipmentId &&
+      references.equipment.some((item) => item.id === requestedEquipmentId)
+    ) {
+      setEquipmentId(requestedEquipmentId);
+      return;
+    }
+    setEquipmentId((current) =>
+      references.equipment.some((item) => item.id === current)
+        ? current
+        : (references.equipment[0]?.id ?? ''),
+    );
+  }, [references.equipment, requestedEquipmentId]);
 
   useEffect(() => {
     if (!equipmentId) {
@@ -1126,10 +1171,15 @@ function ServiceDevicesView({
                   <span aria-hidden="true" />
                   <div>
                     <div className="service-history-event-heading">
-                      <strong>{event.workOrderNumber}</strong>
+                      <div>
+                        <small className="service-history-event-type">
+                          {eventLabels[event.eventType]}
+                        </small>
+                        <strong>{event.referenceNumber}</strong>
+                      </div>
                       <ServiceStatus status={event.status} />
                     </div>
-                    <p>{event.description}</p>
+                    {event.description ? <p>{event.description}</p> : null}
                     <small>
                       {formatDateTime(event.occurredAt, timezone)}
                       {event.technicianName ? ` · ${event.technicianName}` : ''}
@@ -1169,6 +1219,7 @@ function ServiceCareView({
   token: string;
   timezone: string;
 }) {
+  const { t } = useLocalization();
   const [overview, setOverview] = useState<ServiceCareOverview | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -1329,8 +1380,21 @@ function ServiceCareView({
             {overview.inspections.map((plan) => {
               const due = plan.nextDueDate <= todayValue;
               return (
-                <button key={plan.id} onClick={() => setSelectedInspection(plan)} type="button">
-                  <span className={`service-inspection-icon${due ? ' is-due' : ''}`}>
+                <button
+                  className={
+                    plan.isOverdue
+                      ? 'is-overdue'
+                      : plan.active && plan.nextDueDate === todayValue
+                        ? 'is-due-today'
+                        : undefined
+                  }
+                  key={plan.id}
+                  onClick={() => setSelectedInspection(plan)}
+                  type="button"
+                >
+                  <span
+                    className={`service-inspection-icon${due ? ' is-due' : ''}${plan.isOverdue ? ' is-overdue' : ''}`}
+                  >
                     <Icon name="activity" size={18} />
                   </span>
                   <span>
@@ -1341,7 +1405,13 @@ function ServiceCareView({
                     </em>
                   </span>
                   <span>
-                    <small>{due ? 'Due now' : 'Next inspection'}</small>
+                    <small>
+                      {plan.isOverdue
+                        ? t('service.overdue')
+                        : plan.nextDueDate === todayValue
+                          ? t('service.dueToday')
+                          : t('service.nextInspection')}
+                    </small>
                     <strong>{formatDate(plan.nextDueDate, timezone)}</strong>
                     <em>
                       Every {plan.intervalMonths} month{plan.intervalMonths === 1 ? '' : 's'}
@@ -1919,6 +1989,7 @@ function InspectionPlanDrawer({
   token: string;
   timezone: string;
 }) {
+  const { t } = useLocalization();
   const [completing, setCompleting] = useState(false);
   const [completedOn, setCompletedOn] = useState(today(timezone));
   const [outcome, setOutcome] = useState<CompleteServiceInspectionRequest['outcome']>('passed');
@@ -1964,8 +2035,14 @@ function InspectionPlanDrawer({
             <h3>{plan.deviceName}</h3>
             <p>{plan.customerLocationName}</p>
           </div>
-          <div className="service-due-date">
-            <small>Next due</small>
+          <div className={`service-due-date${plan.isOverdue ? ' is-overdue' : ''}`}>
+            <small>
+              {plan.isOverdue
+                ? t('service.overdue')
+                : plan.nextDueDate === today(timezone)
+                  ? t('service.dueToday')
+                  : t('service.nextInspection')}
+            </small>
             <strong>{formatDate(plan.nextDueDate, timezone)}</strong>
           </div>
         </section>
@@ -2160,7 +2237,7 @@ function warrantyStatus(endsOn?: string) {
 function formatFileSize(bytes: number) {
   return bytes < 1024 * 1024
     ? `${Math.max(1, Math.round(bytes / 1024))} KB`
-    : `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+    : `${formatOperationsNumber(bytes / 1024 / 1024, { minimumFractionDigits: 1, maximumFractionDigits: 1 })} MB`;
 }
 
 function navigationServiceRequestId(value: unknown): string | undefined {
@@ -2169,6 +2246,15 @@ function navigationServiceRequestId(value: unknown): string | undefined {
     'serviceRequestId' in value &&
     typeof value.serviceRequestId === 'string'
     ? value.serviceRequestId
+    : undefined;
+}
+
+function serviceEquipmentIdFromNavigation(value: unknown): string | undefined {
+  return value &&
+    typeof value === 'object' &&
+    'equipmentId' in value &&
+    typeof value.equipmentId === 'string'
+    ? value.equipmentId
     : undefined;
 }
 
@@ -3275,6 +3361,7 @@ function CompleteWorkOrderDrawer({
   timezone: string;
   workOrder: ServiceWorkOrder;
 }) {
+  const { locale } = useLocalization();
   const [completionNotes, setCompletionNotes] = useState('');
   const [laborCostBgn, setLaborCostBgn] = useState('0');
   const [transportCostBgn, setTransportCostBgn] = useState('0');
@@ -3308,6 +3395,18 @@ function CompleteWorkOrderDrawer({
       setError('Capture the customer signature before completing the work order.');
       return;
     }
+    const batchNeedsSelection = parts.some((part) => {
+      const reference = availableParts.find((item) => item.productId === part.productId);
+      return reference?.trackingMode === 'batch' && !part.batchNumber?.trim();
+    });
+    if (batchNeedsSelection) {
+      setError(
+        locale === 'bg'
+          ? 'Изберете партида за всеки използван партиден артикул.'
+          : 'Choose a batch for each batch-tracked part used.',
+      );
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -3323,7 +3422,21 @@ function CompleteWorkOrderDrawer({
       };
       onSaved(await completeServiceWorkOrder(token, workOrder.id, crypto.randomUUID(), input));
     } catch (caught) {
-      setError(errorText(caught, 'The work order could not be completed.'));
+      if (caught instanceof ApiClientError && caught.code === 'INVENTORY_BATCH_NOT_FOUND') {
+        setError(
+          locale === 'bg'
+            ? 'Избраната партида не е налична за този артикул. Обновете данните и изберете налична партида.'
+            : 'That batch is not available for this part. Refresh the list and choose an available batch.',
+        );
+      } else if (caught instanceof ApiClientError && caught.code === 'INSUFFICIENT_BATCH_STOCK') {
+        setError(
+          locale === 'bg'
+            ? 'В избраната партида няма достатъчно наличност. Намалете количеството или изберете друга партида.'
+            : 'There is not enough stock in that batch. Reduce the quantity or choose another batch.',
+        );
+      } else {
+        setError(errorText(caught, 'The work order could not be completed.'));
+      }
     } finally {
       setBusy(false);
     }
@@ -3482,6 +3595,9 @@ function CompleteWorkOrderDrawer({
           <div className="service-part-editor">
             {parts.map((part, index) => {
               const reference = availableParts.find((item) => item.productId === part.productId);
+              const selectedBatch = reference?.availableBatches?.find(
+                (item) => item.batchNumber === part.batchNumber,
+              );
               return (
                 <div className="service-part-editor-row" key={`part-${index}`}>
                   <ServiceField label="Part">
@@ -3506,6 +3622,7 @@ function CompleteWorkOrderDrawer({
                     <input
                       min="0.0001"
                       onChange={(event) => updatePart(index, { quantity: event.target.value })}
+                      max={selectedBatch?.availableQuantity}
                       required
                       step="0.0001"
                       type="number"
@@ -3514,11 +3631,31 @@ function CompleteWorkOrderDrawer({
                   </ServiceField>
                   {reference?.trackingMode === 'batch' ? (
                     <ServiceField label="Batch number">
-                      <input
+                      <select
                         onChange={(event) => updatePart(index, { batchNumber: event.target.value })}
                         required
                         value={part.batchNumber ?? ''}
-                      />
+                      >
+                        <option value="">
+                          {locale === 'bg' ? 'Изберете партида' : 'Select a batch'}
+                        </option>
+                        {(reference.availableBatches ?? []).map((batch) => (
+                          <option key={batch.batchNumber} value={batch.batchNumber}>
+                            {batch.batchNumber} · {batch.availableQuantity}{' '}
+                            {locale === 'bg' ? 'налични' : 'available'}
+                            {batch.expiresAt
+                              ? ` · ${locale === 'bg' ? 'срок' : 'expires'} ${formatDate(batch.expiresAt, timezone)}`
+                              : ''}
+                          </option>
+                        ))}
+                      </select>
+                      {!reference.availableBatches?.length ? (
+                        <small>
+                          {locale === 'bg'
+                            ? 'В склада на техника няма налични партиди за този артикул.'
+                            : 'No batches for this part are available in the technician warehouse.'}
+                        </small>
+                      ) : null}
                     </ServiceField>
                   ) : null}
                   {reference?.trackingMode === 'serial' ? (
@@ -3938,20 +4075,23 @@ function ServiceMetric({ label, tone, value }: { label: string; tone?: 'warning'
   );
 }
 
-function ServiceStatus({
-  status,
-}: {
-  status: ServiceRequest['status'] | ServiceWorkOrder['status'];
-}) {
+function ServiceStatus({ status }: { status: string }) {
   const { t } = useLocalization();
-  const labels = {
+  const labels: Record<string, string> = {
+    accepted: t('service.handoverStatus.accepted'),
+    approved: t('service.claimStatus.approved'),
     cancelled: t('service.status.cancelled'),
+    closed: t('service.claimStatus.closed'),
     completed: t('service.status.completed'),
     in_progress: t('service.status.in_progress'),
     new: t('service.status.new'),
+    prepared: t('service.handoverStatus.prepared'),
+    received: t('service.claimStatus.received'),
+    rejected: t('service.claimStatus.rejected'),
     scheduled: t('service.status.scheduled'),
+    under_review: t('service.claimStatus.under_review'),
   };
-  return <span className={`service-status is-${status}`}>{labels[status]}</span>;
+  return <span className={`service-status is-${status}`}>{labels[status] ?? status}</span>;
 }
 
 function ServiceState({ children, title }: { children?: ReactNode; title: string }) {
@@ -4143,15 +4283,17 @@ function formatScheduleRange(dateFrom: string, dateTo: string, timezone: string)
 }
 
 function weekdayShort(value: string, timezone: string) {
-  return new Intl.DateTimeFormat('en-GB', { timeZone: timezone, weekday: 'short' }).format(
-    new Date(`${value}T12:00:00Z`),
-  );
+  return formatOperationsDate(new Date(`${value}T12:00:00Z`), {
+    timeZone: timezone,
+    weekday: 'short',
+  });
 }
 
 function calendarMonthShort(value: string, timezone: string) {
-  return new Intl.DateTimeFormat('en-GB', { month: 'short', timeZone: timezone }).format(
-    new Date(`${value}T12:00:00Z`),
-  );
+  return formatOperationsDate(new Date(`${value}T12:00:00Z`), {
+    month: 'short',
+    timeZone: timezone,
+  });
 }
 
 function calendarDayNumber(value: string) {
@@ -4175,36 +4317,30 @@ function initials(value: string) {
 }
 
 function formatDate(value: string, timezone: string) {
-  return new Intl.DateTimeFormat(activeDateLocale(), {
+  return formatOperationsDate(new Date(`${value}T12:00:00Z`), {
     dateStyle: 'medium',
     timeZone: timezone,
-  }).format(new Date(`${value}T12:00:00Z`));
+  });
 }
 
 function formatDateTime(value: string, timezone: string) {
-  return new Intl.DateTimeFormat(activeDateLocale(), {
+  return formatOperationsDate(new Date(value), {
     dateStyle: 'medium',
     timeStyle: 'short',
     timeZone: timezone,
-  }).format(new Date(value));
+  });
 }
 
 function formatTime(value: string, timezone: string) {
-  return new Intl.DateTimeFormat(activeDateLocale(), {
+  return formatOperationsDate(new Date(value), {
     hour: '2-digit',
     minute: '2-digit',
     timeZone: timezone,
-  }).format(new Date(value));
+  });
 }
 
 function formatMoney(value: string) {
-  return new Intl.NumberFormat(activeDateLocale(), { currency: 'BGN', style: 'currency' }).format(
-    Number(value),
-  );
-}
-
-function activeDateLocale() {
-  return document.documentElement.lang === 'bg' ? 'bg-BG' : 'en-GB';
+  return formatOperationsCurrency(value, 'BGN');
 }
 
 function formatMinutes(value: number) {

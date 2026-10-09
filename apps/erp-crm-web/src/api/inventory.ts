@@ -11,8 +11,12 @@ import type {
   SerialTraceability,
   StockBalance,
   StockIssue,
+  StockMovementJournalPage,
+  StockMovementJournalQuery,
   StockReceipt,
   StockReservation,
+  StockReservationPage,
+  StockReservationQuery,
   StockReturn,
   StockSettings,
   Stocktake,
@@ -54,6 +58,18 @@ export function listStockBalances(token: string): Promise<StockBalance[]> {
   return unwrapApiResponse(
     apiClient.GET('/api/v1/warehouse/stock-balances', {
       headers: authorizationHeaders(token),
+    }),
+  );
+}
+
+export function listStockMovements(
+  token: string,
+  query: StockMovementJournalQuery = {},
+): Promise<StockMovementJournalPage> {
+  return unwrapApiResponse(
+    apiClient.GET('/api/v1/warehouse/stock-movements', {
+      headers: authorizationHeaders(token),
+      params: { query },
     }),
   );
 }
@@ -194,6 +210,18 @@ export function createStockReservation(
       body: input,
       headers: authorizationHeaders(token),
       params: { header: idempotencyParameters(idempotencyKey).header },
+    }),
+  );
+}
+
+export function listStockReservations(
+  token: string,
+  query: StockReservationQuery = {},
+): Promise<StockReservationPage> {
+  return unwrapApiResponse(
+    apiClient.GET('/api/v1/warehouse/stock-reservations', {
+      headers: authorizationHeaders(token),
+      params: { query },
     }),
   );
 }

@@ -17,6 +17,13 @@ import {
 } from '../api/procurement';
 import { useAuth } from '../auth/AuthProvider';
 import { Icon } from '../components/Icon';
+import { TechnicalIdentifier } from '../components/TechnicalIdentifier';
+import {
+  formatOperationsCurrency,
+  formatOperationsDate,
+  formatOperationsNumber,
+  useLocalization,
+} from '../i18n/LocalizationProvider';
 import { messages } from '../i18n/legacyMessages';
 import { ProcurementWorkspace } from './SupplierProcurementPage';
 
@@ -24,6 +31,7 @@ export type ProcurementView = 'goods-receipts' | 'purchase-orders';
 
 export function ProcurementPage({ view }: { view: ProcurementView }) {
   const { hasPermission, session } = useAuth();
+  useLocalization();
   const token = session?.sessionToken ?? '';
   const [status, setStatus] = useState<PurchaseOrderStatus | ''>('');
   const data = useProcurementData(token, status || undefined);
@@ -134,10 +142,13 @@ export function ProcurementPage({ view }: { view: ProcurementView }) {
                 </div>
                 <div>
                   <strong>{order.supplierName}</strong>
-                  <span>
-                    {receipt.supplierDeliveryReference ?? shortIdentity(receipt.id)} ·{' '}
-                    {formatDateTime(receipt.receivedAt)}
-                  </span>
+                  <div className="procurement-receipt-meta">
+                    <span>
+                      {receipt.supplierDeliveryReference ?? messages.procurement.goodsReceiptRecord}{' '}
+                      · {formatDateTime(receipt.receivedAt)}
+                    </span>
+                    <TechnicalIdentifier kind="goodsReceipt" value={receipt.id} />
+                  </div>
                 </div>
                 <div>
                   <strong>{receipt.lines.length}</strong>
@@ -206,7 +217,12 @@ function PurchaseOrderCard({
     <article className="procurement-order-card">
       <header>
         <div>
-          <span className="procurement-order-id">{shortIdentity(order.id)}</span>
+          <div className="procurement-order-reference">
+            <span className="procurement-order-id">
+              {messages.procurement.order} · {formatDateTime(order.createdAt)}
+            </span>
+            <TechnicalIdentifier kind="purchaseOrder" value={order.id} />
+          </div>
           <h2>{order.supplierName}</h2>
           <p>{order.warehouseName}</p>
         </div>
@@ -630,6 +646,11 @@ function GoodsReceiptDrawer({
             if (!draft) return null;
             const remainingQuantity = subtractDecimal(line.orderedQuantity, line.deliveredQuantity);
             const remainingId = `receipt-line-${line.id}-remaining`;
+            const hasUnitCostVariance =
+              draft.include &&
+              order.currencyCode === 'BGN' &&
+              isReceiptCost(draft.unitCostBgn) &&
+              decimalUnits(draft.unitCostBgn) !== decimalUnits(line.unitPrice);
             return (
               <article
                 className={`procurement-receive-line${draft.include ? '' : ' is-excluded'}`}
@@ -684,6 +705,16 @@ function GoodsReceiptDrawer({
                     />
                   </label>
                 </div>
+                {hasUnitCostVariance ? (
+                  <div className="procurement-price-variance">
+                    <InlineAlert tone="warning">
+                      {messages.procurement.priceVariance(
+                        formatMoney(line.unitPrice, 'BGN'),
+                        formatMoney(draft.unitCostBgn, 'BGN'),
+                      )}
+                    </InlineAlert>
+                  </div>
+                ) : null}
                 {product?.trackingMode === 'serial' ? (
                   <label>
                     <span>{messages.procurement.serialNumbers}</span>
@@ -986,38 +1017,34 @@ function formatOrderTotal(order: PurchaseOrder) {
 
 function formatMoney(value: string, currencyCode: string) {
   try {
-    return new Intl.NumberFormat(undefined, { currency: currencyCode, style: 'currency' }).format(
-      Number(value),
-    );
+    return formatOperationsCurrency(value, currencyCode);
   } catch {
-    return `${Number(value).toFixed(2)} ${currencyCode}`;
+    return `${formatOperationsNumber(Number(value), { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currencyCode}`;
   }
 }
 
 function formatDate(value: string) {
-  return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(
-    new Date(`${value}T00:00:00`),
-  );
+  return formatOperationsDate(new Date(`${value}T00:00:00`), { dateStyle: 'medium' });
 }
 
 function formatDateTime(value: string) {
-  return new Intl.DateTimeFormat(undefined, {
+  return formatOperationsDate(new Date(value), {
     dateStyle: 'medium',
     timeStyle: 'short',
-  }).format(new Date(value));
-}
-
-function shortIdentity(value: string) {
-  return `PO · ${value.slice(0, 8).toUpperCase()}`;
+  });
 }
 
 function formatQuantity(value: number) {
-  return new Intl.NumberFormat(undefined, { maximumFractionDigits: 4 }).format(value);
+  return formatOperationsNumber(value, { maximumFractionDigits: 4 });
 }
 
 function decimalUnits(value: string): bigint {
   const [whole, fraction = ''] = value.split('.');
   return BigInt(`${whole}${fraction.padEnd(4, '0')}`);
+}
+
+function isReceiptCost(value: string): boolean {
+  return /^\d+(\.\d{1,4})?$/u.test(value);
 }
 
 function subtractDecimal(left: string, right: string) {

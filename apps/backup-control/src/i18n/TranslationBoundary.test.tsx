@@ -28,11 +28,11 @@ describe('Recovery localization', () => {
         <Fixture />
       </LocalizationProvider>,
     );
-    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'BG' })));
+    await act(() => fireEvent.click(screen.getByRole('button', { name: 'BG' })));
     expect(await screen.findByRole('heading', { name: 'Операции по архивиране' })).toBeTruthy();
     expect(screen.getByRole('region', { name: 'Състояние на готовността' })).toBeTruthy();
     expect(screen.getByText('Primary PostgreSQL')).toBeTruthy();
-    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'EN' })));
+    await act(() => fireEvent.click(screen.getByRole('button', { name: 'EN' })));
     expect(await screen.findByRole('heading', { name: 'Backup operations' })).toBeTruthy();
   });
 });

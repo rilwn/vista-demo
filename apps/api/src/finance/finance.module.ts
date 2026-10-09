@@ -4,6 +4,7 @@ import { OperationsOverviewService } from './operations-overview.service.js';
 
 import { AuditModule } from '../audit/audit.module.js';
 import { DatabaseModule } from '../database/database.module.js';
+import { SalesModule } from '../sales/sales.module.js';
 import { FinanceBankController } from './finance-bank.controller.js';
 import { FinanceBankService } from './finance-bank.service.js';
 import { FinanceCashController } from './finance-cash.controller.js';
@@ -39,7 +40,7 @@ import { FinancialDocumentsService } from './financial-documents.service.js';
     FinanceService,
     FinancialDocumentsService,
   ],
-  imports: [AuditModule, DatabaseModule],
+  imports: [AuditModule, DatabaseModule, SalesModule],
   providers: [
     OperationsOverviewService,
     FinanceBankService,

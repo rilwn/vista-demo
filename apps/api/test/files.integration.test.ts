@@ -186,7 +186,7 @@ describe.skipIf(!runInfrastructureTests)('managed partner files', () => {
       await adminDatabase.query(`DROP DATABASE IF EXISTS ${databaseName}`);
       await adminDatabase.end();
     }
-  });
+  }, 30_000);
 
   it('protects Finance attachments and preserves financial snapshots across replacement', async () => {
     const http = application.getHttpServer() as Server;

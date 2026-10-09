@@ -1,4 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { Type } from 'class-transformer';
 import type {
   BusinessBranch,
   BusinessLocation,
@@ -9,6 +10,11 @@ import type {
   CreateBusinessOperatorRequest,
   CreateCashRegisterRequest,
   CreateLegalBusinessEntityRequest,
+  UpdateBusinessBranchRequest,
+  UpdateBusinessLocationRequest,
+  UpdateBusinessOperatorRequest,
+  UpdateCashRegisterRequest,
+  UpdateLegalBusinessEntityRequest,
   LegalBusinessEntity,
   OrganizationMember,
   OrganizationTopology,
@@ -16,11 +22,13 @@ import type {
 import {
   ArrayMaxSize,
   IsArray,
+  IsInt,
   IsOptional,
   IsString,
   IsUUID,
   Matches,
   MaxLength,
+  Min,
   MinLength,
 } from 'class-validator';
 
@@ -50,6 +58,17 @@ export class CreateLegalBusinessEntityDto implements CreateLegalBusinessEntityRe
   vatNumber?: string;
 }
 
+export class UpdateLegalBusinessEntityDto
+  extends CreateLegalBusinessEntityDto
+  implements UpdateLegalBusinessEntityRequest
+{
+  @ApiProperty({ minimum: 1, type: Number })
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  expectedVersion!: number;
+}
+
 export class CreateBusinessBranchDto implements CreateBusinessBranchRequest {
   @ApiProperty({ maxLength: 30, minLength: 1, type: String })
   @IsString()
@@ -62,6 +81,17 @@ export class CreateBusinessBranchDto implements CreateBusinessBranchRequest {
   @MinLength(1)
   @MaxLength(255)
   name!: string;
+}
+
+export class UpdateBusinessBranchDto
+  extends CreateBusinessBranchDto
+  implements UpdateBusinessBranchRequest
+{
+  @ApiProperty({ minimum: 1, type: Number })
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  expectedVersion!: number;
 }
 
 export class CreateBusinessLocationDto implements CreateBusinessLocationRequest {
@@ -113,6 +143,17 @@ export class CreateBusinessLocationDto implements CreateBusinessLocationRequest 
   postalCode?: string;
 }
 
+export class UpdateBusinessLocationDto
+  extends CreateBusinessLocationDto
+  implements UpdateBusinessLocationRequest
+{
+  @ApiProperty({ minimum: 1, type: Number })
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  expectedVersion!: number;
+}
+
 export class CreateBusinessOperatorDto implements CreateBusinessOperatorRequest {
   @ApiProperty({ format: 'uuid', type: String })
   @IsUUID('loose')
@@ -123,6 +164,20 @@ export class CreateBusinessOperatorDto implements CreateBusinessOperatorRequest 
   @MinLength(1)
   @MaxLength(30)
   code!: string;
+}
+
+export class UpdateBusinessOperatorDto implements UpdateBusinessOperatorRequest {
+  @ApiProperty({ maxLength: 30, minLength: 1, type: String })
+  @IsString()
+  @MinLength(1)
+  @MaxLength(30)
+  code!: string;
+
+  @ApiProperty({ minimum: 1, type: Number })
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  expectedVersion!: number;
 }
 
 export class CreateCashRegisterDto implements CreateCashRegisterRequest {
@@ -144,6 +199,41 @@ export class CreateCashRegisterDto implements CreateCashRegisterRequest {
   @ArrayMaxSize(100)
   @IsUUID('4', { each: true })
   operatorIds?: string[];
+}
+
+export class UpdateCashRegisterDto implements UpdateCashRegisterRequest {
+  @ApiProperty({ maxLength: 30, minLength: 1, type: String })
+  @IsString()
+  @MinLength(1)
+  @MaxLength(30)
+  code!: string;
+
+  @ApiProperty({ maxLength: 120, minLength: 1, type: String })
+  @IsString()
+  @MinLength(1)
+  @MaxLength(120)
+  name!: string;
+
+  @ApiPropertyOptional({ maxItems: 100, type: [String] })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(100)
+  @IsUUID('4', { each: true })
+  operatorIds?: string[];
+
+  @ApiProperty({ minimum: 1, type: Number })
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  expectedVersion!: number;
+}
+
+export class OrganizationRecordVersionDto {
+  @ApiProperty({ minimum: 1, type: Number })
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  expectedVersion!: number;
 }
 
 export class LegalBusinessEntityDto implements LegalBusinessEntity {

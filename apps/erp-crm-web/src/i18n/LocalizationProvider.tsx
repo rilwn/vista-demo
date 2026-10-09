@@ -61,6 +61,93 @@ export function getOperationsLocale(): OperationsLocale {
   return activeLocale;
 }
 
+export function getOperationsIntlLocale(): 'bg-BG' | 'en-GB' {
+  return activeLocale === 'bg' ? 'bg-BG' : 'en-GB';
+}
+
+export function formatOperationsNumber(
+  value: number | bigint,
+  options?: Intl.NumberFormatOptions,
+): string {
+  return new Intl.NumberFormat(getOperationsIntlLocale(), options).format(value);
+}
+
+export function formatOperationsCurrency(
+  value: number | string,
+  currency: string,
+  options?: Omit<
+    Intl.NumberFormatOptions,
+    'currency' | 'currencyDisplay' | 'currencySign' | 'style'
+  >,
+): string {
+  const locale = getOperationsIntlLocale();
+  const currencyDigits = new Intl.NumberFormat(locale, {
+    currency,
+    style: 'currency',
+  }).resolvedOptions();
+  const minimum = options?.minimumFractionDigits ?? currencyDigits.minimumFractionDigits ?? 2;
+  const maximum = options?.maximumFractionDigits ?? currencyDigits.maximumFractionDigits ?? 2;
+  const formatter = new Intl.NumberFormat(locale, {
+    ...options,
+    maximumFractionDigits: maximum,
+    minimumFractionDigits: minimum,
+    style: 'decimal',
+  });
+  const decimal = /^(-?)(\d+)(?:\.(\d+))?$/.exec(String(value));
+  if (!decimal) {
+    const amount = formatter.format(typeof value === 'string' ? Number(value) : value);
+    return `${amount} ${currency}`;
+  }
+
+  const factor = 10n ** BigInt(maximum);
+  const fraction = decimal[3] ?? '';
+  let scaledFraction = BigInt(fraction.slice(0, maximum).padEnd(maximum, '0') || '0');
+  if (fraction.length > maximum && fraction[maximum]! >= '5') scaledFraction += 1n;
+  let whole = BigInt(decimal[2]!);
+  if (scaledFraction >= factor) {
+    whole += 1n;
+    scaledFraction -= factor;
+  }
+  const roundedFraction = scaledFraction
+    .toString()
+    .padStart(maximum, '0')
+    .replace(/0+$/u, '')
+    .padEnd(minimum, '0');
+  const negative = decimal[1] === '-';
+  const signedWhole = negative ? (whole === 0n ? -0 : -whole) : whole;
+  const amount = formatter
+    .formatToParts(signedWhole)
+    .map((part) => (part.type === 'fraction' ? roundedFraction : part.value))
+    .join('');
+  return `${amount} ${currency}`;
+}
+
+export function formatOperationsMinorCurrency(value: bigint, currency: string): string {
+  const absolute = value < 0n ? -value : value;
+  const whole = absolute / 100n;
+  const fraction = (absolute % 100n).toString().padStart(2, '0');
+  const amount = `${value < 0n ? '-' : ''}${whole}.${fraction}`;
+  return formatOperationsCurrency(amount, currency, {
+    maximumFractionDigits: 2,
+    minimumFractionDigits: 2,
+  });
+}
+
+export function formatOperationsDate(
+  value: Date | number,
+  options: Intl.DateTimeFormatOptions,
+): string {
+  return new Intl.DateTimeFormat(getOperationsIntlLocale(), options).format(value);
+}
+
+export function formatOperationsDateRange(
+  from: Date | number,
+  to: Date | number,
+  options: Intl.DateTimeFormatOptions,
+): string {
+  return new Intl.DateTimeFormat(getOperationsIntlLocale(), options).formatRange(from, to);
+}
+
 export function useLocalization(): LocalizationContextValue {
   return useContext(LocalizationContext);
 }

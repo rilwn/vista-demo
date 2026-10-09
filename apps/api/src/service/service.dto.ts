@@ -380,7 +380,15 @@ class ServiceTechnicianReferenceDto {
   @ApiProperty({ type: String }) warehouseName!: string;
 }
 
+class ServiceBatchReferenceDto {
+  @ApiProperty({ type: String }) availableQuantity!: string;
+  @ApiProperty({ type: String }) batchNumber!: string;
+  @ApiPropertyOptional({ type: String, format: 'date' }) expiresAt?: string;
+}
+
 class ServicePartReferenceDto {
+  @ApiPropertyOptional({ isArray: true, type: ServiceBatchReferenceDto })
+  availableBatches?: ServiceBatchReferenceDto[];
   @ApiProperty({ type: String }) availableQuantity!: string;
   @ApiProperty({ type: String }) productCode!: string;
   @ApiProperty({ format: 'uuid', type: String }) productId!: string;
@@ -427,6 +435,7 @@ class ServiceScheduleAppointmentDto implements ServiceScheduleAppointment {
   @ApiProperty({ type: String }) customerLocationName!: string;
   @ApiProperty({ type: String }) customerName!: string;
   @ApiProperty({ type: String }) deviceName!: string;
+  @ApiProperty({ type: Boolean }) isOverdue!: boolean;
   @ApiProperty({ enum: servicePriorities }) priority!: ServiceScheduleAppointment['priority'];
   @ApiProperty({ type: String }) requestNumber!: string;
   @ApiProperty({ format: 'date-time', type: String }) scheduledEnd!: string;
@@ -480,6 +489,7 @@ export class ServiceRequestDto implements ServiceRequest {
   @ApiProperty({ format: 'uuid', type: String }) customerPartnerId!: string;
   @ApiProperty({ type: String }) deviceName!: string;
   @ApiProperty({ format: 'uuid', type: String }) id!: string;
+  @ApiProperty({ type: Boolean }) isOverdue!: boolean;
   @ApiProperty({ type: String }) number!: string;
   @ApiPropertyOptional({ format: 'date', type: String }) plannedVisitDate?: string;
   @ApiProperty({ enum: servicePriorities }) priority!: ServiceRequest['priority'];
@@ -577,6 +587,7 @@ export class ServiceWorkOrderDto implements ServiceWorkOrder {
   @ApiProperty({ isArray: true, type: ServiceWorkOrderHistoryEntryDto })
   history!: ServiceWorkOrder['history'];
   @ApiProperty({ format: 'uuid', type: String }) id!: string;
+  @ApiProperty({ type: Boolean }) isOverdue!: boolean;
   @ApiProperty({ type: String }) laborCostBgn!: string;
   @ApiProperty({ type: Number }) laborMinutes!: number;
   @ApiProperty({ type: String }) number!: string;
@@ -616,18 +627,21 @@ export class ServiceWorkOrderPageDto implements ServiceWorkOrderPage {
   @ApiProperty({ minimum: 0, type: Number }) totalPages!: number;
 }
 
-class ServiceEquipmentHistoryEventDto implements ServiceEquipmentHistoryEvent {
+class ServiceEquipmentHistoryEventDto {
   @ApiPropertyOptional({ format: 'date-time', type: String }) completedAt?: string;
   @ApiProperty({ type: String }) description!: string;
+  @ApiProperty({ enum: ['sale', 'warranty_claim', 'service_request', 'service_visit', 'repair'] })
+  eventType!: ServiceEquipmentHistoryEvent['eventType'];
   @ApiProperty({ format: 'uuid', type: String }) id!: string;
   @ApiProperty({ format: 'date-time', type: String }) occurredAt!: string;
   @ApiProperty({ isArray: true, type: ServiceWorkOrderPartUsageDto })
   parts!: ServiceEquipmentHistoryEvent['parts'];
-  @ApiProperty({ enum: serviceTypes }) serviceType!: ServiceEquipmentHistoryEvent['serviceType'];
-  @ApiProperty({ enum: ['scheduled', 'in_progress', 'completed', 'cancelled'] })
-  status!: ServiceEquipmentHistoryEvent['status'];
+  @ApiProperty({ type: String }) referenceNumber!: string;
+  @ApiPropertyOptional({ enum: serviceTypes })
+  serviceType?: ServiceEquipmentHistoryEvent['serviceType'];
+  @ApiProperty({ type: String }) status!: string;
   @ApiPropertyOptional({ type: String }) technicianName?: string;
-  @ApiProperty({ type: String }) workOrderNumber!: string;
+  @ApiPropertyOptional({ type: String }) workOrderNumber?: string;
 }
 
 export class ServiceEquipmentHistoryDto implements ServiceEquipmentHistory {
@@ -795,6 +809,7 @@ export class ServiceInspectionPlanDto implements ServiceInspectionPlan {
   @ApiProperty({ format: 'uuid', type: String }) id!: string;
   @ApiProperty({ enum: serviceInspectionTypes })
   inspectionType!: ServiceInspectionPlan['inspectionType'];
+  @ApiProperty({ type: Boolean }) isOverdue!: boolean;
   @ApiProperty({ type: Number }) intervalMonths!: number;
   @ApiPropertyOptional({ format: 'date', type: String }) lastCompletedOn?: string;
   @ApiProperty({ format: 'date', type: String }) nextDueDate!: string;

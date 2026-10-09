@@ -79,6 +79,7 @@ export const messages = {
     currencyHint: 'Three-letter code',
     delivered: 'Delivered',
     deliveryReference: 'Supplier delivery reference',
+    goodsReceiptRecord: 'Goods receipt',
     emptyOrders: 'No purchase orders yet',
     emptyOrdersHint: 'Create the first order when supplier, product, and warehouse data is ready.',
     emptyReceipts: 'No goods receipts yet',
@@ -117,6 +118,8 @@ export const messages = {
     receiveSubtitle: 'Record only the quantities delivered now. Remaining quantities stay open.',
     receiveSuccess: 'Delivery received and warehouse stock updated.',
     receiveTitle: 'Receive purchase order',
+    priceVariance: (orderPrice: string, receiptCost: string) =>
+      `Receipt unit cost (${receiptCost}) differs from purchase-order price (${orderPrice}). This cost will be used for inventory valuation; review it before posting.`,
     received: 'Received',
     receipts: 'Goods receipts',
     receiptDestination: 'Delivery destination',
@@ -364,6 +367,8 @@ export const messages = {
     created: 'Partner added to the shared registry.',
     detailsEyebrow: 'Partner record',
     detailsTitle: 'Partner details',
+    noVatNumber: 'VAT number not recorded',
+    recordId: 'Record ID',
     customerOverview: 'Customer overview',
     duplicateDescription:
       'Creation was stopped because an existing legal entity may match. Review the record below; records are never merged automatically.',

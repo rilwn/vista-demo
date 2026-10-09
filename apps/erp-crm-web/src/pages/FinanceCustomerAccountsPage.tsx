@@ -2,6 +2,7 @@ import { Button, InlineAlert, Toast } from '@vista/ui';
 import type {
   CreateCustomerAdvanceRequest,
   CustomerAdvancePaymentMethod,
+  CustomerOpenReceivable,
   CustomerPaymentAccount,
   CustomerPaymentAccountReferenceData,
   UpsertCustomerPaymentTermsRequest,
@@ -10,6 +11,7 @@ import { type FormEvent, type ReactNode, useCallback, useEffect, useMemo, useSta
 
 import { ApiClientError } from '../api/client';
 import {
+  allocateCustomerAdvance,
   createCustomerAdvance,
   getCustomerPaymentAccountReferenceData,
   listCustomerPaymentAccounts,
@@ -17,9 +19,15 @@ import {
 } from '../api/finance';
 import { useAuth } from '../auth/AuthProvider';
 import { Icon } from '../components/Icon';
+import {
+  formatOperationsDate,
+  formatOperationsMinorCurrency,
+  useLocalization,
+} from '../i18n/LocalizationProvider';
 import { FinanceTabs } from './FinanceBankPage';
 
 type Panel =
+  | { account: CustomerPaymentAccount; mode: 'allocate'; receivable: CustomerOpenReceivable }
   | { account: CustomerPaymentAccount; mode: 'preview' }
   | { account?: CustomerPaymentAccount; customerPartnerId?: string; mode: 'advance' }
   | { account?: CustomerPaymentAccount; customerPartnerId?: string; mode: 'terms' };
@@ -27,6 +35,7 @@ type Panel =
 const emptyReferences: CustomerPaymentAccountReferenceData = { customers: [] };
 
 export function FinanceCustomerAccountsPage() {
+  useLocalization();
   const { hasPermission, session } = useAuth();
   const token = session?.sessionToken ?? '';
   const data = useCustomerAccounts(token);
@@ -130,6 +139,9 @@ export function FinanceCustomerAccountsPage() {
           account={panel.account}
           canCreate={canCreate}
           canEdit={canEdit}
+          onAllocate={(receivable) =>
+            setPanel({ account: panel.account, mode: 'allocate', receivable })
+          }
           onAdvance={() => setPanel({ account: panel.account, mode: 'advance' })}
           onBack={() => setPanel(undefined)}
           onTerms={() => setPanel({ account: panel.account, mode: 'terms' })}
@@ -143,6 +155,16 @@ export function FinanceCustomerAccountsPage() {
           }
           onSaved={(advance) => saved(`${advance.number} was recorded.`)}
           references={data.references}
+          token={token}
+        />
+      ) : panel?.mode === 'allocate' ? (
+        <AllocateAdvancePanel
+          account={panel.account}
+          onBack={() => setPanel({ account: panel.account, mode: 'preview' })}
+          onSaved={(advanceNumber) =>
+            saved(`${advanceNumber} was allocated to ${panel.receivable.number}.`)
+          }
+          receivable={panel.receivable}
           token={token}
         />
       ) : panel?.mode === 'terms' ? (
@@ -166,6 +188,7 @@ function AccountPreview({
   account,
   canCreate,
   canEdit,
+  onAllocate,
   onAdvance,
   onBack,
   onTerms,
@@ -173,6 +196,7 @@ function AccountPreview({
   account: CustomerPaymentAccount;
   canCreate: boolean;
   canEdit: boolean;
+  onAllocate: (receivable: CustomerOpenReceivable) => void;
   onAdvance: () => void;
   onBack: () => void;
   onTerms: () => void;
@@ -198,6 +222,45 @@ function AccountPreview({
             ) : null}
             {canCreate ? <Button onClick={onAdvance}>Record advance</Button> : null}
           </div>
+        </section>
+
+        <section className="customer-account-section">
+          <header>
+            <div>
+              <h3>Open receivables</h3>
+              <p>Apply an available advance to reduce an outstanding balance.</p>
+            </div>
+            <strong>{account.openReceivables.length}</strong>
+          </header>
+          {account.openReceivables.length ? (
+            <div className="customer-open-receivable-list">
+              {account.openReceivables.map((receivable) => (
+                <article key={receivable.id}>
+                  <div>
+                    <strong>{receivable.number}</strong>
+                    <small>
+                      {receivable.sourceInvoiceNumber} · Due {date(receivable.dueDate)}
+                    </small>
+                  </div>
+                  <div>
+                    <span>Outstanding</span>
+                    <strong>{money(receivable.outstandingTotal)}</strong>
+                  </div>
+                  {canCreate && account.advances.length ? (
+                    <Button
+                      className="customer-open-receivable-apply"
+                      onClick={() => onAllocate(receivable)}
+                      variant="secondary"
+                    >
+                      Apply advance
+                    </Button>
+                  ) : null}
+                </article>
+              ))}
+            </div>
+          ) : (
+            <p className="customer-account-empty">No open receivables are available.</p>
+          )}
         </section>
 
         <section className="customer-account-section">
@@ -301,6 +364,117 @@ function AccountPreview({
   );
 }
 
+function AllocateAdvancePanel({
+  account,
+  onBack,
+  onSaved,
+  receivable,
+  token,
+}: {
+  account: CustomerPaymentAccount;
+  onBack: () => void;
+  onSaved: (advanceNumber: string) => void;
+  receivable: CustomerOpenReceivable;
+  token: string;
+}) {
+  const [advanceId, setAdvanceId] = useState(account.advances[0]?.id ?? '');
+  const [amount, setAmount] = useState(
+    account.advances[0]
+      ? smallerAmount(account.advances[0].availableAmount, receivable.outstandingTotal)
+      : '',
+  );
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const advance = account.advances.find((item) => item.id === advanceId);
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    if (!advance) return;
+    const normalizedAmount = fixedDecimal(amount);
+    if (!normalizedAmount || decimalUnits(normalizedAmount) <= 0n) {
+      setError('Enter a valid amount greater than zero, with up to four decimal places.');
+      return;
+    }
+    setBusy(true);
+    setError('');
+    try {
+      await allocateCustomerAdvance(token, receivable.id, crypto.randomUUID(), {
+        amount: normalizedAmount,
+        customerAdvanceId: advance.id,
+      });
+      onSaved(advance.number);
+    } catch (caught) {
+      setError(errorText(caught, 'The advance could not be applied. Refresh and try again.'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <AccountDrawer
+      busy={busy}
+      onBack={onBack}
+      subtitle={`${receivable.number} · ${receivable.sourceInvoiceNumber}`}
+      title="Apply customer advance"
+    >
+      <form className="customer-account-form" onSubmit={(event) => void submit(event)}>
+        {error ? <InlineAlert tone="error">{error}</InlineAlert> : null}
+        <section className="customer-account-form-card">
+          <header>
+            <span>1</span>
+            <div>
+              <h3>Choose the advance and amount</h3>
+              <p>
+                The payment keeps its original date and method, and remains linked to the advance.
+              </p>
+            </div>
+          </header>
+          <Field label="Customer advance">
+            <select
+              onChange={(event) => {
+                const selected = account.advances.find((item) => item.id === event.target.value);
+                setAdvanceId(event.target.value);
+                if (selected)
+                  setAmount(smallerAmount(selected.availableAmount, receivable.outstandingTotal));
+              }}
+              required
+              value={advanceId}
+            >
+              {account.advances.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.number} · {money(item.availableAmount)} available
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Open receivable">
+            <input
+              readOnly
+              value={`${receivable.number} · ${money(receivable.outstandingTotal)} outstanding`}
+            />
+          </Field>
+          <Field label="Amount to apply (BGN)">
+            <input
+              max={
+                advance
+                  ? smallerAmount(advance.availableAmount, receivable.outstandingTotal)
+                  : undefined
+              }
+              min="0.0001"
+              onChange={(event) => setAmount(event.target.value)}
+              required
+              step="0.0001"
+              type="number"
+              value={amount}
+            />
+          </Field>
+        </section>
+        <Actions busy={busy} onBack={onBack} primary="Apply advance" />
+      </form>
+    </AccountDrawer>
+  );
+}
+
 function TermsPanel({
   account,
   accounts,
@@ -343,11 +517,16 @@ function TermsPanel({
 
   async function submit(event: FormEvent) {
     event.preventDefault();
+    const normalizedCreditLimit = fixedDecimal(creditLimit);
+    if (!normalizedCreditLimit) {
+      setError('Enter a valid credit limit with up to four decimal places.');
+      return;
+    }
     setBusy(true);
     setError('');
     try {
       const input: UpsertCustomerPaymentTermsRequest = {
-        creditLimitBgn: Number(creditLimit).toFixed(4),
+        creditLimitBgn: normalizedCreditLimit,
         ...(selectedAccount?.terms ? { expectedVersion: selectedAccount.terms.version } : {}),
         onAccountEnabled: enabled,
         paymentTermsDays: Number(days),
@@ -502,11 +681,16 @@ function AdvancePanel({
 
   async function submit(event: FormEvent) {
     event.preventDefault();
+    const normalizedAmount = fixedDecimal(amount);
+    if (!normalizedAmount || decimalUnits(normalizedAmount) <= 0n) {
+      setError('Enter a valid amount greater than zero, with up to four decimal places.');
+      return;
+    }
     setBusy(true);
     setError('');
     try {
       const input: CreateCustomerAdvanceRequest = {
-        amount: Number(amount).toFixed(4),
+        amount: normalizedAmount,
         customerPartnerId: customerId,
         paymentMethod: method,
         ...(reference.trim() ? { paymentReference: reference.trim() } : {}),
@@ -752,17 +936,48 @@ function useCustomerAccounts(token: string) {
 }
 
 function money(value: string) {
-  return new Intl.NumberFormat('en-GB', { currency: 'BGN', style: 'currency' }).format(
-    Number(value),
-  );
+  const units = decimalUnits(value);
+  const negative = units < 0n;
+  const absoluteUnits = negative ? -units : units;
+  const cents = (absoluteUnits + 50n) / 100n;
+  return formatOperationsMinorCurrency(negative ? -cents : cents, 'BGN');
 }
 function sum(values: string[]) {
-  return values.reduce((total, value) => total + Number(value), 0).toFixed(4);
+  return decimalText(values.reduce((total, value) => total + decimalUnits(value), 0n));
 }
 function date(value: string) {
-  return new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium' }).format(
-    new Date(`${value}T00:00:00Z`),
-  );
+  return formatOperationsDate(new Date(`${value}T00:00:00Z`), {
+    dateStyle: 'medium',
+    timeZone: 'UTC',
+  });
+}
+function smallerAmount(left: string, right: string) {
+  const leftUnits = decimalUnits(left);
+  const rightUnits = decimalUnits(right);
+  return decimalText(leftUnits < rightUnits ? leftUnits : rightUnits);
+}
+function fixedDecimal(value: string) {
+  const normalized = value.trim().replace(',', '.');
+  const match = /^(\d+)(?:\.(\d{0,4}))?$/u.exec(normalized);
+  if (!match) return null;
+  const whole = (match[1] ?? '0').replace(/^0+(?=\d)/u, '');
+  const fraction = (match[2] ?? '').padEnd(4, '0');
+  return `${whole}.${fraction}`;
+}
+function decimalUnits(value: string) {
+  const match = /^(-?)(\d+)(?:\.(\d{1,4}))?$/u.exec(value.trim().replace(',', '.'));
+  if (!match) return 0n;
+  const whole = BigInt(match[2] ?? '0');
+  const fraction = BigInt((match[3] ?? '').padEnd(4, '0'));
+  const units = whole * 10_000n + fraction;
+  return match[1] === '-' ? -units : units;
+}
+function decimalText(units: bigint) {
+  const negative = units < 0n;
+  const absoluteUnits = negative ? -units : units;
+  const whole = absoluteUnits / 10_000n;
+  const fraction = String(absoluteUnits % 10_000n).padStart(4, '0');
+  return `${negative ? '-' : ''}${whole}.${fraction}`;
 }
 function today() {
   return new Date().toISOString().slice(0, 10);

@@ -26,12 +26,19 @@ import {
 } from '../api/procurement';
 import { useAuth } from '../auth/AuthProvider';
 import { Icon } from '../components/Icon';
+import { TechnicalIdentifier } from '../components/TechnicalIdentifier';
+import {
+  formatOperationsCurrency,
+  formatOperationsDate,
+  useLocalization,
+} from '../i18n/LocalizationProvider';
 import { Link } from '../routing/Router';
 
 export type SupplierProcurementView = 'supplier-claims' | 'supplier-invoices' | 'suppliers';
 
 export function SupplierProcurementPage({ view }: { view: SupplierProcurementView }) {
   const { hasPermission, session } = useAuth();
+  useLocalization();
   const token = session?.sessionToken ?? '';
   const data = useSupplierProcurementData(token);
   const [supplierPreview, setSupplierPreview] = useState<ProcurementSupplierRecord | null>(null);
@@ -722,7 +729,7 @@ function SupplierInvoiceDrawer({
             >
               {orders.map((item) => (
                 <option key={item.id} value={item.id}>
-                  {item.supplierName} · {shortIdentity(item.id)}
+                  {item.supplierName} · {item.warehouseName} · {formatDateTime(item.createdAt)}
                 </option>
               ))}
             </select>
@@ -734,8 +741,9 @@ function SupplierInvoiceDrawer({
                 <strong>{order.supplierName}</strong>
               </div>
               <div>
-                <span>Order reference</span>
-                <strong>{shortIdentity(order.id)}</strong>
+                <span>Purchase order</span>
+                <strong>{formatDateTime(order.createdAt)}</strong>
+                <TechnicalIdentifier kind="purchaseOrder" value={order.id} />
               </div>
               <div>
                 <span>Currency</span>
@@ -940,7 +948,9 @@ function InvoicePreviewDrawer({
           </div>
           <div>
             <dt>Purchase order</dt>
-            <dd>{shortIdentity(invoice.purchaseOrderId)}</dd>
+            <dd>
+              <TechnicalIdentifier kind="purchaseOrder" value={invoice.purchaseOrderId} />
+            </dd>
           </div>
           <div>
             <dt>Currency</dt>
@@ -1506,26 +1516,21 @@ function claimAdvanceLabel(status: SupplierClaimStatus) {
       : 'Close claim';
 }
 
-function shortIdentity(value: string) {
-  return value.slice(0, 8).toUpperCase();
-}
 function today() {
   return new Date().toISOString().slice(0, 10);
 }
 function formatDate(value: string) {
-  return new Intl.DateTimeFormat('en-GB', {
+  return formatOperationsDate(new Date(`${value}T00:00:00Z`), {
     day: '2-digit',
     month: 'short',
     year: 'numeric',
-  }).format(new Date(`${value}T00:00:00Z`));
+  });
 }
 function formatDateTime(value: string) {
-  return new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium', timeStyle: 'short' }).format(
-    new Date(value),
-  );
+  return formatOperationsDate(new Date(value), { dateStyle: 'medium', timeStyle: 'short' });
 }
 function formatMoney(value: string, currency: string) {
-  return new Intl.NumberFormat('en-GB', { currency, style: 'currency' }).format(Number(value));
+  return formatOperationsCurrency(value, currency);
 }
 function subtract(left: string, right: string) {
   return Math.max(0, Number(left) - Number(right)).toFixed(4);

@@ -25,6 +25,7 @@ import type { AuthenticatedRequest } from '../auth/authentication.types.js';
 import type { CorrelatedRequest } from '../common/correlation-id.middleware.js';
 import { RateLimitPolicy } from '../security/rate-limit.decorator.js';
 import {
+  AllocateCustomerAdvanceDto,
   CancelFinanceCustomerDocumentDto,
   CreateFinanceCustomerDocumentDto,
   CreateFinancePaymentDto,
@@ -102,6 +103,28 @@ export class FinanceController {
     @Req() request: AuthenticatedRequest,
   ): Promise<FinanceCustomerDocumentDto> {
     return this.finance.recordPayment(id, input, key, request.authentication, metadata(request));
+  }
+
+  @Post('documents/:id/advance-allocations')
+  @HttpCode(HttpStatus.CREATED)
+  @RequirePermissions({ action: 'create', module: 'erp.finance' })
+  @ApiBody({ type: AllocateCustomerAdvanceDto })
+  @ApiCreatedResponse({ type: FinanceCustomerDocumentDto })
+  @ApiHeader({ name: 'Idempotency-Key', required: true })
+  @ApiParam({ format: 'uuid', name: 'id' })
+  allocateCustomerAdvance(
+    @Param('id') id: string,
+    @Body() input: AllocateCustomerAdvanceDto,
+    @Headers('idempotency-key') key: string | undefined,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<FinanceCustomerDocumentDto> {
+    return this.finance.allocateCustomerAdvance(
+      id,
+      input,
+      key,
+      request.authentication,
+      metadata(request),
+    );
   }
 
   @Post('documents/:id/cancel')

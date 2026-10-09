@@ -82,6 +82,7 @@ export interface AuthenticationContextResponse {
   employeeId: string;
   isAdministrative: boolean;
   permissions: ApiPermission[];
+  roleNames: string[];
   sessionId: string;
   twoFactorVerified: boolean;
 }
@@ -341,6 +342,7 @@ export interface AuditEventRecord {
   previousEventHash?: string;
   sourceIp?: string;
   targetId?: string;
+  targetDisplayName?: string;
   targetType: string;
   userAgent?: string;
 }
@@ -996,9 +998,21 @@ export interface CustomerPaymentAccount {
   customerName: string;
   customerPartnerId: string;
   entries: CustomerAccountEntry[];
+  openReceivables: CustomerOpenReceivable[];
   outstandingBalance: string;
   terms?: CustomerPaymentTerms;
   uic?: string;
+}
+
+export interface CustomerOpenReceivable {
+  allocatedTotal: string;
+  dueDate: string;
+  id: string;
+  number: string;
+  outstandingTotal: string;
+  paymentStatus: Exclude<FinancePaymentStatus, 'cancelled'>;
+  sourceInvoiceNumber: string;
+  total: string;
 }
 
 export interface CustomerPaymentAccountReferenceData {
@@ -1383,6 +1397,10 @@ export interface CreateLegalBusinessEntityRequest {
   vatNumber?: string;
 }
 
+export interface UpdateLegalBusinessEntityRequest extends CreateLegalBusinessEntityRequest {
+  expectedVersion: number;
+}
+
 export interface BusinessBranch {
   active: boolean;
   code: string;
@@ -1395,6 +1413,10 @@ export interface BusinessBranch {
 export interface CreateBusinessBranchRequest {
   code: string;
   name: string;
+}
+
+export interface UpdateBusinessBranchRequest extends CreateBusinessBranchRequest {
+  expectedVersion: number;
 }
 
 export interface BusinessLocation {
@@ -1423,6 +1445,10 @@ export interface CreateBusinessLocationRequest {
   postalCode?: string;
 }
 
+export interface UpdateBusinessLocationRequest extends CreateBusinessLocationRequest {
+  expectedVersion: number;
+}
+
 export interface OrganizationMember {
   accountId: string;
   displayName: string;
@@ -1442,6 +1468,11 @@ export interface CreateBusinessOperatorRequest {
   code: string;
 }
 
+export interface UpdateBusinessOperatorRequest {
+  code: string;
+  expectedVersion: number;
+}
+
 export interface CashRegister {
   active: boolean;
   businessLocationId: string;
@@ -1456,6 +1487,10 @@ export interface CreateCashRegisterRequest {
   code: string;
   name: string;
   operatorIds?: string[];
+}
+
+export interface UpdateCashRegisterRequest extends CreateCashRegisterRequest {
+  expectedVersion: number;
 }
 
 export interface OrganizationTopology {
@@ -1766,8 +1801,14 @@ export const vatTreatments = ['standard_20', 'reduced_9', 'zero', 'exempt', 'ica
 export type VatTreatment = (typeof vatTreatments)[number];
 
 export interface SalesReferenceData {
+  businessTimezone: string;
   batches: Array<{
     batchNumber: string;
+    productId: string;
+    quantity: string;
+    warehouseId: string;
+  }>;
+  availability: Array<{
     productId: string;
     quantity: string;
     warehouseId: string;
@@ -1807,6 +1848,15 @@ export interface CreateSalesQuotationRequest {
   overallDiscountPercent: string;
   validUntil: string;
   warehouseId: string;
+}
+
+export interface UpdateSalesQuotationRequest extends CreateSalesQuotationRequest {
+  expectedVersion: number;
+}
+
+export interface CancelSalesQuotationRequest {
+  expectedVersion: number;
+  reason?: string;
 }
 
 export interface SalesQuotationLine extends CreateSalesQuotationLineRequest {
@@ -1924,6 +1974,8 @@ export interface SalesInvoice {
 }
 
 export interface SalesWorkflow {
+  cancelledAt?: string;
+  cancellationReason?: string;
   createdAt: string;
   currencyCode: string;
   customerName: string;
@@ -1935,8 +1987,9 @@ export interface SalesWorkflow {
   number: string;
   order?: SalesOrder;
   overallDiscountPercent: string;
+  version: number;
   shipment?: SalesShipment;
-  status: 'confirmed' | 'draft' | 'invoiced' | 'shipped';
+  status: 'cancelled' | 'confirmed' | 'draft' | 'expired' | 'invoiced' | 'shipped';
   subtotal: string;
   total: string;
   validUntil: string;
@@ -1983,6 +2036,11 @@ export interface CreateFinancePaymentRequest {
   paymentReference?: string;
 }
 
+export interface AllocateCustomerAdvanceRequest {
+  amount: string;
+  customerAdvanceId: string;
+}
+
 export interface CancelFinanceCustomerDocumentRequest {
   cancellationReason: string;
   expectedVersion: number;
@@ -1997,6 +2055,7 @@ export interface FinancePayment {
   paymentDate: string;
   paymentMethod: FinancePaymentMethod;
   paymentReference?: string;
+  sourceCustomerAdvanceNumber?: string;
   recordedAt: string;
 }
 
@@ -3268,6 +3327,20 @@ export interface FinancialDocumentCorrectionReference {
   type: 'invoice';
 }
 
+export interface FinancialDocumentSubscriptionDraftReference {
+  id: string;
+  number: string;
+  contractNumber: string;
+  customerPartnerId: string;
+  customerName: string;
+  currencyCode: string;
+  amount: string;
+  billingDate: string;
+  servicePeriodStart: string;
+  servicePeriodEnd: string;
+  linkedDocumentId?: string;
+}
+
 export interface FinancialDocumentReferenceData {
   businessTimezone: string;
   correctionDocuments: FinancialDocumentCorrectionReference[];
@@ -3275,6 +3348,7 @@ export interface FinancialDocumentReferenceData {
   products: FinancialDocumentProductReference[];
   salesDrafts: FinancialDocumentSalesDraftReference[];
   serviceDrafts: FinancialDocumentServiceDraftReference[];
+  subscriptionDrafts: FinancialDocumentSubscriptionDraftReference[];
   scopes: FinancialDocumentScopeReference[];
 }
 
@@ -3309,6 +3383,7 @@ export interface CreateFinancialDocumentRequest {
   sourceSalesInvoiceId?: string;
   sourcePosSaleId?: string;
   sourceServiceWorkOrderId?: string;
+  sourceSubscriptionDraftId?: string;
   taxEventDate: string;
 }
 
@@ -3373,6 +3448,8 @@ export interface FinancialDocument {
   rateSource: string;
   sourceSalesInvoiceId?: string;
   sourceSalesInvoiceNumber?: string;
+  sourceSubscriptionDraftId?: string;
+  sourceSubscriptionDraftNumber?: string;
   sourcePosSaleId?: string;
   sourcePosSaleNumber?: string;
   sourceFiscalReceiptNumber?: string;
@@ -3445,12 +3522,19 @@ export interface ServiceTechnicianReference {
 }
 
 export interface ServicePartReference {
+  availableBatches?: ServiceBatchReference[];
   availableQuantity: string;
   productCode: string;
   productId: string;
   productName: string;
   trackingMode: ProductTrackingMode;
   warehouseId: string;
+}
+
+export interface ServiceBatchReference {
+  availableQuantity: string;
+  batchNumber: string;
+  expiresAt?: string;
 }
 
 export interface ServiceSubscriptionReference {
@@ -3553,6 +3637,20 @@ export interface CrmTicketServiceLink {
   serviceRequestNumber: string;
 }
 
+export type CrmTicketSlaEventType = 'at_risk' | 'breached';
+export type CrmTicketSlaTimerType = 'response' | 'resolution';
+export type CrmTicketSlaDeliveryStatus =
+  'pending' | 'processing' | 'delivered' | 'failed' | 'cancelled';
+
+export interface CrmTicketSlaEvent {
+  createdAt: string;
+  deliveryStatus: CrmTicketSlaDeliveryStatus;
+  eventType: CrmTicketSlaEventType;
+  id: string;
+  recipientName: string;
+  timerType: CrmTicketSlaTimerType;
+}
+
 export interface CrmTicket {
   assignedTo?: CrmTicketAssigneeReference;
   category: CrmTicketCategory;
@@ -3574,6 +3672,7 @@ export interface CrmTicket {
   responseState: CrmSlaTimerState;
   resolutionDueAt: string;
   resolutionState: CrmSlaTimerState;
+  slaEvents: CrmTicketSlaEvent[];
   resolvedAt?: string;
   serviceLink?: CrmTicketServiceLink;
   serviceSubscriptionContractId?: string;
@@ -3711,6 +3810,21 @@ export interface CrmTask {
   version: number;
 }
 
+export type CrmTimelineOperationalSource = 'payment' | 'quotation' | 'service_request' | 'ticket';
+
+export interface CrmTimelineOperationalEvent {
+  actorName?: string;
+  description?: string;
+  eventId: string;
+  eventType: string;
+  locationName?: string;
+  recordId: string;
+  referenceNumber: string;
+  source: CrmTimelineOperationalSource;
+  status: string;
+  title: string;
+}
+
 export type CrmTimelineItem =
   | { interaction: CrmInteraction; kind: 'interaction'; occurredAt: string }
   | {
@@ -3718,6 +3832,11 @@ export type CrmTimelineItem =
       occurredAt: string;
       task: CrmTask;
       taskEvent: CrmTaskHistoryEntry;
+    }
+  | {
+      kind: 'operational_event';
+      occurredAt: string;
+      operationalEvent: CrmTimelineOperationalEvent;
     };
 
 export interface CrmTimelinePage {
@@ -4055,7 +4174,18 @@ export interface CrmAfterSalesOverview {
   referrals: CrmReferral[];
   surveySources: CrmSurveySourceReference[];
   surveys: CrmCustomerSurvey[];
+  warrantyCardReconciliation: CrmWarrantyCardReconciliationStatus;
   warrantyCards: CrmWarrantyCard[];
+}
+
+export interface CrmWarrantyCardReconciliationStatus {
+  eligibleSoldSerials: number;
+  missingCards: number;
+  registeredSoldSerials: number;
+}
+
+export interface CrmWarrantyCardReconciliationResult {
+  cardsCreated: number;
 }
 
 export const crmAnalyticsPipelineStages = [
@@ -4186,6 +4316,7 @@ export interface ServiceScheduleAppointment {
   customerLocationName: string;
   customerName: string;
   deviceName: string;
+  isOverdue: boolean;
   priority: ServicePriority;
   requestNumber: string;
   scheduledEnd: string;
@@ -4267,6 +4398,7 @@ export interface ServiceRequest {
   customerPartnerId: string;
   deviceName: string;
   id: string;
+  isOverdue: boolean;
   number: string;
   plannedVisitDate?: string;
   priority: ServicePriority;
@@ -4357,6 +4489,7 @@ export interface ServiceWorkOrder {
   financialDocumentNumber?: string;
   history: ServiceWorkOrderHistoryEntry[];
   id: string;
+  isOverdue: boolean;
   laborCostBgn: string;
   laborMinutes: number;
   number: string;
@@ -4393,13 +4526,15 @@ export interface ServiceWorkOrderPage {
 export interface ServiceEquipmentHistoryEvent {
   completedAt?: string;
   description: string;
+  eventType: 'sale' | 'warranty_claim' | 'service_request' | 'service_visit' | 'repair';
   id: string;
   occurredAt: string;
   parts: ServiceWorkOrderPartUsage[];
-  serviceType: ServiceType;
-  status: ServiceWorkOrderStatus;
+  referenceNumber: string;
+  serviceType?: ServiceType;
+  status: string;
   technicianName?: string;
-  workOrderNumber: string;
+  workOrderNumber?: string;
 }
 
 export interface ServiceEquipmentHistory {
@@ -4495,6 +4630,7 @@ export interface ServiceInspectionPlan {
   equipmentId: string;
   id: string;
   inspectionType: ServiceInspectionType;
+  isOverdue: boolean;
   intervalMonths: number;
   lastCompletedOn?: string;
   nextDueDate: string;
@@ -4927,6 +5063,49 @@ export interface StockTransfer {
   unitCostBgn: string;
 }
 
+export const stockMovementTypes = [
+  'receipt',
+  'issue',
+  'return_in',
+  'transfer_in',
+  'transfer_out',
+  'stocktake_in',
+  'stocktake_out',
+] as const;
+export type StockMovementType = (typeof stockMovementTypes)[number];
+export interface StockMovementJournalItem {
+  actorDisplayName: string;
+  id: string;
+  occurredAt: string;
+  movementType: StockMovementType;
+  productCode: string;
+  productId: string;
+  productName: string;
+  quantity: string;
+  referenceLabel: string;
+  referenceType: string;
+  sourceHref?: string;
+  totalCostBgn: string;
+  unitCostBgn: string;
+  warehouseId: string;
+  warehouseName: string;
+}
+export interface StockMovementJournalPage {
+  items: StockMovementJournalItem[];
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+}
+export interface StockMovementJournalQuery {
+  movementType?: StockMovementType;
+  page?: number;
+  pageSize?: number;
+  productId?: string;
+  search?: string;
+  warehouseId?: string;
+}
+
 export type StocktakeStatus = 'open' | 'completed' | 'cancelled';
 export interface Stocktake {
   id: string;
@@ -4970,11 +5149,23 @@ export interface StockReservation {
   initialQuantity: string;
   productId: string;
   referenceId: string;
+  referenceLabel: string;
   referenceType: StockReservationReferenceType;
   remainingQuantity: string;
   serialItemIds: string[];
   status: StockReservationStatus;
   warehouseId: string;
+}
+export interface StockReservationPage {
+  items: StockReservation[];
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+}
+export interface StockReservationQuery {
+  page?: number;
+  pageSize?: number;
 }
 
 export interface ConfigureStockSettingsRequest {
@@ -5053,8 +5244,9 @@ export interface SerialTraceability {
     status: CustomerEquipmentStatus;
   };
   events: SerialTraceEvent[];
-  product: SerialTraceParty;
-  serialItemId: string;
+  inventoryRecordLinked: boolean;
+  product: Omit<SerialTraceParty, 'id'> & { id?: string };
+  serialItemId?: string;
   serialNumber: string;
   status: 'available' | 'issued' | 'missing';
 }

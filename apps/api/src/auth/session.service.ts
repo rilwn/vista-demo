@@ -24,6 +24,7 @@ interface SessionAccountRow {
   employee_id: string;
   expires_at: Date;
   is_administrative: boolean;
+  role_names: string[];
   session_id: string;
   two_factor_verified: boolean;
 }
@@ -137,7 +138,9 @@ export class SessionService {
          employee.display_name,
          employee.email,
          $3::boolean AS two_factor_verified,
-         COALESCE(bool_or(role.is_administrative), false) AS is_administrative
+         COALESCE(bool_or(role.is_administrative), false) AS is_administrative,
+         COALESCE(array_agg(DISTINCT role.name ORDER BY role.name)
+           FILTER (WHERE role.id IS NOT NULL), ARRAY[]::text[]) AS role_names
        FROM identity.session_records session
        JOIN identity.user_accounts account ON account.id = session.account_id
        JOIN identity.employees employee ON employee.id = account.employee_id
@@ -176,6 +179,7 @@ export class SessionService {
       employeeId: account.employee_id,
       isAdministrative: account.is_administrative,
       permissions,
+      roleNames: account.role_names,
       sessionId: account.session_id,
       twoFactorVerified: account.two_factor_verified,
     };

@@ -18,7 +18,7 @@ interface LocalizationContextValue {
 const STORAGE_KEY = 'vista.pos.locale';
 let activeLocale: PosLocale = 'en';
 const LocalizationContext = createContext<LocalizationContextValue>({
-  locale: 'en' as PosLocale,
+  locale: 'en',
   setLocale: () => undefined,
 });
 

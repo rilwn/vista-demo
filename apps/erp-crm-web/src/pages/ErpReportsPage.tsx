@@ -15,6 +15,7 @@ import { Icon } from '../components/Icon';
 import { erpReportsApi as api, downloadErpReport } from '../api/erp-reports';
 import { erpReportMessages as copy } from './erp-report.messages';
 import { pagesForModule, workflowPath } from './workflow-pages';
+import { formatOperationsDate, useLocalization } from '../i18n/LocalizationProvider';
 import {
   defaultReportColumns,
   isReportUuid,
@@ -43,6 +44,7 @@ export function ReportsWorkspace({
   token: string;
   canCreate: boolean;
 }) {
+  useLocalization();
   const tabList = useActiveItemVisibility<HTMLElement>(scope);
   const [definitions, setDefinitions] = useState<ErpReportDefinition[]>([]);
   const [definition, setDefinition] = useState<ErpReportDefinition>();
@@ -745,7 +747,11 @@ function RecentErpExports({
                 <strong>{r.name}</strong>
                 <small>
                   {copy.formats[r.format]} ·{' '}
-                  {new Date(r.createdAt).toLocaleString('en-GB', { timeZone: 'Europe/Sofia' })}
+                  {formatOperationsDate(new Date(r.createdAt), {
+                    dateStyle: 'medium',
+                    timeStyle: 'short',
+                    timeZone: 'Europe/Sofia',
+                  })}
                 </small>
               </div>
               <span className={`erp-report-status is-${r.status}`}>{copy.statuses[r.status]}</span>

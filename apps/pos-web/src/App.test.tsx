@@ -143,6 +143,8 @@ describe('POS application', () => {
     expect(await screen.findByRole('button', { name: '1 checkout pending' })).toBeTruthy();
     fireEvent.click(screen.getByRole('link', { name: 'Recovery' }));
     expect(await screen.findByText('Checkout saved')).toBeTruthy();
+    expect(screen.queryByText('86a47c28-7521-4a81-aafd-c04d92363230')).toBeNull();
+    expect(screen.getAllByRole('button', { name: 'Copy checkout ID' }).length).toBeGreaterThan(0);
     expect(window.location.pathname).toBe('/checkouts');
     app.unmount();
     render(<App />);

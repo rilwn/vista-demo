@@ -4,6 +4,7 @@ import { type FormEvent, useState } from 'react';
 import { ApiClientError } from '../api/auth';
 import { Icon } from '../components/Icon';
 import { LanguageSwitcher } from '../components/LanguageSwitcher';
+import { TechnicalIdentifier } from '../components/TechnicalIdentifier';
 import { useLocalization } from '../i18n/LocalizationProvider';
 import { messages } from '../messages';
 import { Link, Navigate, useRouter } from '../routing/Router';
@@ -111,7 +112,8 @@ export function LoginPage() {
                 <p>{errorMessage(error.code, t)}</p>
                 {error.correlationId ? (
                   <small>
-                    {t('login.reference')}: {error.correlationId.slice(0, 12)}
+                    {t('login.reference')}{' '}
+                    <TechnicalIdentifier kind="signInRequest" value={error.correlationId} />
                   </small>
                 ) : null}
               </InlineAlert>

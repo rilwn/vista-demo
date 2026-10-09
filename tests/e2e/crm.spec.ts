@@ -12,6 +12,60 @@ async function openCrm(page: Page) {
     .click();
 }
 
+test('CRM opportunity stages use Bulgarian grammar and return cleanly to English', async ({
+  page,
+}) => {
+  await openCrm(page);
+  await page.getByRole('group', { name: 'Language' }).getByRole('button', { name: 'BG' }).click();
+  await page.getByRole('link', { name: /Потенциални клиенти и възможности/ }).click();
+  await page.getByRole('link', { name: 'Потенциални клиенти и фуния', exact: true }).click();
+  await expect(
+    page.getByText(
+      'Превръщайте реалния интерес в клиенти, оферти и проследим напредък на продажбите.',
+    ),
+  ).toBeVisible();
+  await expect(
+    page.getByText(
+      'Първо квалифицирайте потенциалния клиент, след което го преобразувайте без дублиране на клиентски профили.',
+    ),
+  ).toBeVisible();
+  await expect(
+    page.getByText('Променете филтрите или добавете следващия реален потенциален клиент.'),
+  ).toBeVisible();
+  await expect(page.getByRole('combobox', { name: 'Източник' }).locator('option')).toContainText([
+    'Препоръка',
+    'Уебсайт',
+    'Търговско изложение',
+  ]);
+
+  await page.getByRole('button', { name: /Продажбен процес/ }).click();
+  await expect(page.getByText('Възможности в изгледа: 0')).toBeVisible();
+
+  const stages = page.locator('.crm-kanban-column');
+  await expect(
+    stages.filter({ has: page.getByRole('heading', { name: 'Квалифицирана' }) }),
+  ).toHaveCount(1);
+  await expect(
+    stages.filter({ has: page.getByRole('heading', { name: 'Изпратена оферта' }) }),
+  ).toHaveCount(1);
+  await expect(
+    stages.filter({ has: page.getByRole('heading', { name: 'Спечелена' }) }),
+  ).toHaveCount(1);
+  await expect(stages.filter({ has: page.getByRole('heading', { name: 'Загубена' }) })).toHaveCount(
+    1,
+  );
+
+  await page.getByRole('group', { name: 'Език' }).getByRole('button', { name: 'EN' }).click();
+  await expect(
+    stages.filter({ has: page.getByRole('heading', { name: 'Qualified' }) }),
+  ).toHaveCount(1);
+  await expect(
+    stages.filter({ has: page.getByRole('heading', { name: 'Quotation sent' }) }),
+  ).toHaveCount(1);
+  await expect(stages.filter({ has: page.getByRole('heading', { name: 'Won' }) })).toHaveCount(1);
+  await expect(stages.filter({ has: page.getByRole('heading', { name: 'Lost' }) })).toHaveCount(1);
+});
+
 async function choose(page: Page, field: string, option: string | RegExp) {
   await page.getByRole('combobox', { name: `Search ${field}`, exact: true }).fill('');
   await page.getByRole('listbox').getByRole('option', { name: option, exact: true }).click();
@@ -46,11 +100,20 @@ test('qualified lead reuses a customer, links a quotation and retains its won op
   await expect(dialog).toHaveCount(0);
   await page.getByRole('button', { name: /^Sales pipeline/ }).click();
   await page.getByRole('button', { name: /Browser CRM equipment opportunity/ }).click();
+  await dialog.getByRole('button', { name: 'Close panel', exact: true }).click();
+  const opportunity = page.getByRole('button', { name: /Browser CRM equipment opportunity/ });
+  await opportunity.dragTo(page.locator('.crm-kanban-column.is-quotation_sent'));
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toContainText(
+    'Link a Sales quotation before moving this opportunity to Quotation sent.',
+  );
+  await expect(dialog.getByRole('button', { name: 'Update stage', exact: true })).toBeDisabled();
   await choose(page, 'Available customer quotation', /DEV-Q-0001/);
   await dialog.getByRole('button', { name: 'Link quotation', exact: true }).click();
   await expect(dialog.locator('.crm-opportunity-quotations')).toContainText('DEV-Q-0001');
+  await dialog.getByRole('button', { name: 'Update stage', exact: true }).click();
+  await expect(dialog.locator('.crm-opportunity-preview-hero')).toContainText('Quotation sent');
   await dialog.getByRole('button', { name: 'Close panel', exact: true }).click();
-  const opportunity = page.getByRole('button', { name: /Browser CRM equipment opportunity/ });
   await opportunity.dragTo(page.locator('.crm-kanban-column.is-negotiation'));
   await expect(page.locator('.crm-kanban-column.is-negotiation')).toContainText(
     'Browser CRM equipment opportunity',

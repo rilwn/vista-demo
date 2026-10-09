@@ -25,6 +25,11 @@ import {
 } from '../api/finance';
 import { useAuth } from '../auth/AuthProvider';
 import { Icon } from '../components/Icon';
+import {
+  formatOperationsCurrency,
+  formatOperationsDate,
+  useLocalization,
+} from '../i18n/LocalizationProvider';
 import { Link } from '../routing/Router';
 import { FinanceTabs } from './FinanceBankPage';
 
@@ -37,6 +42,7 @@ const emptyReferences: FinanceSupplierReferenceData = {
 
 export function FinancePayablesPage() {
   const { hasPermission, session } = useAuth();
+  useLocalization();
   const token = session?.sessionToken ?? '';
   const data = useSupplierFinance(token);
   const [view, setView] = useState<'advances' | 'payables'>('payables');
@@ -1332,12 +1338,10 @@ function useSupplierFinance(token: string) {
 }
 
 function money(value: string) {
-  return new Intl.NumberFormat(undefined, {
-    currency: 'BGN',
+  return formatOperationsCurrency(value, 'BGN', {
     maximumFractionDigits: 2,
     minimumFractionDigits: 2,
-    style: 'currency',
-  }).format(Number(value));
+  });
 }
 
 function sum(values: string[]) {
@@ -1349,18 +1353,18 @@ function minimum(left: string, right: string) {
 }
 
 function formatDate(value: string) {
-  return new Intl.DateTimeFormat(undefined, {
+  return formatOperationsDate(new Date(`${value}T12:00:00Z`), {
     dateStyle: 'medium',
     timeZone: 'Europe/Sofia',
-  }).format(new Date(`${value}T12:00:00Z`));
+  });
 }
 
 function formatDateTime(value: string) {
-  return new Intl.DateTimeFormat(undefined, {
+  return formatOperationsDate(new Date(value), {
     dateStyle: 'medium',
     timeStyle: 'short',
     timeZone: 'Europe/Sofia',
-  }).format(new Date(value));
+  });
 }
 
 function dueText(item: FinanceSupplierPayable) {

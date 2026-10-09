@@ -92,7 +92,10 @@ services through Coolify's proxy. Configure the values in
 [`.env.coolify.example`](.env.coolify.example) as Coolify variables; never upload
 an environment file. Assign the Operations, POS and Recovery domains in Coolify
 to internal port `8080`. Do not assign domains or host ports to API, PostgreSQL,
-Redis, MinIO or Mailpit. The staging stack captures email in its private Mailpit
+Redis, MinIO or Mailpit. Set `VITE_POS_APP_URL` to the public HTTPS origin used
+for Vista POS; the Operations Reports hub uses it to open management reports
+directly in the POS Reports screen. Coolify requires this value during the
+Operations image build so it cannot silently publish a dead POS link. The staging stack captures email in its private Mailpit
 container; no email leaves the VPS. Replace it with the approved SMTP adapter
 only after `INT-001` is decided.
 

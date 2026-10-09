@@ -32,6 +32,7 @@ import {
 } from '../api/logistics';
 import { useAuth } from '../auth/AuthProvider';
 import { Icon } from '../components/Icon';
+import { formatOperationsDate, useLocalization } from '../i18n/LocalizationProvider';
 import { Link } from '../routing/Router';
 
 export type LogisticsOperationsView = 'couriers' | 'deliveries' | 'returns' | 'routes';
@@ -76,6 +77,7 @@ const emptyRoutePage: LogisticsRoutePlanPage = {
 
 export function LogisticsOperationsPage({ view }: { view: LogisticsOperationsView }) {
   const { hasPermission, session } = useAuth();
+  useLocalization();
   const token = session?.sessionToken ?? '';
   const canCreate = hasPermission('erp.logistics', 'create');
   const canEdit = hasPermission('erp.logistics', 'edit');
@@ -1878,28 +1880,28 @@ function localDateTimeToIso(value: string) {
 }
 
 function formatDateTime(value: string) {
-  return new Intl.DateTimeFormat('en-GB', {
+  return formatOperationsDate(new Date(value), {
     dateStyle: 'medium',
     timeStyle: 'short',
-  }).format(new Date(value));
+  });
 }
 
 function formatDate(value: string) {
-  return new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium', timeZone: 'UTC' }).format(
-    new Date(`${value}T00:00:00Z`),
-  );
+  return formatOperationsDate(new Date(`${value}T00:00:00Z`), {
+    dateStyle: 'medium',
+    timeZone: 'UTC',
+  });
 }
 
 function formatTime(value: string) {
-  return new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit' }).format(
-    new Date(value),
-  );
+  return formatOperationsDate(new Date(value), { hour: '2-digit', minute: '2-digit' });
 }
 
 function formatWeekday(value: string) {
-  return new Intl.DateTimeFormat('en-GB', { weekday: 'long', timeZone: 'UTC' }).format(
-    new Date(`${value}T00:00:00Z`),
-  );
+  return formatOperationsDate(new Date(`${value}T00:00:00Z`), {
+    weekday: 'long',
+    timeZone: 'UTC',
+  });
 }
 
 function todayInput() {

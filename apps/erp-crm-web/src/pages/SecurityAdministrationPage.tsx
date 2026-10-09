@@ -31,6 +31,12 @@ import {
 import { ApiClientError } from '../api/client';
 import { useAuth } from '../auth/AuthProvider';
 import { Icon } from '../components/Icon';
+import { TechnicalIdentifier } from '../components/TechnicalIdentifier';
+import {
+  formatOperationsDate,
+  getOperationsLocale,
+  useLocalization,
+} from '../i18n/LocalizationProvider';
 import { securityText as text } from '../i18n/securityMessages';
 
 type SecurityView = 'accounts' | 'audit' | 'roles' | 'sessions';
@@ -53,6 +59,7 @@ const modules = [
 ] as const;
 
 export function SecurityAdministrationPage() {
+  useLocalization();
   const { hasPermission, session } = useAuth();
   const token = session?.sessionToken ?? '';
   const [accounts, setAccounts] = useState<SecurityAccount[]>([]);
@@ -163,7 +170,7 @@ export function SecurityAdministrationPage() {
               [
                 ['accounts', `${text.employees} · ${accounts.length}`],
                 ['roles', `${text.roles} · ${roles.length}`],
-                ['sessions', `${text.sessions} · ${activeSessions}`],
+                ['sessions', text.activeSessionCount(activeSessions)],
                 ['audit', text.activity],
               ] as const
             ).map(([key, label]) => (
@@ -408,19 +415,16 @@ function RolesView({
 
   useEffect(() => setPage((value) => Math.min(value, totalPages)), [totalPages]);
 
-  if (!roles.length)
-    return (
-      <SecurityEmpty
-        title={text.noRoles}
-        detail="Add a role to define what employees can view and change."
-      />
-    );
+  if (!roles.length) return <SecurityEmpty title={text.noRoles} detail={text.noRolesHint} />;
   return (
     <div className="security-role-list">
       <div className="security-role-list-heading">
         <div>
           <span>{text.roleDirectory}</span>
           <p>{text.roleDirectoryHint}</p>
+          {!canApprove ? (
+            <p className="security-role-read-only-hint">{text.rolePageAccessRequired}</p>
+          ) : null}
         </div>
         <strong>
           {roles.length} {text.roles.toLocaleLowerCase()}
@@ -570,11 +574,16 @@ function AuditView({
               <div>
                 <strong>{humanAction(event.action)}</strong>
                 <span>
-                  {event.actorDisplayName ?? text.system} · {formatDate(event.occurredAt)}
+                  {event.action === 'auth.login.failed'
+                    ? text.signInAttemptFor(event.targetDisplayName ?? text.unrecognizedAccount)
+                    : (event.actorDisplayName ?? text.system)}{' '}
+                  · {formatDate(event.occurredAt)}
                 </span>
-                <small>
+                <small className="security-audit-target">
                   {humanTarget(event.targetType)}
-                  {event.targetId ? ` · ${event.targetId.slice(0, 8).toUpperCase()}` : ''}
+                  {event.targetId ? (
+                    <TechnicalIdentifier kind="targetRecord" value={event.targetId} />
+                  ) : null}
                 </small>
               </div>
             </article>
@@ -726,12 +735,7 @@ function RoleComposer({
     }
   }
   return (
-    <Drawer
-      title={text.addRole}
-      subtitle="Choose what employees with this role can do."
-      onClose={onClose}
-      wide
-    >
+    <Drawer title={text.addRole} subtitle={text.createRoleHint} onClose={onClose} wide>
       <form className="security-admin-form" onSubmit={(event) => void submit(event)}>
         {error ? <InlineAlert tone="error">{error}</InlineAlert> : null}
         <div className="security-form-pair">
@@ -743,7 +747,7 @@ function RoleComposer({
             value={draft.name}
           />
           <TextField
-            hint="Use lowercase letters, numbers, dots, dashes, or underscores."
+            hint={text.roleCodeHint}
             id="security-role-code"
             label={text.roleCode}
             onChange={(e) => setDraft({ ...draft, code: e.target.value.toLowerCase() })}
@@ -771,6 +775,7 @@ function RoleComposer({
           </span>
         </label>
         <PermissionMatrix selected={selected} onToggle={toggle} />
+        <PermissionDependencyNotice selected={selected} />
         <div className="security-drawer-actions">
           <Button onClick={onClose} variant="quiet">
             {text.cancel}
@@ -851,8 +856,8 @@ function RoleEditorDrawer({
 
   return (
     <Drawer
-      title={`Edit ${friendlyRoleText(role.name)}`}
-      subtitle="Update the role name, description, and available access."
+      title={text.editRoleTitle(friendlyRoleText(role.name))}
+      subtitle={text.editRoleHint}
       onClose={onClose}
       wide
     >
@@ -865,17 +870,13 @@ function RoleEditorDrawer({
           <section className="security-role-protection">
             <Icon name="shield" size={18} />
             <span>
-              <strong>Administrative role</strong>
-              <small>
-                Changing this role requires a two-factor verified administrator session.
-              </small>
+              <strong>{text.administrativeRole}</strong>
+              <small>{text.administrativeRoleHint}</small>
             </span>
           </section>
         ) : null}
         {!editAllowed ? (
-          <InlineAlert tone="warning">
-            Set up and verify your authenticator before changing this administrative role.
-          </InlineAlert>
+          <InlineAlert tone="warning">{text.administrativeRoleRequired}</InlineAlert>
         ) : null}
         <TextField
           id="security-role-edit-name"
@@ -891,6 +892,7 @@ function RoleEditorDrawer({
           value={draft.description ?? ''}
         />
         <PermissionMatrix disabled={!editAllowed} selected={selected} onToggle={toggle} />
+        <PermissionDependencyNotice selected={selected} />
         <div className="security-drawer-actions">
           <Button onClick={onClose} variant="quiet">
             {text.cancel}
@@ -944,6 +946,17 @@ function PermissionMatrix({
       ))}
     </fieldset>
   );
+}
+
+function PermissionDependencyNotice({ selected }: { selected: string[] }) {
+  const missingView = modules.filter(
+    (module) =>
+      selected.some((permission) => permission.startsWith(`${module}:`)) &&
+      !selected.includes(`${module}:view`),
+  );
+  if (!missingView.length) return null;
+  const moduleList = formatModuleList(missingView.map(shortModule));
+  return <InlineAlert tone="warning">{text.permissionWithoutView(moduleList)}</InlineAlert>;
 }
 
 function AccountAccessDrawer({
@@ -1352,24 +1365,7 @@ function SecurityLoading() {
   );
 }
 function shortModule(module: string): string {
-  return (
-    (
-      {
-        platform: 'Platform',
-        'platform.organization': 'Business structure',
-        'erp.finance': 'Finance',
-        'erp.procurement': 'Procurement',
-        'erp.warehouse': 'Warehouse',
-        'erp.sales': 'Sales',
-        'erp.service': 'Service',
-        'erp.logistics': 'Logistics',
-        reports: 'Reports',
-        crm: 'CRM',
-        pos: 'POS',
-        backup: 'Backup & DR',
-      } as Record<string, string>
-    )[module] ?? module
-  );
+  return text.moduleName(module);
 }
 function humanAction(action: string): string {
   return (
@@ -1407,7 +1403,7 @@ function humanTarget(target: string): string {
   );
 }
 function permissionActionLabel(action: (typeof actions)[number]): string {
-  return titleCase(action);
+  return text.actionName(action);
 }
 function titleCase(value: string): string {
   return value.replace(/\b\w/gu, (character) => character.toUpperCase());
@@ -1419,19 +1415,51 @@ function friendlyRoleText(value: string): string {
     .replace(/^Vista bootstrap\s+/iu, '');
 }
 function friendlyRoleDescription(role: SecurityRole): string {
-  if (/development fixture role/iu.test(role.description ?? '')) {
-    return role.isAdministrative
-      ? 'Administrative permissions for platform management.'
-      : 'Standard permissions for assigned daily work.';
+  if (role.code.startsWith('dev-fixture-')) {
+    const fixtureKey = role.code.slice('dev-fixture-'.length);
+    const localized = text.fixtureRoleDescription(fixtureKey);
+    if (role.version === 1 && localized) return localized;
   }
+  if (/development fixture role/iu.test(role.description ?? ''))
+    return summarizeRolePermissions(role.permissions);
   return role.description ? friendlyRoleText(role.description) : 'No description';
 }
+function summarizeRolePermissions(permissions: SecurityRole['permissions']): string {
+  const grouped = new Map<string, Set<string>>();
+  for (const permission of permissions) {
+    const moduleActions = grouped.get(permission.module) ?? new Set<string>();
+    moduleActions.add(permission.action);
+    grouped.set(permission.module, moduleActions);
+  }
+  const manageable: string[] = [];
+  const viewOnly: string[] = [];
+  const limited: string[] = [];
+  for (const [module, moduleActions] of grouped) {
+    if (moduleActions.has('view')) {
+      (moduleActions.size > 1 ? manageable : viewOnly).push(shortModule(module));
+    } else {
+      limited.push(shortModule(module));
+    }
+  }
+  const descriptions = [
+    manageable.length ? text.roleManageSummary(formatModuleList(manageable)) : '',
+    viewOnly.length ? text.roleViewSummary(formatModuleList(viewOnly)) : '',
+    limited.length ? text.roleLimitedSummary(formatModuleList(limited)) : '',
+  ].filter(Boolean);
+  return descriptions.join(' ') || text.roleNoPermissions;
+}
+function formatModuleList(values: string[]): string {
+  return new Intl.ListFormat(getOperationsLocale() === 'bg' ? 'bg' : 'en', {
+    style: 'long',
+    type: 'conjunction',
+  }).format(values);
+}
 function formatDate(value: string): string {
-  return new Intl.DateTimeFormat('en-GB', {
+  return formatOperationsDate(new Date(value), {
     dateStyle: 'medium',
     timeStyle: 'short',
     timeZone: 'Europe/Sofia',
-  }).format(new Date(value));
+  });
 }
 function sameSet(left: string[], right: string[]): boolean {
   return (

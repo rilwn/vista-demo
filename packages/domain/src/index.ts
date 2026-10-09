@@ -54,6 +54,116 @@ const rateScale = 100_000_000n;
 const percentScale = 10_000n;
 const oneHundredPercent = 100n * percentScale;
 
+export type BusinessIdentifierField = 'uic' | 'vatNumber';
+
+export interface BusinessIdentifierIssue {
+  field: BusinessIdentifierField;
+  reason: 'invalid_bulgarian_uic' | 'invalid_eu_vat_number';
+}
+
+const euVatSuffixPatterns: Record<string, RegExp> = {
+  AT: /^U\d{8}$/u,
+  BE: /^[01]\d{9}$/u,
+  BG: /^\d{9,10}$/u,
+  CY: /^\d{8}[A-Z]$/u,
+  CZ: /^\d{8,10}$/u,
+  DE: /^\d{9}$/u,
+  DK: /^\d{8}$/u,
+  EE: /^\d{9}$/u,
+  EL: /^\d{9}$/u,
+  ES: /^[A-Z0-9]\d{7}[A-Z0-9]$/u,
+  FI: /^\d{8}$/u,
+  FR: /^[A-Z0-9]{2}\d{9}$/u,
+  HR: /^\d{11}$/u,
+  HU: /^\d{8}$/u,
+  IE: /^(?:\d{7}[A-Z]{1,2}|\d[A-Z]\d{5}[A-Z])$/u,
+  IT: /^\d{11}$/u,
+  LT: /^(?:\d{9}|\d{12})$/u,
+  LU: /^\d{8}$/u,
+  LV: /^\d{11}$/u,
+  MT: /^\d{8}$/u,
+  NL: /^\d{9}B\d{2}$/u,
+  PL: /^\d{10}$/u,
+  PT: /^\d{9}$/u,
+  RO: /^\d{2,10}$/u,
+  SE: /^\d{12}$/u,
+  SI: /^\d{8}$/u,
+  SK: /^\d{10}$/u,
+  XI: /^(?:\d{9}|\d{12}|GD\d{3}|HA\d{3})$/u,
+};
+
+export function isValidBulgarianUic(value: string): boolean {
+  const digits = value.trim();
+  if (!/^\d{9}(?:\d{4})?$/u.test(digits)) return false;
+  const baseIsValid = checkBulgarianUicChecksum(digits.slice(0, 9));
+  if (!baseIsValid || digits.length === 9) return baseIsValid;
+
+  const branchDigits = digits.slice(9, 13);
+  const primary = weightedCheckDigit(branchDigits, [2, 7, 3, 5]);
+  const check = primary === 10 ? weightedCheckDigit(branchDigits, [4, 9, 5, 7]) : primary;
+  return Number(branchDigits[3]) === check % 10;
+}
+
+export function isValidEuVatNumber(value: string): boolean {
+  const normalized = value.replace(/\s+/gu, '').toUpperCase();
+  const countryCode = normalized.slice(0, 2);
+  const suffixPattern = euVatSuffixPatterns[countryCode];
+  return suffixPattern ? suffixPattern.test(normalized.slice(2)) : false;
+}
+
+export function businessIdentifierIssues(input: {
+  uic?: string | null;
+  vatNumber?: string | null;
+}): BusinessIdentifierIssue[] {
+  const issues: BusinessIdentifierIssue[] = [];
+  if (input.uic?.trim() && !isValidBulgarianUic(input.uic)) {
+    issues.push({ field: 'uic', reason: 'invalid_bulgarian_uic' });
+  }
+  if (input.vatNumber?.trim() && !isValidEuVatNumber(input.vatNumber)) {
+    issues.push({ field: 'vatNumber', reason: 'invalid_eu_vat_number' });
+  }
+  return issues;
+}
+
+/**
+ * Accepts common international telephone notation without assuming a country.
+ * The number must contain 7–15 digits; punctuation is limited to readable
+ * grouping characters and a single leading international '+' sign.
+ */
+export function isValidTelephoneNumber(value: string): boolean {
+  const telephone = value.trim();
+  if (!/^\+?(?:\([0-9]+\)|[0-9])[0-9().\s-]*$/u.test(telephone)) return false;
+
+  const digitCount = telephone.replace(/\D/gu, '').length;
+  if (digitCount < 7 || digitCount > 15) return false;
+
+  let parenthesisDepth = 0;
+  for (const character of telephone) {
+    if (character === '(') {
+      parenthesisDepth += 1;
+      if (parenthesisDepth > 1) return false;
+    } else if (character === ')') {
+      if (parenthesisDepth !== 1) return false;
+      parenthesisDepth = 0;
+    }
+  }
+  return parenthesisDepth === 0;
+}
+
+function checkBulgarianUicChecksum(value: string): boolean {
+  const digits = value.slice(0, 8);
+  const check = Number(value[8]);
+  const primary = weightedCheckDigit(digits, [1, 2, 3, 4, 5, 6, 7, 8]);
+  const expected = primary === 10 ? weightedCheckDigit(digits, [3, 4, 5, 6, 7, 8, 9, 10]) : primary;
+  return check === expected % 10;
+}
+
+function weightedCheckDigit(value: string, weights: number[]): number {
+  return (
+    [...value].reduce((sum, digit, index) => sum + Number(digit) * (weights[index] ?? 0), 0) % 11
+  );
+}
+
 export function calculateFinancialDocument(
   lines: FinancialCalculationLine[],
   exchangeRate: string,

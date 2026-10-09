@@ -13,15 +13,30 @@ describe('development fixtures', () => {
     const emails = developmentFixtureAccounts.map(({ email }) => email);
     const employeeNumbers = developmentFixtureAccounts.map(({ employeeNumber }) => employeeNumber);
     const roleCodes = developmentFixtureAccounts.map(({ roleCode }) => roleCode);
+    const roleDescriptions = developmentFixtureAccounts.map(
+      ({ roleDescription }) => roleDescription,
+    );
 
     expect(developmentFixtureAccounts).toHaveLength(12);
     expect(new Set(emails).size).toBe(emails.length);
     expect(new Set(employeeNumbers).size).toBe(employeeNumbers.length);
     expect(new Set(roleCodes).size).toBe(roleCodes.length);
+    expect(new Set(roleDescriptions).size).toBe(roleDescriptions.length);
+    expect(
+      roleDescriptions.every((description) => !description.includes('development fixture')),
+    ).toBe(true);
     expect(emails).toContain('dispatcher@vista.local');
     expect(emails).toContain('technician@vista.local');
     expect(emails).toContain('pos.operator@vista.local');
     expect(emails).toContain('backup.operator@vista.local');
+    for (const key of ['manager', 'platform-manager'] as const) {
+      expect(
+        developmentFixtureAccounts
+          .find((account) => account.key === key)
+          ?.permissions.filter((permission) => permission.module === 'platform.organization')
+          .map(({ action }) => action),
+      ).toEqual(['view', 'create', 'edit', 'delete']);
+    }
     expect(
       developmentFixtureAccounts.find((account) => account.key === 'pos-operator')?.permissions,
     ).toEqual([
@@ -48,6 +63,22 @@ describe('development fixtures', () => {
           (permission) => permission.module === 'pos' && permission.action === 'approve',
         ),
     ).toBe(true);
+    expect(
+      developmentFixtureAccounts
+        .find((account) => account.key === 'manager')
+        ?.permissions.some(
+          (permission) => permission.module === 'pos' && permission.action === 'view',
+        ),
+    ).toBe(true);
+    expect(
+      developmentFixtureAccounts
+        .find((account) => account.key === 'manager')
+        ?.permissions.some(
+          (permission) =>
+            permission.module === 'pos' &&
+            (permission.action === 'create' || permission.action === 'edit'),
+        ),
+    ).toBe(false);
     expect(
       developmentFixtureAccounts
         .find((account) => account.key === 'viewer')

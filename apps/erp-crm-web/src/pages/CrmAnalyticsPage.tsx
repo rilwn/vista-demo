@@ -27,9 +27,16 @@ import {
 } from '../api/crm-analytics';
 import { useAuth } from '../auth/AuthProvider';
 import { Icon } from '../components/Icon';
+import {
+  formatOperationsCurrency,
+  formatOperationsDate,
+  formatOperationsNumber,
+  useLocalization,
+} from '../i18n/LocalizationProvider';
 import { CrmTabs } from './CrmTicketsPage';
 import { listSavedCrmReports, saveCrmReport } from '../api/report-workspace';
 import { savedReportMessages as savedText } from './saved-report.messages';
+import { comparison } from './analytics-comparison';
 import './report-workspace.css';
 
 type Period = { dateFrom: string; dateTo: string };
@@ -45,6 +52,7 @@ const revenueDimensions: CrmAnalyticsRevenueDimension[] = [
 
 export function CrmAnalyticsPage() {
   const { hasPermission, session } = useAuth();
+  useLocalization();
   const token = session?.sessionToken ?? '';
   const initialPeriod = useMemo(() => presetPeriod('90-days'), []);
   const [dateFrom, setDateFrom] = useState(initialPeriod.dateFrom);
@@ -1041,32 +1049,6 @@ function CompactEmpty({ text }: { text: string }) {
   );
 }
 
-function comparison(
-  current: string,
-  previous: string,
-  unit: 'percent' | 'points' = 'percent',
-): { label: string; tone: 'down' | 'neutral' | 'up' } {
-  const currentValue = Number(current);
-  const previousValue = Number(previous);
-  if (!Number.isFinite(currentValue) || !Number.isFinite(previousValue)) {
-    return { label: 'No comparison', tone: 'neutral' };
-  }
-  const delta =
-    unit === 'points'
-      ? currentValue - previousValue
-      : previousValue === 0
-        ? currentValue === 0
-          ? 0
-          : 100
-        : ((currentValue - previousValue) / Math.abs(previousValue)) * 100;
-  if (Math.abs(delta) < 0.005) return { label: 'No change from prior period', tone: 'neutral' };
-  const suffix = unit === 'points' ? 'points' : '%';
-  return {
-    label: `${delta > 0 ? '↑' : '↓'} ${Math.abs(delta).toFixed(1)} ${suffix} vs prior period`,
-    tone: delta > 0 ? 'up' : 'down',
-  };
-}
-
 function presetPeriod(preset: '30-days' | '90-days' | 'year'): Period {
   const today = new Date();
   const from = new Date(today);
@@ -1083,19 +1065,15 @@ function localDate(value: Date): string {
 }
 
 function money(value: string): string {
-  return new Intl.NumberFormat(undefined, { currency: 'BGN', style: 'currency' }).format(
-    Number(value),
-  );
+  return formatOperationsCurrency(value, 'BGN');
 }
 
 function formatDecimal(value: string): string {
-  return new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 }).format(Number(value));
+  return formatOperationsNumber(Number(value), { maximumFractionDigits: 2 });
 }
 
 function shortDate(value: string): string {
-  return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(
-    new Date(`${value}T00:00:00`),
-  );
+  return formatOperationsDate(new Date(`${value}T00:00:00`), { dateStyle: 'medium' });
 }
 
 function barWidth(value: number, total: number): string {
@@ -1136,15 +1114,13 @@ function formatDescription(format: ReportExportFormat): string {
 }
 
 function formatExportDate(value: string): string {
-  return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(
-    new Date(value),
-  );
+  return formatOperationsDate(new Date(value), { dateStyle: 'medium', timeStyle: 'short' });
 }
 
 function formatFileSize(value: number): string {
   if (value < 1024) return `${value} B`;
   if (value < 1024 * 1024) return `${Math.round(value / 1024)} KB`;
-  return `${(value / (1024 * 1024)).toFixed(1)} MB`;
+  return `${formatOperationsNumber(value / (1024 * 1024), { minimumFractionDigits: 1, maximumFractionDigits: 1 })} MB`;
 }
 
 function errorMessage(error: unknown, fallback: string): string {

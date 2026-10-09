@@ -152,6 +152,25 @@ describe.skipIf(!runInfrastructureTests)('CRM lead and opportunity pipeline', ()
       telephone: '+359 888 200 300',
     };
     const key = `lead-${runId}`;
+    await request(application.getHttpServer())
+      .post('/api/v1/crm/leads')
+      .set('authorization', `Bearer ${editorToken}`)
+      .set('idempotency-key', `invalid-phone-${runId}`)
+      .send({ ...payload, telephone: 'abc' })
+      .expect(400)
+      .expect(({ body }) =>
+        expect(body.error).toMatchObject({
+          code: 'CRM_LEAD_TELEPHONE_INVALID',
+          details: [
+            {
+              field: 'telephone',
+              message:
+                'Enter 7–15 digits. An optional leading +, spaces, parentheses, hyphens or dots are allowed.',
+            },
+          ],
+          message: 'Review the telephone number.',
+        }),
+      );
     const created = await request(application.getHttpServer())
       .post('/api/v1/crm/leads')
       .set('authorization', `Bearer ${editorToken}`)
@@ -208,8 +227,8 @@ describe.skipIf(!runInfrastructureTests)('CRM lead and opportunity pipeline', ()
       newCustomer: {
         displayName: lead.organizationName,
         kind: 'legal_entity',
-        uic: `CRM${runId.slice(0, 12)}`,
-        vatNumber: `BGCRM${runId.slice(0, 10)}`,
+        uic: '131282355',
+        vatNumber: 'BG131282355',
       },
       note: 'Customer details confirmed during qualification.',
       opportunity: {
@@ -221,6 +240,22 @@ describe.skipIf(!runInfrastructureTests)('CRM lead and opportunity pipeline', ()
         title: 'Fiscal device and service package',
       },
     };
+    const invalidConversion = await request(application.getHttpServer())
+      .post(`/api/v1/crm/leads/${lead.id}/convert`)
+      .set('authorization', `Bearer ${editorToken}`)
+      .set('idempotency-key', `convert-invalid-identifiers-${runId}`)
+      .send({
+        ...payload,
+        newCustomer: { ...payload.newCustomer, uic: '12AB', vatNumber: 'XYZ' },
+      })
+      .expect(400);
+    expect(invalidConversion.body).toMatchObject({
+      error: {
+        code: 'BUSINESS_IDENTIFIER_INVALID',
+        details: [{ field: 'uic' }, { field: 'vatNumber' }],
+      },
+    });
+
     const key = `convert-${runId}`;
     const converted = await request(application.getHttpServer())
       .post(`/api/v1/crm/leads/${lead.id}/convert`)
@@ -274,9 +309,25 @@ describe.skipIf(!runInfrastructureTests)('CRM lead and opportunity pipeline', ()
       `INSERT INTO sales.quotations (
          id, quotation_number, customer_partner_id, warehouse_id, valid_until,
          currency_code, subtotal, vat_total, total, created_by
-       ) VALUES ($1,$2,$3,$4,'2026-10-31','BGN',1500,300,1800,$5)`,
+      ) VALUES ($1,$2,$3,$4,'2026-10-31','BGN',1500,300,1800,$5)`,
       [quotationId, `Q-${runId.slice(0, 18)}`, convertedCustomerId, warehouseId, editorAccountId],
     );
+    await request(application.getHttpServer())
+      .post(`/api/v1/crm/opportunities/${opportunity.id}/stage`)
+      .set('authorization', `Bearer ${editorToken}`)
+      .set('idempotency-key', `move-unquoted-${runId}`)
+      .send({
+        expectedVersion: opportunity.version,
+        probabilityPercent: 60,
+        stage: 'quotation_sent',
+      })
+      .expect(409)
+      .expect(({ body }) =>
+        expect(body.error).toMatchObject({
+          code: 'CRM_OPPORTUNITY_QUOTATION_REQUIRED',
+          message: 'Link a Sales quotation before moving this opportunity to Quotation sent.',
+        }),
+      );
     const linked = await request(application.getHttpServer())
       .post(`/api/v1/crm/opportunities/${opportunity.id}/quotations`)
       .set('authorization', `Bearer ${editorToken}`)

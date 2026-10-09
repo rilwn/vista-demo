@@ -25,11 +25,18 @@ import {
   retryServiceReportExport,
 } from '../api/service';
 import { Icon } from '../components/Icon';
+import {
+  formatOperationsCurrency,
+  formatOperationsDate,
+  formatOperationsNumber,
+  useLocalization,
+} from '../i18n/LocalizationProvider';
 import { listSavedServiceReports, saveServiceReport } from '../api/report-workspace';
 import { savedReportMessages as savedText } from './saved-report.messages';
 import './report-workspace.css';
 
 export function ServiceReportsView({ canExport, token }: { canExport: boolean; token: string }) {
+  useLocalization();
   const initialPeriod = useMemo(reportPeriod, []);
   const [dateFrom, setDateFrom] = useState(initialPeriod.dateFrom);
   const [dateTo, setDateTo] = useState(initialPeriod.dateTo);
@@ -126,13 +133,19 @@ function ServiceReportContent({ report, token }: { report: ServiceReportOverview
         labels={['Requests', 'Open', 'Completed', 'Recorded time', 'Service value']}
         className="service-report-summary"
       >
-        <ReportMetric label="Requests" value={report.totals.totalRequests.toLocaleString()} />
+        <ReportMetric
+          label="Requests"
+          value={formatOperationsNumber(report.totals.totalRequests)}
+        />
         <ReportMetric
           label="Open"
           tone="warning"
-          value={report.totals.openRequests.toLocaleString()}
+          value={formatOperationsNumber(report.totals.openRequests)}
         />
-        <ReportMetric label="Completed" value={report.totals.completedRequests.toLocaleString()} />
+        <ReportMetric
+          label="Completed"
+          value={formatOperationsNumber(report.totals.completedRequests)}
+        />
         <ReportMetric label="Recorded time" value={durationLabel(report.totals.laborMinutes)} />
         <ReportMetric label="Service value" value={money(report.totals.totalCostBgn)} />
       </DashboardCards>
@@ -808,9 +821,7 @@ function durationLabel(minutes: number) {
   return remainder ? `${hours}h ${remainder}m` : `${hours}h`;
 }
 function money(value: string) {
-  return new Intl.NumberFormat(undefined, { style: 'currency', currency: 'BGN' }).format(
-    Number(value),
-  );
+  return formatOperationsCurrency(value, 'BGN');
 }
 function percentage(value: number, total: number) {
   return `${total ? Math.max(4, Math.round((value / total) * 100)) : 0}%`;
@@ -826,14 +837,12 @@ function formatDescription(format: ReportExportFormat) {
   }[format];
 }
 function formatExportDate(value: string) {
-  return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(
-    new Date(value),
-  );
+  return formatOperationsDate(new Date(value), { dateStyle: 'medium', timeStyle: 'short' });
 }
 function formatFileSize(value: number) {
   if (value < 1024) return `${value} B`;
   if (value < 1024 * 1024) return `${Math.round(value / 1024)} KB`;
-  return `${(value / (1024 * 1024)).toFixed(1)} MB`;
+  return `${formatOperationsNumber(value / (1024 * 1024), { minimumFractionDigits: 1, maximumFractionDigits: 1 })} MB`;
 }
 function errorMessage(error: unknown, fallback: string) {
   return error instanceof ApiClientError ? error.message : fallback;

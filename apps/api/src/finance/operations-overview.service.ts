@@ -120,7 +120,8 @@ export class OperationsOverviewService {
         const revenue = await client.query<{ value: string }>(
           `SELECT coalesce(sum(CASE WHEN document_type = 'credit_note' THEN -bgn_net_total ELSE bgn_net_total END),0)::text AS value
            FROM finance.financial_documents
-           WHERE status <> 'cancelled' AND document_type IN ('invoice','credit_note','debit_note')
+           WHERE status NOT IN ('draft', 'cancelled') AND official_number IS NOT NULL
+           AND document_type IN ('invoice','credit_note','debit_note')
            AND issue_date BETWEEN $1::date AND $2::date`,
           [query.dateFrom, query.dateTo],
         );

@@ -8,7 +8,11 @@ import type {
   ReturnStockRequest,
   ReplenishmentStatus,
   StockBalance,
+  StockMovementJournalPage,
+  StockMovementJournalQuery,
+  StockMovementType,
   StockReservation,
+  StockReservationPage,
   Stocktake,
   TransferStockRequest,
   Warehouse,
@@ -24,7 +28,9 @@ import {
   createStockReservation,
   createWarehouse,
   issueStock,
+  listStockMovements,
   listReplenishment,
+  listStockReservations,
   listStockBalances,
   listWarehouses,
   openStocktake,
@@ -36,12 +42,20 @@ import {
 } from '../api/inventory';
 import { useAuth } from '../auth/AuthProvider';
 import { Icon } from '../components/Icon';
+import { TechnicalIdentifier } from '../components/TechnicalIdentifier';
+import {
+  formatOperationsCurrency,
+  formatOperationsMinorCurrency,
+  formatOperationsNumber,
+  useLocalization,
+} from '../i18n/LocalizationProvider';
 import { Link } from '../routing/Router';
 import { SerialTraceabilityPage } from './SerialTraceabilityPage';
 
 export type WarehouseView = 'warehouses' | 'stock' | 'movements' | 'stocktakes' | 'reservations';
 
 export function WarehouseOperationsPage({ view }: { view: WarehouseView }) {
+  useLocalization();
   const { hasPermission, session } = useAuth();
   const token = session?.sessionToken ?? '';
   const data = useWarehouseData(token, view === 'stock');
@@ -366,7 +380,10 @@ function StockView({
   const visibleReplenishment = replenishment.filter(
     (item) => warehouseId === 'all' || item.warehouseId === warehouseId,
   );
-  const totalValue = visibleBalances.reduce((sum, item) => sum + Number(item.inventoryValueBgn), 0);
+  const totalValue = visibleBalances.reduce(
+    (sum, item) => sum + displayedBgnMinorUnits(item.inventoryValueBgn),
+    0n,
+  );
   const reserved = visibleBalances.reduce((sum, item) => sum + Number(item.reservedQuantity), 0);
   const lowStock = visibleReplenishment.filter((item) => item.lowStock);
   return (
@@ -421,7 +438,7 @@ function StockView({
       <section className="inventory-kpis" aria-label="Inventory summary">
         <Metric
           label="Inventory value"
-          value={money(totalValue)}
+          value={moneyFromBgnMinorUnits(totalValue)}
           detail="Weighted-average value in BGN"
         />
         <Metric
@@ -466,7 +483,7 @@ function StockView({
                     {productById.get(balance.productId)?.name ?? 'Unavailable product'}
                   </strong>
                   <small>
-                    {productById.get(balance.productId)?.productCode ?? balance.productId}
+                    {productById.get(balance.productId)?.productCode ?? 'Code not available'}
                   </small>
                 </div>
                 <span>
@@ -652,8 +669,19 @@ function StockSettingsForm({
 }
 
 type MovementMode = 'receipt' | 'issue' | 'return' | 'transfer';
+const movementTypes: StockMovementType[] = [
+  'receipt',
+  'issue',
+  'return_in',
+  'transfer_in',
+  'transfer_out',
+  'stocktake_in',
+  'stocktake_out',
+];
 function MovementsView({ permissions, products, token, warehouses }: OperationalProps) {
   const [mode, setMode] = useState<MovementMode>('receipt');
+  const [journalRevision, setJournalRevision] = useState(0);
+  const refreshJournal = useCallback(() => setJournalRevision((value) => value + 1), []);
   return (
     <WarehousePageFrame
       description="Record receipts, issues, linked returns, and transfers with the serial or batch details required for each product."
@@ -681,11 +709,12 @@ function MovementsView({ permissions, products, token, warehouses }: Operational
         ))}
       </div>
       {permissions.create && mode === 'return' ? (
-        <ReturnMovementForm token={token} warehouses={warehouses} />
+        <ReturnMovementForm onPosted={refreshJournal} token={token} warehouses={warehouses} />
       ) : permissions.create ? (
         <MovementForm
           key={mode}
           mode={mode}
+          onPosted={refreshJournal}
           products={products}
           token={token}
           warehouses={warehouses}
@@ -695,11 +724,25 @@ function MovementsView({ permissions, products, token, warehouses }: Operational
           Your role can review inventory but cannot post stock movements.
         </InlineAlert>
       )}
+      <StockMovementJournal
+        revision={journalRevision}
+        products={products}
+        token={token}
+        warehouses={warehouses}
+      />
     </WarehousePageFrame>
   );
 }
 
-function ReturnMovementForm({ token, warehouses }: { token: string; warehouses: Warehouse[] }) {
+function ReturnMovementForm({
+  onPosted,
+  token,
+  warehouses,
+}: {
+  onPosted: () => void;
+  token: string;
+  warehouses: Warehouse[];
+}) {
   const [originalIssueId, setOriginalIssueId] = useState('');
   const [destinationWarehouseId, setDestinationWarehouseId] = useState(warehouses[0]?.id ?? '');
   const [disposition, setDisposition] = useState<ReturnStockRequest['disposition']>('restock');
@@ -731,6 +774,7 @@ function ReturnMovementForm({ token, warehouses }: { token: string; warehouses: 
     setResult(null);
     try {
       setResult(await returnStock(token, attempt(input), input));
+      onPosted();
     } catch (caught) {
       setError(commandError(caught, 'The linked stock return could not be posted.'));
     } finally {
@@ -812,8 +856,9 @@ function ReturnMovementForm({ token, warehouses }: { token: string; warehouses: 
         ) : null}
         {result ? (
           <InlineAlert tone="success" title="Return posted">
-            Return {shortId(result.id)} restored inventory at {money(result.unitCostBgn)} per unit;
-            total value {money(result.totalCostBgn)}.
+            Return posted; inventory restored at {money(result.unitCostBgn)} per unit, total value{' '}
+            {money(result.totalCostBgn)}.{' '}
+            <TechnicalIdentifier kind="stockMovement" value={result.id} />
           </InlineAlert>
         ) : null}
         <div className="warehouse-form-actions">
@@ -844,11 +889,13 @@ function ReturnMovementForm({ token, warehouses }: { token: string; warehouses: 
 
 function MovementForm({
   mode,
+  onPosted,
   products,
   token,
   warehouses,
 }: {
   mode: MovementMode;
+  onPosted: () => void;
   products: ProductSummary[];
   token: string;
   warehouses: Warehouse[];
@@ -892,6 +939,7 @@ function MovementForm({
           ...(expiresAt && batchNumber ? { expiresAt } : {}),
         };
         setResult(await receiveStock(token, attempt(input), input));
+        onPosted();
       } else if (mode === 'issue') {
         const input: IssueStockRequest = {
           productId,
@@ -902,6 +950,7 @@ function MovementForm({
           ...tracking,
         };
         setResult(await issueStock(token, attempt(input), input));
+        onPosted();
       } else {
         const input: TransferStockRequest = {
           fromWarehouseId: warehouseId,
@@ -912,6 +961,7 @@ function MovementForm({
           ...tracking,
         };
         setResult(await transferStock(token, attempt(input), input));
+        onPosted();
       }
     } catch (caught) {
       setError(commandError(caught, 'The movement could not be posted.'));
@@ -1044,8 +1094,9 @@ function MovementForm({
         ) : null}
         {result ? (
           <InlineAlert tone="success" title="Movement posted">
-            Transaction {shortId(result.id)} posted at {money(result.unitCostBgn)} per unit; total
-            value {money(result.totalCostBgn)}.
+            Movement posted at {money(result.unitCostBgn)} per unit; total value{' '}
+            {money(result.totalCostBgn)}.{' '}
+            <TechnicalIdentifier kind="stockMovement" value={result.id} />
           </InlineAlert>
         ) : null}
         <div className="warehouse-form-actions">
@@ -1082,6 +1133,220 @@ function MovementForm({
         </Link>
       </aside>
     </form>
+  );
+}
+
+function StockMovementJournal({
+  products,
+  revision,
+  token,
+  warehouses,
+}: {
+  products: ProductSummary[];
+  revision: number;
+  token: string;
+  warehouses: Warehouse[];
+}) {
+  const { dateLocale } = useLocalization();
+  const [warehouseId, setWarehouseId] = useState('');
+  const [productId, setProductId] = useState('');
+  const [movementType, setMovementType] = useState<StockMovementType | ''>('');
+  const [search, setSearch] = useState('');
+  const [query, setQuery] = useState<StockMovementJournalQuery>({ page: 1, pageSize: 25 });
+  const [data, setData] = useState<StockMovementJournalPage | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [refresh, setRefresh] = useState(0);
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    setError(null);
+    void listStockMovements(token, query)
+      .then((next) => {
+        if (active) setData(next);
+      })
+      .catch((caught: unknown) => {
+        if (active) setError(commandError(caught, 'Movement history could not be loaded.'));
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [query, refresh, revision, token]);
+
+  function applyFilters(event: FormEvent) {
+    event.preventDefault();
+    setQuery({
+      page: 1,
+      pageSize: 25,
+      ...(movementType ? { movementType } : {}),
+      ...(productId ? { productId } : {}),
+      ...(search.trim() ? { search: search.trim() } : {}),
+      ...(warehouseId ? { warehouseId } : {}),
+    });
+  }
+
+  return (
+    <section aria-label="Posted stock movements" className="inventory-panel stock-movement-journal">
+      <header className="inventory-panel-heading">
+        <div>
+          <span>Movement history</span>
+          <h2>Posted stock movements</h2>
+          <small>
+            Review stock changes and open the linked source record when one is available.
+          </small>
+        </div>
+        <Button onClick={() => setRefresh((value) => value + 1)} type="button" variant="secondary">
+          Refresh
+        </Button>
+      </header>
+
+      <form className="movement-journal-filters" onSubmit={applyFilters}>
+        <SelectField
+          id="journal-warehouse"
+          label="Warehouse"
+          onChange={setWarehouseId}
+          value={warehouseId}
+        >
+          <option value="">All warehouses</option>
+          {warehouses.map((item) => (
+            <option key={item.id} value={item.id}>
+              {item.name}
+            </option>
+          ))}
+        </SelectField>
+        <SelectField id="journal-product" label="Product" onChange={setProductId} value={productId}>
+          <option value="">All products</option>
+          {products.map((item) => (
+            <option key={item.id} value={item.id}>
+              {item.name} · {item.productCode}
+            </option>
+          ))}
+        </SelectField>
+        <SelectField
+          id="journal-movement-type"
+          label="Movement"
+          onChange={(value) => setMovementType(value as StockMovementType | '')}
+          value={movementType}
+        >
+          <option value="">All movements</option>
+          {movementTypes.map((type) => (
+            <option key={type} value={type}>
+              {movementTypeLabel(type)}
+            </option>
+          ))}
+        </SelectField>
+        <TextField
+          id="journal-search"
+          label="Search product or reference"
+          maxLength={120}
+          onChange={(event) => setSearch(event.target.value)}
+          placeholder="Name, product code, or document reference"
+          value={search}
+        />
+        <Button type="submit" variant="secondary">
+          Apply filters
+        </Button>
+      </form>
+
+      {error ? (
+        <InlineAlert tone="error" title="Movement history unavailable">
+          {error}
+        </InlineAlert>
+      ) : null}
+      {loading ? <p className="movement-journal-state">Loading movement history…</p> : null}
+      {!loading && !error && data?.items.length === 0 ? (
+        <p className="movement-journal-state">No posted movements match these filters.</p>
+      ) : null}
+      {!loading && !error && data?.items.length ? (
+        <>
+          <div className="movement-journal-scroll">
+            <table className="movement-journal-table">
+              <thead>
+                <tr>
+                  <th scope="col">Date and time</th>
+                  <th scope="col">Movement</th>
+                  <th scope="col">Product</th>
+                  <th scope="col">Warehouse</th>
+                  <th scope="col">Source record</th>
+                  <th className="is-numeric" scope="col">
+                    Quantity
+                  </th>
+                  <th className="is-numeric" scope="col">
+                    Value
+                  </th>
+                  <th scope="col">Posted by</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.items.map((item) => (
+                  <tr key={item.id}>
+                    <td>{formatMovementDate(item.occurredAt, dateLocale)}</td>
+                    <td>
+                      <span className={`movement-journal-type is-${item.movementType}`}>
+                        {movementTypeLabel(item.movementType)}
+                      </span>
+                    </td>
+                    <td>
+                      <strong>{item.productName}</strong>
+                      <small>{item.productCode}</small>
+                    </td>
+                    <td>{item.warehouseName}</td>
+                    <td>
+                      {item.sourceHref ? (
+                        <Link className="movement-source-link" to={item.sourceHref}>
+                          {item.referenceLabel}
+                        </Link>
+                      ) : (
+                        <span>{item.referenceLabel}</span>
+                      )}
+                      <small>{item.referenceType}</small>
+                    </td>
+                    <td
+                      className={`is-numeric ${Number(item.quantity) < 0 ? 'is-negative' : 'is-positive'}`}
+                    >
+                      {formatMovementQuantity(item.quantity, dateLocale)}
+                    </td>
+                    <td className="is-numeric">
+                      <strong>{money(item.totalCostBgn)}</strong>
+                      <small>{money(item.unitCostBgn)} / unit</small>
+                    </td>
+                    <td>{item.actorDisplayName}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <footer className="movement-journal-pagination">
+            <span>{data.total.toLocaleString(dateLocale)} movements</span>
+            <div>
+              <Button
+                disabled={data.page <= 1 || loading}
+                onClick={() => setQuery((current) => ({ ...current, page: data.page - 1 }))}
+                type="button"
+                variant="secondary"
+              >
+                Previous
+              </Button>
+              <span>
+                Page {data.page} of {Math.max(data.totalPages, 1)}
+              </span>
+              <Button
+                disabled={data.page >= data.totalPages || loading}
+                onClick={() => setQuery((current) => ({ ...current, page: data.page + 1 }))}
+                type="button"
+                variant="secondary"
+              >
+                Next
+              </Button>
+            </div>
+          </footer>
+        </>
+      ) : null}
+    </section>
   );
 }
 
@@ -1364,6 +1629,34 @@ function StocktakeSession({
 function ReservationsView(props: OperationalProps) {
   const { permissions, products, token, warehouses } = props;
   const [reservation, setReservation] = useState<StockReservation | null>(null);
+  const [reservationPage, setReservationPage] = useState<StockReservationPage | null>(null);
+  const [reservationPageNumber, setReservationPageNumber] = useState(1);
+  const [reservationLoading, setReservationLoading] = useState(true);
+  const [reservationError, setReservationError] = useState<string | null>(null);
+  const [reservationReload, setReservationReload] = useState(0);
+  useEffect(() => {
+    let current = true;
+    setReservationLoading(true);
+    setReservationError(null);
+    void listStockReservations(token, { page: reservationPageNumber, pageSize: 25 })
+      .then((result) => {
+        if (current) setReservationPage(result);
+      })
+      .catch((caught: unknown) => {
+        if (current)
+          setReservationError(commandError(caught, 'Active reservations could not be loaded.'));
+      })
+      .finally(() => {
+        if (current) setReservationLoading(false);
+      });
+    return () => {
+      current = false;
+    };
+  }, [reservationPageNumber, reservationReload, token]);
+  function refreshReservations(value: StockReservation) {
+    setReservation(value);
+    setReservationReload((current) => current + 1);
+  }
   return (
     <WarehousePageFrame
       description="Reserve quantities or exact serial numbers for a sales order, quotation, or service request, and review device movements."
@@ -1374,7 +1667,7 @@ function ReservationsView(props: OperationalProps) {
         <section>
           {permissions.create ? (
             <ReservationForm
-              onCreated={setReservation}
+              onCreated={refreshReservations}
               products={products}
               token={token}
               warehouses={warehouses}
@@ -1383,15 +1676,57 @@ function ReservationsView(props: OperationalProps) {
             <InlineAlert tone="info">Your role cannot create stock reservations.</InlineAlert>
           )}
           {reservation ? (
-            <ReservationReceipt
-              canRelease={permissions.edit}
-              onChanged={setReservation}
-              products={products}
-              reservation={reservation}
-              token={token}
-              warehouses={warehouses}
-            />
+            <InlineAlert tone="success">
+              Reservation for <strong>{reservation.referenceLabel}</strong> is now{' '}
+              <strong>{reservation.status}</strong>.
+            </InlineAlert>
           ) : null}
+          <section className="warehouse-command-card reservation-register">
+            <div className="command-card-heading">
+              <div>
+                <span>Warehouse commitments</span>
+                <h2>Active reservations</h2>
+              </div>
+              <small>{reservationPage?.total ?? 0} active</small>
+            </div>
+            {reservationLoading ? <p role="status">Loading reservations…</p> : null}
+            {reservationError ? <InlineAlert tone="error">{reservationError}</InlineAlert> : null}
+            {!reservationLoading && !reservationError && !reservationPage?.items.length ? (
+              <p>No active reservations.</p>
+            ) : null}
+            {reservationPage?.items.map((item) => (
+              <ReservationReceipt
+                key={item.id}
+                canRelease={permissions.edit}
+                onChanged={refreshReservations}
+                products={products}
+                reservation={item}
+                token={token}
+                warehouses={warehouses}
+              />
+            ))}
+            {reservationPage && reservationPage.totalPages > 1 ? (
+              <div className="reservation-pagination">
+                <Button
+                  disabled={reservationPageNumber <= 1}
+                  onClick={() => setReservationPageNumber((current) => current - 1)}
+                  variant="secondary"
+                >
+                  Previous
+                </Button>
+                <span>
+                  Page {reservationPage.page} of {reservationPage.totalPages}
+                </span>
+                <Button
+                  disabled={reservationPageNumber >= reservationPage.totalPages}
+                  onClick={() => setReservationPageNumber((current) => current + 1)}
+                  variant="secondary"
+                >
+                  Next
+                </Button>
+              </div>
+            ) : null}
+          </section>
         </section>
         <section className="embedded-trace">
           <SerialTraceabilityPage compact />
@@ -1488,6 +1823,7 @@ function ReservationForm({
           id="reservation-reference"
           label="Reference"
           maxLength={120}
+          hint="Enter an existing order, quotation, or service request number."
           onChange={(event) => setReferenceId(event.target.value)}
           required
           value={referenceId}
@@ -1575,7 +1911,7 @@ function ReservationReceipt({
       </div>
       <div>
         <span>Reference</span>
-        <strong>{reservation.referenceId}</strong>
+        <strong>{reservation.referenceLabel}</strong>
         <small>{reservation.referenceType.replace('_', ' ')}</small>
       </div>
       <div>
@@ -1787,12 +2123,46 @@ function commandError(caught: unknown, fallback: string) {
   return details.length ? `${caught.message}: ${details.join('. ')}` : caught.message;
 }
 function quantity(value: string | number) {
-  return Number(value).toLocaleString('en-GB', { maximumFractionDigits: 4 });
+  return formatOperationsNumber(Number(value), { maximumFractionDigits: 4 });
 }
 function money(value: string | number) {
-  return `${Number(value).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} BGN`;
+  return formatOperationsCurrency(value, 'BGN');
 }
-function shortId(value: string) {
-  return value.slice(0, 8).toUpperCase();
+function displayedBgnMinorUnits(value: string) {
+  const match = /^(-?)(\d+)(?:\.(\d+))?$/.exec(value);
+  if (!match) return 0n;
+  let minor = BigInt(match[2]!) * 100n + BigInt((match[3] ?? '').padEnd(2, '0').slice(0, 2));
+  if ((match[3] ?? '')[2] && (match[3] ?? '')[2]! >= '5') minor += 1n;
+  return match[1] === '-' ? -minor : minor;
+}
+function moneyFromBgnMinorUnits(value: bigint) {
+  return formatOperationsMinorCurrency(value, 'BGN');
+}
+function formatMovementDate(value: string, locale: string) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime())
+    ? value
+    : new Intl.DateTimeFormat(locale, {
+        dateStyle: 'medium',
+        timeStyle: 'short',
+        timeZone: 'Europe/Sofia',
+      }).format(date);
+}
+function formatMovementQuantity(value: string, locale: string) {
+  const quantity = Number(value);
+  const formatted = Math.abs(quantity).toLocaleString(locale, { maximumFractionDigits: 4 });
+  return quantity < 0 ? `−${formatted}` : `+${formatted}`;
+}
+function movementTypeLabel(type: StockMovementType) {
+  const labels: Record<StockMovementType, string> = {
+    issue: 'Issued',
+    receipt: 'Received',
+    return_in: 'Return received',
+    stocktake_in: 'Stocktake increase',
+    stocktake_out: 'Stocktake decrease',
+    transfer_in: 'Transfer in',
+    transfer_out: 'Transfer out',
+  };
+  return labels[type];
 }
 import { erpReportMessages } from './erp-report.messages';

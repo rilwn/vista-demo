@@ -47,7 +47,8 @@ export class NamedJobTriggerHandlersService implements OnModuleInit {
     const domainResult =
       context.name === 'sales.subscription-invoice.generate'
         ? await this.subscriptions.generateDueInvoiceDrafts(context)
-        : context.name === 'finance.payment-status.detect'
+        : context.name === 'finance.payment-status.detect' ||
+            context.name === 'finance.payment-notification.prepare'
           ? await this.finance.detectPaymentStatuses(context)
           : context.name === 'report.generate' && typeof context.payload['exportId'] === 'string'
             ? await this.reportExports.generate(context)
@@ -60,6 +61,9 @@ export class NamedJobTriggerHandlersService implements OnModuleInit {
                   : context.name === 'crm.sla.evaluate'
                     ? await this.crmTickets.evaluateSla(context)
                     : undefined;
+    // A fulfilled domain call is execution evidence, not another request for an
+    // unregistered consumer. Keep genuine future handoffs pending.
+    const completed = domainResult !== undefined;
     const eventId = deterministicUuid(`${context.name}\u0000${context.idempotencyKey}`);
     const outboxIdempotencyKey = `scheduled:${createHash('sha256')
       .update(`${context.name}\u0000${context.idempotencyKey}`)
@@ -67,8 +71,9 @@ export class NamedJobTriggerHandlersService implements OnModuleInit {
     const result = await this.database.getPool().query(
       `INSERT INTO integration.outbox_events (
          id, aggregate_type, aggregate_id, event_type, event_version,
-         correlation_id, idempotency_key, payload
-       ) VALUES ($1, 'scheduled_job', $1, $2, 1, $3, $4, $5)
+         correlation_id, idempotency_key, payload, status, completed_at
+       ) VALUES ($1, 'scheduled_job', $1, $2, 1, $3, $4, $5, $6::varchar,
+                 CASE WHEN $6::varchar = 'completed' THEN now() END)
        ON CONFLICT (idempotency_key) DO NOTHING`,
       [
         eventId,
@@ -80,12 +85,17 @@ export class NamedJobTriggerHandlersService implements OnModuleInit {
           jobName: context.name,
           queuedAt: context.enqueuedAt,
         },
+        completed ? 'completed' : 'pending',
       ],
     );
     const deduplicated = result.rowCount === 0;
     this.logger.event(
       'info',
-      deduplicated ? 'scheduled_job.deduplicated' : 'scheduled_job.queued',
+      deduplicated
+        ? 'scheduled_job.deduplicated'
+        : completed
+          ? 'scheduled_job.completed'
+          : 'scheduled_job.queued',
       {
         eventId,
         jobName: context.name,

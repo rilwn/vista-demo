@@ -10,28 +10,84 @@ import { type FormEvent, useCallback, useEffect, useState } from 'react';
 import { ApiClientError } from '../api/client';
 import {
   acceptSalesHandover,
+  cancelSalesQuotation,
   confirmSalesQuotation,
   createSalesInvoiceDraft,
   createSalesQuotation,
   createSalesShipment,
+  downloadSalesQuotationPdf,
   getSalesReferenceData,
   listSalesWorkflows,
+  updateSalesQuotation,
 } from '../api/sales';
 import { resolveSalesPrice } from '../api/sales-pricing';
 import { useAuth } from '../auth/AuthProvider';
 import { Icon } from '../components/Icon';
-import { Link } from '../routing/Router';
+import {
+  formatOperationsCurrency,
+  formatOperationsDate,
+  useLocalization,
+} from '../i18n/LocalizationProvider';
+import { Link, useRouter } from '../routing/Router';
 import { erpReportMessages } from './erp-report.messages';
 
 export function SalesWorkflowPage() {
+  const { location, navigate } = useRouter();
   const { hasPermission, session } = useAuth();
+  const { locale } = useLocalization();
   const token = session?.sessionToken ?? '';
   const data = useSalesData(token);
   const [preview, setPreview] = useState<SalesWorkflow | null>(null);
   const [creating, setCreating] = useState(false);
+  const [editing, setEditing] = useState<SalesWorkflow | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [sourceReturnTo, setSourceReturnTo] = useState<string | null>(null);
   const canCreate = hasPermission('erp.sales', 'create');
   const canEdit = hasPermission('erp.sales', 'edit');
+  const routeState =
+    location.state && typeof location.state === 'object'
+      ? (location.state as {
+          returnTo?: unknown;
+          sourceQuotationId?: unknown;
+          sourceSalesInvoiceId?: unknown;
+        })
+      : undefined;
+  const requestedInvoiceId =
+    typeof routeState?.sourceSalesInvoiceId === 'string'
+      ? routeState.sourceSalesInvoiceId
+      : undefined;
+  const requestedQuotationId =
+    typeof routeState?.sourceQuotationId === 'string' ? routeState.sourceQuotationId : undefined;
+  const requestedReturnTo =
+    typeof routeState?.returnTo === 'string' &&
+    /^\/modules\/erp\.finance\/(invoices|payments)$/u.test(routeState.returnTo)
+      ? routeState.returnTo
+      : '/modules/erp.finance/invoices';
+
+  useEffect(() => {
+    if ((!requestedInvoiceId && !requestedQuotationId) || data.loading || data.error) return;
+    const workflow = requestedQuotationId
+      ? data.workflows.find((item) => item.id === requestedQuotationId)
+      : data.workflows.find((item) => item.invoice?.id === requestedInvoiceId);
+    navigate(location.pathname, { replace: true });
+    setSourceReturnTo(requestedQuotationId ? null : requestedReturnTo);
+    if (workflow) setPreview(workflow);
+    else
+      setNotice(
+        requestedQuotationId
+          ? 'The linked quotation could not be found.'
+          : 'The linked Sales invoice draft could not be found.',
+      );
+  }, [
+    data.error,
+    data.loading,
+    data.workflows,
+    location.pathname,
+    navigate,
+    requestedInvoiceId,
+    requestedQuotationId,
+    requestedReturnTo,
+  ]);
 
   if (data.loading) return <SalesState title="Loading sales records" />;
   if (data.error)
@@ -72,12 +128,25 @@ export function SalesWorkflowPage() {
       ) : null}
       <SalesRegister onPreview={setPreview} workflows={data.workflows} />
 
-      {creating ? (
+      {creating || editing ? (
         <QuotationDrawer
-          onBack={() => setCreating(false)}
+          key={editing?.id ?? 'new-quotation'}
+          {...(editing ? { editing } : {})}
+          onBack={() => {
+            setCreating(false);
+            setEditing(null);
+          }}
           onSaved={(workflow) => {
             setCreating(false);
-            setNotice(`${workflow.number} was created.`);
+            setEditing(null);
+            setPreview(editing ? workflow : null);
+            setNotice(
+              editing
+                ? locale === 'bg'
+                  ? `${workflow.number} беше редактирана.`
+                  : `${workflow.number} was revised.`
+                : `${workflow.number} was created.`,
+            );
             data.reload();
           }}
           references={data.references}
@@ -86,9 +155,17 @@ export function SalesWorkflowPage() {
       ) : null}
       {preview ? (
         <WorkflowDrawer
+          {...(sourceReturnTo ? { backLabel: 'Back to Finance' } : {})}
           canCreate={canCreate}
           canEdit={canEdit}
-          onBack={() => setPreview(null)}
+          onEdit={(workflow) => {
+            setPreview(null);
+            setEditing(workflow);
+          }}
+          onBack={() => {
+            if (sourceReturnTo) navigate(sourceReturnTo);
+            else setPreview(null);
+          }}
           onSaved={(workflow, message) => {
             setPreview(workflow);
             setNotice(message);
@@ -162,11 +239,26 @@ function SalesRegister({
 }
 
 function WorkflowProgress({ status }: { status: SalesWorkflow['status'] }) {
-  const current = ['draft', 'confirmed', 'shipped', 'invoiced'].indexOf(status);
+  const current =
+    status === 'expired' || status === 'cancelled'
+      ? 0
+      : ['draft', 'confirmed', 'shipped', 'invoiced'].indexOf(status);
   return (
     <div aria-label={`Current stage: ${statusLabel(status)}`} className="sales-progress">
       {['Quotation', 'Order', 'Shipment', 'Invoice'].map((label, index) => (
-        <span className={index <= current ? 'is-complete' : ''} key={label} title={label} />
+        <span
+          className={
+            (status === 'expired' || status === 'cancelled') && index === 0
+              ? status === 'expired'
+                ? 'is-expired'
+                : 'is-cancelled'
+              : index <= current
+                ? 'is-complete'
+                : ''
+          }
+          key={label}
+          title={label}
+        />
       ))}
       <small>{statusLabel(status)}</small>
     </div>
@@ -183,22 +275,44 @@ interface QuotationLineDraft {
 }
 
 function QuotationDrawer({
+  editing,
   onBack,
   onSaved,
   references,
   token,
 }: {
+  editing?: SalesWorkflow;
   onBack: () => void;
   onSaved: (workflow: SalesWorkflow) => void;
   references: SalesReferenceData;
   token: string;
 }) {
-  const [customerPartnerId, setCustomerPartnerId] = useState(references.customers[0]?.id ?? '');
-  const [warehouseId, setWarehouseId] = useState(references.warehouses[0]?.id ?? '');
-  const [validUntil, setValidUntil] = useState(futureDate(14));
-  const [currencyCode, setCurrencyCode] = useState('BGN');
-  const [overallDiscountPercent, setOverallDiscountPercent] = useState('0');
-  const [lines, setLines] = useState<QuotationLineDraft[]>([quotationLine()]);
+  const { locale } = useLocalization();
+  const [customerPartnerId, setCustomerPartnerId] = useState(
+    editing?.customerPartnerId ?? references.customers[0]?.id ?? '',
+  );
+  const [warehouseId, setWarehouseId] = useState(
+    editing?.warehouseId ?? references.warehouses[0]?.id ?? '',
+  );
+  const [validUntil, setValidUntil] = useState(
+    editing?.validUntil ?? futureDate(14, references.businessTimezone),
+  );
+  const [currencyCode, setCurrencyCode] = useState(editing?.currencyCode ?? 'BGN');
+  const [overallDiscountPercent, setOverallDiscountPercent] = useState(
+    editing?.overallDiscountPercent ?? '0',
+  );
+  const [lines, setLines] = useState<QuotationLineDraft[]>(
+    editing
+      ? editing.lines.map((line) => ({
+          discountPercent: line.discountPercent,
+          id: line.id,
+          productId: line.productId,
+          quantity: line.quantity,
+          unitPrice: line.unitPrice,
+          vatTreatment: line.vatTreatment,
+        }))
+      : [quotationLine()],
+  );
   const [busy, setBusy] = useState(false);
   const [priceBusyLineId, setPriceBusyLineId] = useState<string | null>(null);
   const [priceNotices, setPriceNotices] = useState<
@@ -271,9 +385,16 @@ function QuotationDrawer({
     setBusy(true);
     setError(null);
     try {
-      onSaved(await createSalesQuotation(token, crypto.randomUUID(), input));
+      onSaved(
+        editing
+          ? await updateSalesQuotation(token, editing.id, crypto.randomUUID(), {
+              ...input,
+              expectedVersion: editing.version,
+            })
+          : await createSalesQuotation(token, crypto.randomUUID(), input),
+      );
     } catch (caught) {
-      setError(errorText(caught, 'The quotation could not be created.'));
+      setError(errorText(caught, 'The quotation could not be saved. Refresh and try again.'));
     } finally {
       setBusy(false);
     }
@@ -281,12 +402,17 @@ function QuotationDrawer({
 
   const missingReferences =
     !references.customers.length || !references.products.length || !references.warehouses.length;
+  const quotationDate = businessDate(references.businessTimezone);
   return (
     <SalesDrawer
       busy={busy}
       onBack={onBack}
-      subtitle="Customer offer and commercial terms"
-      title="New quotation"
+      subtitle={
+        editing
+          ? `${editing.number} · Revision ${editing.version}`
+          : 'Customer offer and commercial terms'
+      }
+      title={editing ? 'Revise quotation' : 'New quotation'}
     >
       <form className="sales-form" onSubmit={(event) => void submit(event)}>
         {error ? <InlineAlert tone="error">{error}</InlineAlert> : null}
@@ -335,11 +461,17 @@ function QuotationDrawer({
             </SalesField>
             <SalesField label="Valid until">
               <input
+                min={quotationDate}
                 required
                 type="date"
                 value={validUntil}
                 onChange={(event) => setValidUntil(event.target.value)}
               />
+              {validUntil < quotationDate ? (
+                <small className="sales-field-error" role="alert">
+                  This quotation must be valid today or later.
+                </small>
+              ) : null}
             </SalesField>
             <SalesField label="Currency">
               <input
@@ -474,6 +606,17 @@ function QuotationDrawer({
                     </small>
                   ) : null}
                 </div>
+                {line.productId &&
+                compareDecimals(
+                  availableQuantity(references, warehouseId, line.productId),
+                  line.quantity,
+                ) < 0 ? (
+                  <InlineAlert tone="warning">
+                    {locale === 'bg'
+                      ? `Налични са ${availableQuantity(references, warehouseId, line.productId)} от заявените ${line.quantity} в този склад. Офертата може да бъде запазена, но наличността ще бъде проверена отново при потвърждение.`
+                      : `${availableQuantity(references, warehouseId, line.productId)} of ${line.quantity} requested units are currently available in this warehouse. You can save the quotation, but stock will be checked again when the order is confirmed.`}
+                  </InlineAlert>
+                ) : null}
               </article>
             ))}
           </div>
@@ -511,7 +654,13 @@ function QuotationDrawer({
             disabled={busy || missingReferences || lines.some((line) => !line.productId)}
             type="submit"
           >
-            {busy ? 'Creating quotation' : 'Create quotation'}
+            {busy
+              ? editing
+                ? 'Saving changes'
+                : 'Creating quotation'
+              : editing
+                ? 'Save changes'
+                : 'Create quotation'}
           </Button>
         </div>
       </form>
@@ -520,22 +669,27 @@ function QuotationDrawer({
 }
 
 function WorkflowDrawer({
+  backLabel,
   canCreate,
   canEdit,
+  onEdit,
   onBack,
   onSaved,
   references,
   token,
   workflow,
 }: {
+  backLabel?: string;
   canCreate: boolean;
   canEdit: boolean;
+  onEdit: (workflow: SalesWorkflow) => void;
   onBack: () => void;
   onSaved: (workflow: SalesWorkflow, message: string) => void;
   references: SalesReferenceData;
   token: string;
   workflow: SalesWorkflow;
 }) {
+  const { locale } = useLocalization();
   const [serials, setSerials] = useState<Record<string, string[]>>({});
   const [serialSearches, setSerialSearches] = useState<Record<string, string>>({});
   const [batches, setBatches] = useState<Record<string, string>>({});
@@ -544,6 +698,8 @@ function WorkflowDrawer({
   const [acceptedByName, setAcceptedByName] = useState('');
   const [acceptanceNotes, setAcceptanceNotes] = useState('');
   const [customerLocationId, setCustomerLocationId] = useState('');
+  const [cancellationReason, setCancellationReason] = useState('');
+  const [confirmCancellation, setConfirmCancellation] = useState(false);
   const serialLines = workflow.lines.filter((line) => line.trackingMode === 'serial');
   const serialSelectionComplete = serialLines.every(
     (line) => (serials[line.id]?.length ?? 0) === Number(line.quantity),
@@ -614,10 +770,42 @@ function WorkflowDrawer({
         }),
       'Customer acceptance recorded on the handover certificate.',
     );
+  const cancel = () =>
+    act(
+      () =>
+        cancelSalesQuotation(token, workflow.id, crypto.randomUUID(), {
+          expectedVersion: workflow.version,
+          ...(cancellationReason.trim() ? { reason: cancellationReason.trim() } : {}),
+        }),
+      'Quotation cancelled. Its history has been kept.',
+    );
+  async function downloadPdf() {
+    setBusy(true);
+    setError(null);
+    try {
+      const blob = await downloadSalesQuotationPdf(token, workflow.id);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${workflow.number}.pdf`;
+      link.click();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (caught) {
+      setError(errorText(caught, 'The quotation PDF could not be downloaded.'));
+    } finally {
+      setBusy(false);
+    }
+  }
+  const canReviseOrCancel = canEdit && ['draft', 'expired'].includes(workflow.status);
+  const availabilityWarnings = workflow.lines.flatMap((line) => {
+    const available = availableQuantity(references, workflow.warehouseId, line.productId);
+    return compareDecimals(available, line.quantity) < 0 ? [{ line, available }] : [];
+  });
 
   return (
     <SalesDrawer
       busy={busy}
+      {...(backLabel ? { backLabel } : {})}
       onBack={onBack}
       subtitle={`${workflow.customerName} · ${formatMoney(workflow.total, workflow.currencyCode)}`}
       title={workflow.number}
@@ -661,6 +849,72 @@ function WorkflowDrawer({
             <dd>{formatMoney(workflow.total, workflow.currencyCode)}</dd>
           </div>
         </dl>
+      </section>
+      {availabilityWarnings.length ? (
+        <InlineAlert tone="warning">
+          {availabilityWarnings.map(({ available, line }) => (
+            <span key={line.id}>
+              {locale === 'bg'
+                ? `${line.productName}: заявени ${line.quantity}, налични ${available} в този склад. Променете офертата или заредете наличност, преди да потвърдите поръчката.`
+                : `${line.productName}: ${line.quantity} requested, ${available} currently available in this warehouse. Revise the quotation or replenish stock before confirming the order.`}
+            </span>
+          ))}
+        </InlineAlert>
+      ) : null}
+      <section className="sales-next-action sales-quotation-actions">
+        <header>
+          <div>
+            <h3>Customer copy</h3>
+            <p>Download a printable quotation. It is not a tax invoice.</p>
+          </div>
+        </header>
+        <Button disabled={busy} onClick={() => void downloadPdf()} variant="secondary">
+          Download quotation PDF
+        </Button>
+        {canReviseOrCancel ? (
+          <div className="sales-quotation-lifecycle">
+            <Button disabled={busy} onClick={() => onEdit(workflow)} variant="secondary">
+              Revise quotation
+            </Button>
+            {!confirmCancellation ? (
+              <Button disabled={busy} onClick={() => setConfirmCancellation(true)} variant="quiet">
+                Cancel quotation
+              </Button>
+            ) : (
+              <div className="sales-cancel-confirmation">
+                <p>
+                  Cancel this quotation? The reference and revision history will remain available.
+                </p>
+                <SalesField label="Reason (optional)">
+                  <textarea
+                    maxLength={500}
+                    onChange={(event) => setCancellationReason(event.target.value)}
+                    rows={2}
+                    value={cancellationReason}
+                  />
+                </SalesField>
+                <div>
+                  <Button
+                    disabled={busy}
+                    onClick={() => setConfirmCancellation(false)}
+                    type="button"
+                    variant="quiet"
+                  >
+                    Keep quotation
+                  </Button>
+                  <Button
+                    disabled={busy}
+                    onClick={() => void cancel()}
+                    type="button"
+                    variant="danger"
+                  >
+                    Confirm cancellation
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+        ) : null}
       </section>
       {workflow.status === 'draft' && canCreate ? (
         <section className="sales-next-action sales-confirm-order">
@@ -905,12 +1159,14 @@ function WorkflowTimeline({ workflow }: { workflow: SalesWorkflow }) {
 }
 
 function SalesDrawer({
+  backLabel,
   busy,
   children,
   onBack,
   subtitle,
   title,
 }: {
+  backLabel?: string;
   busy: boolean;
   children: React.ReactNode;
   onBack: () => void;
@@ -934,13 +1190,13 @@ function SalesDrawer({
       >
         <header className="sales-drawer-header">
           <button
-            aria-label="Back to sales list"
+            aria-label={backLabel ?? 'Back to sales list'}
             className="sales-back-button"
             disabled={busy}
             onClick={onBack}
             type="button"
           >
-            <Icon name="arrow" size={17} /> Back
+            <Icon name="arrow" size={17} /> {backLabel ?? 'Back'}
           </button>
           <button
             aria-label="Close preview"
@@ -1099,7 +1355,9 @@ function SalesState({ children, title }: { children?: React.ReactNode; title: st
 function useSalesData(token: string) {
   const [workflows, setWorkflows] = useState<SalesWorkflow[]>([]);
   const [references, setReferences] = useState<SalesReferenceData>({
+    availability: [],
     batches: [],
+    businessTimezone: 'Europe/Sofia',
     customers: [],
     customerLocations: [],
     products: [],
@@ -1154,29 +1412,56 @@ function updateLine(
 }
 function statusLabel(status: SalesWorkflow['status']) {
   return {
+    cancelled: 'Cancelled',
     draft: 'Quotation',
+    expired: 'Expired',
     confirmed: 'Confirmed order',
     shipped: 'Shipped',
     invoiced: 'Invoice draft',
   }[status];
 }
-function futureDate(days: number) {
-  const date = new Date();
+function availableQuantity(references: SalesReferenceData, warehouseId: string, productId: string) {
+  return (
+    references.availability?.find(
+      (item) => item.warehouseId === warehouseId && item.productId === productId,
+    )?.quantity ?? '0'
+  );
+}
+function compareDecimals(left: string, right: string): number {
+  const toUnits = (value: string) => {
+    if (!/^\d+(?:\.\d{1,4})?$/u.test(value)) return null;
+    const [whole, fraction = ''] = value.split('.');
+    return BigInt(`${whole}${fraction.padEnd(4, '0')}`);
+  };
+  const leftUnits = toUnits(left);
+  const rightUnits = toUnits(right);
+  if (leftUnits === null || rightUnits === null) return 0;
+  return leftUnits < rightUnits ? -1 : leftUnits > rightUnits ? 1 : 0;
+}
+function futureDate(days: number, timeZone: string) {
+  const date = new Date(`${businessDate(timeZone)}T00:00:00Z`);
   date.setUTCDate(date.getUTCDate() + days);
   return date.toISOString().slice(0, 10);
 }
+function businessDate(timeZone: string) {
+  const parts = new Intl.DateTimeFormat('en', {
+    day: '2-digit',
+    month: '2-digit',
+    timeZone,
+    year: 'numeric',
+  }).formatToParts(new Date());
+  const part = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((candidate) => candidate.type === type)?.value ?? '';
+  return `${part('year')}-${part('month')}-${part('day')}`;
+}
 function formatDate(value: string) {
-  return new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium' }).format(
-    new Date(`${value}T00:00:00Z`),
-  );
+  return formatOperationsDate(new Date(`${value}T00:00:00Z`), { dateStyle: 'medium' });
 }
 function formatDateTime(value: string) {
-  return new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium', timeStyle: 'short' }).format(
-    new Date(value),
-  );
+  return formatOperationsDate(new Date(value), { dateStyle: 'medium', timeStyle: 'short' });
 }
 function formatMoney(value: string, currency: string) {
-  return new Intl.NumberFormat('en-GB', { currency, style: 'currency' }).format(Number(value));
+  return formatOperationsCurrency(value, currency);
 }
 function errorText(error: unknown, fallback: string) {
   return error instanceof ApiClientError ? (error.details[0]?.message ?? error.message) : fallback;

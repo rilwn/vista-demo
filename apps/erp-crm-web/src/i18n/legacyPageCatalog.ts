@@ -1,6 +1,86 @@
 /** Reviewed translations for workflow pages that still contain legacy inline copy. */
 export const legacyBulgarianText: Readonly<Record<string, string>> = {
   // Shared workflow language
+  'Open receivables': 'Отворени вземания',
+  'Apply an available advance to reduce an outstanding balance.':
+    'Приложете наличен аванс, за да намалите непогасеното задължение.',
+  'Apply advance': 'Приложи аванс',
+  'Apply customer advance': 'Приложи клиентски аванс',
+  'Choose the advance and amount': 'Изберете аванс и сума',
+  'The payment keeps its original date and method, and remains linked to the advance.':
+    'Плащането запазва първоначалните си дата и начин и остава свързано с аванса.',
+  'Customer advance': 'Клиентски аванс',
+  'Open receivable': 'Отворено вземане',
+  'Amount to apply (BGN)': 'Сума за прилагане (лв.)',
+  'No open receivables are available.': 'Няма отворени вземания.',
+  'The advance could not be applied. Refresh and try again.':
+    'Авансът не може да бъде приложен. Обновете страницата и опитайте отново.',
+  'Choose an available advance belonging to this customer.':
+    'Изберете наличен аванс на този клиент.',
+  'The allocation exceeds the available customer advance.':
+    'Сумата надвишава наличния клиентски аванс.',
+  'Advance from': 'Аванс от',
+  'Active drafts': 'Активни чернови',
+  Invoices: 'Фактури',
+  Proformas: 'Проформи',
+  'Correction notes': 'Кредитни и дебитни известия',
+  'Subscription billing': 'Абонаментно фактуриране',
+  'Review billing': 'Преглед на начислението',
+  'Awaiting Finance review': 'Очаква преглед от Финанси',
+  'Review each billing period before preparing its invoice.':
+    'Прегледайте всеки период на фактуриране, преди да подготвите фактурата.',
+  'Subscription billing record': 'Абонаментно начисление',
+  'No subscription billing record is awaiting review.':
+    'Няма абонаментно начисление, което очаква преглед.',
+  'Select a subscription billing record awaiting review.':
+    'Изберете абонаментно начисление, което очаква преглед.',
+  'Subscription charge': 'Абонаментна такса',
+  'Open in Finance': 'Отвори във Финанси',
+  'Net charge': 'Нетна такса',
+  'Finding customer price…': 'Търсене на клиентска цена…',
+  'Customer price could not be loaded. Enter a price or try again.':
+    'Клиентската цена не може да бъде заредена. Въведете цена или опитайте отново.',
+  'No price matches this customer, date and currency. Enter the unit price.':
+    'Няма цена за този клиент, дата и валута. Въведете единичната цена.',
+  'Before VAT. Finance reviews the tax treatment for each billing period.':
+    'Без ДДС. Финанси проверява данъчното третиране за всеки период на фактуриране.',
+  'The charge comes from the saved billing period. Review its VAT treatment before preparing the draft.':
+    'Таксата е от записания период на фактуриране. Проверете режима на ДДС, преди да подготвите черновата.',
+  'Prepare an invoice from the subscription billing record.':
+    'Подгответе фактура от абонаментното начисление.',
+  'Review the subscription charge and select its VAT treatment.':
+    'Прегледайте абонаментната такса и изберете режима на ДДС.',
+  'Select a subscription billing record for this customer and currency.':
+    'Изберете абонаментно начисление за този клиент и валута.',
+  'The subscription charge must match the saved billing record.':
+    'Абонаментната такса трябва да съответства на записаното начисление.',
+  'These reports are not accounting or VAT filings. Sales journals and output VAT include issued documents only. Drafts remain available in Financial documents.':
+    'Тези справки не са счетоводни или ДДС декларации. Дневникът за продажби и начисленият ДДС включват само издадени документи. Черновите са достъпни във Финансови документи.',
+  'No earlier value to compare': 'Няма предишна стойност за сравнение',
+  'Issued invoices only; drafts and cancelled documents excluded.':
+    'Само издадени фактури; черновите и анулираните документи не се включват.',
+  'Issued documents only; drafts, cancelled documents and proformas excluded.':
+    'Само издадени документи; черновите, анулираните документи и проформите не се включват.',
+  'Issued invoices only; drafts, cancelled documents, proformas and correction notes excluded from activity.':
+    'Само издадени фактури; черновите, анулираните документи, проформите и известията не се включват в активността.',
+  'Issued invoices and debit notes less credit notes; drafts, cancelled documents and proformas excluded.':
+    'Издадени фактури и дебитни известия минус кредитни известия; черновите, анулираните документи и проформите не се включват.',
+  'All issued financial documents up to the selected end date.':
+    'Всички издадени финансови документи до избраната крайна дата.',
+  'Customers with an issued invoice in both periods divided by customers with an issued invoice in the previous period.':
+    'Клиенти с издадена фактура и в двата периода, разделени на клиентите с издадена фактура в предишния период.',
+  'The original invoice could not be loaded. Try again.':
+    'Оригиналната фактура не може да бъде заредена. Опитайте отново.',
+  'Enter the exchange rate and its source for the selected currency.':
+    'Въведете обменния курс и неговия източник за избраната валута.',
+  'The credit exceeds the amount remaining on the original invoice. Review earlier credit notes.':
+    'Кредитното известие надвишава оставащата сума по оригиналната фактура. Проверете предишните кредитни известия.',
+  'A credit line exceeds the quantity remaining on the original invoice. Use the original product and unit.':
+    'Ред от кредитното известие надвишава оставащото количество по оригиналната фактура. Използвайте оригиналния продукт и мерна единица.',
+  'There is not enough cash in this register for this payment or cancellation.':
+    'В тази каса няма достатъчно пари за това плащане или анулиране.',
+  'The payment date cannot be after the current business date.':
+    'Датата на плащане не може да бъде след текущата работна дата.',
   'ERP · Procurement': 'ERP · Снабдяване',
   'ERP · Finance': 'ERP · Финанси',
   'ERP · Warehouse': 'ERP · Склад',
@@ -40,6 +120,24 @@ export const legacyBulgarianText: Readonly<Record<string, string>> = {
   Cancelled: 'Анулиран',
   Approved: 'Одобрен',
   Rejected: 'Отхвърлен',
+  'Needs attention': 'Изисква внимание',
+  'On the way': 'На път',
+  Planned: 'Планиран',
+  Registered: 'Регистриран',
+  'Under repair': 'В ремонт',
+  Retired: 'Изведено от употреба',
+  'Quotation sent': 'Изпратена оферта',
+  Negotiation: 'Договаряне',
+  Lost: 'Загубена',
+  Converted: 'Преобразуван',
+  'Awaiting response': 'Очаква отговор',
+  Responded: 'Отговорено',
+  'Under review': 'В процес на преглед',
+  Promoter: 'Привърженик',
+  Passive: 'Неутрален клиент',
+  Detractor: 'Недоволен клиент',
+  Create: 'Създаване',
+  Update: 'Обновяване',
   Paid: 'Платен',
   Unpaid: 'Неплатен',
   'Partially paid': 'Частично платен',
@@ -221,6 +319,14 @@ export const legacyBulgarianText: Readonly<Record<string, string>> = {
   'Back to finance list': 'Назад към финансовия списък',
   'Close panel': 'Затваряне на панела',
   'Customer payment accounts': 'Клиентски разплащателни сметки',
+  'Open in Sales': 'Отваряне в Продажби',
+  'Back to Finance': 'Назад към Финанси',
+  'The linked Sales invoice draft could not be found.':
+    'Свързаната чернова на фактура от Продажби не беше намерена.',
+  'Enter a valid amount greater than zero, with up to four decimal places.':
+    'Въведете валидна сума над нулата с до четири знака след десетичната запетая.',
+  'Enter a valid credit limit with up to four decimal places.':
+    'Въведете валиден кредитен лимит с до четири знака след десетичната запетая.',
   'Manage approved credit terms, received advances, and POS account balances.':
     'Управлявайте одобрените кредитни условия, получените аванси и салдата от POS.',
   'Set payment terms': 'Задаване на условия за плащане',
@@ -370,7 +476,6 @@ export const legacyBulgarianText: Readonly<Record<string, string>> = {
   Method: 'Метод',
   'Allocation trail': 'История на разпределенията',
   'Payables covered by this advance': 'Задължения, покрити с този аванс',
-  'Apply advance': 'Прилагане на аванс',
   'Supplier payable': 'Задължение към доставчик',
   'Amount to apply': 'Сума за прилагане',
   'There is no open payable for this supplier.': 'Няма открито задължение към този доставчик.',
@@ -636,6 +741,37 @@ export const legacyBulgarianText: Readonly<Record<string, string>> = {
   'Save thresholds': 'Запазване на праговете',
   'Stock movements': 'Складови движения',
   'Movement type': 'Вид движение',
+  'Movement history': 'История на движенията',
+  'Posted stock movements': 'Записани складови движения',
+  'Review stock changes and open the linked source record when one is available.':
+    'Преглеждайте промените в наличностите и отваряйте свързания източник, когато е наличен.',
+  'All products': 'Всички продукти',
+  'All movements': 'Всички движения',
+  'Search product or reference': 'Търсене по продукт или основание',
+  'Name, product code, or document reference': 'Име, продуктов код или номер на документ',
+  'Apply filters': 'Прилагане на филтрите',
+  'Movement history unavailable': 'Историята на движенията не е налична',
+  'Movement history could not be loaded.': 'Историята на движенията не можа да бъде заредена.',
+  'Loading movement history…': 'Зареждане на историята на движенията…',
+  'No posted movements match these filters.':
+    'Няма записани движения, които да отговарят на филтрите.',
+  'Date and time': 'Дата и час',
+  Movement: 'Движение',
+  'Source record': 'Изходен документ',
+  'Posted by': 'Записал',
+  'Return received': 'Получено връщане',
+  Issued: 'Изписано',
+  'Stocktake increase': 'Увеличение от инвентаризация',
+  'Stocktake decrease': 'Намаление от инвентаризация',
+  Stocktake: 'Инвентаризация',
+  'Transfer in': 'Вътрешно получаване',
+  'Transfer out': 'Вътрешно изпращане',
+  'Goods receipt': 'Стокова разписка',
+  'Delivery return': 'Връщане по доставка',
+  'Pos sale': 'POS продажба',
+  'Pos return': 'POS връщане',
+  unit: 'единица',
+  movements: 'движения',
   'Your role can review inventory but cannot post stock movements.':
     'Вашата роля може да преглежда наличностите, но не може да осчетоводява складови движения.',
   'Linked return': 'Свързано връщане',
@@ -659,6 +795,12 @@ export const legacyBulgarianText: Readonly<Record<string, string>> = {
   'The original issue, product, batch, quantity, and serial numbers are checked before the return is saved.':
     'Преди запазване се проверяват първоначалното изписване, продуктът, партидата, количеството и серийните номера.',
   'Open serial trace': 'Отваряне на проследяването по сериен номер',
+  'No inventory or customer equipment record matches this serial number.':
+    'Няма складов запис или запис за клиентско оборудване с този сериен номер.',
+  'This device is registered to a customer but is not linked to inventory. Supplier receipt and stock-movement history cannot be shown.':
+    'Това устройство е регистрирано към клиент, но не е свързано със складова наличност. Историята за доставка от доставчик и складовите движения не може да бъде показана.',
+  'No trace events are recorded for this serial yet.':
+    'Все още няма записани събития за проследяване на този сериен номер.',
   stock: 'наличност',
   'Each posting creates one traceable stock transaction.':
     'Всяко осчетоводяване създава проследима складова транзакция.',
@@ -697,6 +839,22 @@ export const legacyBulgarianText: Readonly<Record<string, string>> = {
   'Reservations & serial trace': 'Резервации и проследяване по сериен номер',
   'Your role cannot create stock reservations.':
     'Вашата роля не може да създава складови резервации.',
+  'Active reservations': 'Активни резервации',
+  'Warehouse commitments': 'Складови ангажименти',
+  'No active reservations.': 'Няма активни резервации.',
+  'Loading reservations…': 'Зареждане на резервациите…',
+  'Active reservations could not be loaded.': 'Активните резервации не могат да бъдат заредени.',
+  'Enter an existing order, quotation, or service request number.':
+    'Въведете съществуващ номер на поръчка, оферта или сервизна заявка.',
+  'This reservation reference does not match an existing sales order, quotation, or service request. Check the document type and reference number.':
+    'Това основание не съответства на съществуваща поръчка за продажба, оферта или сервизна заявка. Проверете вида на документа и номера.',
+  'This document already has an active reservation for this product in the selected warehouse.':
+    'За този документ вече има активна резервация за продукта в избрания склад.',
+  'Source unavailable': 'Източникът не е наличен',
+  'Reservation for': 'Резервация за',
+  'is now': 'вече е',
+  active: 'активна',
+  released: 'освободена',
   'New commitment': 'Нов ангажимент',
   'Reserve stock': 'Резервиране на наличност',
   'Availability is checked when the reservation is saved.':
@@ -716,6 +874,7 @@ export const legacyBulgarianText: Readonly<Record<string, string>> = {
   'Add warehouse': 'Добавяне на склад',
   'Unavailable product': 'Недостъпен продукт',
   'Unavailable warehouse': 'Недостъпен склад',
+  'Code not available': 'Няма наличен код',
   'Low stock': 'Ниска наличност',
   'Stock healthy': 'Достатъчна наличност',
   Receive: 'Приемане',
@@ -741,6 +900,28 @@ export const legacyBulgarianText: Readonly<Record<string, string>> = {
     'Създайте първата оферта, за да започнете процеса по продажба.',
   'Sales workflow register': 'Регистър на продажбите',
   'Valid until': 'Валидна до',
+  'This quotation must be valid today or later.':
+    'Крайната дата на офертата трябва да бъде днешна или бъдеща.',
+  'Revise quotation': 'Редактиране на офертата',
+  'Customer copy': 'Копие за клиента',
+  'Download a printable quotation. It is not a tax invoice.':
+    'Изтеглете офертата за печат. Тя не е данъчна фактура.',
+  'Download quotation PDF': 'Изтегляне на офертата в PDF',
+  'Cancel quotation': 'Отказ на офертата',
+  'Cancel this quotation? The reference and revision history will remain available.':
+    'Да се откаже ли офертата? Номерът и историята на редакциите ще бъдат запазени.',
+  'Reason (optional)': 'Причина (незадължително)',
+  'Keep quotation': 'Запазване на офертата',
+  'Saving changes': 'Запазване на промените',
+  'Save changes': 'Запазване на промените',
+  'The quotation could not be saved. Refresh and try again.':
+    'Офертата не може да бъде запазена. Обновете страницата и опитайте отново.',
+  'Quotation cancelled. Its history has been kept.': 'Офертата е отказана. Историята ѝ е запазена.',
+  'was revised.': 'беше редактирана.',
+  'Only an unconfirmed quotation can be revised': 'Може да се редактира само непотвърдена оферта.',
+  'Only an unconfirmed quotation can be cancelled': 'Може да се откаже само непотвърдена оферта.',
+  'This quotation changed after you opened it. Refresh it before saving.':
+    'Офертата е променена след отварянето ѝ. Обновете я преди запис.',
   'Add an active customer, product, and warehouse before creating a quotation.':
     'Добавете активен клиент, продукт и склад, преди да създадете оферта.',
   'Customer and fulfilment': 'Клиент и изпълнение',
@@ -799,6 +980,7 @@ export const legacyBulgarianText: Readonly<Record<string, string>> = {
   Accepted: 'Прието',
   'Awaiting acceptance': 'Очаква приемане',
   'Confirmed order': 'Потвърдена поръчка',
+  Expired: 'Изтекла',
   Shipped: 'Експедирано',
   Selected: 'Избрано',
   device: 'устройство',
@@ -980,6 +1162,28 @@ export const legacyBulgarianText: Readonly<Record<string, string>> = {
   'recorded activities in this view': 'записани дейности в този изглед',
   'Loading customer history…': 'Зареждане на историята на клиента…',
   'No activity recorded yet': 'Все още няма записана активност',
+  'Ticket created': 'Сигналът е създаден',
+  'Customer response recorded': 'Записан е отговор от клиента',
+  'Service request linked': 'Свързана е сервизна заявка',
+  'Ticket status updated': 'Статусът на сигнала е обновен',
+  'Ticket updated': 'Сигналът е обновен',
+  'Service request received': 'Получена е сервизна заявка',
+  'Service visit scheduled': 'Сервизното посещение е планирано',
+  'Service work started': 'Сервизната работа е започната',
+  'Service work completed': 'Сервизната работа е завършена',
+  'Service work cancelled': 'Сервизната работа е отменена',
+  'Service request updated': 'Сервизната заявка е обновена',
+  'Quotation created': 'Офертата е създадена',
+  'Quotation updated': 'Офертата е обновена',
+  'Sales quotation': 'Оферта за продажба',
+  'Payment received': 'Получено плащане',
+  'Payment recorded': 'Плащането е записано',
+  'Compensation/offset': 'Прихващане',
+  New: 'Нов',
+  Scheduled: 'Планиран',
+  Confirmed: 'Потвърден',
+  Invoiced: 'Фактуриран',
+  'Waiting for customer': 'Изчаква се клиентът',
   'Open customer tasks': 'Отворени задачи за клиента',
   'Follow-up': 'Последващо действие',
   'Open tasks': 'Отворени задачи',
@@ -1043,6 +1247,7 @@ export const legacyBulgarianText: Readonly<Record<string, string>> = {
   'Linked to this ticket': 'Свързано с този сигнал',
   'No Service request has been created.': 'Няма създадена сервизна заявка.',
   'Service subscription': 'Сервизен абонамент',
+  'Batch number': 'Партида',
   'Choose contract': 'Изберете договор',
   'Update status': 'Обновяване на статуса',
   'Next status': 'Следващ статус',
@@ -1107,6 +1312,17 @@ export const legacyBulgarianText: Readonly<Record<string, string>> = {
   'Loading sales pipeline': 'Зареждане на продажбения процес',
   'Opportunity pipeline': 'Процес на възможностите',
   'No opportunities': 'Няма възможности',
+  'New leads': 'Нови потенциални клиенти',
+  Qualified: 'Квалифициран',
+  Referral: 'Препоръка',
+  Website: 'Уебсайт',
+  'Trade exhibition': 'Търговско изложение',
+  'Turn genuine interest into customers, quotations, and visible sales progress.':
+    'Превръщайте реалния интерес в клиенти, оферти и проследим напредък на продажбите.',
+  'Qualify first, then convert without creating duplicate customer records.':
+    'Първо квалифицирайте потенциалния клиент, след което го преобразувайте без дублиране на клиентски профили.',
+  'Change the filters or add the next genuine prospect.':
+    'Променете филтрите или добавете следващия реален потенциален клиент.',
   Prospect: 'Потенциален клиент',
   Enquiry: 'Запитване',
   'Lead details': 'Данни за потенциалния клиент',
@@ -1130,6 +1346,9 @@ export const legacyBulgarianText: Readonly<Record<string, string>> = {
   'Opportunity details': 'Данни за възможността',
   'Sales quotations': 'Оферти за продажба',
   'No Sales quotation is linked yet.': 'Все още няма свързана оферта.',
+  'Link a Sales quotation before moving this opportunity to Quotation sent.':
+    'Свържете оферта за продажба, преди да преместите възможността в етап „Изпратена оферта“.',
+  'Create or find a quotation': 'Създаване или намиране на оферта',
   'Link quotation': 'Свързване на оферта',
   'Update stage': 'Обновяване на етапа',
   'Opportunity history': 'История на възможността',
@@ -1146,6 +1365,15 @@ export const legacyBulgarianText: Readonly<Record<string, string>> = {
   'Net Promoter Score': 'Индекс на препоръчване (NPS)',
   'NPS trend': 'Тенденция на NPS',
   'Customer surveys': 'Клиентски анкети',
+  'Completed work awaiting a survey': 'Завършена работа, чакаща анкета',
+  'Choose a completed Service job or delivery to prepare its customer survey.':
+    'Изберете завършена сервизна дейност или доставка, за да подготвите клиентска анкета.',
+  'No completed Service jobs or deliveries are waiting for a survey.':
+    'Няма завършени сервизни дейности или доставки, които чакат анкета.',
+  'Record invitations shared with customers and enter their responses here.':
+    'Записвайте споделените с клиентите покани и въвеждайте отговорите им тук.',
+  'No survey invitations have been recorded.': 'Няма записани покани за анкета.',
+  'No completed work is waiting for a survey.': 'Няма завършена работа, която да чака анкета.',
   'Referral summary': 'Обобщение на препоръките',
   'Referral register': 'Регистър на препоръките',
   'Referred by': 'Препоръчан от',
@@ -1181,6 +1409,12 @@ export const legacyBulgarianText: Readonly<Record<string, string>> = {
   'Reject claim': 'Отхвърляне на рекламацията',
   'Close claim': 'Затваряне на рекламацията',
   'Send customer survey': 'Изпращане на клиентска анкета',
+  'Prepare survey': 'Подготовка на анкета',
+  'Prepare customer survey': 'Подготовка на клиентска анкета',
+  'Share this question with the customer using your usual contact method, then record the invitation.':
+    'Споделете въпроса с клиента чрез обичайния начин за контакт и след това запишете поканата.',
+  'Record invitation shared': 'Записване на споделена покана',
+  'Customer survey invitation recorded.': 'Поканата за клиентска анкета е записана.',
   'Choose completed work': 'Изберете завършена дейност',
   'Delivery or Service job': 'Доставка или сервизна работа',
   'Survey question': 'Въпрос в анкетата',
@@ -1198,6 +1432,10 @@ export const legacyBulgarianText: Readonly<Record<string, string>> = {
   Organization: 'Организация',
   'Contact person': 'Лице за контакт',
   Telephone: 'Телефон',
+  'Use 7–15 digits. An optional leading +, spaces, parentheses, hyphens or dots are allowed.':
+    'Въведете 7–15 цифри. По желание използвайте начален знак +, интервали, скоби, тирета или точки.',
+  'Enter a valid telephone number using 7–15 digits. An optional leading +, spaces, parentheses, hyphens or dots are allowed.':
+    'Въведете валиден телефонен номер с 7–15 цифри. По желание използвайте начален знак +, интервали, скоби, тирета или точки.',
   Email: 'Имейл',
   'Context (optional)': 'Контекст (незадължително)',
   'What is the prospect interested in?': 'От какво се интересува потенциалният клиент?',

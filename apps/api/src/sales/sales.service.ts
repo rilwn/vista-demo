@@ -4,6 +4,7 @@ import { HttpStatus, Inject, Injectable } from '@nestjs/common';
 import type { AppEnvironment } from '@vista/config';
 import type {
   AcceptSalesHandoverRequest,
+  CancelSalesQuotationRequest,
   ConfirmSalesQuotationRequest,
   CreateSalesQuotationRequest,
   CreateSalesShipmentRequest,
@@ -14,6 +15,7 @@ import type {
   SalesReferenceData,
   SalesShipment,
   SalesWorkflow,
+  UpdateSalesQuotationRequest,
   VatTreatment,
 } from '@vista/contracts';
 import type { PoolClient } from 'pg';
@@ -26,8 +28,11 @@ import type {
 import { ApiErrorException } from '../common/api-error.exception.js';
 import { APP_ENVIRONMENT } from '../config/config.module.js';
 import { DatabaseService } from '../database/database.service.js';
+import { renderSalesQuotation } from './sales-quotation-renderer.js';
 
 type QuotationRow = {
+  cancelled_at: string | null;
+  cancellation_reason: string | null;
   created_at: string;
   currency_code: string;
   customer_name: string;
@@ -40,6 +45,7 @@ type QuotationRow = {
   total: string;
   valid_until: string;
   vat_total: string;
+  version: number;
   warehouse_id: string;
   warehouse_name: string;
 };
@@ -65,7 +71,7 @@ export class SalesService {
   ) {}
 
   async referenceData(): Promise<SalesReferenceData> {
-    const [customers, customerLocations, products, warehouses, serials, batches] =
+    const [customers, customerLocations, products, warehouses, serials, batches, availability] =
       await Promise.all([
         this.database.getPool().query<{ id: string; name: string }>(
           `SELECT partner.id, partner.display_name AS name
@@ -126,8 +132,31 @@ export class SalesService {
          JOIN inventory.batches batch ON batch.id = balance.batch_id
          WHERE balance.quantity > 0 ORDER BY batch.batch_number`,
         ),
+        this.database.getPool().query<{
+          product_id: string;
+          quantity: string;
+          warehouse_id: string;
+        }>(
+          `SELECT balance.product_id, balance.warehouse_id,
+                  greatest(balance.quantity - coalesce(reserved.quantity, 0), 0)::text AS quantity
+           FROM inventory.stock_balances balance
+           LEFT JOIN (
+             SELECT warehouse_id, product_id, sum(remaining_quantity) AS quantity
+             FROM inventory.stock_reservations
+             WHERE status = 'active'
+             GROUP BY warehouse_id, product_id
+           ) reserved ON reserved.warehouse_id = balance.warehouse_id
+                    AND reserved.product_id = balance.product_id
+           ORDER BY balance.warehouse_id, balance.product_id`,
+        ),
       ]);
     return {
+      businessTimezone: this.environment.BUSINESS_TIMEZONE,
+      availability: availability.rows.map((row) => ({
+        productId: row.product_id,
+        quantity: row.quantity,
+        warehouseId: row.warehouse_id,
+      })),
       batches: batches.rows.map((row) => ({
         batchNumber: row.batch_number,
         productId: row.product_id,
@@ -171,6 +200,30 @@ export class SalesService {
     }
   }
 
+  async quotationPdf(
+    id: string,
+    auth: AuthenticationContext,
+    metadata: RequestSecurityMetadata,
+  ): Promise<{ buffer: Buffer; fileName: string; mediaType: 'application/pdf' }> {
+    const workflow = await this.workflow(id);
+    const buffer = await renderSalesQuotation(workflow);
+    await this.audit.append({
+      action: 'sales.quotation.pdf_downloaded',
+      actorAccountId: auth.accountId,
+      after: { number: workflow.number, version: workflow.version },
+      correlationId: metadata.correlationId,
+      ...(metadata.sourceIp ? { sourceIp: metadata.sourceIp } : {}),
+      targetId: workflow.id,
+      targetType: 'sales_quotation',
+      ...(metadata.userAgent ? { userAgent: metadata.userAgent } : {}),
+    });
+    return {
+      buffer,
+      fileName: `${workflow.number}.pdf`,
+      mediaType: 'application/pdf',
+    };
+  }
+
   async createQuotation(
     input: CreateSalesQuotationRequest,
     key: string | undefined,
@@ -179,6 +232,12 @@ export class SalesService {
   ): Promise<SalesWorkflow> {
     const normalized = normalizeQuotation(input);
     return this.command('sales.quotation.create', key, normalized, async (client, commandKey) => {
+      if (normalized.validUntil < businessDate(this.environment.BUSINESS_TIMEZONE))
+        throw new ApiErrorException(
+          'SALES_QUOTATION_VALIDITY_DATE_INVALID',
+          'The quotation validity date cannot be earlier than the quotation date',
+          HttpStatus.BAD_REQUEST,
+        );
       await this.requireCustomer(client, normalized.customerPartnerId);
       await this.requireWarehouse(client, normalized.warehouseId);
       const productIds = normalized.lines.map((line) => line.productId);
@@ -253,6 +312,7 @@ export class SalesService {
         [id, normalized.overallDiscountPercent],
       );
       const workflow = await this.loadWorkflow(client, id);
+      await this.recordQuotationRevision(client, workflow, auth.accountId);
       await this.sideEffects(
         client,
         'sales_quotation',
@@ -265,6 +325,201 @@ export class SalesService {
       );
       return workflow;
     });
+  }
+
+  async updateQuotation(
+    quotationId: string,
+    input: UpdateSalesQuotationRequest,
+    key: string | undefined,
+    auth: AuthenticationContext,
+    metadata: RequestSecurityMetadata,
+  ): Promise<SalesWorkflow> {
+    const { expectedVersion, ...quotationInput } = input;
+    const normalized = normalizeQuotation(quotationInput);
+    return this.command(
+      `sales.quotation.update:${quotationId}`,
+      key,
+      { ...normalized, expectedVersion },
+      async (client, commandKey) => {
+        if (normalized.validUntil < businessDate(this.environment.BUSINESS_TIMEZONE))
+          throw new ApiErrorException(
+            'SALES_QUOTATION_VALIDITY_DATE_INVALID',
+            'The quotation validity date cannot be earlier than the quotation date',
+            HttpStatus.BAD_REQUEST,
+          );
+        const header = await client.query<{ status: string; version: number }>(
+          'SELECT status, version FROM sales.quotations WHERE id = $1 FOR UPDATE',
+          [quotationId],
+        );
+        const current = header.rows[0];
+        if (!current)
+          throw new ApiErrorException(
+            'SALES_QUOTATION_NOT_FOUND',
+            'The quotation was not found',
+            HttpStatus.NOT_FOUND,
+          );
+        if (current.version !== expectedVersion)
+          throw new ApiErrorException(
+            'SALES_QUOTATION_VERSION_CONFLICT',
+            'This quotation changed after you opened it. Refresh it before saving.',
+            HttpStatus.CONFLICT,
+          );
+        if (current.status !== 'draft')
+          throw new ApiErrorException(
+            'SALES_QUOTATION_NOT_EDITABLE',
+            'Only an unconfirmed quotation can be revised',
+            HttpStatus.CONFLICT,
+          );
+
+        const before = await this.loadWorkflow(client, quotationId);
+        await this.recordQuotationRevision(client, before, auth.accountId);
+        await this.requireCustomer(client, normalized.customerPartnerId);
+        await this.requireWarehouse(client, normalized.warehouseId);
+        const productIds = normalized.lines.map((line) => line.productId);
+        const products = await client.query<{ id: string }>(
+          `SELECT product.id FROM master_data.products product
+           JOIN master_data.product_categories category ON category.id = product.category_id
+           WHERE product.id = ANY($1::uuid[]) AND product.active AND category.active
+           FOR KEY SHARE OF product`,
+          [productIds],
+        );
+        if (products.rowCount !== productIds.length)
+          throw new ApiErrorException(
+            'SALES_PRODUCT_NOT_FOUND',
+            'One or more selected products are unavailable',
+            HttpStatus.NOT_FOUND,
+          );
+
+        await client.query('DELETE FROM sales.quotation_lines WHERE quotation_id = $1', [
+          quotationId,
+        ]);
+        for (const line of normalized.lines) {
+          await client.query(
+            `INSERT INTO sales.quotation_lines (
+               id, quotation_id, product_id, quantity, unit_price, discount_percent,
+               vat_treatment, line_total
+             ) VALUES (
+               $1, $2, $3, $4, $5, $6, $7,
+               round($4::numeric * $5::numeric * (1 - $6::numeric / 100), 4)
+             )`,
+            [
+              randomUUID(),
+              quotationId,
+              line.productId,
+              line.quantity,
+              line.unitPrice,
+              line.discountPercent,
+              line.vatTreatment,
+            ],
+          );
+        }
+        await client.query(
+          `UPDATE sales.quotations
+           SET customer_partner_id = $2, warehouse_id = $3, valid_until = $4,
+               currency_code = $5, overall_discount_percent = $6,
+               subtotal = totals.subtotal, vat_total = totals.vat_total,
+               total = totals.subtotal + totals.vat_total,
+               version = version + 1, updated_at = now()
+           FROM (
+             SELECT round(sum(line_total) * (1 - $6::numeric / 100), 4) AS subtotal,
+               round(sum(line_total * CASE vat_treatment
+                 WHEN 'standard_20' THEN 0.20
+                 WHEN 'reduced_9' THEN 0.09
+                 ELSE 0 END) * (1 - $6::numeric / 100), 4) AS vat_total
+             FROM sales.quotation_lines WHERE quotation_id = $1
+           ) totals
+           WHERE id = $1`,
+          [
+            quotationId,
+            normalized.customerPartnerId,
+            normalized.warehouseId,
+            normalized.validUntil,
+            normalized.currencyCode,
+            normalized.overallDiscountPercent,
+          ],
+        );
+        const workflow = await this.loadWorkflow(client, quotationId);
+        await this.recordQuotationRevision(client, workflow, auth.accountId);
+        await this.sideEffects(
+          client,
+          'sales_quotation',
+          quotationId,
+          'sales.quotation.revised',
+          workflow,
+          auth,
+          metadata,
+          commandKey,
+          before,
+        );
+        return workflow;
+      },
+      HttpStatus.OK,
+    );
+  }
+
+  async cancelQuotation(
+    quotationId: string,
+    input: CancelSalesQuotationRequest,
+    key: string | undefined,
+    auth: AuthenticationContext,
+    metadata: RequestSecurityMetadata,
+  ): Promise<SalesWorkflow> {
+    const reason = input.reason?.trim() || undefined;
+    return this.command(
+      `sales.quotation.cancel:${quotationId}`,
+      key,
+      { expectedVersion: input.expectedVersion, ...(reason ? { reason } : {}) },
+      async (client, commandKey) => {
+        const header = await client.query<{ status: string; version: number }>(
+          'SELECT status, version FROM sales.quotations WHERE id = $1 FOR UPDATE',
+          [quotationId],
+        );
+        const current = header.rows[0];
+        if (!current)
+          throw new ApiErrorException(
+            'SALES_QUOTATION_NOT_FOUND',
+            'The quotation was not found',
+            HttpStatus.NOT_FOUND,
+          );
+        if (current.version !== input.expectedVersion)
+          throw new ApiErrorException(
+            'SALES_QUOTATION_VERSION_CONFLICT',
+            'This quotation changed after you opened it. Refresh it before saving.',
+            HttpStatus.CONFLICT,
+          );
+        if (current.status !== 'draft')
+          throw new ApiErrorException(
+            'SALES_QUOTATION_NOT_CANCELLABLE',
+            'Only an unconfirmed quotation can be cancelled',
+            HttpStatus.CONFLICT,
+          );
+
+        const before = await this.loadWorkflow(client, quotationId);
+        await this.recordQuotationRevision(client, before, auth.accountId);
+        await client.query(
+          `UPDATE sales.quotations
+           SET status = 'cancelled', cancelled_at = now(), cancelled_by = $2,
+               cancellation_reason = $3, version = version + 1, updated_at = now()
+           WHERE id = $1`,
+          [quotationId, auth.accountId, reason ?? null],
+        );
+        const workflow = await this.loadWorkflow(client, quotationId);
+        await this.recordQuotationRevision(client, workflow, auth.accountId);
+        await this.sideEffects(
+          client,
+          'sales_quotation',
+          quotationId,
+          'sales.quotation.cancelled',
+          workflow,
+          auth,
+          metadata,
+          commandKey,
+          before,
+        );
+        return workflow;
+      },
+      HttpStatus.OK,
+    );
   }
 
   async confirmQuotation(
@@ -303,7 +558,7 @@ export class SalesService {
             'Only a draft quotation can be confirmed',
             HttpStatus.CONFLICT,
           );
-        if (header.valid_until < new Date().toISOString().slice(0, 10))
+        if (header.valid_until < businessDate(this.environment.BUSINESS_TIMEZONE))
           throw new ApiErrorException(
             'SALES_QUOTATION_EXPIRED',
             'The quotation validity period has ended',
@@ -892,8 +1147,10 @@ export class SalesService {
         id: string;
         product_id: string | null;
         serialized_item_id: string | null;
+        warranty_end_date: string | null;
       }>(
-        `SELECT id, customer_location_id, product_id, serialized_item_id
+        `SELECT id, customer_location_id, product_id, serialized_item_id,
+                warranty_end_date::text
          FROM master_data.customer_equipment
          WHERE serialized_item_id = $1 OR upper(serial_number) = upper($2)
          FOR UPDATE`,
@@ -910,23 +1167,34 @@ export class SalesService {
             `Serial ${item.serial_number} is already registered to another customer location. Review the equipment record before accepting this handover.`,
             HttpStatus.CONFLICT,
           );
-        if (!equipment.serialized_item_id)
+        const needsEquipmentUpdate =
+          !equipment.serialized_item_id ||
+          !equipment.product_id ||
+          (item.warranty_months !== null && !equipment.warranty_end_date);
+        if (needsEquipmentUpdate)
           await client.query(
             `UPDATE master_data.customer_equipment
-             SET serialized_item_id = $2, updated_by = $3, version = version + 1,
-                 updated_at = now()
+             SET product_id = COALESCE(product_id, $2),
+                 serialized_item_id = COALESCE(serialized_item_id, $3),
+                 device_name = CASE WHEN product_id IS NULL THEN $4 ELSE device_name END,
+                 warranty_end_date = CASE
+                   WHEN $5::integer IS NULL THEN warranty_end_date
+                   ELSE COALESCE(
+                     warranty_end_date,
+                     ($6::date + make_interval(months => $5))::date
+                   )
+                 END,
+                 updated_by = $7, version = version + 1, updated_at = now()
              WHERE id = $1`,
-            [equipment.id, item.serial_item_id, actorAccountId],
-          );
-        if (item.warranty_months !== null)
-          await client.query(
-            `UPDATE master_data.customer_equipment
-             SET warranty_end_date = COALESCE(
-                   warranty_end_date,
-                   ($2::date + make_interval(months => $3))::date
-                 ), updated_by = $4, updated_at = now()
-             WHERE id = $1`,
-            [equipment.id, purchaseDate, item.warranty_months, actorAccountId],
+            [
+              equipment.id,
+              item.product_id,
+              item.serial_item_id,
+              item.product_name,
+              item.warranty_months,
+              purchaseDate,
+              actorAccountId,
+            ],
           );
         if (!equipment.serialized_item_id)
           changes.push({
@@ -1141,7 +1409,8 @@ export class SalesService {
               warehouse.name AS warehouse_name, quotation.valid_until::text,
               quotation.currency_code, quotation.overall_discount_percent::text,
               quotation.subtotal::text, quotation.vat_total::text, quotation.total::text,
-              quotation.status, quotation.created_at::text
+              quotation.status, quotation.created_at::text, quotation.version,
+              quotation.cancelled_at::text, quotation.cancellation_reason
        FROM sales.quotations quotation
        JOIN master_data.partners customer ON customer.id = quotation.customer_partner_id
        JOIN master_data.warehouses warehouse ON warehouse.id = quotation.warehouse_id
@@ -1175,13 +1444,22 @@ export class SalesService {
       lines: linesResult.rows.map(mapQuotationLine),
       number: header.quotation_number,
       overallDiscountPercent: header.overall_discount_percent,
-      status: header.status,
+      version: header.version,
+      status:
+        header.status === 'cancelled'
+          ? 'cancelled'
+          : header.status === 'draft' &&
+              header.valid_until < businessDate(this.environment.BUSINESS_TIMEZONE)
+            ? 'expired'
+            : header.status,
       subtotal: header.subtotal,
       total: header.total,
       validUntil: header.valid_until,
       vatTotal: header.vat_total,
       warehouseId: header.warehouse_id,
       warehouseName: header.warehouse_name,
+      ...(header.cancelled_at ? { cancelledAt: asIso(header.cancelled_at) } : {}),
+      ...(header.cancellation_reason ? { cancellationReason: header.cancellation_reason } : {}),
       ...(order ? { order } : {}),
     };
     if (order) {
@@ -1526,6 +1804,7 @@ export class SalesService {
     key: string | undefined,
     payload: object,
     action: (client: PoolClient, idempotencyKey: string) => Promise<T>,
+    responseStatus = HttpStatus.CREATED,
   ): Promise<T> {
     const idempotencyKey = validKey(key);
     const hash = createHash('sha256').update(JSON.stringify(payload)).digest('hex');
@@ -1540,9 +1819,9 @@ export class SalesService {
       const result = await action(client, idempotencyKey);
       await client.query(
         `UPDATE platform.idempotency_keys
-         SET status = 'completed', response_status = 201, response_body = $3
+         SET status = 'completed', response_status = $4, response_body = $3
          WHERE scope = $1 AND idempotency_key = $2`,
-        [scope, idempotencyKey, result],
+        [scope, idempotencyKey, result, responseStatus],
       );
       await client.query('COMMIT');
       return result;
@@ -1569,6 +1848,7 @@ export class SalesService {
     auth: AuthenticationContext,
     metadata: RequestSecurityMetadata,
     idempotencyKey: string,
+    before?: SalesWorkflow,
   ) {
     await client.query(
       `INSERT INTO integration.outbox_events (
@@ -1590,6 +1870,7 @@ export class SalesService {
         action: eventType,
         actorAccountId: auth.accountId,
         after: payload as Record<string, unknown>,
+        ...(before ? { before: before as unknown as Record<string, unknown> } : {}),
         correlationId: metadata.correlationId,
         ...(metadata.sourceIp ? { sourceIp: metadata.sourceIp } : {}),
         targetId,
@@ -1597,6 +1878,20 @@ export class SalesService {
         ...(metadata.userAgent ? { userAgent: metadata.userAgent } : {}),
       },
       client,
+    );
+  }
+
+  private async recordQuotationRevision(
+    client: PoolClient,
+    workflow: SalesWorkflow,
+    changedBy: string,
+  ): Promise<void> {
+    await client.query(
+      `INSERT INTO sales.quotation_revisions (
+         id, quotation_id, version, snapshot, changed_by, changed_at
+       ) VALUES ($1, $2, $3, $4, $5, now())
+       ON CONFLICT (quotation_id, version) DO NOTHING`,
+      [randomUUID(), workflow.id, workflow.version, workflow, changedBy],
     );
   }
 }
@@ -1716,6 +2011,18 @@ function normalizeDate(value: string) {
       HttpStatus.BAD_REQUEST,
     );
   return value;
+}
+
+function businessDate(timezone: string) {
+  const parts = new Intl.DateTimeFormat('en', {
+    day: '2-digit',
+    month: '2-digit',
+    timeZone: timezone,
+    year: 'numeric',
+  }).formatToParts(new Date());
+  const part = (type: Intl.DateTimeFormatPartTypes) =>
+    required(parts.find((candidate) => candidate.type === type)?.value, `Missing ${type}`);
+  return `${part('year')}-${part('month')}-${part('day')}`;
 }
 
 function normalizePercent(value: string) {

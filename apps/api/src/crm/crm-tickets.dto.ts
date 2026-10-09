@@ -243,6 +243,21 @@ class CrmTicketServiceLinkDto {
   serviceRequestNumber!: string;
 }
 
+class CrmTicketSlaEventDto {
+  @ApiProperty({ format: 'date-time', type: String })
+  createdAt!: string;
+  @ApiProperty({ enum: ['pending', 'processing', 'delivered', 'failed', 'cancelled'] })
+  deliveryStatus!: CrmTicket['slaEvents'][number]['deliveryStatus'];
+  @ApiProperty({ enum: ['at_risk', 'breached'] })
+  eventType!: CrmTicket['slaEvents'][number]['eventType'];
+  @ApiProperty({ format: 'uuid', type: String })
+  id!: string;
+  @ApiProperty({ type: String })
+  recipientName!: string;
+  @ApiProperty({ enum: ['response', 'resolution'] })
+  timerType!: CrmTicket['slaEvents'][number]['timerType'];
+}
+
 export class CrmTicketDto implements CrmTicket {
   @ApiPropertyOptional({ type: () => CrmTicketAssigneeDto })
   assignedTo?: CrmTicketAssigneeDto;
@@ -284,6 +299,8 @@ export class CrmTicketDto implements CrmTicket {
   resolutionDueAt!: string;
   @ApiProperty({ enum: ['on_track', 'at_risk', 'breached', 'met'] })
   resolutionState!: CrmTicket['resolutionState'];
+  @ApiProperty({ isArray: true, type: () => CrmTicketSlaEventDto })
+  slaEvents!: CrmTicketSlaEventDto[];
   @ApiPropertyOptional({ format: 'date-time', type: String })
   resolvedAt?: string;
   @ApiPropertyOptional({ type: () => CrmTicketServiceLinkDto })

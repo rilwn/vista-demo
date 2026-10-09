@@ -43,28 +43,26 @@ describe('Operational dashboard', () => {
       }),
     );
     mount();
-    await screen.findByText('BGN 108.00');
+    await screen.findByText('108.00 BGN');
     fireEvent.click(screen.getByText('Customize overview'));
     fireEvent.click(screen.getByRole('checkbox', { name: 'Recorded revenue' }));
     fireEvent.click(screen.getByRole('button', { name: 'Save layout' }));
     await screen.findByText('Your overview layout is saved.');
-    expect(screen.queryByText('BGN 108.00')).toBeNull();
+    expect(screen.queryByText('108.00 BGN')).toBeNull();
     expect(
-      screen.queryByText(
-        'Revenue includes prepared documents, before VAT, not posted accounting revenue.',
-      ),
+      screen.queryByText('Revenue includes issued documents before VAT. Drafts are excluded.'),
     ).toBeNull();
     cleanup();
     mount();
     await screen.findByRole('heading', { name: 'Active Service requests' });
-    expect(screen.queryByText('BGN 108.00')).toBeNull();
+    expect(screen.queryByText('108.00 BGN')).toBeNull();
     fireEvent.click(screen.getByText('Customize overview'));
     expect(
       screen.getByRole<HTMLInputElement>('checkbox', { name: 'Recorded revenue' }).checked,
     ).toBe(false);
     fireEvent.click(screen.getByRole('button', { name: 'Show all cards' }));
     fireEvent.click(screen.getByRole('button', { name: 'Save layout' }));
-    await screen.findByText('BGN 108.00');
+    await screen.findByText('108.00 BGN');
   });
 
   it('keeps choices after a failed save and explains conflicting changes', async () => {
@@ -79,7 +77,7 @@ describe('Operational dashboard', () => {
       }),
     );
     mount();
-    await screen.findByText('BGN 108.00');
+    await screen.findByText('108.00 BGN');
     fireEvent.click(screen.getByText('Customize overview'));
     fireEvent.click(screen.getByRole('checkbox', { name: 'Recorded revenue' }));
     fireEvent.click(screen.getByRole('button', { name: 'Save layout' }));
@@ -89,7 +87,7 @@ describe('Operational dashboard', () => {
     expect(
       screen.getByRole<HTMLInputElement>('checkbox', { name: 'Recorded revenue' }).checked,
     ).toBe(false);
-    expect(screen.getByText('BGN 108.00')).toBeTruthy();
+    expect(screen.getByText('108.00 BGN')).toBeTruthy();
   });
 
   it('keeps customization available when all permitted cards are hidden', async () => {
@@ -125,12 +123,10 @@ describe('Operational dashboard', () => {
       );
     vi.stubGlobal('fetch', fetchMock);
     mount();
-    expect(await screen.findByText('BGN 108.00')).toBeTruthy();
+    expect(await screen.findByText('108.00 BGN')).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Active Service requests' })).toBeTruthy();
     expect(
-      screen.getByText(
-        'Revenue includes prepared documents, before VAT, not posted accounting revenue.',
-      ),
+      screen.getByText('Revenue includes issued documents before VAT. Drafts are excluded.'),
     ).toBeTruthy();
     const details = screen.getByText('How these figures are calculated').closest('details');
     expect(details?.open).toBe(false);

@@ -46,8 +46,16 @@ approval and adapter configuration.
 `sales.subscription-invoice.generate` remains an active domain handler. Its
 stable daily schedule creates exactly one review draft for each due
 location/device subscription period and advances the next billing date in the
-same transaction. The resulting draft follows the separate Finance collection
-and legal-issuance workflows.
+same transaction. Finance's reference API and Financial documents screen expose
+these saved billing periods for review. Preparing a document captures its source
+ID, customer, currency and net charge; Finance selects the VAT treatment and,
+for foreign currency, supplies the rate snapshot. Row locking and migration
+0066's partial unique index permit one active Finance invoice draft per period,
+including when different request keys arrive concurrently. A cancelled Finance
+draft remains in history and releases the period for a new review draft.
+Sales provides permission-aware navigation to the same source/linked Finance
+record. Legal issuance and subscription collection posting remain separate work;
+this handoff does not allocate an official number or claim a posted invoice.
 
 `service.inspection-reminder.prepare`, `crm.warranty-expiration.prepare`, and
 `service.plan-visit.generate` are active Service-care handlers with stable daily
@@ -75,6 +83,18 @@ a PostgreSQL advisory lock prevent simultaneous or replayed execution from
 creating two outputs. Retried attempts update the same lifecycle record and
 deterministic private object; completed replays return the saved result. CSV,
 Excel, and PDF files retain checksum, size, row-count, and audit evidence.
+
+Implemented scheduled domain handlers record `completed` execution evidence
+with a completion timestamp after their domain operation succeeds. A failed
+domain call records no success marker and is retried through the same stable key.
+Payment-notification preparation uses Finance's idempotent due-status/reminder
+operation rather than creating an unconsumed request alone.
+
+Migration `0065` repairs historical markers only for handlers that previously
+performed their domain work before inserting the marker. It preserves immutable
+content, records exactly which statuses it repairs, and has a scoped rollback.
+Generic report requests without an export ID, notification-only legacy markers,
+backup handoffs and unsupported business events are not marked complete.
 
 The remaining later-phase handlers form the durable boundary for domains
 delivered in later ordered phases. A successful handler writes one deterministic
@@ -149,3 +169,10 @@ For recovery:
 Outbox identity, aggregate identity, event type, version, sequence, correlation,
 payload, and occurrence time are database-protected from update. Operators must
 not bypass the replay workflow with direct SQL.
+
+Notification dispatch records unexpected attempts after rolling back a failed
+delivery. It records pending/failed state without overwriting another delivery.
+A recovered pending message can retry its retained failed queue job; messages
+with terminal recipient/channel errors remain failed and are not auto-requeued.
+Redis-backed authentication/rate protection waits up to two seconds for a short
+reconnection, then fails closed. This is not an offline authorization fallback.

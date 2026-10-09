@@ -10,10 +10,11 @@ import { LegacyTranslationBoundary } from './i18n/LegacyTranslationBoundary';
 import { useLocalization } from './i18n/LocalizationProvider';
 import { AccessPage } from './pages/AccessPage';
 import { CatalogPage } from './pages/CatalogPage';
-import { CrmTicketsPage } from './pages/CrmTicketsPage';
 import { CrmAnalyticsPage } from './pages/CrmAnalyticsPage';
 import { CrmAfterSalesPage } from './pages/CrmAfterSalesPage';
+import { CrmLocationsEquipmentPage } from './pages/CrmLocationsEquipmentPage';
 import { CrmPipelinePage } from './pages/CrmPipelinePage';
+import { CrmTicketsPage } from './pages/CrmTicketsPage';
 import { CrmTimelinePage } from './pages/CrmTimelinePage';
 import { type FinanceView, FinancePage } from './pages/FinancePage';
 import { FinanceCustomerAccountsPage } from './pages/FinanceCustomerAccountsPage';
@@ -167,6 +168,9 @@ function pageForPath(
   }
   if (pathname === '/modules/crm/tickets') {
     return hasPermission('crm') ? <CrmTicketsPage /> : <NotFoundPage />;
+  }
+  if (pathname === '/modules/crm/locations-equipment') {
+    return hasPermission('crm') ? <CrmLocationsEquipmentPage /> : <NotFoundPage />;
   }
   if (pathname === '/modules/crm/timeline') {
     return hasPermission('crm') ? <CrmTimelinePage /> : <NotFoundPage />;

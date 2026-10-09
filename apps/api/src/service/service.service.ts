@@ -62,6 +62,7 @@ interface RequestRow {
   customer_partner_id: string;
   device_name: string;
   id: string;
+  is_overdue: boolean;
   planned_visit_date: string | null;
   priority: ServiceRequest['priority'];
   problem_description: string;
@@ -98,6 +99,7 @@ interface WorkOrderRow {
   financial_document_id: string | null;
   financial_document_number: string | null;
   id: string;
+  is_overdue: boolean;
   labor_cost_bgn: string;
   labor_minutes: number;
   parts_cost_bgn: string;
@@ -145,6 +147,15 @@ interface LockedWorkOrderRow {
   service_request_id: string;
   status: ServiceWorkOrderStatus;
   technician_warehouse_id: string | null;
+  version: number;
+}
+
+interface LinkedCrmTicketRow {
+  correlation_id: string;
+  request_number: string;
+  status: string;
+  ticket_id: string;
+  ticket_number: string;
   version: number;
 }
 
@@ -213,6 +224,7 @@ interface ScheduleAppointmentRow {
   customer_location_name: string;
   customer_name: string;
   device_name: string;
+  is_overdue: boolean;
   local_date: string;
   priority: ServiceScheduleAppointment['priority'];
   request_number: string;
@@ -335,6 +347,11 @@ export class ServiceOperationsService {
         visibilityAccountId,
       ]),
       pool.query<{
+        available_batches: Array<{
+          availableQuantity: string;
+          batchNumber: string;
+          expiresAt: string | null;
+        }>;
         available_quantity: string;
         product_code: string;
         product_id: string;
@@ -344,7 +361,18 @@ export class ServiceOperationsService {
       }>(
         `SELECT balance.warehouse_id, product.id AS product_id, product.name AS product_name,
                 product.product_code, category.tracking_mode,
-                balance.quantity::text AS available_quantity
+                balance.quantity::text AS available_quantity,
+                COALESCE((
+                  SELECT json_agg(json_build_object(
+                    'availableQuantity', batch_balance.quantity::text,
+                    'batchNumber', batch.batch_number,
+                    'expiresAt', batch.expires_at::text
+                  ) ORDER BY batch.expires_at NULLS LAST, batch.batch_number)
+                  FROM inventory.batch_stock_balances batch_balance
+                  JOIN inventory.batches batch ON batch.id = batch_balance.batch_id
+                  WHERE batch_balance.warehouse_id = balance.warehouse_id
+                    AND batch.product_id = product.id AND batch_balance.quantity > 0
+                ), '[]'::json) AS available_batches
          FROM inventory.stock_balances balance
          JOIN master_data.warehouses warehouse ON warehouse.id = balance.warehouse_id
          JOIN organization.operators operator ON operator.id = warehouse.technician_operator_id
@@ -399,6 +427,11 @@ export class ServiceOperationsService {
         name: row.name,
       })),
       parts: parts.rows.map((row) => ({
+        availableBatches: row.available_batches.map((batch) => ({
+          availableQuantity: batch.availableQuantity,
+          batchNumber: batch.batchNumber,
+          ...(batch.expiresAt ? { expiresAt: batch.expiresAt } : {}),
+        })),
         availableQuantity: row.available_quantity,
         productCode: row.product_code,
         productId: row.product_id,
@@ -457,6 +490,7 @@ export class ServiceOperationsService {
                 work_order.work_order_number, work_order.assigned_technician_account_id
                   AS technician_account_id,
                 work_order.scheduled_start, work_order.scheduled_end, work_order.status,
+                work_order.scheduled_end < now() AS is_overdue,
                 request.request_number, request.priority,
                 partner.display_name AS customer_name, location.name AS customer_location_name,
                 equipment.device_name,
@@ -824,25 +858,52 @@ export class ServiceOperationsService {
       );
       const row = equipment.rows[0];
       if (!row) throw equipmentNotFound();
-      const workOrders = await client.query<{ id: string }>(
-        `SELECT work_order.id
+      const fullHistory = serviceVisibilityAccountId(auth) === undefined;
+      const [workOrders, openRequests] = await Promise.all([
+        client.query<{ id: string }>(
+          `SELECT work_order.id
          FROM service.work_orders work_order
          JOIN service.requests request ON request.id = work_order.service_request_id
          WHERE request.customer_equipment_id = $1
            AND ($2::uuid IS NULL OR work_order.assigned_technician_account_id = $2)
          ORDER BY COALESCE(work_order.completed_at, work_order.started_at, work_order.created_at) DESC,
                   work_order.id DESC`,
-        [id, serviceVisibilityAccountId(auth)],
-      );
+          [id, serviceVisibilityAccountId(auth)],
+        ),
+        fullHistory
+          ? client.query<{
+              id: string;
+              occurred_at: string;
+              problem_description: string;
+              request_number: string;
+              service_type: ServiceRequest['serviceType'];
+              status: ServiceRequestStatus;
+            }>(
+              `SELECT request.id, request.request_number, request.problem_description,
+                      request.service_type, request.status, request.created_at::text AS occurred_at
+               FROM service.requests request
+               WHERE request.customer_equipment_id = $1
+                 AND NOT EXISTS (
+                   SELECT 1 FROM service.work_orders work_order
+                   WHERE work_order.service_request_id = request.id
+                 )
+               ORDER BY request.created_at DESC, request.id DESC`,
+              [id],
+            )
+          : Promise.resolve({ rows: [] }),
+      ]);
       const events: ServiceEquipmentHistoryEvent[] = [];
       for (const workOrder of workOrders.rows) {
         const detail = await this.loadWorkOrder(client, workOrder.id);
         events.push({
           ...(detail.completedAt ? { completedAt: detail.completedAt } : {}),
           description: detail.completionNotes ?? detail.problemDescription,
+          eventType: detail.status === 'completed' ? 'repair' : 'service_visit',
           id: detail.id,
-          occurredAt: detail.completedAt ?? detail.startedAt ?? detail.createdAt,
+          occurredAt:
+            detail.completedAt ?? detail.startedAt ?? detail.scheduledStart ?? detail.createdAt,
           parts: detail.parts,
+          referenceNumber: detail.number,
           serviceType: detail.serviceType,
           status: detail.status,
           ...(detail.assignedTechnician
@@ -851,6 +912,86 @@ export class ServiceOperationsService {
           workOrderNumber: detail.number,
         });
       }
+      for (const request of openRequests.rows) {
+        events.push({
+          description: request.problem_description,
+          eventType: 'service_request',
+          id: request.id,
+          occurredAt: request.occurred_at,
+          parts: [],
+          referenceNumber: request.request_number,
+          serviceType: request.service_type,
+          status: request.status,
+        });
+      }
+      if (fullHistory) {
+        const [handovers, claims] = await Promise.all([
+          client.query<{
+            certificate_number: string;
+            customer_name: string;
+            id: string;
+            occurred_at: string;
+            status: string;
+          }>(
+            `SELECT DISTINCT certificate.id, certificate.certificate_number,
+                    certificate.status, partner.display_name AS customer_name,
+                    COALESCE(certificate.accepted_at, certificate.prepared_at)::text AS occurred_at
+             FROM sales.handover_certificates certificate
+             JOIN sales.handover_certificate_lines line ON line.certificate_id = certificate.id
+             JOIN master_data.partners partner ON partner.id = certificate.customer_partner_id
+             WHERE EXISTS (
+               SELECT 1 FROM unnest(line.serial_numbers) AS selected(serial_number)
+               WHERE upper(selected.serial_number) = upper($1)
+             )
+             ORDER BY occurred_at DESC, certificate.id DESC`,
+            [row.serial_number],
+          ),
+          client.query<{
+            claim_number: string;
+            description: string;
+            id: string;
+            note: string | null;
+            occurred_at: string;
+            status: string;
+          }>(
+            `SELECT history.id, claim.claim_number, claim.description,
+                    history.next_status AS status, history.note,
+                    history.changed_at::text AS occurred_at
+             FROM service.warranty_claims claim
+             JOIN service.warranty_claim_status_history history
+               ON history.warranty_claim_id = claim.id
+             WHERE claim.customer_equipment_id = $1
+             ORDER BY history.changed_at DESC, history.id DESC`,
+            [id],
+          ),
+        ]);
+        for (const handover of handovers.rows) {
+          events.push({
+            description: handover.customer_name,
+            eventType: 'sale',
+            id: handover.id,
+            occurredAt: handover.occurred_at,
+            parts: [],
+            referenceNumber: handover.certificate_number,
+            status: handover.status,
+          });
+        }
+        for (const claim of claims.rows) {
+          events.push({
+            description: claim.note ?? claim.description,
+            eventType: 'warranty_claim',
+            id: claim.id,
+            occurredAt: claim.occurred_at,
+            parts: [],
+            referenceNumber: claim.claim_number,
+            status: claim.status,
+          });
+        }
+      }
+      events.sort((left, right) => {
+        const timeDifference = Date.parse(right.occurredAt) - Date.parse(left.occurredAt);
+        return timeDifference || right.id.localeCompare(left.id);
+      });
       return {
         deviceName: row.device_name,
         equipmentId: row.id,
@@ -1344,6 +1485,7 @@ export class ServiceOperationsService {
           'technician_completed_work',
           auth.accountId,
         );
+        await this.resolveLinkedCrmTicket(client, workOrder.service_request_id, auth);
         const result = await this.loadWorkOrder(client, id);
         await this.sideEffects(
           client,
@@ -2007,6 +2149,79 @@ export class ServiceOperationsService {
       client,
     );
   }
+
+  private async resolveLinkedCrmTicket(
+    client: PoolClient,
+    serviceRequestId: string,
+    auth: AuthenticationContext,
+  ): Promise<void> {
+    const linked = await client.query<LinkedCrmTicketRow>(
+      `SELECT ticket.id AS ticket_id, ticket.ticket_number, ticket.status,
+              ticket.version, link.correlation_id, request.request_number
+       FROM crm.ticket_service_links link
+       JOIN crm.tickets ticket ON ticket.id = link.ticket_id
+       JOIN service.requests request ON request.id = link.service_request_id
+       WHERE link.service_request_id = $1
+       FOR UPDATE OF ticket`,
+      [serviceRequestId],
+    );
+    const ticket = linked.rows[0];
+    if (!ticket || !['new', 'in_progress', 'waiting_customer'].includes(ticket.status)) return;
+
+    const resolved = await client.query<{ resolved_at: string | Date; version: number }>(
+      `UPDATE crm.tickets
+       SET status = 'resolved', resolved_at = COALESCE(resolved_at, now()),
+           updated_by = $2, version = version + 1, updated_at = now()
+       WHERE id = $1 AND status IN ('new', 'in_progress', 'waiting_customer')
+       RETURNING resolved_at, version`,
+      [ticket.ticket_id, auth.accountId],
+    );
+    const resolution = resolved.rows[0];
+    if (!resolution) return;
+
+    const note = `Service request ${ticket.request_number} completed / Сервизната заявка ${ticket.request_number} е завършена.`;
+    await client.query(
+      `INSERT INTO crm.ticket_history (id, ticket_id, event_type, status, note, changed_by)
+       VALUES ($1,$2,'status_change','resolved',$3,$4)`,
+      [randomUUID(), ticket.ticket_id, note, auth.accountId],
+    );
+    const eventType = 'crm.ticket.resolved-by-service';
+    const eventPayload = {
+      correlationId: ticket.correlation_id,
+      resolvedAt: new Date(resolution.resolved_at).toISOString(),
+      serviceRequestId,
+      serviceRequestNumber: ticket.request_number,
+      status: 'resolved',
+      ticketId: ticket.ticket_id,
+      ticketNumber: ticket.ticket_number,
+    };
+    await client.query(
+      `INSERT INTO integration.outbox_events (
+         id, aggregate_type, aggregate_id, event_type, event_version,
+         correlation_id, idempotency_key, payload
+       ) VALUES ($1,'crm_ticket',$2,$3,1,$4,$5,$6)`,
+      [
+        randomUUID(),
+        ticket.ticket_id,
+        eventType,
+        ticket.correlation_id,
+        `${eventType}:${serviceRequestId}`,
+        eventPayload,
+      ],
+    );
+    await this.audit.append(
+      {
+        action: eventType,
+        actorAccountId: auth.accountId,
+        after: { ...eventPayload, version: resolution.version },
+        before: { status: ticket.status, version: ticket.version },
+        correlationId: ticket.correlation_id,
+        targetId: ticket.ticket_id,
+        targetType: 'crm_ticket',
+      },
+      client,
+    );
+  }
 }
 
 function requestQuery(): string {
@@ -2015,6 +2230,8 @@ function requestQuery(): string {
                  request.subscription_contract_id, request.source_channel, request.service_type,
                  request.priority, request.problem_description, request.status, request.completed_at,
                  request.created_at, request.updated_at, request.version,
+                 COALESCE(work_order.status IN ('scheduled', 'in_progress')
+                   AND work_order.scheduled_end < now(), false) AS is_overdue,
                  visit_generation.planned_date::text AS planned_visit_date,
                  partner.display_name AS customer_name, location.name AS customer_location_name,
                  equipment.device_name, equipment.serial_number,
@@ -2050,6 +2267,8 @@ function workOrderQuery(): string {
                  work_order.transport_cost_bgn::text, work_order.total_cost_bgn::text,
                  work_order.signer_name, work_order.signature_media_type, work_order.signed_at,
                  work_order.created_at, work_order.updated_at, work_order.version,
+                 COALESCE(work_order.status IN ('scheduled', 'in_progress')
+                   AND work_order.scheduled_end < now(), false) AS is_overdue,
                  request.request_number, request.customer_partner_id, request.customer_location_id,
                  request.customer_equipment_id, request.subscription_contract_id, request.problem_description,
                  request.service_type, request.priority,
@@ -2125,6 +2344,7 @@ function mapScheduleAppointment(row: ScheduleAppointmentRow): ServiceScheduleApp
     customerLocationName: row.customer_location_name,
     customerName: row.customer_name,
     deviceName: row.device_name,
+    isOverdue: row.is_overdue,
     priority: row.priority,
     requestNumber: row.request_number,
     scheduledEnd: asIso(row.scheduled_end),
@@ -2148,6 +2368,7 @@ function mapRequest(row: RequestRow): ServiceRequest {
     customerPartnerId: row.customer_partner_id,
     deviceName: row.device_name,
     id: row.id,
+    isOverdue: row.is_overdue,
     number: row.request_number,
     ...(row.planned_visit_date ? { plannedVisitDate: row.planned_visit_date } : {}),
     priority: row.priority,
@@ -2213,6 +2434,7 @@ function mapWorkOrder(
       : {}),
     history: history.map(mapHistory),
     id: row.id,
+    isOverdue: row.is_overdue,
     laborCostBgn: row.labor_cost_bgn,
     laborMinutes: row.labor_minutes,
     number: row.work_order_number,

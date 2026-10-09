@@ -194,6 +194,12 @@ describe.skipIf(!runInfrastructureTests)('POS split payment and linked return li
     await request(application.getHttpServer())
       .get(endpoint)
       .set('authorization', `Bearer ${managerToken}`)
+      .expect(200)
+      .expect(({ body }) => expect(body.total).toBe(0));
+    await request(application.getHttpServer())
+      .post(endpoint)
+      .set('authorization', `Bearer ${managerToken}`)
+      .send({ ...body, id: randomUUID() })
       .expect(403);
     // Grant a second test account POS access only inside this isolated database.
     const grant = await database.query(
@@ -489,7 +495,9 @@ describe.skipIf(!runInfrastructureTests)('POS split payment and linked return li
     await request(application.getHttpServer())
       .get(lookupPath)
       .set('Authorization', `Bearer ${managerToken}`)
-      .expect(403);
+      // A view-only manager cannot recover another operator's client transaction.
+      // The endpoint deliberately hides records outside the authenticated operator.
+      .expect(404);
     await request(application.getHttpServer())
       .get('/api/v1/pos/sales/by-transaction/not-a-uuid')
       .set('Authorization', `Bearer ${posToken}`)
@@ -1182,6 +1190,20 @@ describe.skipIf(!runInfrastructureTests)('POS split payment and linked return li
       requiresDateRange: false,
       requiresShift: true,
     });
+    const managerOverview = await get<PosReportOverview>(
+      application,
+      '/api/v1/pos/reports/overview?dateFrom=2026-01-01&dateTo=2026-12-31',
+      managerToken,
+    );
+    expect(managerOverview.totals).toEqual(overview.totals);
+    const managerDefinitions = await get<PosReportDefinition[]>(
+      application,
+      '/api/v1/pos/report-exports/definitions',
+      managerToken,
+    );
+    expect(managerDefinitions.map((item) => item.key)).toEqual(
+      expect.arrayContaining(['pos.x-report', 'pos.z-report', 'pos.location-comparison']),
+    );
     const reports = application.get(PosReportsService);
     const xReport = await reports.exportData('pos.x-report', {
       asOf: new Date().toISOString(),

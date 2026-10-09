@@ -7,6 +7,7 @@ import type {
   CrmTask,
   CrmTaskPriority,
   CrmTimelineItem,
+  CrmTimelineOperationalEvent,
   CrmTimelinePage as TimelinePage,
   CrmTimelineReferenceData,
 } from '@vista/contracts';
@@ -23,6 +24,8 @@ import {
 import { uploadManagedFile } from '../api/files';
 import { useAuth } from '../auth/AuthProvider';
 import { Icon } from '../components/Icon';
+import { formatOperationsDate, useLocalization } from '../i18n/LocalizationProvider';
+import { useRouter } from '../routing/Router';
 import { CrmTabs } from './CrmTicketsPage';
 import { ManagedFilesPanel } from './PartnerDocumentsPanel';
 
@@ -60,6 +63,8 @@ type DrawerState =
   | { kind: 'task'; value: CrmTask };
 
 export function CrmTimelinePage() {
+  useLocalization();
+  const { navigate } = useRouter();
   const { hasPermission, session } = useAuth();
   const token = session?.sessionToken ?? '';
   const canCreate = hasPermission('crm', 'create');
@@ -278,7 +283,11 @@ export function CrmTimelinePage() {
             {loading ? <TimelineState title="Loading customer history…" /> : null}
             {!loading && !page.items.length ? (
               <TimelineState title="No activity recorded yet">
-                <p>Log a call, email, chat, or visit, or create the first follow-up task.</p>
+                <p>
+                  Log a call, email, chat, or visit, or create a follow-up task. Linked tickets,
+                  Service requests, quotations, and payments also appear here when your role allows
+                  access.
+                </p>
               </TimelineState>
             ) : null}
             {!loading && page.items.length ? (
@@ -286,14 +295,32 @@ export function CrmTimelinePage() {
                 {page.items.map((item) => (
                   <TimelineRecord
                     item={item}
-                    key={`${item.kind}:${item.kind === 'interaction' ? item.interaction.id : item.taskEvent.id}`}
-                    onOpen={() =>
+                    key={timelineItemKey(item)}
+                    onOpen={() => {
+                      if (item.kind === 'operational_event') {
+                        const event = item.operationalEvent;
+                        if (event.source === 'ticket')
+                          navigate('/modules/crm/tickets', { state: { ticketId: event.recordId } });
+                        else if (event.source === 'service_request')
+                          navigate('/modules/erp.service/requests', {
+                            state: { serviceRequestId: event.recordId },
+                          });
+                        else if (event.source === 'quotation')
+                          navigate('/modules/erp.sales/quotations', {
+                            state: { sourceQuotationId: event.recordId },
+                          });
+                        else
+                          navigate('/modules/erp.finance/payments', {
+                            state: { paymentId: event.recordId },
+                          });
+                        return;
+                      }
                       setDrawer(
                         item.kind === 'interaction'
                           ? { kind: 'interaction', value: item.interaction }
                           : { kind: 'task', value: item.task },
-                      )
-                    }
+                      );
+                    }}
                     timezone={references.businessTimezone}
                   />
                 ))}
@@ -1083,32 +1110,118 @@ function TimelineRecord({
 }) {
   const interaction = item.kind === 'interaction' ? item.interaction : null;
   const task = item.kind === 'task_event' ? item.task : null;
+  const operationalEvent = item.kind === 'operational_event' ? item.operationalEvent : null;
   return (
-    <li className={`is-${item.kind}`}>
+    <li className={`is-${item.kind}${operationalEvent ? ` is-${operationalEvent.source}` : ''}`}>
       <span className="crm-timeline-node" aria-hidden="true">
-        {item.kind === 'interaction' ? 'C' : 'T'}
+        {operationalEvent
+          ? ({ payment: 'P', quotation: 'Q', service_request: 'S', ticket: 'T' }[
+              operationalEvent.source
+            ] ?? 'R')
+          : item.kind === 'interaction'
+            ? 'C'
+            : 'T'}
       </span>
       <button onClick={onOpen} type="button">
         <span className="crm-timeline-record-copy">
           <span className="crm-timeline-record-label">
-            {interaction
-              ? interactionLabel(interaction.interactionType)
-              : taskEventLabel(item.kind === 'task_event' ? item.taskEvent.type : 'created')}
+            {operationalEvent
+              ? operationalEventLabel(operationalEvent)
+              : interaction
+                ? interactionLabel(interaction.interactionType)
+                : taskEventLabel(item.kind === 'task_event' ? item.taskEvent.type : 'created')}
           </span>
-          <strong>{interaction?.subject ?? task?.title}</strong>
-          <small>{interaction?.notes ?? task?.notes ?? 'Customer follow-up task'}</small>
+          <strong>{interaction?.subject ?? task?.title ?? operationalEvent?.title}</strong>
+          <small>
+            {operationalEvent
+              ? `${operationalEvent.referenceNumber}${operationalEventDescription(operationalEvent) ? ` · ${operationalEventDescription(operationalEvent)}` : ''}`
+              : (interaction?.notes ?? task?.notes ?? 'Customer follow-up task')}
+          </small>
           <span>
-            {interaction?.createdByName ?? task?.assignedTo.displayName}
-            {interaction?.locationName || task?.locationName
-              ? ` · ${interaction?.locationName ?? task?.locationName}`
-              : ''}
+            {operationalEvent
+              ? [operationalEvent.actorName, operationalEvent.locationName ?? 'Customer account']
+                  .filter(Boolean)
+                  .join(' · ')
+              : `${interaction?.createdByName ?? task?.assignedTo.displayName}${
+                  interaction?.locationName || task?.locationName
+                    ? ` · ${interaction?.locationName ?? task?.locationName}`
+                    : ''
+                }`}
           </span>
+          {operationalEvent ? (
+            <span className="crm-timeline-operational-status">
+              {operationalEventStatus(operationalEvent)}
+            </span>
+          ) : null}
         </span>
         <time dateTime={item.occurredAt}>{formatDateTime(item.occurredAt, timezone)}</time>
         <Icon name="arrow" size={15} />
       </button>
     </li>
   );
+}
+
+function timelineItemKey(item: CrmTimelineItem): string {
+  if (item.kind === 'interaction') return `interaction:${item.interaction.id}`;
+  if (item.kind === 'task_event') return `task:${item.taskEvent.id}`;
+  return `operational:${item.operationalEvent.eventId}`;
+}
+
+function operationalEventLabel(event: CrmTimelineOperationalEvent): string {
+  if (event.source === 'ticket') {
+    const labels: Record<string, string> = {
+      created: 'Ticket created',
+      response: 'Customer response recorded',
+      service_link: 'Service request linked',
+      status_change: 'Ticket status updated',
+    };
+    return labels[event.eventType] ?? 'Ticket updated';
+  }
+  if (event.source === 'service_request') {
+    const labels: Record<string, string> = {
+      request_received: 'Service request received',
+      visit_scheduled: 'Service visit scheduled',
+      work_cancelled: 'Service work cancelled',
+      work_completed: 'Service work completed',
+      work_started: 'Service work started',
+    };
+    return labels[event.eventType] ?? 'Service request updated';
+  }
+  if (event.source === 'quotation')
+    return event.eventType === 'quotation_created' ? 'Quotation created' : 'Quotation updated';
+  return 'Payment recorded';
+}
+
+function operationalEventDescription(event: CrmTimelineOperationalEvent): string | undefined {
+  if (event.source !== 'payment' || !event.description) return event.description;
+  const labels: Record<string, string> = {
+    bank_transfer: 'Bank transfer',
+    card: 'Card payment',
+    cash: 'Cash',
+    offset: 'Compensation/offset',
+    pos_terminal: 'POS terminal',
+  };
+  return labels[event.description] ?? event.description;
+}
+
+function operationalEventStatus(event: CrmTimelineOperationalEvent): string {
+  const labels: Record<string, string> = {
+    active: 'Active',
+    cancelled: 'Cancelled',
+    closed: 'Closed',
+    completed: 'Completed',
+    confirmed: 'Confirmed',
+    draft: 'Draft',
+    in_progress: 'In progress',
+    invoiced: 'Invoiced',
+    new: 'New',
+    recorded: 'Recorded',
+    resolved: 'Resolved',
+    scheduled: 'Scheduled',
+    shipped: 'Shipped',
+    waiting_customer: 'Waiting for customer',
+  };
+  return labels[event.status] ?? event.status;
 }
 
 function DrawerSection({
@@ -1204,11 +1317,11 @@ function taskEventLabel(value: CrmTask['history'][number]['type']): string {
       : 'Task cancelled';
 }
 function formatDateTime(value: string, timezone: string): string {
-  return new Intl.DateTimeFormat(undefined, {
+  return formatOperationsDate(new Date(value), {
     dateStyle: 'medium',
     timeStyle: 'short',
     timeZone: timezone,
-  }).format(new Date(value));
+  });
 }
 function localDateTime(date: Date): string {
   const offset = date.getTimezoneOffset() * 60_000;

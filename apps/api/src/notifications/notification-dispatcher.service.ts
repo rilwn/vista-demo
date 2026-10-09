@@ -138,14 +138,19 @@ export class NotificationDispatcherService
          LIMIT 100`,
       );
       await Promise.all(
-        result.rows.map((message) =>
-          this.jobs.enqueue({
+        result.rows.map(async (message) => {
+          const queued = await this.jobs.enqueue({
             correlationId: message.id,
             idempotencyKey: message.idempotency_key,
             name: notificationDispatchJobName,
             payload: { notificationId: message.id },
-          }),
-        ),
+          });
+          // A recovered database claim must not be stranded behind its retained
+          // failed BullMQ job. Terminal message failures are not selected here.
+          if (queued.deduplicated && (await this.jobs.getJobState(queued.jobId)) === 'failed') {
+            await this.jobs.retryFailed(queued.jobId);
+          }
+        }),
       );
     } catch (error) {
       this.logger.event('error', 'notification.schedule.failed', {
@@ -194,11 +199,18 @@ export class NotificationDispatcherService
     const client = await this.database.getPool().connect();
     try {
       await client.query('BEGIN');
-      await this.fail(
-        client,
-        notificationId,
-        error instanceof Error ? error.constructor.name : 'NOTIFICATION_DELIVERY_FAILED',
-        retryAllowed,
+      // The delivery transaction was rolled back, including its claim. Record
+      // this attempt on the pending row, without overwriting another delivery.
+      await client.query(
+        `UPDATE notifications.messages
+         SET status = $2, attempt_count = attempt_count + 1, last_error_code = $3,
+             processing_started_at = NULL
+         WHERE id = $1 AND status = 'pending'`,
+        [
+          notificationId,
+          retryAllowed ? 'pending' : 'failed',
+          error instanceof Error ? error.constructor.name : 'NOTIFICATION_DELIVERY_FAILED',
+        ],
       );
       await client.query('COMMIT');
     } catch (failure) {

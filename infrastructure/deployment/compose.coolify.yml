@@ -117,7 +117,12 @@ services:
 
   operations:
     image: vista-operations:${VISTA_IMAGE_TAG:?Set VISTA_IMAGE_TAG in Coolify}
-    build: { context: ., dockerfile: infrastructure/deployment/Dockerfile, target: operations }
+    build:
+      context: .
+      dockerfile: infrastructure/deployment/Dockerfile
+      target: operations
+      args:
+        VITE_POS_APP_URL: ${VITE_POS_APP_URL:?Set the public Vista POS URL in Coolify}
     expose: ['8080']
     read_only: true
     tmpfs: [/tmp]

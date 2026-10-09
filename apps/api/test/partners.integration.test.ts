@@ -28,6 +28,7 @@ import type {
   ProductSummary,
   ProductCategory,
   SerialTraceability,
+  ServiceRequest,
   StockIssue,
   StockReservation,
   StockReturn,
@@ -60,6 +61,7 @@ describe.skipIf(!runInfrastructureTests)('partner master-data vertical slice', (
   let creatorToken: string;
   let categoryCreatorToken: string;
   let categoryCreatorAccountId: string;
+  let organizationDeleteToken: string;
   let database: Pool;
   let databaseName: string;
   let primaryPartner: PartnerSummary;
@@ -70,8 +72,8 @@ describe.skipIf(!runInfrastructureTests)('partner master-data vertical slice', (
     displayName: `  Vista   Partner ${runId}  `,
     kind: 'legal_entity',
     roles: ['supplier', 'customer'],
-    uic: `uic-${runId.slice(0, 12)}`,
-    vatNumber: `bg-${runId.slice(0, 12)}`,
+    uic: '131282355',
+    vatNumber: 'BG131282355',
   };
 
   beforeAll(async () => {
@@ -161,6 +163,7 @@ describe.skipIf(!runInfrastructureTests)('partner master-data vertical slice', (
     const passwordHash = await application.get(PasswordService).hash(password);
     const creatorEmail = `partner-creator-${runId}@example.invalid`;
     const categoryCreatorEmail = `category-creator-${runId}@example.invalid`;
+    const organizationDeleteEmail = `organization-delete-${runId}@example.invalid`;
     const viewerEmail = `partner-viewer-${runId}@example.invalid`;
     const creatorId = await createAccount(database, 'creator', creatorEmail, passwordHash);
     categoryCreatorAccountId = await createAccount(
@@ -169,28 +172,46 @@ describe.skipIf(!runInfrastructureTests)('partner master-data vertical slice', (
       categoryCreatorEmail,
       passwordHash,
     );
+    const organizationDeleteAccountId = await createAccount(
+      database,
+      'organization-delete',
+      organizationDeleteEmail,
+      passwordHash,
+    );
     const viewerId = await createAccount(database, 'viewer', viewerEmail, passwordHash);
     await grantPermissions(database, creatorId, 'crm', ['view', 'create', 'edit', 'delete']);
+    await grantPermissions(database, creatorId, 'erp.service', ['view', 'create']);
     await grantPermissions(database, categoryCreatorAccountId, 'erp.warehouse', [
       'view',
       'create',
       'edit',
       'approve',
     ]);
+    await grantPermissions(database, categoryCreatorAccountId, 'erp.sales', ['view', 'create']);
     await grantPermissions(database, categoryCreatorAccountId, 'platform.organization', [
       'view',
       'create',
+      'edit',
     ]);
     await grantPermissions(database, categoryCreatorAccountId, 'platform', ['view', 'edit']);
+    await grantPermissions(database, organizationDeleteAccountId, 'platform.organization', [
+      'delete',
+    ]);
     await grantPermissions(database, viewerId, 'crm', ['view']);
     creatorToken = await login(application, creatorEmail);
     categoryCreatorToken = await login(application, categoryCreatorEmail);
+    organizationDeleteToken = await login(application, organizationDeleteEmail);
     viewerToken = await login(application, viewerEmail);
   }, 30_000);
 
   afterAll(async () => {
     if (application) {
-      for (const token of [creatorToken, categoryCreatorToken, viewerToken]) {
+      for (const token of [
+        creatorToken,
+        categoryCreatorToken,
+        organizationDeleteToken,
+        viewerToken,
+      ]) {
         if (token) {
           await request(application.getHttpServer())
             .post('/api/v1/auth/logout')
@@ -320,6 +341,27 @@ describe.skipIf(!runInfrastructureTests)('partner master-data vertical slice', (
       [`scheduled${runId}`],
     );
     expect(evidence.rows[0]?.count).toBe(String(expectedNames.length));
+    const states = await database.query<{ event_type: string; status: string }>(
+      `SELECT event_type, status FROM integration.outbox_events
+       WHERE aggregate_type = 'scheduled_job' AND correlation_id = $1`,
+      [`scheduled${runId}`],
+    );
+    for (const name of [
+      'finance.payment-status.detect',
+      'finance.payment-notification.prepare',
+      'crm.sla.evaluate',
+      'service.inspection-reminder.prepare',
+      'service.plan-visit.generate',
+      'crm.warranty-expiration.prepare',
+      'sales.subscription-invoice.generate',
+    ]) {
+      expect(
+        states.rows.find((row) => row.event_type === `scheduler.${name}.requested`)?.status,
+      ).toBe('completed');
+    }
+    expect(
+      states.rows.find((row) => row.event_type === 'scheduler.backup.verify.requested')?.status,
+    ).toBe('pending');
   });
 
   it('publishes ordered events, deduplicates consumption, recovers claims, and retains poison messages', async () => {
@@ -458,6 +500,19 @@ describe.skipIf(!runInfrastructureTests)('partner master-data vertical slice', (
   });
 
   it('creates normalized canonical partner data with roles, audit, and outbox atomically', async () => {
+    const invalid = await request(application.getHttpServer())
+      .post('/api/v1/master-data/partners')
+      .set('authorization', `Bearer ${creatorToken}`)
+      .set('idempotency-key', `partner-invalid-identifiers-${runId}`)
+      .send({ ...primaryInput, uic: '12AB', vatNumber: 'XYZ' })
+      .expect(400);
+    expect(invalid.body).toMatchObject({
+      error: {
+        code: 'BUSINESS_IDENTIFIER_INVALID',
+        details: [{ field: 'uic' }, { field: 'vatNumber' }],
+      },
+    });
+
     const response = await request(application.getHttpServer())
       .post('/api/v1/master-data/partners')
       .set('authorization', `Bearer ${creatorToken}`)
@@ -471,8 +526,8 @@ describe.skipIf(!runInfrastructureTests)('partner master-data vertical slice', (
       displayName: `Vista Partner ${runId}`,
       kind: 'legal_entity',
       roles: ['customer', 'supplier'],
-      uic: `UIC-${runId.slice(0, 12).toUpperCase()}`,
-      vatNumber: `BG-${runId.slice(0, 12).toUpperCase()}`,
+      uic: '131282355',
+      vatNumber: 'BG131282355',
       version: 1,
     });
 
@@ -574,7 +629,7 @@ describe.skipIf(!runInfrastructureTests)('partner master-data vertical slice', (
       displayName: `Maintenance Partner ${runId}`,
       kind: 'legal_entity',
       roles: ['partner'],
-      uic: `maint-${runId.slice(0, 12)}`,
+      uic: '123456786',
     });
     const updateInput = {
       companyRepresentative: 'Updated Representative',
@@ -582,9 +637,22 @@ describe.skipIf(!runInfrastructureTests)('partner master-data vertical slice', (
       expectedVersion: created.version,
       kind: 'legal_entity',
       roles: ['customer', 'partner'],
-      uic: `maint-${runId.slice(0, 12)}`,
-      vatNumber: `bg-maint-${runId.slice(0, 8)}`,
+      uic: '123456786',
+      vatNumber: 'BG123456786',
     };
+    const invalidUpdate = await request(application.getHttpServer())
+      .put(`/api/v1/master-data/partners/${created.id}`)
+      .set('authorization', `Bearer ${creatorToken}`)
+      .set('idempotency-key', `maintain-invalid-update-${runId}`)
+      .send({ ...updateInput, vatNumber: 'XYZ' })
+      .expect(400);
+    expect(invalidUpdate.body).toMatchObject({
+      error: {
+        code: 'BUSINESS_IDENTIFIER_INVALID',
+        details: [{ field: 'vatNumber' }],
+      },
+    });
+
     const updatedResponse = await request(application.getHttpServer())
       .put(`/api/v1/master-data/partners/${created.id}`)
       .set('authorization', `Bearer ${creatorToken}`)
@@ -851,6 +919,46 @@ describe.skipIf(!runInfrastructureTests)('partner master-data vertical slice', (
     });
     expect(equipment).not.toHaveProperty('serializedItemId');
 
+    const serviceRequestResponse = (await request(application.getHttpServer())
+      .post('/api/v1/service/requests')
+      .set('authorization', `Bearer ${creatorToken}`)
+      .set('idempotency-key', `legacy-equipment-service-${runId}`)
+      .send({
+        customerEquipmentId: equipment.id,
+        customerLocationId: location.id,
+        customerPartnerId: primaryPartner.id,
+        priority: 'normal',
+        problemDescription: 'Display resets after a power interruption.',
+        serviceType: 'warranty',
+        sourceChannel: 'telephone',
+      })
+      .expect(201)) as { body: ServiceRequest };
+    const registeredTrace = await request(application.getHttpServer())
+      .get(`/api/v1/warehouse/serial-traceability/${encodeURIComponent(equipment.serialNumber)}`)
+      .set('authorization', `Bearer ${categoryCreatorToken}`)
+      .expect(200);
+    expect(registeredTrace.body).toMatchObject({
+      currentCustody: { displayName: 'North site', type: 'customer' },
+      customer: { displayName: primaryPartner.displayName, id: primaryPartner.id },
+      customerEquipment: {
+        id: equipment.id,
+        location: { displayName: 'North site', id: location.id },
+        status: 'active',
+      },
+      inventoryRecordLinked: false,
+      product: { displayName: 'Legacy fiscal device' },
+      serialNumber: equipment.serialNumber,
+      status: 'issued',
+    });
+    expect(registeredTrace.body).not.toHaveProperty('serialItemId');
+    expect(registeredTrace.body).not.toHaveProperty('currentWarehouse');
+    expect(registeredTrace.body.events).toEqual([
+      expect.objectContaining({
+        eventType: 'service_requested',
+        referenceId: serviceRequestResponse.body.number,
+      }),
+    ]);
+
     const duplicateSerial = await request(application.getHttpServer())
       .post(`/api/v1/master-data/partners/${primaryPartner.id}/locations/${location.id}/equipment`)
       .set('authorization', `Bearer ${creatorToken}`)
@@ -1026,11 +1134,29 @@ describe.skipIf(!runInfrastructureTests)('partner master-data vertical slice', (
       .send({ code: 'VS', name: 'Vista Service Ltd.' })
       .expect(403);
 
+    const invalidEntity = await request(application.getHttpServer())
+      .post('/api/v1/organization/legal-entities')
+      .set('authorization', `Bearer ${categoryCreatorToken}`)
+      .set('idempotency-key', `legal-entity-invalid-${runId}`)
+      .send({
+        code: `BAD-${runId.slice(0, 6)}`,
+        name: 'Invalid test entity',
+        uic: '12AB',
+        vatNumber: 'XYZ',
+      })
+      .expect(400);
+    expect(invalidEntity.body).toMatchObject({
+      error: {
+        code: 'BUSINESS_IDENTIFIER_INVALID',
+        details: [{ field: 'uic' }, { field: 'vatNumber' }],
+      },
+    });
+
     const entityInput = {
       code: ` vs-${runId.slice(0, 6)} `,
       name: '  Vista   Service Ltd. ',
-      uic: `UIC-${runId.slice(0, 10)}`,
-      vatNumber: ` bg-${runId.slice(0, 10)} `,
+      uic: '131282355',
+      vatNumber: ' BG 131282355 ',
     };
     const entityResponse = await request(application.getHttpServer())
       .post('/api/v1/organization/legal-entities')
@@ -1042,7 +1168,8 @@ describe.skipIf(!runInfrastructureTests)('partner master-data vertical slice', (
     expect(entity).toMatchObject({
       code: `VS-${runId.slice(0, 6).toUpperCase()}`,
       name: 'Vista Service Ltd.',
-      vatNumber: `BG-${runId.slice(0, 10).toUpperCase()}`,
+      uic: '131282355',
+      vatNumber: 'BG131282355',
     });
     const entityReplay = await request(application.getHttpServer())
       .post('/api/v1/organization/legal-entities')
@@ -1145,6 +1272,263 @@ describe.skipIf(!runInfrastructureTests)('partner master-data vertical slice', (
       [[entity.id, branch.id, location.id, operator.id, cashRegister.id]],
     );
     expect(evidence.rows[0]).toEqual({ audit_count: '5', outbox_count: '5' });
+  });
+
+  it('edits, deactivates, and reactivates organization records without losing linked history', async () => {
+    const suffix = runId.slice(0, 6).toUpperCase();
+    const entity = (
+      await request(application.getHttpServer())
+        .post('/api/v1/organization/legal-entities')
+        .set('authorization', `Bearer ${categoryCreatorToken}`)
+        .set('idempotency-key', `qa-org2-ent-${runId}`)
+        .send({ code: `QA-${suffix}`, name: 'QA Business' })
+        .expect(201)
+    ).body as LegalBusinessEntity;
+    await request(application.getHttpServer())
+      .put(`/api/v1/organization/legal-entities/${entity.id}`)
+      .set('authorization', `Bearer ${viewerToken}`)
+      .set('idempotency-key', `qa-org2-denied-${runId}`)
+      .send({ code: entity.code, name: entity.name, expectedVersion: entity.version })
+      .expect(403);
+    await request(application.getHttpServer())
+      .post(`/api/v1/organization/legal-entities/${entity.id}/deactivate`)
+      .set('authorization', `Bearer ${categoryCreatorToken}`)
+      .set('idempotency-key', `qa-org2-deactivate-denied-${runId}`)
+      .send({ expectedVersion: entity.version })
+      .expect(403);
+
+    const branch = (
+      await request(application.getHttpServer())
+        .post(`/api/v1/organization/legal-entities/${entity.id}/branches`)
+        .set('authorization', `Bearer ${categoryCreatorToken}`)
+        .set('idempotency-key', `qa-org2-br-${runId}`)
+        .send({ code: `BR-${suffix}`, name: 'QA Branch' })
+        .expect(201)
+    ).body as BusinessBranch;
+    const location = (
+      await request(application.getHttpServer())
+        .post(`/api/v1/organization/branches/${branch.id}/locations`)
+        .set('authorization', `Bearer ${categoryCreatorToken}`)
+        .set('idempotency-key', `qa-org2-loc-${runId}`)
+        .send({
+          addressLine1: '1 Test Road',
+          city: 'Vratsa',
+          code: `LOC-${suffix}`,
+          locationType: 'QA location',
+          name: 'QA Location',
+        })
+        .expect(201)
+    ).body as BusinessLocation;
+    const operator = (
+      await request(application.getHttpServer())
+        .post(`/api/v1/organization/locations/${location.id}/operators`)
+        .set('authorization', `Bearer ${categoryCreatorToken}`)
+        .set('idempotency-key', `qa-org2-op-${runId}`)
+        .send({ accountId: categoryCreatorAccountId, code: `OP-${suffix}` })
+        .expect(201)
+    ).body as BusinessOperator;
+    const register = (
+      await request(application.getHttpServer())
+        .post(`/api/v1/organization/locations/${location.id}/registers`)
+        .set('authorization', `Bearer ${categoryCreatorToken}`)
+        .set('idempotency-key', `qa-org2-reg-${runId}`)
+        .send({ code: `POS-${suffix}`, name: 'QA Register', operatorIds: [operator.id] })
+        .expect(201)
+    ).body as CashRegister;
+    const latestTopology = (
+      await request(application.getHttpServer())
+        .get('/api/v1/organization/topology')
+        .set('authorization', `Bearer ${categoryCreatorToken}`)
+        .expect(200)
+    ).body as OrganizationTopology;
+    const currentEntity = latestTopology.legalEntities.find((item) => item.id === entity.id)!;
+    const currentBranch = latestTopology.branches.find((item) => item.id === branch.id)!;
+    const currentLocation = latestTopology.locations.find((item) => item.id === location.id)!;
+    const currentOperator = latestTopology.operators.find((item) => item.id === operator.id)!;
+    const currentRegister = latestTopology.cashRegisters.find((item) => item.id === register.id)!;
+
+    const update = (methodPath: string, key: string, value: object) =>
+      request(application.getHttpServer())
+        .put(methodPath)
+        .set('authorization', `Bearer ${categoryCreatorToken}`)
+        .set('idempotency-key', `${key}-${runId}`)
+        .send(value);
+    const updatedEntity = await update(
+      `/api/v1/organization/legal-entities/${entity.id}`,
+      'qa-org2-edit-ent',
+      { code: entity.code, name: 'QA Business Updated', expectedVersion: currentEntity.version },
+    ).expect(200);
+    const updatedBranch = await update(
+      `/api/v1/organization/branches/${branch.id}`,
+      'qa-org2-edit-br',
+      { code: branch.code, name: 'QA Branch Updated', expectedVersion: currentBranch.version },
+    ).expect(200);
+    const updatedLocation = await update(
+      `/api/v1/organization/locations/${location.id}`,
+      'qa-org2-edit-loc',
+      {
+        addressLine1: '2 Test Road',
+        addressLine2: 'Unit 4',
+        city: 'Vratsa',
+        code: location.code,
+        countryCode: 'BG',
+        expectedVersion: currentLocation.version,
+        locationType: 'QA location updated',
+        name: 'QA Location Updated',
+      },
+    ).expect(200);
+    const updatedOperator = await update(
+      `/api/v1/organization/operators/${operator.id}`,
+      'qa-org2-edit-op',
+      { code: `OP2-${suffix}`, expectedVersion: currentOperator.version },
+    ).expect(200);
+    const updatedRegister = await update(
+      `/api/v1/organization/cash-registers/${register.id}`,
+      'qa-org2-edit-reg',
+      {
+        code: register.code,
+        expectedVersion: currentRegister.version,
+        name: 'QA Register Updated',
+        operatorIds: [operator.id],
+      },
+    ).expect(200);
+    expect(updatedEntity.body).toMatchObject({ name: 'QA Business Updated', version: 3 });
+    expect(updatedBranch.body).toMatchObject({ name: 'QA Branch Updated', version: 3 });
+    expect(updatedLocation.body).toMatchObject({ addressLine1: '2 Test Road', version: 4 });
+    expect(updatedOperator.body).toMatchObject({ code: `OP2-${suffix}`, version: 2 });
+    expect(updatedRegister.body).toMatchObject({
+      name: 'QA Register Updated',
+      operatorIds: [operator.id],
+      version: 2,
+    });
+
+    const blockedEntity = await request(application.getHttpServer())
+      .post(`/api/v1/organization/legal-entities/${entity.id}/deactivate`)
+      .set('authorization', `Bearer ${organizationDeleteToken}`)
+      .set('idempotency-key', `qa-org2-block-ent-${runId}`)
+      .send({ expectedVersion: currentEntity.version + 1 })
+      .expect(409);
+    expect(blockedEntity.body).toMatchObject({
+      error: { code: 'LEGAL_ENTITY_HAS_ACTIVE_BRANCHES' },
+    });
+
+    await request(application.getHttpServer())
+      .post(`/api/v1/organization/cash-registers/${register.id}/deactivate`)
+      .set('authorization', `Bearer ${organizationDeleteToken}`)
+      .set('idempotency-key', `qa-org2-deact-reg-${runId}`)
+      .send({ expectedVersion: currentRegister.version + 1 })
+      .expect(200);
+    const blockedOperator = await request(application.getHttpServer())
+      .post(`/api/v1/organization/operators/${operator.id}/deactivate`)
+      .set('authorization', `Bearer ${organizationDeleteToken}`)
+      .set('idempotency-key', `qa-org2-block-op-${runId}`)
+      .send({ expectedVersion: currentOperator.version + 1 })
+      .expect(409);
+    expect(blockedOperator.body).toMatchObject({
+      error: { code: 'OPERATOR_HAS_ACTIVE_ASSIGNMENTS' },
+    });
+    await update(`/api/v1/organization/cash-registers/${register.id}`, 'qa-org2-unassign', {
+      code: register.code,
+      expectedVersion: currentRegister.version + 2,
+      name: 'QA Register Updated',
+      operatorIds: [],
+    }).expect(200);
+    await request(application.getHttpServer())
+      .post(`/api/v1/organization/operators/${operator.id}/deactivate`)
+      .set('authorization', `Bearer ${organizationDeleteToken}`)
+      .set('idempotency-key', `qa-org2-deact-op-${runId}`)
+      .send({ expectedVersion: currentOperator.version + 1 })
+      .expect(200);
+    await request(application.getHttpServer())
+      .post(`/api/v1/organization/locations/${location.id}/deactivate`)
+      .set('authorization', `Bearer ${organizationDeleteToken}`)
+      .set('idempotency-key', `qa-org2-deact-loc-${runId}`)
+      .send({ expectedVersion: currentLocation.version + 1 })
+      .expect(200);
+    await request(application.getHttpServer())
+      .post(`/api/v1/organization/branches/${branch.id}/deactivate`)
+      .set('authorization', `Bearer ${organizationDeleteToken}`)
+      .set('idempotency-key', `qa-org2-deact-br-${runId}`)
+      .send({ expectedVersion: currentBranch.version + 1 })
+      .expect(200);
+    await request(application.getHttpServer())
+      .post(`/api/v1/organization/legal-entities/${entity.id}/deactivate`)
+      .set('authorization', `Bearer ${organizationDeleteToken}`)
+      .set('idempotency-key', `qa-org2-deact-ent-${runId}`)
+      .send({ expectedVersion: currentEntity.version + 1 })
+      .expect(200);
+    const inactiveTopology = (
+      await request(application.getHttpServer())
+        .get('/api/v1/organization/topology')
+        .set('authorization', `Bearer ${categoryCreatorToken}`)
+        .expect(200)
+    ).body as OrganizationTopology;
+    expect(inactiveTopology.legalEntities).toContainEqual(
+      expect.objectContaining({ id: entity.id, active: false }),
+    );
+    expect(inactiveTopology.branches).toContainEqual(
+      expect.objectContaining({ id: branch.id, active: false }),
+    );
+    expect(inactiveTopology.locations).toContainEqual(
+      expect.objectContaining({ id: location.id, active: false }),
+    );
+    expect(inactiveTopology.operators).toContainEqual(
+      expect.objectContaining({ id: operator.id, active: false }),
+    );
+    expect(inactiveTopology.cashRegisters).toContainEqual(
+      expect.objectContaining({ id: register.id, active: false }),
+    );
+
+    const reactivate = (path: string, key: string, version: number) =>
+      request(application.getHttpServer())
+        .post(path)
+        .set('authorization', `Bearer ${categoryCreatorToken}`)
+        .set('idempotency-key', `${key}-${runId}`)
+        .send({ expectedVersion: version });
+    await request(application.getHttpServer())
+      .post(`/api/v1/organization/legal-entities/${entity.id}/reactivate`)
+      .set('authorization', `Bearer ${organizationDeleteToken}`)
+      .set('idempotency-key', `qa-org2-reactivate-denied-${runId}`)
+      .send({ expectedVersion: currentEntity.version + 2 })
+      .expect(403);
+    await reactivate(
+      `/api/v1/organization/legal-entities/${entity.id}/reactivate`,
+      'qa-org2-react-ent',
+      currentEntity.version + 2,
+    ).expect(200);
+    await reactivate(
+      `/api/v1/organization/branches/${branch.id}/reactivate`,
+      'qa-org2-react-br',
+      currentBranch.version + 2,
+    ).expect(200);
+    await reactivate(
+      `/api/v1/organization/locations/${location.id}/reactivate`,
+      'qa-org2-react-loc',
+      currentLocation.version + 2,
+    ).expect(200);
+    await reactivate(
+      `/api/v1/organization/operators/${operator.id}/reactivate`,
+      'qa-org2-react-op',
+      currentOperator.version + 2,
+    ).expect(200);
+    await reactivate(
+      `/api/v1/organization/cash-registers/${register.id}/reactivate`,
+      'qa-org2-react-reg',
+      currentRegister.version + 3,
+    ).expect(200);
+
+    const evidence = await database.query<{
+      audit_count: string;
+      outbox_count: string;
+      before_count: string;
+    }>(
+      `SELECT
+         (SELECT count(*)::text FROM audit.events WHERE target_id = ANY($1::uuid[])) AS audit_count,
+         (SELECT count(*)::text FROM integration.outbox_events WHERE aggregate_id = ANY($1::uuid[])) AS outbox_count,
+         (SELECT count(*)::text FROM audit.events WHERE target_id = ANY($1::uuid[]) AND before_data IS NOT NULL) AS before_count`,
+      [[entity.id, branch.id, location.id, operator.id, register.id]],
+    );
+    expect(evidence.rows[0]).toEqual({ audit_count: '21', outbox_count: '21', before_count: '16' });
   });
 
   it('creates a controlled category hierarchy without production seed data', async () => {
@@ -1648,12 +2032,91 @@ describe.skipIf(!runInfrastructureTests)('partner master-data vertical slice', (
       [stocktake.id, stocktake.id],
     );
     expect(stocktakeEvidence.rows[0]).toEqual({ audit_count: '5', movement_count: '3' });
+    const stockMovementJournal = await request(application.getHttpServer())
+      .get(
+        `/api/v1/warehouse/stock-movements?warehouseId=${warehouse.id}&productId=${untrackedProduct.id}&movementType=stocktake_out&search=annual-count-${runId}`,
+      )
+      .set('authorization', `Bearer ${categoryCreatorToken}`)
+      .expect(200);
+    expect(stockMovementJournal.body).toMatchObject({
+      items: [
+        expect.objectContaining({
+          movementType: 'stocktake_out',
+          productCode: untrackedProduct.productCode,
+          productId: untrackedProduct.id,
+          quantity: '-1.0000',
+          referenceLabel: `annual-count-${runId}`,
+          referenceType: 'Stocktake',
+          sourceHref: '/modules/erp.warehouse/stocktakes',
+          warehouseId: warehouse.id,
+        }),
+      ],
+      page: 1,
+      pageSize: 25,
+      total: 1,
+      totalPages: 1,
+    });
+    await request(application.getHttpServer())
+      .get('/api/v1/warehouse/stock-movements')
+      .set('authorization', `Bearer ${viewerToken}`)
+      .expect(403);
+
+    const quotationResponse = await request(application.getHttpServer())
+      .post('/api/v1/sales/quotations')
+      .set('authorization', `Bearer ${categoryCreatorToken}`)
+      .set('idempotency-key', `reservation-source-quotation-${runId}`)
+      .send({
+        currencyCode: 'BGN',
+        customerPartnerId: primaryPartner.id,
+        lines: [
+          {
+            discountPercent: '0',
+            productId: untrackedProduct.id,
+            quantity: '1',
+            unitPrice: '10',
+            vatTreatment: 'standard_20',
+          },
+        ],
+        overallDiscountPercent: '0',
+        validUntil: '2099-12-31',
+        warehouseId: warehouse.id,
+      })
+      .expect(201);
+    const reservationSource = quotationResponse.body as {
+      id: string;
+      lines: Array<{ id: string }>;
+      number: string;
+    };
+    const invalidReservation = await request(application.getHttpServer())
+      .post('/api/v1/warehouse/stock-reservations')
+      .set('authorization', `Bearer ${categoryCreatorToken}`)
+      .set('idempotency-key', `reservation-unknown-source-${runId}`)
+      .send({
+        productId: untrackedProduct.id,
+        quantity: '3',
+        referenceId: 'NONEXISTENT-SO-999',
+        referenceType: 'sales_order',
+        warehouseId: warehouse.id,
+      })
+      .expect(404);
+    expect(invalidReservation.body).toMatchObject({
+      error: { code: 'STOCK_RESERVATION_SOURCE_NOT_FOUND' },
+    });
+    const noReservationCreated = await request(application.getHttpServer())
+      .get('/api/v1/warehouse/stock-reservations')
+      .set('authorization', `Bearer ${categoryCreatorToken}`)
+      .expect(200);
+    expect(noReservationCreated.body).toMatchObject({ items: [], total: 0 });
+    await request(application.getHttpServer())
+      .get('/api/v1/warehouse/stock-reservations')
+      .set('authorization', `Bearer ${viewerToken}`)
+      .expect(403);
 
     const reservationInput = {
       productId: untrackedProduct.id,
       quantity: '3',
-      referenceId: `order-${runId}`,
-      referenceType: 'sales_order',
+      referenceId: reservationSource.number,
+      referenceType: 'quotation',
       warehouseId: warehouse.id,
     };
     const reservationResponse = await request(application.getHttpServer())
@@ -1665,8 +2128,26 @@ describe.skipIf(!runInfrastructureTests)('partner master-data vertical slice', (
     const stockReservation = reservationResponse.body as StockReservation;
     expect(reservationResponse.body).toMatchObject({
       initialQuantity: '3.0000',
+      referenceLabel: reservationSource.number,
       remainingQuantity: '3.0000',
       status: 'active',
+    });
+    const activeReservationPage = await request(application.getHttpServer())
+      .get('/api/v1/warehouse/stock-reservations?page=1&pageSize=10')
+      .set('authorization', `Bearer ${categoryCreatorToken}`)
+      .expect(200);
+    expect(activeReservationPage.body).toMatchObject({
+      items: [
+        expect.objectContaining({
+          id: (reservationResponse.body as StockReservation).id,
+          referenceLabel: reservationSource.number,
+          status: 'active',
+        }),
+      ],
+      page: 1,
+      pageSize: 10,
+      total: 1,
+      totalPages: 1,
     });
     const reservationReplay = await request(application.getHttpServer())
       .post('/api/v1/warehouse/stock-reservations')
@@ -1721,6 +2202,56 @@ describe.skipIf(!runInfrastructureTests)('partner master-data vertical slice', (
       remainingQuantity: '1.0000',
       status: 'released',
     });
+    const reservationPageAfterRelease = await request(application.getHttpServer())
+      .get('/api/v1/warehouse/stock-reservations')
+      .set('authorization', `Bearer ${categoryCreatorToken}`)
+      .expect(200);
+    expect(reservationPageAfterRelease.body).toMatchObject({ items: [], total: 0 });
+
+    const confirmedQuotation = await request(application.getHttpServer())
+      .post(`/api/v1/sales/quotations/${reservationSource.id}/confirm`)
+      .set('authorization', `Bearer ${categoryCreatorToken}`)
+      .set('idempotency-key', `reservation-internal-order-${runId}`)
+      .send({ lines: [{ quotationLineId: reservationSource.lines[0]!.id }] })
+      .expect(201);
+    const order = confirmedQuotation.body.order as { id: string; number: string };
+    const salesReservationPage = await request(application.getHttpServer())
+      .get('/api/v1/warehouse/stock-reservations')
+      .set('authorization', `Bearer ${categoryCreatorToken}`)
+      .expect(200);
+    expect(salesReservationPage.body).toMatchObject({
+      items: [
+        expect.objectContaining({
+          referenceLabel: order.number,
+          referenceType: 'sales_order',
+          status: 'active',
+        }),
+      ],
+      total: 1,
+    });
+    expect(salesReservationPage.body.items[0].referenceLabel).not.toBe(order.id);
+    const duplicateOrderReservation = await request(application.getHttpServer())
+      .post('/api/v1/warehouse/stock-reservations')
+      .set('authorization', `Bearer ${categoryCreatorToken}`)
+      .set('idempotency-key', `reservation-duplicate-order-${runId}`)
+      .send({
+        productId: untrackedProduct.id,
+        quantity: '1',
+        referenceId: order.number,
+        referenceType: 'sales_order',
+        warehouseId: warehouse.id,
+      })
+      .expect(409);
+    expect(duplicateOrderReservation.body).toMatchObject({
+      error: { code: 'STOCK_RESERVATION_ALREADY_EXISTS' },
+    });
+    const serviceRequestSource = await database.query<{ request_number: string }>(
+      `SELECT request_number FROM service.requests
+       WHERE customer_partner_id = $1 ORDER BY created_at, id LIMIT 1`,
+      [primaryPartner.id],
+    );
+    const serviceRequestNumber = serviceRequestSource.rows[0]?.request_number;
+    if (!serviceRequestNumber) throw new Error('Expected an existing Service request source');
 
     const serialReservation = await request(application.getHttpServer())
       .post('/api/v1/warehouse/stock-reservations')
@@ -1729,13 +2260,17 @@ describe.skipIf(!runInfrastructureTests)('partner master-data vertical slice', (
       .send({
         productId: product.id,
         quantity: '1',
-        referenceId: `service-${runId}`,
+        referenceId: serviceRequestNumber,
         referenceType: 'service_request',
         serialNumbers: [`device-${runId}-02`],
         warehouseId: technicianWarehouse.id,
       })
       .expect(201);
-    expect(serialReservation.body.serialItemIds).toHaveLength(1);
+    const serialReservationBody = serialReservation.body as StockReservation;
+    expect(serialReservationBody).toMatchObject({
+      referenceLabel: serviceRequestNumber,
+    });
+    expect(serialReservationBody.serialItemIds).toHaveLength(1);
     const reservedTransfer = await request(application.getHttpServer())
       .post('/api/v1/warehouse/stock-transfers')
       .set('authorization', `Bearer ${categoryCreatorToken}`)
@@ -1753,7 +2288,7 @@ describe.skipIf(!runInfrastructureTests)('partner master-data vertical slice', (
       error: { code: 'INSUFFICIENT_AVAILABLE_STOCK' },
     });
     await request(application.getHttpServer())
-      .post(`/api/v1/warehouse/stock-reservations/${serialReservation.body.id}/release`)
+      .post(`/api/v1/warehouse/stock-reservations/${serialReservationBody.id}/release`)
       .set('authorization', `Bearer ${categoryCreatorToken}`)
       .set('idempotency-key', `serial-reservation-release-${runId}`)
       .expect(200);
@@ -1918,12 +2453,12 @@ describe.skipIf(!runInfrastructureTests)('partner master-data vertical slice', (
     expect(replenishment.body).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          availableQuantity: '3.0000',
+          availableQuantity: '2.0000',
           lowStock: true,
           physicalQuantity: '3.0000',
           productId: untrackedProduct.id,
-          recommendedQuantity: '4.0000',
-          reservedQuantity: '0.0000',
+          recommendedQuantity: '5.0000',
+          reservedQuantity: '1.0000',
         }),
       ]),
     );
@@ -1980,7 +2515,7 @@ describe.skipIf(!runInfrastructureTests)('partner master-data vertical slice', (
       .set('idempotency-key', `low-stock-recovery-${runId}`)
       .send({
         productId: untrackedProduct.id,
-        quantity: '1',
+        quantity: '2',
         referenceId: `low-stock-recovery-${runId}`,
         unitCostBgn: '5',
         warehouseId: warehouse.id,
@@ -1992,7 +2527,7 @@ describe.skipIf(!runInfrastructureTests)('partner master-data vertical slice', (
       .set('idempotency-key', `low-stock-relapse-${runId}`)
       .send({
         productId: untrackedProduct.id,
-        quantity: '1',
+        quantity: '2',
         reason: 'repair',
         referenceId: `low-stock-relapse-${runId}`,
         warehouseId: warehouse.id,
@@ -2088,7 +2623,8 @@ async function createAccount(
 async function grantPermissions(
   pool: Pool,
   accountId: string,
-  module: 'crm' | 'erp.warehouse' | 'platform' | 'platform.organization',
+  module:
+    'crm' | 'erp.sales' | 'erp.service' | 'erp.warehouse' | 'platform' | 'platform.organization',
   actions: Array<'approve' | 'create' | 'delete' | 'edit' | 'view'>,
 ): Promise<void> {
   const roleId = randomUUID();

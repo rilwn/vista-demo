@@ -5,6 +5,7 @@ import type {
   CrmOpportunity,
   CrmReportDefinition,
   CrmReportExport,
+  CrmTicket,
   CustomerPaymentAccount,
   CustomerOperationalOverview,
   FinanceAgingReport,
@@ -26,12 +27,14 @@ import type {
   ServiceInspectionPlan,
   ServiceReportDefinition,
   ServiceReportOverview,
+  StockMovementJournalPage,
   WarrantyClaim,
 } from '@vista/contracts';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { App } from './App';
 import { AuthProvider } from './auth/AuthProvider';
+import { LocalizationProvider } from './i18n/LocalizationProvider';
 import { messages, moduleMessages } from './messages';
 import { RouterProvider } from './routing/Router';
 
@@ -52,6 +55,7 @@ const authenticationContext = {
   email: loginResponse.account.email,
   employeeId: '1390f07a-927d-475c-a598-47af5d2f8ceb',
   isAdministrative: false,
+  roleNames: ['Warehouse Clerk'],
   permissions: [
     { action: 'view', module: 'erp.warehouse' },
     { action: 'view', module: 'crm' },
@@ -68,9 +72,9 @@ const partner = {
   id: '72d8eca0-6b36-4eae-a7a6-5fffe54a3bbf',
   kind: 'legal_entity',
   roles: ['customer', 'supplier'],
-  uic: '204000001',
+  uic: '131282355',
   updatedAt: '2026-08-06T12:00:00.000Z',
-  vatNumber: 'BG204000001',
+  vatNumber: 'BG131282355',
   version: 1,
 } satisfies PartnerSummary;
 
@@ -173,6 +177,8 @@ const inventoryProductFixture = {
 describe('ERP and CRM authenticated workspace', () => {
   beforeEach(() => {
     sessionStorage.clear();
+    window.localStorage.clear();
+    document.documentElement.lang = 'en';
   });
 
   afterEach(() => {
@@ -604,6 +610,7 @@ describe('ERP and CRM authenticated workspace', () => {
     expect(await screen.findByText('Low stock needs attention')).toBeTruthy();
     expect(screen.getByText('Payment is due soon')).toBeTruthy();
     expect(screen.getByText(/FIN-REV-2026-000005 · Alfa Market Demo Ltd\./u)).toBeTruthy();
+    expect(screen.getByText(/60\.00 BGN/u)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: /Low stock needs attention/u }));
     await waitFor(() =>
       expect(fetchMock).toHaveBeenCalledWith(
@@ -611,9 +618,11 @@ describe('ERP and CRM authenticated workspace', () => {
         expect.objectContaining({ method: 'POST' }),
       ),
     );
+    fireEvent.click(screen.getByRole('button', { name: 'BG' }));
+    expect(await screen.findByText(/60,00 BGN/u)).toBeTruthy();
   });
 
-  it('shows a safe API error and shortened correlation reference', async () => {
+  it('shows a safe API error and keeps its full correlation reference copyable', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValueOnce(
@@ -641,7 +650,8 @@ describe('ERP and CRM authenticated workspace', () => {
     fireEvent.submit(screen.getByRole('button', { name: messages.auth.signIn }).closest('form')!);
 
     expect(await screen.findByText(messages.errors.AUTHENTICATION_FAILED)).toBeTruthy();
-    expect(screen.getByText(`${messages.auth.errorReference}: 12345678-90a`)).toBeTruthy();
+    expect(screen.queryByText('12345678-90ab-cdef-1234-567890abcdef')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Copy sign-in reference' })).toBeTruthy();
   });
 
   it('loads the canonical partner registry and keeps create controls permission-aware', async () => {
@@ -664,6 +674,10 @@ describe('ERP and CRM authenticated workspace', () => {
     fireEvent.click(partnerButton);
     const detailDialog = screen.getByRole('dialog', { name: messages.partners.detailsTitle });
     expect(detailDialog.classList.contains('partner-detail-drawer')).toBe(true);
+    expect(within(detailDialog).queryByText(partner.id)).toBeNull();
+    expect(
+      within(detailDialog).getByRole('button', { name: 'Copy partner record ID' }),
+    ).toBeTruthy();
     expect(
       within(detailDialog).getByRole('heading', { name: 'Registration details' }),
     ).toBeTruthy();
@@ -677,6 +691,53 @@ describe('ERP and CRM authenticated workspace', () => {
     expect(new Headers((listRequest?.[1] as RequestInit).headers).get('Authorization')).toBe(
       `Bearer ${loginResponse.sessionToken}`,
     );
+  });
+
+  it('blocks malformed registration identifiers before creating a partner', async () => {
+    const createContext = {
+      ...authenticationContext,
+      permissions: [...authenticationContext.permissions, { action: 'create', module: 'crm' }],
+    };
+    storeAuthenticatedSession(createContext);
+    const fetchMock = vi.fn((input: string, options?: RequestInit) => {
+      if (input.endsWith('/auth/me')) return Promise.resolve(jsonResponse(createContext));
+      if (input.includes('/master-data/partners?'))
+        return Promise.resolve(jsonResponse(partnerPage));
+      if (input.endsWith('/master-data/partners') && options?.method === 'POST')
+        return Promise.reject(new Error('Invalid identifiers should not reach the API.'));
+      return Promise.resolve(jsonResponse({}));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderApplication(['/partners']);
+    fireEvent.click(await screen.findByRole('button', { name: messages.partners.create }));
+    const dialog = screen.getByRole('dialog', { name: messages.partners.createTitle });
+    fireEvent.change(within(dialog).getByLabelText(messages.partners.name), {
+      target: { value: 'New Bulgarian partner Ltd.' },
+    });
+    fireEvent.change(within(dialog).getByLabelText(messages.partners.uic), {
+      target: { value: '12AB' },
+    });
+    fireEvent.change(within(dialog).getByLabelText(messages.partners.vatNumber), {
+      target: { value: 'XYZ' },
+    });
+    fireEvent.submit(dialog.querySelector('form')!);
+
+    expect(
+      await within(dialog).findByText(
+        'Enter a 9- or 13-digit Bulgarian UIC with a correct check digit.',
+      ),
+    ).toBeTruthy();
+    expect(
+      within(dialog).getByText(
+        'Enter a VAT number in a supported EU format, such as BG followed by 9 or 10 digits.',
+      ),
+    ).toBeTruthy();
+    expect(
+      fetchMock.mock.calls.filter(
+        ([url, options]) => url.endsWith('/master-data/partners') && options?.method === 'POST',
+      ),
+    ).toHaveLength(0);
   });
 
   it('keeps the New ticket fields scrollable above an edge-to-edge action footer', async () => {
@@ -748,6 +809,94 @@ describe('ERP and CRM authenticated workspace', () => {
     expect(within(footer).getByRole('button', { name: 'Back' })).toBeTruthy();
   });
 
+  it('shows SLA escalation recipient and notification delivery in the ticket preview', async () => {
+    const ticketId = '37775383-cfb8-473c-b792-64144562f0cc';
+    const ticket: CrmTicket = {
+      category: { code: 'technical', id: 'category-1', name: 'Technical support' },
+      channel: 'telephone',
+      createdAt: '2026-10-09T08:00:00.000Z',
+      customerName: 'Alfa Market Demo Ltd.',
+      customerPartnerId: partner.id,
+      description: 'The fiscal register stopped printing receipts.',
+      history: [
+        {
+          changedAt: '2026-10-09T08:00:00.000Z',
+          id: 'eb886421-2d70-46ac-a92b-b7719bf3b56d',
+          status: 'new',
+          type: 'created',
+        },
+      ],
+      id: ticketId,
+      number: 'TKT-2026-000014',
+      priority: 'high',
+      responseDueAt: '2026-10-09T09:00:00.000Z',
+      responseState: 'breached',
+      resolutionDueAt: '2026-10-09T12:00:00.000Z',
+      resolutionState: 'at_risk',
+      slaEvents: [
+        {
+          createdAt: '2026-10-09T09:05:00.000Z',
+          deliveryStatus: 'delivered',
+          eventType: 'breached',
+          id: 'f695036c-7238-4709-8c90-f8a7b2442ce2',
+          recipientName: 'Vista Demo Service Manager',
+          timerType: 'response',
+        },
+      ],
+      slaPolicy: {
+        id: 'e4ce3fed-2988-4a4a-b61b-767036b16c53',
+        name: 'Technical support SLA',
+        responseMinutes: 60,
+        resolutionMinutes: 240,
+      },
+      status: 'in_progress',
+      subject: 'Fiscal register stopped printing',
+      updatedAt: '2026-10-09T09:05:00.000Z',
+      version: 2,
+    };
+    const references = {
+      assignees: [],
+      businessTimezone: 'Europe/Sofia',
+      categories: [{ code: 'technical', id: 'category-1', name: 'Technical support' }],
+      customers: [{ id: partner.id, name: partner.displayName }],
+      equipment: [],
+      locations: [],
+      slaPolicies: [ticket.slaPolicy],
+      subscriptions: [],
+    };
+    storeAuthenticatedSession(authenticationContext);
+    const fetchMock = vi.fn((input: string) => {
+      if (input.endsWith('/auth/me')) return Promise.resolve(jsonResponse(authenticationContext));
+      if (input.endsWith('/crm/tickets/reference-data'))
+        return Promise.resolve(jsonResponse(references));
+      if (input.includes('/crm/tickets?'))
+        return Promise.resolve(
+          jsonResponse({
+            items: [ticket],
+            page: 1,
+            pageSize: 25,
+            summary: { atRisk: 1, breached: 1, open: 1, unassigned: 0 },
+            total: 1,
+            totalPages: 1,
+          }),
+        );
+      if (input.endsWith(`/crm/tickets/${ticketId}`)) return Promise.resolve(jsonResponse(ticket));
+      return Promise.resolve(jsonResponse({}));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderApplication(['/modules/crm/tickets']);
+
+    fireEvent.click(
+      await screen.findByRole('button', { name: /Fiscal register stopped printing/u }),
+    );
+    const dialog = await screen.findByRole('dialog', { name: ticket.number });
+    expect(within(dialog).getByRole('heading', { name: 'SLA history' })).toBeTruthy();
+    expect(within(dialog).getByText('First response deadline passed')).toBeTruthy();
+    expect(within(dialog).getByText('Recipient: Vista Demo Service Manager')).toBeTruthy();
+    expect(within(dialog).getByText('Delivered')).toBeTruthy();
+  });
+
   it('records customer interactions and completes assigned follow-up tasks from the CRM timeline', async () => {
     const crmContext = {
       ...authenticationContext,
@@ -762,6 +911,34 @@ describe('ERP and CRM authenticated workspace', () => {
     const locationId = '08d7992e-504a-4b86-b10d-c06ba6ab30de';
     const interactionId = 'b88a1b22-ad44-4ba2-b50f-21df3ae5e767';
     const taskId = '72d20969-8d5b-45f3-9403-e842c380a2d2';
+    const linkedTicketId = '5ed20969-8d5b-45f3-9403-e842c380a2d2';
+    const linkedTicket: CrmTicket = {
+      category: { code: 'technical', id: 'timeline-category', name: 'Technical support' },
+      channel: 'telephone',
+      createdAt: '2026-09-01T08:00:00.000Z',
+      customerName: 'Alfa Market Demo Ltd.',
+      customerPartnerId: customerId,
+      description: 'The customer needs a fiscal display check.',
+      history: [],
+      id: linkedTicketId,
+      number: 'TKT-2026-000021',
+      priority: 'normal',
+      responseDueAt: '2026-09-01T09:00:00.000Z',
+      responseState: 'on_track',
+      resolutionDueAt: '2026-09-01T12:00:00.000Z',
+      resolutionState: 'on_track',
+      slaEvents: [],
+      slaPolicy: {
+        id: 'timeline-sla',
+        name: 'Standard support',
+        responseMinutes: 60,
+        resolutionMinutes: 240,
+      },
+      status: 'new',
+      subject: 'Fiscal display check',
+      updatedAt: '2026-09-01T08:00:00.000Z',
+      version: 1,
+    };
     const references = {
       assignees: [{ displayName: 'Mila Petrova', id: crmContext.accountId }],
       businessTimezone: 'Europe/Sofia',
@@ -773,6 +950,20 @@ describe('ERP and CRM authenticated workspace', () => {
     let task: Record<string, unknown> | null = null;
     function page() {
       const items = [
+        {
+          kind: 'operational_event',
+          occurredAt: '2026-09-01T08:00:00.000Z',
+          operationalEvent: {
+            eventId: 'timeline-ticket-created',
+            eventType: 'created',
+            locationName: 'Main retail store',
+            recordId: linkedTicketId,
+            referenceNumber: linkedTicket.number,
+            source: 'ticket',
+            status: 'new',
+            title: linkedTicket.subject,
+          },
+        },
         ...(interaction
           ? [{ interaction, kind: 'interaction', occurredAt: interaction['occurredAt'] }]
           : []),
@@ -806,6 +997,34 @@ describe('ERP and CRM authenticated workspace', () => {
       if (input.endsWith('/crm/timeline/reference-data')) {
         return Promise.resolve(jsonResponse(references));
       }
+      if (input.endsWith('/crm/tickets/reference-data')) {
+        return Promise.resolve(
+          jsonResponse({
+            assignees: [],
+            businessTimezone: 'Europe/Sofia',
+            categories: [linkedTicket.category],
+            customers: [{ id: customerId, name: 'Alfa Market Demo Ltd.' }],
+            equipment: [],
+            locations: [],
+            slaPolicies: [linkedTicket.slaPolicy],
+            subscriptions: [],
+          }),
+        );
+      }
+      if (input.includes('/crm/tickets?')) {
+        return Promise.resolve(
+          jsonResponse({
+            items: [],
+            page: 1,
+            pageSize: 25,
+            summary: { atRisk: 0, breached: 0, open: 0, unassigned: 0 },
+            total: 0,
+            totalPages: 0,
+          }),
+        );
+      }
+      if (input.endsWith(`/crm/tickets/${linkedTicketId}`))
+        return Promise.resolve(jsonResponse(linkedTicket));
       if (input.includes('/crm/timeline?')) return Promise.resolve(jsonResponse(page()));
       if (input.endsWith('/crm/interactions') && options?.method === 'POST') {
         const body = JSON.parse(options.body as string) as Record<string, unknown>;
@@ -886,7 +1105,7 @@ describe('ERP and CRM authenticated workspace', () => {
     );
     fireEvent.keyDown(interactionDialog, { key: 'Escape' });
     expect(screen.queryByRole('dialog', { name: 'Log interaction' })).toBeNull();
-    expect(document.activeElement).toBe(interactionButton);
+    await waitFor(() => expect(document.activeElement).toBe(interactionButton));
     fireEvent.click(interactionButton);
     interactionDialog = screen.getByRole('dialog', { name: 'Log interaction' });
     expect(interactionDialog.querySelector('.crm-timeline-drawer-actions')).toBeTruthy();
@@ -923,6 +1142,9 @@ describe('ERP and CRM authenticated workspace', () => {
     expect(await screen.findByText('The task was completed.')).toBeTruthy();
     expect(within(taskPreview).getByText('Completed')).toBeTruthy();
 
+    fireEvent.click(screen.getByRole('button', { name: /TKT-2026-000021/u }));
+    expect(await screen.findByRole('dialog', { name: linkedTicket.number })).toBeTruthy();
+
     const interactionCommand = fetchMock.mock.calls.find(
       ([url, options]) => url.endsWith('/crm/interactions') && options?.method === 'POST',
     );
@@ -948,6 +1170,7 @@ describe('ERP and CRM authenticated workspace', () => {
     const customerId = 'aa17e1cc-bfef-4d25-bd44-833894c14ed6';
     const leadId = 'ab8a1b22-ad44-4ba2-b50f-21df3ae5e767';
     const opportunityId = 'ac8a1b22-ad44-4ba2-b50f-21df3ae5e767';
+    const quotationId = 'ad8a1b22-ad44-4ba2-b50f-21df3ae5e767';
     let customers: Array<{ id: string; name: string }> = [];
     let lead: CrmLead | null = null;
     let opportunity: CrmOpportunity | null = null;
@@ -955,7 +1178,16 @@ describe('ERP and CRM authenticated workspace', () => {
       assignees: [owner],
       businessTimezone: 'Europe/Sofia',
       customers,
-      quotations: [],
+      quotations: [
+        {
+          customerPartnerId: customerId,
+          currencyCode: 'BGN',
+          id: quotationId,
+          number: 'Q-2026-000001',
+          status: 'draft',
+          total: '1800.00',
+        },
+      ],
     });
     const leadPage = () => ({
       items: lead ? [lead] : [],
@@ -1103,6 +1335,40 @@ describe('ERP and CRM authenticated workspace', () => {
       if (input.endsWith(`/crm/opportunities/${opportunityId}`) && !options?.method)
         return Promise.resolve(jsonResponse(opportunity));
       if (
+        input.endsWith(`/crm/opportunities/${opportunityId}/quotations`) &&
+        options?.method === 'POST'
+      ) {
+        const linkedAt = '2026-09-01T10:12:00.000Z';
+        opportunity = {
+          ...opportunity!,
+          history: [
+            ...opportunity!.history,
+            {
+              changedAt: linkedAt,
+              changedByName: owner.displayName,
+              id: 'opportunity-quotation-linked',
+              nextStage: opportunity!.stage,
+              note: 'Linked quotation Q-2026-000001.',
+              probabilityPercent: opportunity!.probabilityPercent,
+              type: 'quotation_linked',
+            },
+          ],
+          quotations: [
+            {
+              currencyCode: 'BGN',
+              id: quotationId,
+              linkedAt,
+              number: 'Q-2026-000001',
+              status: 'draft',
+              total: '1800.00',
+            },
+          ],
+          updatedAt: linkedAt,
+          version: opportunity!.version + 1,
+        };
+        return Promise.resolve(jsonResponse(opportunity));
+      }
+      if (
         input.endsWith(`/crm/opportunities/${opportunityId}/stage`) &&
         options?.method === 'POST'
       ) {
@@ -1148,9 +1414,22 @@ describe('ERP and CRM authenticated workspace', () => {
     fireEvent.change(within(dialog).getByLabelText('Contact person'), {
       target: { value: 'Petar Dimitrov' },
     });
+    const telephoneField = within(dialog).getByLabelText('Telephone');
+    fireEvent.change(telephoneField, { target: { value: 'abc' } });
+    fireEvent.blur(telephoneField);
+    expect(
+      await within(dialog).findByText(
+        'Enter a valid telephone number using 7–15 digits. An optional leading +, spaces, parentheses, hyphens or dots are allowed.',
+      ),
+    ).toBeTruthy();
+    expect(within(dialog).getByRole('button', { name: 'Save lead' })).toHaveProperty(
+      'disabled',
+      true,
+    );
     fireEvent.change(within(dialog).getByLabelText('Telephone'), {
       target: { value: '+359 888 200 300' },
     });
+    await waitFor(() => expect(within(dialog).queryByRole('alert')).toBeNull());
     fireEvent.change(within(dialog).getByLabelText('Notes (optional)'), {
       target: { value: 'Interested in a fiscal device and annual service.' },
     });
@@ -1173,6 +1452,30 @@ describe('ERP and CRM authenticated workspace', () => {
     fireEvent.change(within(dialog).getByLabelText('Estimated value (BGN)'), {
       target: { value: '1800' },
     });
+    fireEvent.change(within(dialog).getByLabelText('Company registration number (optional)'), {
+      target: { value: '12AB' },
+    });
+    fireEvent.change(within(dialog).getByLabelText('VAT number (optional)'), {
+      target: { value: 'XYZ' },
+    });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Convert lead' }));
+    expect(
+      await within(dialog).findByText(
+        'Enter a 9- or 13-digit Bulgarian UIC with a correct check digit.',
+      ),
+    ).toBeTruthy();
+    expect(
+      fetchMock.mock.calls.filter(
+        ([url, options]) =>
+          url.endsWith(`/crm/leads/${leadId}/convert`) && options?.method === 'POST',
+      ),
+    ).toHaveLength(0);
+    fireEvent.change(within(dialog).getByLabelText('Company registration number (optional)'), {
+      target: { value: '131282355' },
+    });
+    fireEvent.change(within(dialog).getByLabelText('VAT number (optional)'), {
+      target: { value: 'BG131282355' },
+    });
     fireEvent.click(within(dialog).getByRole('button', { name: 'Convert lead' }));
     expect(
       await screen.findByText(
@@ -1188,6 +1491,20 @@ describe('ERP and CRM authenticated workspace', () => {
     fireEvent.change(within(dialog).getByLabelText('Next stage'), {
       target: { value: 'quotation_sent' },
     });
+    expect(
+      await within(dialog).findByText(
+        'Link a Sales quotation before moving this opportunity to Quotation sent.',
+      ),
+    ).toBeTruthy();
+    expect(within(dialog).getByRole('button', { name: 'Update stage' })).toHaveProperty(
+      'disabled',
+      true,
+    );
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Link quotation' }));
+    expect(
+      await screen.findByText('The Sales quotation was linked to this opportunity.'),
+    ).toBeTruthy();
+    expect(within(dialog).getByText('Q-2026-000001')).toBeTruthy();
     fireEvent.click(within(dialog).getByRole('button', { name: 'Update stage' }));
     expect(await screen.findByText('OPP-2026-000001 moved to Quotation sent.')).toBeTruthy();
     expect(within(dialog).getAllByText('Quotation sent').length).toBeGreaterThan(0);
@@ -1823,6 +2140,7 @@ describe('ERP and CRM authenticated workspace', () => {
     let locationCreated = false;
     let equipmentCreated = false;
     let equipmentUpdated = false;
+    let statusChangeBlocked = false;
     const fetchMock = vi.fn((input: string, options?: RequestInit) => {
       if (input.endsWith('/auth/me')) return Promise.resolve(jsonResponse(contextWithEdit));
       if (input.includes('/master-data/partners?'))
@@ -1834,6 +2152,21 @@ describe('ERP and CRM authenticated workspace', () => {
         return Promise.resolve(jsonResponse(equipment, 201));
       }
       if (input.endsWith(`/equipment/${equipment.id}`) && options?.method === 'PUT') {
+        const body = JSON.parse(options.body as string) as { status: string };
+        if (body.status === 'active') {
+          statusChangeBlocked = true;
+          return Promise.resolve(
+            jsonResponse(
+              {
+                error: {
+                  code: 'CUSTOMER_EQUIPMENT_SERVICE_WORK_OPEN',
+                  message: 'The device has open Service work.',
+                },
+              },
+              409,
+            ),
+          );
+        }
         equipmentUpdated = true;
         return Promise.resolve(jsonResponse(maintainedEquipment));
       }
@@ -1914,6 +2247,20 @@ describe('ERP and CRM authenticated workspace', () => {
       expectedVersion: equipment.version,
       status: 'under_repair',
     });
+    const maintainedRow = screen.getByText(equipment.serialNumber).closest('.equipment-row');
+    if (!(maintainedRow instanceof HTMLElement))
+      throw new Error('Maintained equipment row missing');
+    fireEvent.click(within(maintainedRow).getByRole('button', { name: 'Edit' }));
+    fireEvent.change(screen.getByLabelText('Status'), { target: { value: 'active' } });
+    fireEvent.submit(
+      screen.getByRole('button', { name: 'Save equipment changes' }).closest('form')!,
+    );
+    expect(
+      await screen.findByText(
+        'This device has scheduled or in-progress Service work. Complete the repair or cancel scheduled work before changing its status or deactivating it.',
+      ),
+    ).toBeTruthy();
+    expect(statusChangeBlocked).toBe(true);
 
     const commands = fetchMock.mock.calls.filter(([, options]) => options?.method === 'POST');
     expect(commands.map(([url]) => url)).toEqual([
@@ -1930,7 +2277,133 @@ describe('ERP and CRM authenticated workspace', () => {
     );
   });
 
+  it('opens shared customer equipment from the CRM register and hands it to Service history', async () => {
+    const context = {
+      ...authenticationContext,
+      permissions: [
+        { action: 'view', module: 'crm' },
+        { action: 'edit', module: 'crm' },
+        { action: 'view', module: 'erp.service' },
+      ],
+    };
+    storeAuthenticatedSession(context);
+    const location = {
+      active: true,
+      addressLine1: '12 Hristo Botev Blvd.',
+      city: 'Vratsa',
+      countryCode: 'BG',
+      id: 'e3996ca2-f924-4da7-82bf-b90ce9f0758f',
+      locationType: 'Store',
+      name: 'Central Store',
+      partnerId: partner.id,
+      version: 1,
+    };
+    const equipment = {
+      active: true,
+      customerLocationId: location.id,
+      deviceName: 'Demo Fiscal Register X1',
+      id: '28e7f8f5-74e9-44a7-8fbe-c6c0c1b9265c',
+      purchaseDate: '2026-08-25',
+      serialNumber: 'DEMO-FR-ALFA-01',
+      status: 'active',
+      version: 1,
+      warrantyEndsOn: '2027-08-25',
+      warrantyStartsOn: '2026-08-25',
+    };
+    const emptyWorkPage = {
+      items: [],
+      page: 1,
+      pageSize: 25,
+      total: 0,
+      totalPages: 0,
+    };
+    const fetchMock = vi.fn((input: string) => {
+      if (input.endsWith('/auth/me')) return Promise.resolve(jsonResponse(context));
+      if (input.includes('/master-data/partners?'))
+        return Promise.resolve(jsonResponse(partnerPage));
+      if (input.endsWith(`/partners/${partner.id}/profile`))
+        return Promise.resolve(jsonResponse(partnerProfile));
+      if (input.endsWith(`/partners/${partner.id}/locations`))
+        return Promise.resolve(jsonResponse([{ equipment: [equipment], location }]));
+      if (input.endsWith('/service/reference-data'))
+        return Promise.resolve(
+          jsonResponse({
+            businessTimezone: 'Europe/Sofia',
+            customers: [{ id: partner.id, name: partner.displayName }],
+            equipment: [
+              {
+                active: equipment.active,
+                customerLocationId: equipment.customerLocationId,
+                customerPartnerId: partner.id,
+                deviceName: equipment.deviceName,
+                id: equipment.id,
+                serialNumber: equipment.serialNumber,
+                status: equipment.status,
+                warrantyEndsOn: equipment.warrantyEndsOn,
+              },
+            ],
+            locations: [{ customerPartnerId: partner.id, id: location.id, name: location.name }],
+            parts: [],
+            subscriptions: [],
+            technicians: [],
+          }),
+        );
+      if (input.includes('/service/requests?') || input.includes('/service/work-orders'))
+        return Promise.resolve(jsonResponse(emptyWorkPage));
+      if (input.endsWith(`/service/equipment/${equipment.id}/history`))
+        return Promise.resolve(
+          jsonResponse({
+            deviceName: equipment.deviceName,
+            equipmentId: equipment.id,
+            events: [],
+            serialNumber: equipment.serialNumber,
+            warrantyEndsOn: equipment.warrantyEndsOn,
+          }),
+        );
+      return Promise.resolve(jsonResponse({}));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderApplication(['/modules/crm/locations-equipment']);
+    expect(await screen.findByRole('heading', { name: 'Locations & equipment' })).toBeTruthy();
+    fireEvent.click(
+      await screen.findByRole('button', {
+        name: 'Review locations and equipment for Vista Retail Partner Ltd.',
+      }),
+    );
+    expect(await screen.findByText('Central Store')).toBeTruthy();
+    const equipmentRow = screen.getByText(equipment.serialNumber).closest('.equipment-row');
+    expect(equipmentRow).toBeTruthy();
+    fireEvent.click(
+      within(equipmentRow as HTMLElement).getByRole('button', { name: 'Service history' }),
+    );
+
+    await waitFor(() => {
+      expect(screen.getByLabelText<HTMLSelectElement>('Device').value).toBe(equipment.id);
+    });
+    await waitFor(() => {
+      expect(
+        fetchMock.mock.calls.some(([url]) =>
+          url.endsWith(`/service/equipment/${equipment.id}/history`),
+        ),
+      ).toBe(true);
+    });
+    expect(await screen.findByText('Service history by serial number')).toBeTruthy();
+  });
+
   it('renders live stock valuation and saves reservation-aware replenishment settings', async () => {
+    const secondProduct = {
+      ...inventoryProductFixture,
+      id: 'ff699db1-0b99-46bd-aae9-b635be3d4bf8',
+      name: 'QA valuation sample two',
+      productCode: 'QA-ROUND-02',
+    };
+    const thirdProduct = {
+      ...inventoryProductFixture,
+      id: '6c46b5dd-89bd-41e4-aea5-af4ecf0c28b9',
+      name: 'QA valuation sample three',
+      productCode: 'QA-ROUND-03',
+    };
     const contextWithWarehouseEdit = {
       ...authenticationContext,
       permissions: [
@@ -1945,7 +2418,9 @@ describe('ERP and CRM authenticated workspace', () => {
       if (input.endsWith('/warehouse/warehouses'))
         return Promise.resolve(jsonResponse([warehouseFixture]));
       if (input.endsWith('/master-data/catalog/products'))
-        return Promise.resolve(jsonResponse([inventoryProductFixture]));
+        return Promise.resolve(
+          jsonResponse([inventoryProductFixture, secondProduct, thirdProduct]),
+        );
       if (input.endsWith('/warehouse/stock-balances'))
         return Promise.resolve(
           jsonResponse([
@@ -1956,6 +2431,24 @@ describe('ERP and CRM authenticated workspace', () => {
               productId: inventoryProductFixture.id,
               quantity: '5.0000',
               reservedQuantity: '2.0000',
+              warehouseId: warehouseFixture.id,
+            },
+            {
+              availableQuantity: '1.0000',
+              averageUnitCostBgn: '1.0060',
+              inventoryValueBgn: '1.0060',
+              productId: secondProduct.id,
+              quantity: '1.0000',
+              reservedQuantity: '0.0000',
+              warehouseId: warehouseFixture.id,
+            },
+            {
+              availableQuantity: '1.0000',
+              averageUnitCostBgn: '1.0060',
+              inventoryValueBgn: '1.0060',
+              productId: thirdProduct.id,
+              quantity: '1.0000',
+              reservedQuantity: '0.0000',
               warehouseId: warehouseFixture.id,
             },
           ]),
@@ -1996,6 +2489,14 @@ describe('ERP and CRM authenticated workspace', () => {
     expect(await screen.findByRole('heading', { name: 'Stock overview' })).toBeTruthy();
     expect((await screen.findAllByText('Fiscal device Alpha')).length).toBeGreaterThan(0);
     expect(screen.getAllByText('1,000.00 BGN').length).toBeGreaterThan(0);
+    for (const product of [secondProduct, thirdProduct]) {
+      expect(
+        within(screen.getByRole('row', { name: new RegExp(product.name, 'u') })).getAllByText(
+          '1.01 BGN',
+        ),
+      ).toHaveLength(2);
+    }
+    expect(screen.getByText('1,002.02 BGN')).toBeTruthy();
     expect(screen.getAllByText('7').length).toBeGreaterThan(0);
     fireEvent.click(screen.getByRole('button', { name: 'Set stock thresholds' }));
     fireEvent.change(screen.getByLabelText('Minimum quantity'), { target: { value: '6' } });
@@ -2041,6 +2542,10 @@ describe('ERP and CRM authenticated workspace', () => {
         return Promise.resolve(jsonResponse([warehouseFixture, technicianWarehouseFixture]));
       if (input.endsWith('/master-data/catalog/products'))
         return Promise.resolve(jsonResponse([inventoryProductFixture]));
+      if (input.includes('/warehouse/stock-movements'))
+        return Promise.resolve(
+          jsonResponse({ items: [], page: 1, pageSize: 25, total: 0, totalPages: 0 }),
+        );
       if (input.endsWith('/warehouse/stock-receipts') && options?.method === 'POST')
         return Promise.resolve(
           jsonResponse(
@@ -2072,7 +2577,9 @@ describe('ERP and CRM authenticated workspace', () => {
     });
     fireEvent.submit(screen.getByRole('button', { name: 'Post receipt' }).closest('form')!);
 
-    expect(await screen.findByText(/Transaction 29F3C3FC posted/u)).toBeTruthy();
+    expect(await screen.findByText(/Movement posted at/u)).toBeTruthy();
+    expect(screen.queryByText(movementId)).toBeNull();
+    expect(screen.getByRole('button', { name: 'Copy stock movement ID' })).toBeTruthy();
     const request = fetchMock.mock.calls.find(
       ([url, options]) => url.endsWith('/warehouse/stock-receipts') && options?.method === 'POST',
     );
@@ -2105,6 +2612,10 @@ describe('ERP and CRM authenticated workspace', () => {
         return Promise.resolve(jsonResponse([warehouseFixture, technicianWarehouseFixture]));
       if (input.endsWith('/master-data/catalog/products'))
         return Promise.resolve(jsonResponse([inventoryProductFixture]));
+      if (input.includes('/warehouse/stock-movements'))
+        return Promise.resolve(
+          jsonResponse({ items: [], page: 1, pageSize: 25, total: 0, totalPages: 0 }),
+        );
       if (input.endsWith('/warehouse/stock-returns') && options?.method === 'POST')
         return Promise.resolve(
           jsonResponse(
@@ -2146,7 +2657,9 @@ describe('ERP and CRM authenticated workspace', () => {
     });
     fireEvent.submit(screen.getByRole('button', { name: 'Post linked return' }).closest('form')!);
 
-    expect(await screen.findByText(/Return A589A3C9 restored inventory/u)).toBeTruthy();
+    expect(await screen.findByText(/Return posted; inventory restored at/u)).toBeTruthy();
+    expect(screen.queryByText(returnMovementId)).toBeNull();
+    expect(screen.getByRole('button', { name: 'Copy stock movement ID' })).toBeTruthy();
     const request = fetchMock.mock.calls.find(
       ([url, options]) => url.endsWith('/warehouse/stock-returns') && options?.method === 'POST',
     );
@@ -2160,6 +2673,92 @@ describe('ERP and CRM authenticated workspace', () => {
       referenceId: 'RMA-2026-0042',
       serialNumbers: ['FDA-ALPHA-0001'],
     });
+  });
+
+  it('filters the stock movement journal and links a posted stocktake to its register', async () => {
+    const contextWithWarehouseCreate = {
+      ...authenticationContext,
+      permissions: [
+        ...authenticationContext.permissions,
+        { action: 'create', module: 'erp.warehouse' },
+      ],
+    };
+    storeAuthenticatedSession(contextWithWarehouseCreate);
+    const reference = 'annual-count-QA-20261009';
+    const movementPage: StockMovementJournalPage = {
+      items: [
+        {
+          actorDisplayName: 'Mila Petrova',
+          id: 'e4dc262f-1c85-4628-8485-62a7ca5f393b',
+          occurredAt: '2026-10-09T09:30:00.000Z',
+          movementType: 'stocktake_out',
+          productCode: inventoryProductFixture.productCode,
+          productId: inventoryProductFixture.id,
+          productName: inventoryProductFixture.name,
+          quantity: '-1.0000',
+          referenceLabel: reference,
+          referenceType: 'Stocktake',
+          sourceHref: '/modules/erp.warehouse/stocktakes',
+          totalCostBgn: '250.0000',
+          unitCostBgn: '250.0000',
+          warehouseId: warehouseFixture.id,
+          warehouseName: warehouseFixture.name,
+        },
+      ],
+      page: 1,
+      pageSize: 25,
+      total: 1,
+      totalPages: 1,
+    };
+    const fetchMock = vi.fn((input: string) => {
+      if (input.endsWith('/auth/me'))
+        return Promise.resolve(jsonResponse(contextWithWarehouseCreate));
+      if (input.endsWith('/warehouse/warehouses'))
+        return Promise.resolve(jsonResponse([warehouseFixture]));
+      if (input.endsWith('/master-data/catalog/products'))
+        return Promise.resolve(jsonResponse([inventoryProductFixture]));
+      if (input.includes('/warehouse/stock-movements'))
+        return Promise.resolve(jsonResponse(movementPage));
+      return Promise.resolve(jsonResponse({}));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderApplication(['/modules/erp.warehouse/movements']);
+
+    expect(await screen.findByRole('heading', { name: 'Posted stock movements' })).toBeTruthy();
+    expect(await screen.findByRole('link', { name: reference })).toBeTruthy();
+    const movementRow = screen.getByRole('row', { name: new RegExp(reference, 'u') });
+    expect(movementRow.querySelector('.is-negative')?.textContent).toMatch(/1/u);
+
+    fireEvent.change(document.querySelector('#journal-warehouse')!, {
+      target: { value: warehouseFixture.id },
+    });
+    fireEvent.change(document.querySelector('#journal-product')!, {
+      target: { value: inventoryProductFixture.id },
+    });
+    fireEvent.change(document.querySelector('#journal-movement-type')!, {
+      target: { value: 'stocktake_out' },
+    });
+    fireEvent.change(screen.getByLabelText('Search product or reference'), {
+      target: { value: reference },
+    });
+    fireEvent.submit(screen.getByRole('button', { name: 'Apply filters' }).closest('form')!);
+
+    await waitFor(() => {
+      expect(
+        fetchMock.mock.calls.some(
+          ([url]) =>
+            url.includes('/warehouse/stock-movements?') &&
+            url.includes(`warehouseId=${warehouseFixture.id}`) &&
+            url.includes(`productId=${inventoryProductFixture.id}`) &&
+            url.includes('movementType=stocktake_out') &&
+            url.includes(`search=${encodeURIComponent(reference)}`),
+        ),
+      ).toBe(true);
+    });
+
+    fireEvent.click(screen.getByRole('link', { name: reference }));
+    expect(await screen.findByRole('heading', { name: 'Stocktakes' })).toBeTruthy();
   });
 
   it('creates and releases an exact-serial reservation from the connected workspace', async () => {
@@ -2177,12 +2776,15 @@ describe('ERP and CRM authenticated workspace', () => {
       initialQuantity: '1.0000',
       productId: inventoryProductFixture.id,
       referenceId: 'SO-2026-0091',
+      referenceLabel: 'SO-2026-0091',
       referenceType: 'sales_order',
       remainingQuantity: '1.0000',
       serialItemIds: ['77886c8d-5812-413d-a93c-c2bcbb4f27df'],
       status: 'active',
       warehouseId: warehouseFixture.id,
     };
+    let activeReservations = [] as (typeof reservation)[];
+    let rejectedUnknownSource = false;
     const fetchMock = vi.fn((input: string, options?: RequestInit) => {
       if (input.endsWith('/auth/me'))
         return Promise.resolve(jsonResponse(contextWithReservationControl));
@@ -2190,12 +2792,49 @@ describe('ERP and CRM authenticated workspace', () => {
         return Promise.resolve(jsonResponse([warehouseFixture]));
       if (input.endsWith('/master-data/catalog/products'))
         return Promise.resolve(jsonResponse([inventoryProductFixture]));
-      if (input.endsWith('/warehouse/stock-reservations') && options?.method === 'POST')
+      if (
+        input.includes('/warehouse/stock-reservations') &&
+        !input.includes('/release') &&
+        options?.method === 'POST'
+      ) {
+        if (!rejectedUnknownSource) {
+          rejectedUnknownSource = true;
+          return Promise.resolve(
+            jsonResponse(
+              {
+                error: {
+                  code: 'STOCK_RESERVATION_SOURCE_NOT_FOUND',
+                  message:
+                    'This reservation reference does not match an existing sales order, quotation, or service request. Check the document type and reference number.',
+                },
+              },
+              404,
+            ),
+          );
+        }
+        activeReservations = [reservation];
         return Promise.resolve(jsonResponse(reservation, 201));
-      if (input.endsWith(`/warehouse/stock-reservations/${reservation.id}/release`))
+      }
+      if (
+        input.includes('/warehouse/stock-reservations') &&
+        !input.includes('/release') &&
+        options?.method !== 'POST'
+      )
+        return Promise.resolve(
+          jsonResponse({
+            items: activeReservations,
+            page: 1,
+            pageSize: 25,
+            total: activeReservations.length,
+            totalPages: activeReservations.length ? 1 : 0,
+          }),
+        );
+      if (input.endsWith(`/warehouse/stock-reservations/${reservation.id}/release`)) {
+        activeReservations = [];
         return Promise.resolve(
           jsonResponse({ ...reservation, remainingQuantity: '0.0000', status: 'released' }),
         );
+      }
       if (input.endsWith('/warehouse/serial-traceability/FDA-ALPHA-0001'))
         return Promise.resolve(
           jsonResponse({
@@ -2259,9 +2898,39 @@ describe('ERP and CRM authenticated workspace', () => {
                 },
               },
             ],
+            inventoryRecordLinked: true,
             product: { displayName: inventoryProductFixture.name, id: inventoryProductFixture.id },
             serialItemId: '77886c8d-5812-413d-a93c-c2bcbb4f27df',
             serialNumber: 'FDA-ALPHA-0001',
+            status: 'issued',
+          }),
+        );
+      if (input.endsWith('/warehouse/serial-traceability/LEGACY-ALFA-001'))
+        return Promise.resolve(
+          jsonResponse({
+            currentCustody: { displayName: 'Alfa Market — Central Store', type: 'customer' },
+            customer: { displayName: 'Alfa Market Ltd.', id: partner.id },
+            customerEquipment: {
+              id: '3a67a050-5a66-4430-a6af-efce81954e52',
+              location: {
+                displayName: 'Alfa Market — Central Store',
+                id: 'c4cb4711-b0cd-4b72-a876-bf1466b4cecc',
+              },
+              status: 'active',
+            },
+            events: [
+              {
+                customer: { displayName: 'Alfa Market Ltd.', id: partner.id },
+                eventId: 'service-request:legacy',
+                eventType: 'service_requested',
+                occurredAt: '2026-08-12T09:00:00.000Z',
+                referenceId: 'SR-2026-000001',
+                referenceType: 'Service request',
+              },
+            ],
+            inventoryRecordLinked: false,
+            product: { displayName: 'Legacy fiscal device' },
+            serialNumber: 'LEGACY-ALFA-001',
             status: 'issued',
           }),
         );
@@ -2274,14 +2943,25 @@ describe('ERP and CRM authenticated workspace', () => {
       await screen.findByRole('heading', { name: 'Reservations & serial trace' }),
     ).toBeTruthy();
     fireEvent.change(screen.getByLabelText('Reference'), {
-      target: { value: reservation.referenceId },
+      target: { value: 'NONEXISTENT-SO-999' },
     });
     fireEvent.change(screen.getByLabelText('Specific serial numbers'), {
       target: { value: 'FDA-ALPHA-0001' },
     });
     fireEvent.submit(screen.getByRole('button', { name: 'Create reservation' }).closest('form')!);
-    expect(await screen.findByText('active')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Release' }));
+    expect(
+      await screen.findByText(
+        'This reservation reference does not match an existing sales order, quotation, or service request. Check the document type and reference number.',
+      ),
+    ).toBeTruthy();
+    expect(screen.getByLabelText('Reference')).toHaveProperty('value', 'NONEXISTENT-SO-999');
+    fireEvent.change(screen.getByLabelText('Reference'), {
+      target: { value: reservation.referenceId },
+    });
+    fireEvent.submit(screen.getByRole('button', { name: 'Create reservation' }).closest('form')!);
+    expect(await screen.findByRole('button', { name: 'Release' })).toBeTruthy();
+    expect((await screen.findAllByText('active')).length).toBeGreaterThan(0);
+    fireEvent.click(await screen.findByRole('button', { name: 'Release' }));
     expect(await screen.findByText('released')).toBeTruthy();
 
     fireEvent.change(screen.getByLabelText('Serial number'), {
@@ -2293,12 +2973,25 @@ describe('ERP and CRM authenticated workspace', () => {
     expect(screen.getByText('Service Technician')).toBeTruthy();
     expect(screen.getAllByText('Main retail site').length).toBeGreaterThan(0);
 
+    fireEvent.change(screen.getByLabelText('Serial number'), {
+      target: { value: 'LEGACY-ALFA-001' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Trace serial' }));
+    expect(
+      await screen.findByText(
+        'This device is registered to a customer but is not linked to inventory. Supplier receipt and stock-movement history cannot be shown.',
+      ),
+    ).toBeTruthy();
+    expect(screen.getByText('Legacy fiscal device')).toBeTruthy();
+    expect(screen.getByText('Service requested')).toBeTruthy();
+
     const commands = fetchMock.mock.calls.filter(([, options]) => options?.method === 'POST');
     expect(commands.map(([url]) => url)).toEqual([
       '/api/v1/warehouse/stock-reservations',
+      '/api/v1/warehouse/stock-reservations',
       `/api/v1/warehouse/stock-reservations/${reservation.id}/release`,
     ]);
-    const createOptions = commands[0]?.[1] as RequestInit;
+    const createOptions = commands[1]?.[1] as RequestInit;
     expect(new Headers(createOptions.headers).get('Idempotency-Key')).toMatch(/^[0-9a-f-]{36}$/u);
     expect(JSON.parse(createOptions.body as string)).toMatchObject({
       referenceId: reservation.referenceId,
@@ -2388,6 +3081,8 @@ describe('ERP and CRM authenticated workspace', () => {
       code: 'VISTA',
       id: '4a6c8732-a7c6-4dac-997c-147bed55b868',
       name: 'Vista Service Ltd.',
+      uic: '131282355',
+      vatNumber: 'BG131282355',
       version: 1,
     };
     const branch = {
@@ -2461,6 +3156,28 @@ describe('ERP and CRM authenticated workspace', () => {
     fireEvent.change(screen.getByLabelText('Legal entity name'), {
       target: { value: entity.name },
     });
+    fireEvent.change(screen.getByLabelText('UIC (optional)'), { target: { value: '12AB' } });
+    fireEvent.change(screen.getByLabelText('VAT number (optional)'), {
+      target: { value: 'XYZ' },
+    });
+    fireEvent.submit(
+      screen.getByRole('heading', { name: 'Add a legal business entity' }).closest('form')!,
+    );
+    expect(
+      await screen.findByText('Enter a 9- or 13-digit Bulgarian UIC with a correct check digit.'),
+    ).toBeTruthy();
+    expect(
+      fetchMock.mock.calls.filter(
+        ([url, options]) =>
+          url.endsWith('/organization/legal-entities') && options?.method === 'POST',
+      ),
+    ).toHaveLength(0);
+    fireEvent.change(screen.getByLabelText('UIC (optional)'), {
+      target: { value: entity.uic },
+    });
+    fireEvent.change(screen.getByLabelText('VAT number (optional)'), {
+      target: { value: entity.vatNumber },
+    });
     fireEvent.submit(
       screen.getByRole('heading', { name: 'Add a legal business entity' }).closest('form')!,
     );
@@ -2498,10 +3215,97 @@ describe('ERP and CRM authenticated workspace', () => {
     ]);
   });
 
+  it('edits a legal entity and deactivates or restores it without deleting its record', async () => {
+    const entity = {
+      active: true,
+      code: 'QA-EDIT',
+      id: '4a6c8732-a7c6-4dac-997c-147bed55b869',
+      name: 'QA Edit Ltd.',
+      version: 1,
+    };
+    const topology = {
+      branches: [],
+      cashRegisters: [],
+      legalEntities: [entity],
+      locations: [],
+      operators: [],
+    };
+    const context = {
+      ...authenticationContext,
+      permissions: [
+        ...authenticationContext.permissions,
+        { action: 'view', module: 'platform.organization' },
+        { action: 'edit', module: 'platform.organization' },
+        { action: 'delete', module: 'platform.organization' },
+      ],
+    };
+    storeAuthenticatedSession(context);
+    const fetchMock = vi.fn((input: string, options?: RequestInit) => {
+      if (input.endsWith('/auth/me')) return Promise.resolve(jsonResponse(context));
+      if (input.endsWith('/organization/members')) return Promise.resolve(jsonResponse([]));
+      if (input.endsWith('/organization/topology')) return Promise.resolve(jsonResponse(topology));
+      if (
+        input.endsWith(`/organization/legal-entities/${entity.id}`) &&
+        options?.method === 'PUT'
+      ) {
+        const inputBody = JSON.parse(options.body as string) as { code: string; name: string };
+        entity.code = inputBody.code;
+        entity.name = inputBody.name;
+        entity.version += 1;
+        return Promise.resolve(jsonResponse(entity));
+      }
+      if (
+        input.includes(`/organization/legal-entities/${entity.id}/`) &&
+        options?.method === 'POST'
+      ) {
+        entity.active = input.endsWith('/reactivate');
+        entity.version += 1;
+        return Promise.resolve(jsonResponse(entity));
+      }
+      return Promise.resolve(jsonResponse({}));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const originalConfirm = window.confirm.bind(window);
+    vi.stubGlobal(
+      'confirm',
+      vi.fn(() => true),
+    );
+
+    renderApplication(['/organization']);
+    const entityCard = (await screen.findByRole('heading', { name: entity.name })).closest(
+      '.organization-entity',
+    ) as HTMLElement;
+    fireEvent.click(within(entityCard).getByRole('button', { name: 'Edit' }));
+    fireEvent.change(screen.getByLabelText('Legal entity name'), {
+      target: { value: 'QA Edit Updated Ltd.' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+    expect(await screen.findByRole('heading', { name: 'QA Edit Updated Ltd.' })).toBeTruthy();
+    expect(fetchMock).toHaveBeenCalledWith(
+      `/api/v1/organization/legal-entities/${entity.id}`,
+      expect.objectContaining({ method: 'PUT' }),
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Deactivate' }));
+    expect(await screen.findByText('Inactive')).toBeTruthy();
+    expect(fetchMock).toHaveBeenCalledWith(
+      `/api/v1/organization/legal-entities/${entity.id}/deactivate`,
+      expect.objectContaining({ method: 'POST' }),
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Reactivate' }));
+    await waitFor(() => expect(entity.active).toBe(true));
+    expect(fetchMock).toHaveBeenCalledWith(
+      `/api/v1/organization/legal-entities/${entity.id}/reactivate`,
+      expect.objectContaining({ method: 'POST' }),
+    );
+    vi.stubGlobal('confirm', originalConfirm);
+  });
+
   it('connects the security control room to accounts, roles, sessions, and audit evidence', async () => {
     const securityContext = {
       ...authenticationContext,
       isAdministrative: true,
+      roleNames: ['Manager'],
       permissions: [
         ...authenticationContext.permissions,
         { action: 'view', module: 'platform' },
@@ -2512,15 +3316,19 @@ describe('ERP and CRM authenticated workspace', () => {
     };
     storeAuthenticatedSession(securityContext);
     const role = {
-      code: 'crm.operator',
-      description: 'Controlled CRM operator access.',
+      code: 'dev-fixture-manager',
+      description: 'Local development fixture role. It is never an administrative role.',
       id: 'c7e72db8-9c66-4395-a216-72c1edc3d582',
       isAdministrative: false,
-      isSystemRole: false,
-      name: 'CRM operator',
-      permissions: [{ action: 'view', module: 'crm' }],
-      version: 1,
+      isSystemRole: true,
+      name: 'Development fixture: Vista Demo Manager',
+      permissions: [
+        { action: 'view', module: 'erp.finance' },
+        { action: 'approve', module: 'pos' },
+      ],
+      version: 2,
     };
+    let listedRoles = [role];
     let account = {
       accountId: '34df4d33-6af4-451c-a36c-c169f7ad3624',
       activeSessionCount: 1,
@@ -2553,15 +3361,14 @@ describe('ERP and CRM authenticated workspace', () => {
       userAgent: 'Vista browser test',
     };
     const auditEvent = {
-      action: 'identity.account.created',
-      actorAccountId: securityContext.accountId,
-      actorDisplayName: securityContext.displayName,
+      action: 'auth.login.failed',
       correlationId: 'security-ui-test',
       eventHash: 'a'.repeat(64),
       id: '625f018f-8f3b-489a-b268-765f88a71461',
       metadata: {},
       occurredAt: '2026-08-10T10:00:00.000Z',
       targetId: account.accountId,
+      targetDisplayName: account.displayName,
       targetType: 'user_account',
     };
     const fetchMock = vi.fn((input: string, options?: RequestInit) => {
@@ -2571,12 +3378,42 @@ describe('ERP and CRM authenticated workspace', () => {
           jsonResponse({ items: [account], page: 1, pageSize: 100, total: 1, totalPages: 1 }),
         );
       }
-      if (input.endsWith('/platform/security/roles')) return Promise.resolve(jsonResponse([role]));
+      if (input.endsWith('/platform/security/roles') && options?.method === 'POST') {
+        const body = JSON.parse(options.body as string) as typeof role;
+        const created = {
+          ...role,
+          ...body,
+          id: 'b40f13f7-7e0a-4f8f-a7fb-658949417bd8',
+          version: 1,
+        };
+        listedRoles = [...listedRoles, created];
+        return Promise.resolve(jsonResponse(created));
+      }
+      if (input.endsWith('/platform/security/roles') && options?.method !== 'PUT')
+        return Promise.resolve(jsonResponse(listedRoles));
       if (input.endsWith(`/platform/security/roles/${role.id}`) && options?.method === 'PUT') {
-        return Promise.resolve(jsonResponse(role));
+        const body = JSON.parse(options.body as string) as {
+          description?: string;
+          expectedVersion: number;
+          name: string;
+          permissions: typeof role.permissions;
+        };
+        const updated = { ...role, ...body, version: role.version + 1 };
+        listedRoles = listedRoles.map((item) => (item.id === role.id ? updated : item));
+        return Promise.resolve(jsonResponse(updated));
       }
       if (input.endsWith('/platform/security/sessions'))
-        return Promise.resolve(jsonResponse([sessionRecord]));
+        return Promise.resolve(
+          jsonResponse([
+            sessionRecord,
+            {
+              ...sessionRecord,
+              expiresAt: '2026-08-09T18:00:00.000Z',
+              id: '0385d837-2d1d-490c-b560-865867fa67aa',
+              revokedAt: '2026-08-09T18:00:00.000Z',
+            },
+          ]),
+        );
       if (input.includes('/platform/security/audit-events?'))
         return Promise.resolve(
           jsonResponse({ items: [auditEvent], page: 1, pageSize: 100, total: 1, totalPages: 1 }),
@@ -2610,25 +3447,52 @@ describe('ERP and CRM authenticated workspace', () => {
     renderApplication(['/security']);
     expect(await screen.findByRole('heading', { name: 'Security' })).toBeTruthy();
     expect(screen.getByText('Activity log checked')).toBeTruthy();
+    expect(screen.getByText('Manager', { selector: '.topbar-account-copy small' })).toBeTruthy();
     expect(screen.getByText(account.displayName)).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: 'Manage' }));
     const accountDialog = screen.getByRole('dialog', { name: account.displayName });
-    fireEvent.click(within(accountDialog).getByRole('checkbox', { name: /CRM operator/u }));
+    fireEvent.click(within(accountDialog).getByRole('checkbox', { name: /Manager/u }));
     fireEvent.click(within(accountDialog).getByRole('button', { name: 'Save roles' }));
     expect(await screen.findByText('Employee access updated.')).toBeTruthy();
 
     fireEvent.click(screen.getByRole('tab', { name: /^Roles/u }));
-    expect(await screen.findByRole('heading', { name: role.name })).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: 'Manager' })).toBeTruthy();
+    expect(
+      screen.getByText('View only: Finance. Actions without screen access: POS.'),
+    ).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Add role' })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Edit access' }));
-    const roleDialog = screen.getByRole('dialog', { name: `Edit ${role.name}` });
+    const roleDialog = screen.getByRole('dialog', { name: 'Edit Manager' });
+    expect(
+      within(roleDialog).getByText(/Selected actions have no View access for POS/u),
+    ).toBeTruthy();
+    fireEvent.click(within(roleDialog).getByRole('checkbox', { name: 'POS View' }));
+    expect(
+      within(roleDialog).queryByText(/Selected actions have no View access for POS/u),
+    ).toBeNull();
     fireEvent.click(within(roleDialog).getByRole('button', { name: 'Save access' }));
     expect(await screen.findByText('Role access updated.')).toBeTruthy();
+    const addedRole = screen.getByRole('button', { name: 'Add role' });
+    fireEvent.click(addedRole);
+    const addRoleDialog = screen.getByRole('dialog', { name: 'Add role' });
+    fireEvent.change(within(addRoleDialog).getByLabelText('Role name'), {
+      target: { value: 'Service viewer' },
+    });
+    fireEvent.change(within(addRoleDialog).getByLabelText('Role code'), {
+      target: { value: 'service.viewer' },
+    });
+    fireEvent.click(within(addRoleDialog).getByRole('checkbox', { name: 'Service View' }));
+    fireEvent.click(within(addRoleDialog).getByRole('button', { name: 'Add role' }));
+    expect(await screen.findByText('Role created.')).toBeTruthy();
     fireEvent.click(screen.getByRole('tab', { name: /^Sessions/u }));
+    expect(screen.getByRole('tab', { name: 'Sessions · 1 active' })).toBeTruthy();
     expect(await screen.findByText(/Current session/u)).toBeTruthy();
     fireEvent.click(screen.getByRole('tab', { name: 'Activity log' }));
     expect((await screen.findAllByText('Activity log checked')).length).toBeGreaterThan(0);
-    expect(screen.getByText('Employee account created')).toBeTruthy();
+    expect(
+      screen.getByText(new RegExp(`Failed sign-in for ${account.displayName}`, 'u')),
+    ).toBeTruthy();
 
     const roleCommand = fetchMock.mock.calls.find(
       ([url, options]) =>
@@ -2655,7 +3519,20 @@ describe('ERP and CRM authenticated workspace', () => {
       description: role.description,
       expectedVersion: role.version,
       name: role.name,
-      permissions: role.permissions,
+      permissions: [
+        { action: 'view', module: 'erp.finance' },
+        { action: 'view', module: 'pos' },
+        { action: 'approve', module: 'pos' },
+      ],
+    });
+    const roleCreateCommand = fetchMock.mock.calls.find(
+      ([url, options]) => url.endsWith('/platform/security/roles') && options?.method === 'POST',
+    );
+    expect(JSON.parse((roleCreateCommand?.[1] as RequestInit).body as string)).toMatchObject({
+      code: 'service.viewer',
+      isAdministrative: false,
+      name: 'Service viewer',
+      permissions: [{ action: 'view', module: 'erp.service' }],
     });
   });
 
@@ -2751,6 +3628,10 @@ describe('ERP and CRM authenticated workspace', () => {
     );
     const dialog = await screen.findByRole('dialog', { name: messages.operations.details });
     expect(within(dialog).getByText(messages.operations.inAppAlert)).toBeTruthy();
+    expect(within(dialog).queryByText(integrationEvent.id)).toBeNull();
+    expect(within(dialog).queryByText(integrationEvent.correlationId)).toBeNull();
+    expect(within(dialog).getByRole('button', { name: 'Copy event ID' })).toBeTruthy();
+    expect(within(dialog).getByRole('button', { name: 'Copy request ID' })).toBeTruthy();
     fireEvent.click(within(dialog).getByRole('button', { name: messages.operations.retry }));
     fireEvent.click(within(dialog).getByRole('button', { name: messages.operations.confirmRetry }));
 
@@ -2853,8 +3734,8 @@ describe('ERP and CRM authenticated workspace', () => {
               quantity: '2.0000',
               serialItemIds: [],
               stockMovementId: '8ba45261-415b-4e9b-b857-b0f7f4ef3658',
-              totalCostBgn: '251.0000',
-              unitCostBgn: '125.5000',
+              totalCostBgn: '280.0000',
+              unitCostBgn: '140.0000',
             },
           ],
           purchaseOrderId: orderId,
@@ -2920,6 +3801,9 @@ describe('ERP and CRM authenticated workspace', () => {
     fireEvent.click(within(createDialog).getByRole('button', { name: messages.procurement.save }));
     expect(await screen.findByText(messages.procurement.createSuccess)).toBeTruthy();
     expect(await screen.findByText(references.suppliers[0]!.name)).toBeTruthy();
+    expect(screen.queryByText(orderId)).toBeNull();
+    expect(screen.getByText(/Purchase order ·/u)).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Copy purchase order ID' })).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: messages.procurement.receive }));
     const receiptDialog = screen.getByRole('dialog', { name: messages.procurement.receiveTitle });
@@ -2942,6 +3826,15 @@ describe('ERP and CRM authenticated workspace', () => {
       within(receiptDialog).getByLabelText<HTMLInputElement>(messages.procurement.quantity)
         .disabled,
     ).toBe(false);
+    const unitCostInput = within(receiptDialog).getByLabelText<HTMLInputElement>(
+      messages.procurement.unitCostBgn,
+    );
+    fireEvent.change(unitCostInput, { target: { value: '140' } });
+    expect(within(receiptDialog).getByText(/differs from purchase-order price/u)).toBeTruthy();
+    fireEvent.click(includeProduct);
+    expect(within(receiptDialog).queryByText(/differs from purchase-order price/u)).toBeNull();
+    fireEvent.click(includeProduct);
+    expect(within(receiptDialog).getByText(/differs from purchase-order price/u)).toBeTruthy();
     fireEvent.change(within(receiptDialog).getByLabelText(messages.procurement.deliveryReference), {
       target: { value: 'DEL-2026-42' },
     });
@@ -2962,6 +3855,12 @@ describe('ERP and CRM authenticated workspace', () => {
       within(goodsReceiptWorkspace).getByRole('heading', { name: 'Goods receipt register' }),
     ).toBeTruthy();
     expect(within(goodsReceiptWorkspace).getByText(/DEL-2026-42/u)).toBeTruthy();
+    expect(
+      within(goodsReceiptWorkspace).getByRole('button', { name: 'Copy goods receipt ID' }),
+    ).toBeTruthy();
+    expect(
+      within(goodsReceiptWorkspace).queryByText('776fd1d4-d58e-45b9-ad95-46f8f4ee0fd8'),
+    ).toBeNull();
 
     const createCall = fetchMock.mock.calls.find(
       ([url, options]) =>
@@ -2979,6 +3878,15 @@ describe('ERP and CRM authenticated workspace', () => {
       ],
       supplierPartnerId: supplierId,
       warehouseId: warehouseFixture.id,
+    });
+    const receiveCall = fetchMock.mock.calls.find(
+      ([url, options]) =>
+        url.endsWith(`/procurement/purchase-orders/${orderId}/receipts`) &&
+        options?.method === 'POST',
+    );
+    expect(JSON.parse((receiveCall?.[1] as RequestInit).body as string)).toMatchObject({
+      lines: [{ orderLineId, quantity: '2.0000', unitCostBgn: '140' }],
+      supplierDeliveryReference: 'DEL-2026-42',
     });
   });
 
@@ -3591,7 +4499,9 @@ describe('ERP and CRM authenticated workspace', () => {
     const warehouseId = '5c8c6996-585c-4375-a239-1c5be14b88f0';
     let workflow: SalesWorkflow | undefined;
     const references = {
+      availability: [{ productId, quantity: '2.0000', warehouseId }],
       batches: [],
+      businessTimezone: 'Europe/Sofia',
       customers: [{ id: customerId, name: 'Vista Retail Customer Ltd.' }],
       customerLocations: [
         { customerPartnerId: customerId, id: customerLocationId, name: 'Main retail site' },
@@ -3616,6 +4526,40 @@ describe('ERP and CRM authenticated workspace', () => {
       if (input.endsWith('/sales/reference-data')) return Promise.resolve(jsonResponse(references));
       if (input.endsWith('/sales/workflows'))
         return Promise.resolve(jsonResponse(workflow ? [workflow] : []));
+      if (input.includes('/sales/quotations/') && options?.method === 'PUT') {
+        if (typeof options.body !== 'string') throw new Error('Expected a JSON request body');
+        const body = JSON.parse(options.body) as {
+          lines: Array<{ productId: string; unitPrice: string }>;
+          overallDiscountPercent: string;
+        };
+        workflow = {
+          ...workflow!,
+          lines: workflow!.lines.map((line) => {
+            const change = body.lines.find((item) => item.productId === line.productId);
+            return change
+              ? {
+                  ...line,
+                  lineTotal: (Number(line.quantity) * Number(change.unitPrice)).toFixed(4),
+                  unitPrice: change.unitPrice,
+                }
+              : line;
+          }),
+          overallDiscountPercent: body.overallDiscountPercent,
+          version: workflow!.version + 1,
+        };
+        return Promise.resolve(jsonResponse(workflow));
+      }
+      if (input.includes('/sales/quotations/') && input.endsWith('/cancel')) {
+        if (typeof options?.body !== 'string') throw new Error('Expected a JSON request body');
+        const body = JSON.parse(options.body) as { reason?: string };
+        workflow = {
+          ...workflow!,
+          ...(body.reason ? { cancellationReason: body.reason } : {}),
+          status: 'cancelled',
+          version: workflow!.version + 1,
+        };
+        return Promise.resolve(jsonResponse(workflow));
+      }
       if (input.includes('/sales/prices/resolve?'))
         return Promise.resolve(
           jsonResponse({
@@ -3652,6 +4596,7 @@ describe('ERP and CRM authenticated workspace', () => {
           ],
           number: 'Q-2026-000001',
           overallDiscountPercent: '0.0000',
+          version: 1,
           status: 'draft',
           subtotal: '80.0000',
           total: '96.0000',
@@ -3763,10 +4708,29 @@ describe('ERP and CRM authenticated workspace', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /New quotation/u }));
     const createDialog = await screen.findByRole('dialog', { name: 'New quotation' });
+    const validityInput = within(createDialog).getByLabelText<HTMLInputElement>('Valid until');
+    expect(validityInput.min).toMatch(/^\d{4}-\d{2}-\d{2}$/u);
+    const dayBeforeValidity = new Date(`${validityInput.min}T00:00:00Z`);
+    dayBeforeValidity.setUTCDate(dayBeforeValidity.getUTCDate() - 1);
+    const pastDate = dayBeforeValidity.toISOString().slice(0, 10);
+    fireEvent.change(validityInput, { target: { value: pastDate } });
+    expect((await within(createDialog).findByRole('alert')).textContent).toBe(
+      'This quotation must be valid today or later.',
+    );
+    expect(validityInput.validity.rangeUnderflow).toBe(true);
+    fireEvent.change(validityInput, { target: { value: validityInput.min } });
     expect(within(createDialog).getByLabelText<HTMLSelectElement>('Product').value).toBe('');
     fireEvent.change(within(createDialog).getByLabelText('Product'), {
       target: { value: productId },
     });
+    fireEvent.change(within(createDialog).getByLabelText('Quantity'), {
+      target: { value: '5' },
+    });
+    expect(
+      await within(createDialog).findByText(
+        /2\.0000 of 5 requested units are currently available/u,
+      ),
+    ).toBeTruthy();
     fireEvent.click(within(createDialog).getByRole('button', { name: 'Use customer price' }));
     expect(await within(createDialog).findByText(/Trade customers applied/u)).toBeTruthy();
     expect(within(createDialog).getByLabelText<HTMLInputElement>('Unit price (BGN)').value).toBe(
@@ -3783,6 +4747,18 @@ describe('ERP and CRM authenticated workspace', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: 'Preview' }));
     let preview = await screen.findByRole('dialog', { name: 'Q-2026-000001' });
+    expect(within(preview).getByRole('button', { name: 'Download quotation PDF' })).toBeTruthy();
+    fireEvent.click(within(preview).getByRole('button', { name: 'Revise quotation' }));
+    const reviseDialog = await screen.findByRole('dialog', { name: 'Revise quotation' });
+    fireEvent.change(within(reviseDialog).getByLabelText('Unit price (BGN)'), {
+      target: { value: '41' },
+    });
+    const revisedValidUntil = reviseDialog.querySelector<HTMLInputElement>('input[type="date"]');
+    if (!revisedValidUntil) throw new Error('Expected the quotation validity date field');
+    fireEvent.change(revisedValidUntil, { target: { value: revisedValidUntil.min } });
+    fireEvent.click(within(reviseDialog).getByRole('button', { name: 'Save changes' }));
+    expect(await screen.findByText('Q-2026-000001 was revised.')).toBeTruthy();
+    preview = await screen.findByRole('dialog', { name: 'Q-2026-000001' });
     const confirmButton = within(preview).getByRole<HTMLButtonElement>('button', {
       name: 'Confirm order and reserve stock',
     });
@@ -3834,6 +4810,28 @@ describe('ERP and CRM authenticated workspace', () => {
     fireEvent.click(within(preview).getByRole('button', { name: 'Back to sales list' }));
     fireEvent.click(screen.getByRole('link', { name: 'Back to Sales' }));
     expect(await screen.findByRole('heading', { name: 'Sales' })).toBeTruthy();
+    const expiredWorkflow: SalesWorkflow = { ...workflow!, status: 'expired' };
+    delete expiredWorkflow.order;
+    delete expiredWorkflow.shipment;
+    delete expiredWorkflow.handover;
+    delete expiredWorkflow.invoice;
+    workflow = expiredWorkflow;
+    fireEvent.click(screen.getByRole('link', { name: /Quotations Prepare time-bounded/u }));
+    expect(await screen.findByRole('heading', { name: 'Sales workflow' })).toBeTruthy();
+    expect(screen.getByLabelText('Current stage: Expired')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+    const expiredPreview = await screen.findByRole('dialog', { name: 'Q-2026-000001' });
+    expect(within(expiredPreview).getByText('Expired')).toBeTruthy();
+    expect(
+      within(expiredPreview).queryByRole('button', { name: 'Confirm order and reserve stock' }),
+    ).toBeNull();
+    fireEvent.click(within(expiredPreview).getByRole('button', { name: 'Cancel quotation' }));
+    fireEvent.change(within(expiredPreview).getByLabelText('Reason (optional)'), {
+      target: { value: 'Customer changed the request.' },
+    });
+    fireEvent.click(within(expiredPreview).getByRole('button', { name: 'Confirm cancellation' }));
+    expect(await screen.findByText('Quotation cancelled. Its history has been kept.')).toBeTruthy();
+    expect(await within(expiredPreview).findByText('Cancelled')).toBeTruthy();
     expect(
       fetchMock.mock.calls.some(
         ([url]) => url.includes('/sales/prices/resolve?asOf=') && url.includes('currencyCode=BGN'),
@@ -4312,6 +5310,18 @@ describe('ERP and CRM authenticated workspace', () => {
       customerName: 'Alfa Market Demo Ltd.',
       customerPartnerId: customerId,
       entries: [],
+      openReceivables: [
+        {
+          allocatedTotal: '0.0000',
+          dueDate: '2026-09-10',
+          id: '7bc6a6c8-813c-4405-8622-e16c4bb6cb9b',
+          number: 'FIN-REV-2026-000041',
+          outstandingTotal: '120.0000',
+          paymentStatus: 'unpaid',
+          sourceInvoiceNumber: 'DEV-INV-DRAFT-000041',
+          total: '120.0000',
+        },
+      ],
       outstandingBalance: '0.0000',
       terms: {
         creditLimitBgn: '2000.0000',
@@ -4325,6 +5335,7 @@ describe('ERP and CRM authenticated workspace', () => {
       },
       uic: '206666666',
     };
+    let advanceAllocation: { amount: string; customerAdvanceId: string } | undefined;
     const fetchMock = vi.fn((input: string, options?: RequestInit) => {
       if (input.endsWith('/auth/me')) return Promise.resolve(jsonResponse(financeContext));
       if (input.endsWith('/finance/customer-accounts/reference-data'))
@@ -4371,6 +5382,36 @@ describe('ERP and CRM authenticated workspace', () => {
         };
         return Promise.resolve(jsonResponse(advance, 201));
       }
+      if (
+        input.endsWith(
+          '/finance/documents/7bc6a6c8-813c-4405-8622-e16c4bb6cb9b/advance-allocations',
+        ) &&
+        options?.method === 'POST'
+      ) {
+        advanceAllocation = JSON.parse(
+          typeof options.body === 'string' ? options.body : '',
+        ) as typeof advanceAllocation;
+        account = {
+          ...account,
+          advanceBalance: '100.0000',
+          advances: account.advances.map((item) =>
+            item.id === '03dbb5fa-13c2-494f-bd4f-34e9dd345538'
+              ? { ...item, availableAmount: '0.0000' }
+              : item.id === advanceId
+                ? { ...item, availableAmount: '100.0000' }
+                : item,
+          ),
+          openReceivables: [
+            {
+              ...account.openReceivables[0]!,
+              allocatedTotal: '80.0000',
+              outstandingTotal: '40.0000',
+              paymentStatus: 'partially_paid',
+            },
+          ],
+        };
+        return Promise.resolve(jsonResponse({ id: 'finance-document-id' }, 201));
+      }
       return Promise.resolve(jsonResponse({}));
     });
     vi.stubGlobal('fetch', fetchMock);
@@ -4397,6 +5438,21 @@ describe('ERP and CRM authenticated workspace', () => {
     });
     fireEvent.click(within(dialog).getByRole('button', { name: 'Record advance' }));
     expect(await screen.findByText('ADV-2026-000001 was recorded.')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+    dialog = await screen.findByRole('dialog', { name: 'Alfa Market Demo Ltd.' });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Apply advance' }));
+    dialog = await screen.findByRole('dialog', { name: 'Apply customer advance' });
+    expect(within(dialog).getByLabelText<HTMLInputElement>('Amount to apply (BGN)').value).toBe(
+      '80.0000',
+    );
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Apply advance' }));
+    expect(
+      await screen.findByText('DEV-ADV-ALFA-001 was allocated to FIN-REV-2026-000041.'),
+    ).toBeTruthy();
+    expect(advanceAllocation).toEqual({
+      amount: '80.0000',
+      customerAdvanceId: '03dbb5fa-13c2-494f-bd4f-34e9dd345538',
+    });
   });
 
   it('moves a supplier invoice through payable, payment, advance allocation, and offset screens', async () => {
@@ -4653,6 +5709,7 @@ describe('ERP and CRM authenticated workspace', () => {
         { action: 'view', module: 'erp.finance' },
         { action: 'create', module: 'erp.finance' },
         { action: 'edit', module: 'erp.finance' },
+        { action: 'view', module: 'erp.sales' },
       ],
     };
     storeAuthenticatedSession(financeContext);
@@ -4773,6 +5830,48 @@ describe('ERP and CRM authenticated workspace', () => {
       vatTotal: '20.0000',
       version: 1,
     };
+    const linkedSalesWorkflow = {
+      createdAt: '2026-08-18T08:00:00.000Z',
+      currencyCode: 'BGN',
+      customerName: 'River Market Ltd.',
+      customerPartnerId: customerId,
+      id: 'a8ee6c19-bc7e-46d2-9d20-a59fa0e435b8',
+      invoice: {
+        currencyCode: 'BGN',
+        customerName: 'River Market Ltd.',
+        customerPartnerId: customerId,
+        id: sourceId,
+        lines: [],
+        number: 'INV-DRAFT-2026-000014',
+        recordedAt: '2026-08-18T08:15:00.000Z',
+        status: 'draft',
+        subtotal: '100.0000',
+        total: '120.0000',
+        vatTotal: '20.0000',
+      },
+      lines: [
+        {
+          discountPercent: '0.0000',
+          id: '92d74976-f726-4b89-a110-f85e1fc16a3e',
+          lineTotal: '100.0000',
+          productId,
+          productName: 'Receipt paper roll',
+          quantity: '2.0000',
+          trackingMode: 'standard',
+          unitPrice: '50.0000',
+          vatTreatment: 'standard_20',
+        },
+      ],
+      number: 'Q-2026-000014',
+      overallDiscountPercent: '0.0000',
+      status: 'invoiced',
+      subtotal: '100.0000',
+      total: '120.0000',
+      validUntil: '2026-09-30',
+      vatTotal: '20.0000',
+      warehouseId: 'b6e3520f-0d34-4afe-91e9-15cd68bc00f8',
+      warehouseName: 'Vratsa Warehouse',
+    };
     let documents: unknown[] = [];
     let attached = false;
     const attachment = {
@@ -4804,6 +5903,19 @@ describe('ERP and CRM authenticated workspace', () => {
         return Promise.resolve(jsonResponse(attachment, 201));
       }
       if (input.endsWith('/auth/me')) return Promise.resolve(jsonResponse(financeContext));
+      if (input.endsWith('/sales/workflows'))
+        return Promise.resolve(jsonResponse([linkedSalesWorkflow]));
+      if (input.endsWith('/sales/reference-data'))
+        return Promise.resolve(
+          jsonResponse({
+            batches: [],
+            customers: [],
+            customerLocations: [],
+            products: [],
+            serials: [],
+            warehouses: [],
+          }),
+        );
       if (input.endsWith('/finance/financial-documents/reference-data'))
         return Promise.resolve(jsonResponse(references));
       if (input.endsWith('/finance/financial-documents') && options?.method === 'POST') {
@@ -4836,21 +5948,28 @@ describe('ERP and CRM authenticated workspace', () => {
     const preview = await screen.findByRole('dialog', { name: 'DINV-VRATSA-2026-000001' });
     expect(within(preview).getByText('No official number allocated')).toBeTruthy();
     expect(within(preview).getByText('INV-DRAFT-2026-000014')).toBeTruthy();
-    expect(within(preview).getByText('Standard 20% (20.0000%)')).toBeTruthy();
-    expect(await within(preview).findByText('No attachments yet')).toBeTruthy();
-    fireEvent.click(within(preview).getByRole('button', { name: 'Add attachment' }));
-    fireEvent.change(within(preview).getByLabelText('Choose file'), {
+    fireEvent.click(within(preview).getByRole('button', { name: 'Open in Sales' }));
+    const salesPreview = await screen.findByRole('dialog', { name: 'Q-2026-000014' });
+    expect(within(salesPreview).getAllByText('INV-DRAFT-2026-000014').length).toBeGreaterThan(0);
+    fireEvent.click(within(salesPreview).getByRole('button', { name: 'Back to Finance' }));
+    expect(await screen.findByRole('heading', { name: 'Financial documents' })).toBeTruthy();
+    fireEvent.click(await screen.findByRole('button', { name: 'Preview' }));
+    const reloadedPreview = await screen.findByRole('dialog', { name: document.number });
+    expect(within(reloadedPreview).getByText('Standard 20% (20.0000%)')).toBeTruthy();
+    expect(await within(reloadedPreview).findByText('No attachments yet')).toBeTruthy();
+    fireEvent.click(within(reloadedPreview).getByRole('button', { name: 'Add attachment' }));
+    fireEvent.change(within(reloadedPreview).getByLabelText('Choose file'), {
       target: {
         files: [
           new File(['%PDF-1.4 supporting document'], 'support.pdf', { type: 'application/pdf' }),
         ],
       },
     });
-    fireEvent.click(within(preview).getByRole('button', { name: 'Upload' }));
-    expect(await within(preview).findByText('support.pdf')).toBeTruthy();
-    expect(within(preview).getByRole('button', { name: 'Replace' })).toBeTruthy();
+    fireEvent.click(within(reloadedPreview).getByRole('button', { name: 'Upload' }));
+    expect(await within(reloadedPreview).findByText('support.pdf')).toBeTruthy();
+    expect(within(reloadedPreview).getByRole('button', { name: 'Replace' })).toBeTruthy();
     expect(
-      within(preview).getByRole('button', { name: 'Back to financial documents' }),
+      within(reloadedPreview).getByRole('button', { name: 'Back to financial documents' }),
     ).toBeTruthy();
     cleanup();
     financeContext.permissions = financeContext.permissions.filter(
@@ -4956,6 +6075,7 @@ describe('ERP and CRM authenticated workspace', () => {
       customers: [{ id: customerId, name: 'River Market Ltd.' }],
       products: [],
       salesDrafts: [],
+      subscriptionDrafts: [],
       serviceDrafts: [
         {
           currencyCode: 'BGN',
@@ -5253,7 +6373,7 @@ describe('ERP and CRM authenticated workspace', () => {
     fireEvent.click(within(preview).getByRole('button', { name: 'Back' }));
     fireEvent.click(screen.getByRole('button', { name: 'Daily cash report' }));
     expect(await screen.findByText('1 receipt')).toBeTruthy();
-    expect(screen.getAllByText(/BGN\s*60\.00/u).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/60\.00\s*BGN/u).length).toBeGreaterThan(0);
   });
 
   it('keeps statement lines separate and automatically matches only an exact reference', async () => {
@@ -6035,6 +7155,7 @@ describe('ERP and CRM authenticated workspace', () => {
       equipmentId,
       id: 'd9ac7c92-539c-4f21-b716-3f1f7b752660',
       inspectionType: 'technical',
+      isOverdue: true,
       intervalMonths: 12,
       nextDueDate: '2026-08-26',
       records: [],
@@ -6132,6 +7253,7 @@ describe('ERP and CRM authenticated workspace', () => {
       ) {
         currentInspection = {
           ...currentInspection,
+          isOverdue: false,
           lastCompletedOn: '2026-08-26',
           nextDueDate: '2027-08-26',
           records: [
@@ -6163,6 +7285,7 @@ describe('ERP and CRM authenticated workspace', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /Technical Fiscal register FX-20/u }));
     dialog = await screen.findByRole('dialog', { name: 'Technical inspection' });
+    expect(within(dialog).getByText('Overdue')).toBeTruthy();
     fireEvent.click(within(dialog).getByRole('button', { name: 'Record completed inspection' }));
     fireEvent.change(within(dialog).getByLabelText('Findings'), {
       target: { value: 'All functional checks passed.' },
@@ -6301,7 +7424,7 @@ describe('ERP and CRM authenticated workspace', () => {
     expect(await screen.findByRole('heading', { name: 'Service reports' })).toBeTruthy();
     expect((await screen.findAllByText('Mila Petrova')).length).toBeGreaterThan(0);
     expect((await screen.findAllByText('2h 30m')).length).toBeGreaterThan(0);
-    expect((await screen.findAllByText(/BGN\s*170\.00/u)).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText(/170\.00\s*BGN/u)).length).toBeGreaterThan(0);
     const serviceTabs = screen.getByRole('navigation', { name: 'Service sections' });
     expect(serviceTabs.classList.contains('service-tabs')).toBe(true);
     expect(
@@ -6390,6 +7513,7 @@ describe('ERP and CRM authenticated workspace', () => {
                             scheduledEnd: `${date}T10:00:00.000Z`,
                             scheduledStart: `${date}T09:00:00.000Z`,
                             status: 'scheduled',
+                            isOverdue: true,
                             workOrderId: '8ff82289-4e28-4a7f-87d0-409ed7124e47',
                             workOrderNumber: 'WO-2026-000001',
                           },
@@ -6450,6 +7574,7 @@ describe('ERP and CRM authenticated workspace', () => {
     renderApplication(['/modules/erp.service/schedule']);
 
     expect(await screen.findByText('Mountain Retail Ltd.')).toBeTruthy();
+    expect(screen.getByText('Overdue')).toBeTruthy();
     expect(screen.getByText('1 visit')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: /Manage working hours/u }));
     const dialog = await screen.findByRole('dialog', { name: 'Working hours and capacity' });
@@ -6680,7 +7805,7 @@ describe('ERP and CRM authenticated workspace', () => {
       ],
     };
     storeAuthenticatedSession(crmContext);
-    const overview = {
+    let overview = {
       assignees: [{ displayName: 'Mila Petrova', id: loginResponse.account.id }],
       businessTimezone: 'Europe/Sofia',
       claims: [],
@@ -6698,6 +7823,11 @@ describe('ERP and CRM authenticated workspace', () => {
         },
       ],
       surveys: [],
+      warrantyCardReconciliation: {
+        eligibleSoldSerials: 1,
+        missingCards: 1,
+        registeredSoldSerials: 0,
+      },
       warrantyCards: [
         {
           claimCount: 0,
@@ -6723,6 +7853,20 @@ describe('ERP and CRM authenticated workspace', () => {
       if (input.endsWith('/auth/me')) return Promise.resolve(jsonResponse(crmContext));
       if (input.endsWith('/crm/after-sales')) return Promise.resolve(jsonResponse(overview));
       if (
+        input.endsWith('/crm/after-sales/warranty-cards/reconcile') &&
+        options?.method === 'POST'
+      ) {
+        overview = {
+          ...overview,
+          warrantyCardReconciliation: {
+            eligibleSoldSerials: 1,
+            missingCards: 0,
+            registeredSoldSerials: 1,
+          },
+        };
+        return Promise.resolve(jsonResponse({ cardsCreated: 1 }));
+      }
+      if (
         input.endsWith(
           '/crm/after-sales/warranty-cards/76d38aa6-ada6-8b23-3c5b-c15be78edc09/offer',
         ) &&
@@ -6742,6 +7886,14 @@ describe('ERP and CRM authenticated workspace', () => {
     expect(warrantiesTab.getAttribute('aria-selected')).toBe('true');
     expect(screen.queryByText('Protected session')).toBeNull();
     expect(await screen.findByText('WCR-2026-000001')).toBeTruthy();
+    expect(screen.getByText('1 eligible sold serial is missing a warranty card.')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Reconcile register' }));
+    expect(
+      await screen.findByText('One missing warranty card was added to the register.'),
+    ).toBeTruthy();
+    await waitFor(() =>
+      expect(screen.queryByText(/sold serials are missing warranty cards/u)).toBeNull(),
+    );
     fireEvent.click(screen.getByText('WCR-2026-000001'));
     let warrantyDialog = await screen.findByRole('dialog', { name: 'WCR-2026-000001' });
     fireEvent.click(within(warrantyDialog).getByRole('button', { name: /New claim/u }));
@@ -6776,11 +7928,21 @@ describe('ERP and CRM authenticated workspace', () => {
     expect(feedbackTab.getAttribute('aria-selected')).toBe('true');
     expect(warrantiesTab.getAttribute('aria-selected')).toBe('false');
     expect(screen.getByText('Net Promoter Score')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: /Send survey/u }));
-    const surveyDialog = await screen.findByRole('dialog', { name: 'Send customer survey' });
+    expect(screen.getByRole('heading', { name: 'Completed work awaiting a survey' })).toBeTruthy();
+    const sourceRow = document.querySelector('.crm-care-survey-source');
+    expect(sourceRow).toBeTruthy();
+    fireEvent.click(
+      within(sourceRow as HTMLElement).getByRole('button', { name: 'Prepare survey' }),
+    );
+    const surveyDialog = await screen.findByRole('dialog', { name: 'Prepare customer survey' });
+    expect(within(surveyDialog).getByLabelText('Delivery or Service job')).toHaveProperty(
+      'value',
+      'service:f3e45425-7e87-4449-aa56-7b2bbf4da71b',
+    );
+    expect(within(surveyDialog).getByText(/Share this question with the customer/u)).toBeTruthy();
     expect(surveyDialog).toBeTruthy();
     expect(
-      screen.getByRole('option', { name: /DEV-WO-0001 · completed Service job/u }),
+      within(surveyDialog).getByRole('button', { name: 'Record invitation shared' }),
     ).toBeTruthy();
     fireEvent.click(within(surveyDialog).getByRole('button', { name: 'Close panel' }));
 
@@ -6793,11 +7955,13 @@ describe('ERP and CRM authenticated workspace', () => {
 
 function renderApplication(initialEntries: string[]) {
   return render(
-    <RouterProvider initialPath={initialEntries[0] ?? '/'}>
-      <AuthProvider>
-        <App />
-      </AuthProvider>
-    </RouterProvider>,
+    <LocalizationProvider>
+      <RouterProvider initialPath={initialEntries[0] ?? '/'}>
+        <AuthProvider>
+          <App />
+        </AuthProvider>
+      </RouterProvider>
+    </LocalizationProvider>,
   );
 }
 

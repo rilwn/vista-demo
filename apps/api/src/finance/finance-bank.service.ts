@@ -316,6 +316,11 @@ export class FinanceBankService {
   ) {
     const transaction = await lockTransaction(client, transactionId);
     if (transaction.match_status === 'matched') return;
+    if (transaction.value_date > (await this.businessDate(client)))
+      throw inputError(
+        'FINANCE_PAYMENT_FUTURE_DATE_INVALID',
+        'The payment date cannot be after the current business date.',
+      );
     if (transaction.direction !== 'incoming')
       throw conflict(
         'FINANCE_BANK_TRANSACTION_DIRECTION_INVALID',

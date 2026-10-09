@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
 import type {
+  AllocateCustomerAdvanceRequest,
   CancelFinanceCustomerDocumentRequest,
   CreateFinanceCustomerDocumentRequest,
   CreateFinancePaymentRequest,
@@ -255,6 +256,12 @@ export class FinanceService {
       201,
       async (client, commandKey) => {
         const before = await this.lockDocument(client, id);
+        if (normalized.paymentDate > (await this.businessDate(client)))
+          throw new ApiErrorException(
+            'FINANCE_PAYMENT_FUTURE_DATE_INVALID',
+            'The payment date cannot be after the current business date.',
+            HttpStatus.BAD_REQUEST,
+          );
         if (before.reviewState === 'cancelled')
           throw new ApiErrorException(
             'FINANCE_DOCUMENT_CANCELLED',
@@ -273,75 +280,206 @@ export class FinanceService {
             'The payment amount exceeds the remaining balance.',
             HttpStatus.CONFLICT,
           );
+        return this.applyPayment(client, id, before, normalized, auth, metadata, commandKey);
+      },
+    );
+  }
 
-        const paymentId = randomUUID();
-        const paymentNumber = await this.nextNumber(client, 'payment', 'PAY');
-        await client.query(
-          `INSERT INTO finance.payments (
-           id, payment_number, customer_partner_id, payment_date, payment_method,
-           currency_code, amount, payment_reference, notes, recorded_by
-         ) VALUES ($1, $2, $3, $4, $5, 'BGN', $6, $7, $8, $9)`,
-          [
-            paymentId,
-            paymentNumber,
-            before.customerPartnerId,
-            normalized.paymentDate,
-            normalized.paymentMethod,
-            normalized.amount,
-            normalized.paymentReference ?? null,
-            normalized.notes ?? null,
-            auth.accountId,
-          ],
+  async allocateCustomerAdvance(
+    documentId: string,
+    input: AllocateCustomerAdvanceRequest,
+    key: string | undefined,
+    auth: AuthenticationContext,
+    metadata: RequestSecurityMetadata,
+  ): Promise<FinanceCustomerDocument> {
+    const normalized = {
+      amount: normalizePositiveDecimal(input.amount),
+      customerAdvanceId: input.customerAdvanceId,
+    };
+    return this.command(
+      `finance.document.advance-allocation:${documentId}`,
+      key,
+      normalized,
+      201,
+      async (client, commandKey) => {
+        const before = await this.lockDocument(client, documentId);
+        this.assertReceivableOpen(before, normalized.amount);
+        const advanceResult = await client.query<{
+          advance_number: string;
+          customer_partner_id: string;
+          payment_method: FinancePaymentMethod;
+          payment_reference: string | null;
+          received_on: string;
+        }>(
+          `SELECT advance_number, customer_partner_id, payment_method,
+                  payment_reference, received_on::text
+           FROM finance.customer_advances WHERE id = $1 FOR UPDATE`,
+          [normalized.customerAdvanceId],
         );
-        await client.query(
-          `INSERT INTO finance.payment_allocations (
-           id, payment_id, customer_document_id, amount, allocated_by
-         ) VALUES ($1, $2, $3, $4, $5)`,
-          [randomUUID(), paymentId, id, normalized.amount, auth.accountId],
-        );
-        const allocatedTotal = decimalString(
-          decimalUnits(before.allocatedTotal) + decimalUnits(normalized.amount),
-        );
-        const outstandingTotal = decimalString(
-          decimalUnits(before.total) - decimalUnits(allocatedTotal),
-        );
-        const paymentStatus = statusFor(
-          before.total,
-          allocatedTotal,
-          before.dueDate,
-          await this.businessDate(client),
-        );
-        await client.query(
-          `UPDATE finance.customer_documents
-         SET allocated_total = $2, outstanding_total = $3, payment_status = $4,
-             version = version + 1, updated_at = now()
-         WHERE id = $1`,
-          [id, allocatedTotal, outstandingTotal, paymentStatus],
-        );
-        if (paymentStatus !== before.paymentStatus)
-          await this.appendStatusHistory(
-            client,
-            id,
-            before.paymentStatus,
-            paymentStatus,
-            'payment_recorded',
-            auth.accountId,
+        const advance = advanceResult.rows[0];
+        if (!advance || advance.customer_partner_id !== before.customerPartnerId)
+          throw new ApiErrorException(
+            'FINANCE_ADVANCE_NOT_AVAILABLE',
+            'Choose an available advance belonging to this customer.',
+            HttpStatus.CONFLICT,
           );
-        const document = await this.loadDocument(client, id);
-        await this.sideEffects(
+        const balance = await client.query<{ available: string }>(
+          `SELECT COALESCE(sum(CASE entry.entry_type
+                    WHEN 'applied' THEN -entry.amount ELSE entry.amount END), 0)::text AS available
+           FROM finance.customer_advance_entries entry
+           WHERE entry.advance_id = $1`,
+          [normalized.customerAdvanceId],
+        );
+        if (decimalUnits(normalized.amount) > decimalUnits(balance.rows[0]?.available ?? '0'))
+          throw new ApiErrorException(
+            'FINANCE_ADVANCE_ALLOCATION_EXCEEDS_BALANCE',
+            'The allocation exceeds the available customer advance.',
+            HttpStatus.CONFLICT,
+          );
+        if (advance.received_on > (await this.businessDate(client)))
+          throw new ApiErrorException(
+            'FINANCE_PAYMENT_FUTURE_DATE_INVALID',
+            'The advance date cannot be after the current business date.',
+            HttpStatus.CONFLICT,
+          );
+        return this.applyPayment(
           client,
-          'finance_payment',
-          paymentId,
-          'finance.payment.recorded',
-          { document, payment: document.payments.find((payment) => payment.id === paymentId) },
+          documentId,
+          before,
+          {
+            amount: normalized.amount,
+            paymentDate: advance.received_on,
+            paymentMethod: advance.payment_method,
+            ...(advance.payment_reference ? { paymentReference: advance.payment_reference } : {}),
+          },
           auth,
           metadata,
           commandKey,
-          before,
+          {
+            id: normalized.customerAdvanceId,
+            number: advance.advance_number,
+          },
         );
-        return document;
       },
     );
+  }
+
+  private assertReceivableOpen(before: FinanceCustomerDocument, amount: string) {
+    if (before.reviewState === 'cancelled')
+      throw new ApiErrorException(
+        'FINANCE_DOCUMENT_CANCELLED',
+        'Payments cannot be recorded against a cancelled Finance review document.',
+        HttpStatus.CONFLICT,
+      );
+    if (decimalUnits(before.outstandingTotal) === 0n)
+      throw new ApiErrorException(
+        'FINANCE_DOCUMENT_SETTLED',
+        'This Finance review document has no remaining balance.',
+        HttpStatus.CONFLICT,
+      );
+    if (decimalUnits(amount) > decimalUnits(before.outstandingTotal))
+      throw new ApiErrorException(
+        'FINANCE_ALLOCATION_EXCEEDS_BALANCE',
+        'The payment amount exceeds the remaining balance.',
+        HttpStatus.CONFLICT,
+      );
+  }
+
+  private async applyPayment(
+    client: PoolClient,
+    id: string,
+    before: FinanceCustomerDocument,
+    paymentInput: ReturnType<typeof normalizePayment>,
+    auth: AuthenticationContext,
+    metadata: RequestSecurityMetadata,
+    commandKey: string,
+    sourceAdvance?: { id: string; number: string },
+  ) {
+    const paymentId = randomUUID();
+    const paymentNumber = await this.nextNumber(client, 'payment', 'PAY');
+    await client.query(
+      `INSERT INTO finance.payments (
+       id, payment_number, customer_partner_id, payment_date, payment_method,
+       currency_code, amount, payment_reference, notes, recorded_by,
+       source_customer_advance_id
+     ) VALUES ($1, $2, $3, $4, $5, 'BGN', $6, $7, $8, $9, $10)`,
+      [
+        paymentId,
+        paymentNumber,
+        before.customerPartnerId,
+        paymentInput.paymentDate,
+        paymentInput.paymentMethod,
+        paymentInput.amount,
+        paymentInput.paymentReference ?? null,
+        paymentInput.notes ?? null,
+        auth.accountId,
+        sourceAdvance?.id ?? null,
+      ],
+    );
+    await client.query(
+      `INSERT INTO finance.payment_allocations (
+       id, payment_id, customer_document_id, amount, allocated_by
+     ) VALUES ($1, $2, $3, $4, $5)`,
+      [randomUUID(), paymentId, id, paymentInput.amount, auth.accountId],
+    );
+    if (sourceAdvance)
+      await client.query(
+        `INSERT INTO finance.customer_advance_entries (
+           id, advance_id, entry_type, amount, customer_document_id,
+           actor_account_id, correlation_id
+         ) VALUES ($1, $2, 'applied', $3, $4, $5, $6)`,
+        [
+          randomUUID(),
+          sourceAdvance.id,
+          paymentInput.amount,
+          id,
+          auth.accountId,
+          metadata.correlationId,
+        ],
+      );
+    const allocatedTotal = decimalString(
+      decimalUnits(before.allocatedTotal) + decimalUnits(paymentInput.amount),
+    );
+    const outstandingTotal = decimalString(
+      decimalUnits(before.total) - decimalUnits(allocatedTotal),
+    );
+    const paymentStatus = statusFor(
+      before.total,
+      allocatedTotal,
+      before.dueDate,
+      await this.businessDate(client),
+    );
+    await client.query(
+      `UPDATE finance.customer_documents
+       SET allocated_total = $2, outstanding_total = $3, payment_status = $4,
+           version = version + 1, updated_at = now()
+       WHERE id = $1`,
+      [id, allocatedTotal, outstandingTotal, paymentStatus],
+    );
+    if (paymentStatus !== before.paymentStatus)
+      await this.appendStatusHistory(
+        client,
+        id,
+        before.paymentStatus,
+        paymentStatus,
+        'payment_recorded',
+        auth.accountId,
+      );
+    const document = await this.loadDocument(client, id);
+    await this.sideEffects(
+      client,
+      'finance_payment',
+      paymentId,
+      sourceAdvance
+        ? 'finance.payment.allocated_from_customer_advance'
+        : 'finance.payment.recorded',
+      { document, payment: document.payments.find((payment) => payment.id === paymentId) },
+      auth,
+      metadata,
+      commandKey,
+      before,
+    );
+    return document;
   }
 
   async cancelDocument(
@@ -570,9 +708,12 @@ export class FinanceService {
       client.query<PaymentRow>(
         `SELECT payment.id, payment.payment_number, payment.payment_date::text,
                 payment.payment_method, payment.amount::text, payment.payment_reference,
-                payment.notes, payment.recorded_at, allocation.allocated_at
+                payment.notes, payment.recorded_at, allocation.allocated_at,
+                advance.advance_number AS source_customer_advance_number
          FROM finance.payment_allocations allocation
          JOIN finance.payments payment ON payment.id = allocation.payment_id
+         LEFT JOIN finance.customer_advances advance
+           ON advance.id = payment.source_customer_advance_id
          WHERE allocation.customer_document_id = $1
          ORDER BY allocation.allocated_at DESC, payment.id DESC`,
         [id],
@@ -799,6 +940,7 @@ interface PaymentRow {
   payment_number: string;
   payment_reference: string | null;
   recorded_at: string | Date;
+  source_customer_advance_number: string | null;
 }
 
 interface HistoryRow {
@@ -866,6 +1008,9 @@ function mapPayment(row: PaymentRow): FinancePayment {
     paymentDate: row.payment_date,
     paymentMethod: row.payment_method,
     ...(row.payment_reference ? { paymentReference: row.payment_reference } : {}),
+    ...(row.source_customer_advance_number
+      ? { sourceCustomerAdvanceNumber: row.source_customer_advance_number }
+      : {}),
     recordedAt: asIso(row.recorded_at),
   };
 }

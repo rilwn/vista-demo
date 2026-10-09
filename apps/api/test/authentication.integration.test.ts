@@ -579,7 +579,25 @@ describe.skipIf(!runInfrastructureTests)(
         .get('/api/v1/auth/me')
         .set('authorization', `Bearer ${adminToken}`)
         .expect(200);
-      expect(profile.body).toMatchObject({ isAdministrative: true, twoFactorVerified: true });
+      expect(profile.body).toMatchObject({
+        isAdministrative: true,
+        roleNames: ['Vista bootstrap administrator'],
+        twoFactorVerified: true,
+      });
+      const employeeAccount = await accountForEmail(database, employeeEmail);
+      const failedSignIns = await request(application.getHttpServer())
+        .get('/api/v1/platform/security/audit-events')
+        .query({ action: 'auth.login.failed' })
+        .set('authorization', `Bearer ${adminToken}`)
+        .expect(200);
+      expect(failedSignIns.body.items).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            targetDisplayName: 'Test employee',
+            targetId: employeeAccount.id,
+          }),
+        ]),
+      );
       const storedFactor = await database.query<{ encrypted_secret: Buffer }>(
         `SELECT encrypted_secret
          FROM identity.authentication_factors
@@ -829,6 +847,60 @@ describe.skipIf(!runInfrastructureTests)(
         .expect(201);
       const roleId = role.body.id as string;
 
+      const roleUpdateInput = {
+        description: 'CRM access with approved profile maintenance.',
+        expectedVersion: role.body.version as number,
+        name: 'CRM agent with profile maintenance',
+        permissions: [
+          { action: 'create', module: 'crm' },
+          { action: 'edit', module: 'crm' },
+          { action: 'view', module: 'crm' },
+        ],
+      };
+      await request(application.getHttpServer())
+        .put(`/api/v1/platform/security/roles/${roleId}`)
+        .set('authorization', `Bearer ${deniedToken}`)
+        .set('idempotency-key', `security-role-denied-${runId}`)
+        .send(roleUpdateInput)
+        .expect(403)
+        .expect(({ body }) => expect(body).toMatchObject({ error: { code: 'PERMISSION_DENIED' } }));
+
+      const updatedRole = await request(application.getHttpServer())
+        .put(`/api/v1/platform/security/roles/${roleId}`)
+        .set('authorization', `Bearer ${adminToken}`)
+        .set('idempotency-key', `security-role-update-${runId}`)
+        .send(roleUpdateInput)
+        .expect(200);
+      expect(updatedRole.body).toMatchObject({
+        description: roleUpdateInput.description,
+        id: roleId,
+        name: roleUpdateInput.name,
+        permissions: roleUpdateInput.permissions,
+        version: roleUpdateInput.expectedVersion + 1,
+      });
+      const replayedRoleUpdate = await request(application.getHttpServer())
+        .put(`/api/v1/platform/security/roles/${roleId}`)
+        .set('authorization', `Bearer ${adminToken}`)
+        .set('idempotency-key', `security-role-update-${runId}`)
+        .send(roleUpdateInput)
+        .expect(200);
+      expect(replayedRoleUpdate.body).toEqual(updatedRole.body);
+      const roleAudit = await database.query<{
+        after_data: { name?: string; permissions?: Array<{ action: string; module: string }> };
+        before_data: { name?: string };
+      }>(
+        `SELECT before_data, after_data
+         FROM audit.events
+         WHERE action = 'iam.role.updated' AND target_id = $1`,
+        [roleId],
+      );
+      expect(roleAudit.rows).toHaveLength(1);
+      expect(roleAudit.rows[0]?.before_data).toMatchObject({ name: 'CRM agent' });
+      expect(roleAudit.rows[0]?.after_data).toMatchObject({
+        name: roleUpdateInput.name,
+        permissions: roleUpdateInput.permissions,
+      });
+
       const assigned = await request(application.getHttpServer())
         .put(`/api/v1/platform/security/accounts/${accountId}/roles`)
         .set('authorization', `Bearer ${adminToken}`)
@@ -836,7 +908,9 @@ describe.skipIf(!runInfrastructureTests)(
         .send({ expectedVersion: 1, roleIds: [roleId] })
         .expect(200);
       expect(assigned.body).toMatchObject({
-        roles: [{ code: `crm-agent-${runId.slice(0, 10)}`, id: roleId }],
+        roles: [
+          { code: `crm-agent-${runId.slice(0, 10)}`, id: roleId, name: roleUpdateInput.name },
+        ],
         version: 2,
       });
 

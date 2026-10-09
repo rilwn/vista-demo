@@ -30,13 +30,13 @@ describe('POS localization', () => {
       </LocalizationProvider>,
     );
 
-    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'BG' })));
+    await act(() => fireEvent.click(screen.getByRole('button', { name: 'BG' })));
     expect(await screen.findByRole('heading', { name: 'Нова продажба' })).toBeTruthy();
     expect(screen.getByRole('region', { name: 'Текуща кошница' })).toBeTruthy();
     expect(screen.getByPlaceholderText('Търсене на клиенти')).toBeTruthy();
     expect(screen.getByText('Alfa Market Demo Ltd.')).toBeTruthy();
 
-    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'EN' })));
+    await act(() => fireEvent.click(screen.getByRole('button', { name: 'EN' })));
     expect(await screen.findByRole('heading', { name: 'New sale' })).toBeTruthy();
   });
 });

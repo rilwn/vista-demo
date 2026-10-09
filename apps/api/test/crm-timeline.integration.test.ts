@@ -114,6 +114,7 @@ describe.skipIf(!runInfrastructureTests)('CRM customer timeline', () => {
     const viewer = await createAccount(database, 'viewer', passwordHash, runId);
     editorAccountId = editor.accountId;
     await grantCrmPermissions(database, editor.accountId, ['view', 'create', 'edit']);
+    await grantOperationalTimelineViews(database, editor.accountId);
     await grantCrmPermissions(database, viewer.accountId, ['view']);
     customerId = randomUUID();
     locationId = randomUUID();
@@ -167,7 +168,7 @@ describe.skipIf(!runInfrastructureTests)('CRM customer timeline', () => {
       await adminDatabase.query(`DROP DATABASE IF EXISTS ${databaseName}`);
       await adminDatabase.end();
     }
-  });
+  }, 30_000);
 
   it('protects reads and commands and returns customer-scoped reference data', async () => {
     await request(application.getHttpServer())
@@ -330,17 +331,159 @@ describe.skipIf(!runInfrastructureTests)('CRM customer timeline', () => {
     expect(cancelledReminder.rows[0]?.status).toBe('cancelled');
   });
 
-  it('returns one chronological customer history with auditable side effects', async () => {
+  it('aggregates linked records chronologically and respects source-module access', async () => {
+    const categoryId = randomUUID();
+    const policyId = randomUUID();
+    const ticketId = randomUUID();
+    const equipmentId = randomUUID();
+    const serviceRequestId = randomUUID();
+    const warehouseId = randomUUID();
+    const quotationId = randomUUID();
+    const paymentId = randomUUID();
+    await database.query(
+      `INSERT INTO crm.ticket_categories (id, code, name)
+       VALUES ($1,$2,'Timeline integration')`,
+      [categoryId, `crm_timeline_${runId.slice(0, 16)}`],
+    );
+    await database.query(
+      `INSERT INTO crm.sla_policies (id, name, customer_partner_id, response_minutes, resolution_minutes)
+       VALUES ($1,'Timeline integration', $2, 60, 240)`,
+      [policyId, customerId],
+    );
+    await database.query(
+      `INSERT INTO crm.tickets (
+         id, ticket_number, customer_partner_id, customer_location_id, category_id,
+         channel, priority, subject, description, sla_policy_id, sla_policy_name,
+         sla_response_minutes, sla_resolution_minutes, sla_risk_threshold_percent,
+         response_due_at, resolution_due_at, created_by, updated_by
+       ) VALUES ($1,$2,$3,$4,$5,'telephone','normal','Fiscal display check','Customer needs a display check.',
+         $6,'Timeline integration',60,240,80,now()+interval '1 hour',now()+interval '4 hours',$7,$7)`,
+      [
+        ticketId,
+        `TKT-TL-${runId.slice(0, 10)}`,
+        customerId,
+        locationId,
+        categoryId,
+        policyId,
+        editorAccountId,
+      ],
+    );
+    await database.query(
+      `INSERT INTO crm.ticket_history (id, ticket_id, event_type, status, note, changed_by)
+       VALUES ($1,$2,'created','new','Customer issue recorded.',$3)`,
+      [randomUUID(), ticketId, editorAccountId],
+    );
+    await database.query(
+      `INSERT INTO master_data.customer_equipment (
+         id, customer_location_id, device_name, serial_number, purchase_date,
+         warranty_start_date, created_by, updated_by
+       ) VALUES ($1,$2,'Timeline fiscal device',$3,'2026-01-01','2026-01-01',$4,$4)`,
+      [equipmentId, locationId, `TL-${runId}`, editorAccountId],
+    );
+    await database.query(
+      `INSERT INTO service.requests (
+         id, request_number, customer_partner_id, customer_location_id,
+         customer_equipment_id, source_channel, service_type, problem_description,
+         created_by, updated_by
+       ) VALUES ($1,$2,$3,$4,$5,'telephone','warranty','Display needs inspection.',$6,$6)`,
+      [
+        serviceRequestId,
+        `SRV-TL-${runId.slice(0, 10)}`,
+        customerId,
+        locationId,
+        equipmentId,
+        editorAccountId,
+      ],
+    );
+    await database.query(
+      `INSERT INTO master_data.warehouses (id, code, name, created_by, updated_by)
+       VALUES ($1,$2,'Timeline warehouse',$3,$3)`,
+      [warehouseId, `TL-${runId.slice(0, 16)}`, editorAccountId],
+    );
+    await database.query(
+      `INSERT INTO sales.quotations (
+         id, quotation_number, customer_partner_id, warehouse_id, valid_until,
+         currency_code, created_by
+       ) VALUES ($1,$2,$3,$4,current_date + 14,'BGN',$5)`,
+      [quotationId, `Q-TL-${runId.slice(0, 10)}`, customerId, warehouseId, editorAccountId],
+    );
+    await database.query(
+      `INSERT INTO finance.payments (
+         id, payment_number, customer_partner_id, payment_date, payment_method,
+         currency_code, amount, recorded_by
+       ) VALUES ($1,$2,$3,current_date,'bank_transfer','BGN',25,$4)`,
+      [paymentId, `PAY-TL-${runId.slice(0, 10)}`, customerId, editorAccountId],
+    );
+
     const response = await request(application.getHttpServer())
       .get(`/api/v1/crm/timeline?customerPartnerId=${customerId}&customerLocationId=${locationId}`)
-      .set('authorization', `Bearer ${viewerToken}`)
+      .set('authorization', `Bearer ${editorToken}`)
       .expect(200);
     const page = response.body as CrmTimelinePage;
     expect(page.summary).toEqual({ interactions: 1, openTasks: 0, overdueTasks: 0 });
-    expect(page.items).toHaveLength(3);
+    expect(page.items).toHaveLength(7);
     expect(page.items.map((item) => item.kind)).toEqual(
-      expect.arrayContaining(['interaction', 'task_event', 'task_event']),
+      expect.arrayContaining([
+        'interaction',
+        'operational_event',
+        'operational_event',
+        'operational_event',
+        'operational_event',
+        'task_event',
+        'task_event',
+      ]),
     );
+    const operationalEvents = page.items.flatMap((item) =>
+      item.kind === 'operational_event' ? [item.operationalEvent] : [],
+    );
+    expect(operationalEvents.map((event) => event.source).sort()).toEqual([
+      'payment',
+      'quotation',
+      'service_request',
+      'ticket',
+    ]);
+    expect(operationalEvents).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          locationName: 'Main shop',
+          referenceNumber: `TKT-TL-${runId.slice(0, 10)}`,
+          source: 'ticket',
+        }),
+        expect.objectContaining({
+          locationName: 'Main shop',
+          referenceNumber: `SRV-TL-${runId.slice(0, 10)}`,
+          source: 'service_request',
+        }),
+        expect.objectContaining({
+          referenceNumber: `Q-TL-${runId.slice(0, 10)}`,
+          source: 'quotation',
+        }),
+        expect.objectContaining({
+          referenceNumber: `PAY-TL-${runId.slice(0, 10)}`,
+          source: 'payment',
+        }),
+      ]),
+    );
+    expect(operationalEvents.find((event) => event.source === 'payment')).not.toHaveProperty(
+      'amount',
+    );
+    expect(page.items.map((item) => Date.parse(item.occurredAt))).toEqual(
+      [...page.items.map((item) => Date.parse(item.occurredAt))].sort(
+        (left, right) => right - left,
+      ),
+    );
+
+    const limitedResponse = await request(application.getHttpServer())
+      .get(`/api/v1/crm/timeline?customerPartnerId=${customerId}&customerLocationId=${locationId}`)
+      .set('authorization', `Bearer ${viewerToken}`)
+      .expect(200);
+    const limitedPage = limitedResponse.body as CrmTimelinePage;
+    const limitedOperationalEvents = limitedPage.items.flatMap((item) =>
+      item.kind === 'operational_event' ? [item.operationalEvent] : [],
+    );
+    expect(limitedOperationalEvents.map((event) => event.source)).toEqual(['ticket']);
+    expect(limitedPage.items).toHaveLength(4);
+
     const sideEffects = await database.query<{ audit_total: string; outbox_total: string }>(
       `SELECT
          (SELECT count(*)::text FROM audit.events
@@ -388,6 +531,29 @@ async function grantCrmPermissions(
       `INSERT INTO iam.permissions (id, module, action) VALUES ($1,'crm',$2)
        ON CONFLICT (module, action) DO UPDATE SET module = EXCLUDED.module RETURNING id`,
       [randomUUID(), action],
+    );
+    await pool.query('INSERT INTO iam.role_permissions (role_id, permission_id) VALUES ($1,$2)', [
+      roleId,
+      permission.rows[0]?.id,
+    ]);
+  }
+  await pool.query('INSERT INTO iam.account_roles (account_id, role_id) VALUES ($1,$2)', [
+    accountId,
+    roleId,
+  ]);
+}
+
+async function grantOperationalTimelineViews(pool: Pool, accountId: string) {
+  const roleId = randomUUID();
+  await pool.query(
+    `INSERT INTO iam.roles (id, code, name) VALUES ($1,$2,'Timeline source views')`,
+    [roleId, `timeline-view-${randomUUID()}`],
+  );
+  for (const module of ['erp.finance', 'erp.sales', 'erp.service'] as const) {
+    const permission = await pool.query<{ id: string }>(
+      `INSERT INTO iam.permissions (id, module, action) VALUES ($1,$2,'view')
+       ON CONFLICT (module, action) DO UPDATE SET module = EXCLUDED.module RETURNING id`,
+      [randomUUID(), module],
     );
     await pool.query('INSERT INTO iam.role_permissions (role_id, permission_id) VALUES ($1,$2)', [
       roleId,

@@ -9,6 +9,7 @@ import {
   Param,
   ParseUUIDPipe,
   Post,
+  Put,
   Req,
 } from '@nestjs/common';
 import {
@@ -39,6 +40,12 @@ import {
   CreateCashRegisterDto,
   CreateLegalBusinessEntityDto,
   LegalBusinessEntityDto,
+  OrganizationRecordVersionDto,
+  UpdateBusinessBranchDto,
+  UpdateBusinessLocationDto,
+  UpdateBusinessOperatorDto,
+  UpdateCashRegisterDto,
+  UpdateLegalBusinessEntityDto,
   OrganizationMemberDto,
   OrganizationTopologyDto,
 } from './organization.dto.js';
@@ -167,6 +174,341 @@ export class OrganizationController {
   ): Promise<CashRegisterDto> {
     return this.organization.createRegister(
       locationId,
+      input,
+      key,
+      request.authentication,
+      metadata(request),
+    );
+  }
+
+  @Put('legal-entities/:id')
+  @RequirePermissions({ action: 'edit', module: 'platform.organization' })
+  @ApiBody({ type: UpdateLegalBusinessEntityDto })
+  @ApiOkResponse({ type: LegalBusinessEntityDto })
+  @ApiHeader({ name: 'Idempotency-Key', required: true })
+  @ApiParam({ format: 'uuid', name: 'id' })
+  updateLegalEntity(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() input: UpdateLegalBusinessEntityDto,
+    @Headers('idempotency-key') key: string | undefined,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<LegalBusinessEntityDto> {
+    return this.organization.updateLegalEntity(
+      id,
+      input,
+      key,
+      request.authentication,
+      metadata(request),
+    );
+  }
+
+  @Put('branches/:id')
+  @RequirePermissions({ action: 'edit', module: 'platform.organization' })
+  @ApiBody({ type: UpdateBusinessBranchDto })
+  @ApiOkResponse({ type: BusinessBranchDto })
+  @ApiHeader({ name: 'Idempotency-Key', required: true })
+  @ApiParam({ format: 'uuid', name: 'id' })
+  updateBranch(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() input: UpdateBusinessBranchDto,
+    @Headers('idempotency-key') key: string | undefined,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<BusinessBranchDto> {
+    return this.organization.updateBranch(
+      id,
+      input,
+      key,
+      request.authentication,
+      metadata(request),
+    );
+  }
+
+  @Put('locations/:id')
+  @RequirePermissions({ action: 'edit', module: 'platform.organization' })
+  @ApiBody({ type: UpdateBusinessLocationDto })
+  @ApiOkResponse({ type: BusinessLocationDto })
+  @ApiHeader({ name: 'Idempotency-Key', required: true })
+  @ApiParam({ format: 'uuid', name: 'id' })
+  updateLocation(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() input: UpdateBusinessLocationDto,
+    @Headers('idempotency-key') key: string | undefined,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<BusinessLocationDto> {
+    return this.organization.updateLocation(
+      id,
+      input,
+      key,
+      request.authentication,
+      metadata(request),
+    );
+  }
+
+  @Put('operators/:id')
+  @RequirePermissions({ action: 'edit', module: 'platform.organization' })
+  @ApiBody({ type: UpdateBusinessOperatorDto })
+  @ApiOkResponse({ type: BusinessOperatorDto })
+  @ApiHeader({ name: 'Idempotency-Key', required: true })
+  @ApiParam({ format: 'uuid', name: 'id' })
+  updateOperator(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() input: UpdateBusinessOperatorDto,
+    @Headers('idempotency-key') key: string | undefined,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<BusinessOperatorDto> {
+    return this.organization.updateOperator(
+      id,
+      input,
+      key,
+      request.authentication,
+      metadata(request),
+    );
+  }
+
+  @Put('cash-registers/:id')
+  @RequirePermissions({ action: 'edit', module: 'platform.organization' })
+  @ApiBody({ type: UpdateCashRegisterDto })
+  @ApiOkResponse({ type: CashRegisterDto })
+  @ApiHeader({ name: 'Idempotency-Key', required: true })
+  @ApiParam({ format: 'uuid', name: 'id' })
+  updateRegister(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() input: UpdateCashRegisterDto,
+    @Headers('idempotency-key') key: string | undefined,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<CashRegisterDto> {
+    return this.organization.updateRegister(
+      id,
+      input,
+      key,
+      request.authentication,
+      metadata(request),
+    );
+  }
+
+  @Post('legal-entities/:id/deactivate')
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissions({ action: 'delete', module: 'platform.organization' })
+  @ApiBody({ type: OrganizationRecordVersionDto })
+  @ApiOkResponse({ type: LegalBusinessEntityDto })
+  @ApiHeader({ name: 'Idempotency-Key', required: true })
+  @ApiParam({ format: 'uuid', name: 'id' })
+  deactivateLegalEntity(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() input: OrganizationRecordVersionDto,
+    @Headers('idempotency-key') key: string | undefined,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<LegalBusinessEntityDto> {
+    return this.organization.setLegalEntityActive(
+      id,
+      false,
+      input,
+      key,
+      request.authentication,
+      metadata(request),
+    );
+  }
+
+  @Post('legal-entities/:id/reactivate')
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissions({ action: 'edit', module: 'platform.organization' })
+  @ApiBody({ type: OrganizationRecordVersionDto })
+  @ApiOkResponse({ type: LegalBusinessEntityDto })
+  @ApiHeader({ name: 'Idempotency-Key', required: true })
+  @ApiParam({ format: 'uuid', name: 'id' })
+  reactivateLegalEntity(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() input: OrganizationRecordVersionDto,
+    @Headers('idempotency-key') key: string | undefined,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<LegalBusinessEntityDto> {
+    return this.organization.setLegalEntityActive(
+      id,
+      true,
+      input,
+      key,
+      request.authentication,
+      metadata(request),
+    );
+  }
+
+  @Post('branches/:id/deactivate')
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissions({ action: 'delete', module: 'platform.organization' })
+  @ApiBody({ type: OrganizationRecordVersionDto })
+  @ApiOkResponse({ type: BusinessBranchDto })
+  @ApiHeader({ name: 'Idempotency-Key', required: true })
+  @ApiParam({ format: 'uuid', name: 'id' })
+  deactivateBranch(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() input: OrganizationRecordVersionDto,
+    @Headers('idempotency-key') key: string | undefined,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<BusinessBranchDto> {
+    return this.organization.setBranchActive(
+      id,
+      false,
+      input,
+      key,
+      request.authentication,
+      metadata(request),
+    );
+  }
+
+  @Post('branches/:id/reactivate')
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissions({ action: 'edit', module: 'platform.organization' })
+  @ApiBody({ type: OrganizationRecordVersionDto })
+  @ApiOkResponse({ type: BusinessBranchDto })
+  @ApiHeader({ name: 'Idempotency-Key', required: true })
+  @ApiParam({ format: 'uuid', name: 'id' })
+  reactivateBranch(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() input: OrganizationRecordVersionDto,
+    @Headers('idempotency-key') key: string | undefined,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<BusinessBranchDto> {
+    return this.organization.setBranchActive(
+      id,
+      true,
+      input,
+      key,
+      request.authentication,
+      metadata(request),
+    );
+  }
+
+  @Post('locations/:id/deactivate')
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissions({ action: 'delete', module: 'platform.organization' })
+  @ApiBody({ type: OrganizationRecordVersionDto })
+  @ApiOkResponse({ type: BusinessLocationDto })
+  @ApiHeader({ name: 'Idempotency-Key', required: true })
+  @ApiParam({ format: 'uuid', name: 'id' })
+  deactivateLocation(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() input: OrganizationRecordVersionDto,
+    @Headers('idempotency-key') key: string | undefined,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<BusinessLocationDto> {
+    return this.organization.setLocationActive(
+      id,
+      false,
+      input,
+      key,
+      request.authentication,
+      metadata(request),
+    );
+  }
+
+  @Post('locations/:id/reactivate')
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissions({ action: 'edit', module: 'platform.organization' })
+  @ApiBody({ type: OrganizationRecordVersionDto })
+  @ApiOkResponse({ type: BusinessLocationDto })
+  @ApiHeader({ name: 'Idempotency-Key', required: true })
+  @ApiParam({ format: 'uuid', name: 'id' })
+  reactivateLocation(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() input: OrganizationRecordVersionDto,
+    @Headers('idempotency-key') key: string | undefined,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<BusinessLocationDto> {
+    return this.organization.setLocationActive(
+      id,
+      true,
+      input,
+      key,
+      request.authentication,
+      metadata(request),
+    );
+  }
+
+  @Post('operators/:id/deactivate')
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissions({ action: 'delete', module: 'platform.organization' })
+  @ApiBody({ type: OrganizationRecordVersionDto })
+  @ApiOkResponse({ type: BusinessOperatorDto })
+  @ApiHeader({ name: 'Idempotency-Key', required: true })
+  @ApiParam({ format: 'uuid', name: 'id' })
+  deactivateOperator(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() input: OrganizationRecordVersionDto,
+    @Headers('idempotency-key') key: string | undefined,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<BusinessOperatorDto> {
+    return this.organization.setOperatorActive(
+      id,
+      false,
+      input,
+      key,
+      request.authentication,
+      metadata(request),
+    );
+  }
+
+  @Post('operators/:id/reactivate')
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissions({ action: 'edit', module: 'platform.organization' })
+  @ApiBody({ type: OrganizationRecordVersionDto })
+  @ApiOkResponse({ type: BusinessOperatorDto })
+  @ApiHeader({ name: 'Idempotency-Key', required: true })
+  @ApiParam({ format: 'uuid', name: 'id' })
+  reactivateOperator(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() input: OrganizationRecordVersionDto,
+    @Headers('idempotency-key') key: string | undefined,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<BusinessOperatorDto> {
+    return this.organization.setOperatorActive(
+      id,
+      true,
+      input,
+      key,
+      request.authentication,
+      metadata(request),
+    );
+  }
+
+  @Post('cash-registers/:id/deactivate')
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissions({ action: 'delete', module: 'platform.organization' })
+  @ApiBody({ type: OrganizationRecordVersionDto })
+  @ApiOkResponse({ type: CashRegisterDto })
+  @ApiHeader({ name: 'Idempotency-Key', required: true })
+  @ApiParam({ format: 'uuid', name: 'id' })
+  deactivateRegister(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() input: OrganizationRecordVersionDto,
+    @Headers('idempotency-key') key: string | undefined,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<CashRegisterDto> {
+    return this.organization.setRegisterActive(
+      id,
+      false,
+      input,
+      key,
+      request.authentication,
+      metadata(request),
+    );
+  }
+
+  @Post('cash-registers/:id/reactivate')
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissions({ action: 'edit', module: 'platform.organization' })
+  @ApiBody({ type: OrganizationRecordVersionDto })
+  @ApiOkResponse({ type: CashRegisterDto })
+  @ApiHeader({ name: 'Idempotency-Key', required: true })
+  @ApiParam({ format: 'uuid', name: 'id' })
+  reactivateRegister(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() input: OrganizationRecordVersionDto,
+    @Headers('idempotency-key') key: string | undefined,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<CashRegisterDto> {
+    return this.organization.setRegisterActive(
+      id,
+      true,
       input,
       key,
       request.authentication,

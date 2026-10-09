@@ -581,7 +581,10 @@ function journalSource(kind: FinanceJournalReport['kind']): string {
                    true AS tax_breakdown_complete
             FROM finance.financial_documents document
             LEFT JOIN sales.invoices source ON source.id = document.source_sales_invoice_id
-            WHERE document.issue_date BETWEEN $1 AND $2`;
+            WHERE document.issue_date BETWEEN $1 AND $2
+              AND document.status NOT IN ('draft', 'cancelled')
+              AND document.official_number IS NOT NULL
+              AND document.document_type <> 'proforma'`;
   }
   return `SELECT invoice.id,
                  invoice.supplier_invoice_number AS number,
@@ -635,7 +638,8 @@ function vatReviewSource(): string {
                  ), 4)::text AS vat_bgn_total
           FROM finance.financial_document_vat_summary summary
           JOIN finance.financial_documents document ON document.id = summary.financial_document_id
-          WHERE document.status = 'draft'
+          WHERE document.status NOT IN ('draft', 'cancelled')
+            AND document.official_number IS NOT NULL
             AND document.document_type IN ('invoice', 'credit_note', 'debit_note')
             AND document.tax_event_date BETWEEN $1 AND $2
           GROUP BY summary.vat_treatment, summary.vat_rate

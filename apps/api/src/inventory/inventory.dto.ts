@@ -5,11 +5,14 @@ import {
   IsArray,
   IsDateString,
   IsIn,
+  IsInt,
   IsOptional,
   IsString,
   IsUUID,
+  Max,
   Matches,
   MaxLength,
+  Min,
   MinLength,
   ValidateNested,
 } from 'class-validator';
@@ -29,10 +32,16 @@ import {
   type SerialTraceEvent,
   type SerialTraceParty,
   type StockBalance,
+  type StockMovementJournalItem,
+  type StockMovementJournalPage,
+  type StockMovementJournalQuery,
+  type StockMovementType,
   type StockIssue,
   type StockReceipt,
   type StockReturn,
   type StockReservation,
+  type StockReservationPage,
+  type StockReservationQuery,
   type StockSettings,
   type StockTransfer,
   type TransferStockRequest,
@@ -41,6 +50,7 @@ import {
   type StocktakeBatchCount,
   type Stocktake,
   type Warehouse,
+  stockMovementTypes,
   stockReturnDispositions,
 } from '@vista/contracts';
 
@@ -172,6 +182,69 @@ export class StockBalanceDto implements StockBalance {
   @ApiProperty({ type: String }) quantity!: string;
   @ApiProperty({ type: String }) reservedQuantity!: string;
   @ApiProperty({ type: String, format: 'uuid' }) warehouseId!: string;
+}
+
+export class StockMovementJournalQueryDto implements StockMovementJournalQuery {
+  @ApiPropertyOptional({ enum: stockMovementTypes })
+  @IsOptional()
+  @IsIn(stockMovementTypes)
+  movementType?: StockMovementType;
+
+  @ApiPropertyOptional({ default: 1, minimum: 1, type: Number })
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  page = 1;
+
+  @ApiPropertyOptional({ default: 25, maximum: 100, minimum: 1, type: Number })
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  pageSize = 25;
+
+  @ApiPropertyOptional({ format: 'uuid', type: String })
+  @IsOptional()
+  @IsUUID('loose')
+  productId?: string;
+
+  @ApiPropertyOptional({ maxLength: 120, type: String })
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  search?: string;
+
+  @ApiPropertyOptional({ format: 'uuid', type: String })
+  @IsOptional()
+  @IsUUID('loose')
+  warehouseId?: string;
+}
+
+export class StockMovementJournalItemDto implements StockMovementJournalItem {
+  @ApiProperty({ type: String }) actorDisplayName!: string;
+  @ApiProperty({ type: String, format: 'uuid' }) id!: string;
+  @ApiProperty({ type: String, format: 'date-time' }) occurredAt!: string;
+  @ApiProperty({ enum: stockMovementTypes }) movementType!: StockMovementType;
+  @ApiProperty({ type: String }) productCode!: string;
+  @ApiProperty({ type: String, format: 'uuid' }) productId!: string;
+  @ApiProperty({ type: String }) productName!: string;
+  @ApiProperty({ type: String }) quantity!: string;
+  @ApiProperty({ type: String }) referenceLabel!: string;
+  @ApiProperty({ type: String }) referenceType!: string;
+  @ApiPropertyOptional({ type: String }) sourceHref?: string;
+  @ApiProperty({ type: String }) totalCostBgn!: string;
+  @ApiProperty({ type: String }) unitCostBgn!: string;
+  @ApiProperty({ type: String, format: 'uuid' }) warehouseId!: string;
+  @ApiProperty({ type: String }) warehouseName!: string;
+}
+
+export class StockMovementJournalPageDto implements StockMovementJournalPage {
+  @ApiProperty({ isArray: true, type: StockMovementJournalItemDto })
+  items!: StockMovementJournalItem[];
+  @ApiProperty({ type: Number }) page!: number;
+  @ApiProperty({ type: Number }) pageSize!: number;
+  @ApiProperty({ type: Number }) total!: number;
+  @ApiProperty({ type: Number }) totalPages!: number;
 }
 
 export class StockReceiptDto implements StockReceipt {
@@ -361,6 +434,7 @@ export class StockReservationDto implements StockReservation {
   @ApiProperty({ type: String }) initialQuantity!: string;
   @ApiProperty({ type: String, format: 'uuid' }) productId!: string;
   @ApiProperty({ type: String }) referenceId!: string;
+  @ApiProperty({ type: String }) referenceLabel!: string;
   @ApiProperty({ enum: stockReservationReferenceTypes })
   referenceType!: StockReservation['referenceType'];
   @ApiProperty({ type: String }) remainingQuantity!: string;
@@ -368,6 +442,29 @@ export class StockReservationDto implements StockReservation {
   @ApiProperty({ enum: ['active', 'released', 'consumed'] })
   status!: StockReservation['status'];
   @ApiProperty({ type: String, format: 'uuid' }) warehouseId!: string;
+}
+
+export class StockReservationQueryDto implements StockReservationQuery {
+  @ApiPropertyOptional({ default: 1, minimum: 1, type: Number })
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  page = 1;
+
+  @ApiPropertyOptional({ default: 25, maximum: 100, minimum: 1, type: Number })
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  pageSize = 25;
+}
+
+export class StockReservationPageDto implements StockReservationPage {
+  @ApiProperty({ isArray: true, type: StockReservationDto }) items!: StockReservation[];
+  @ApiProperty({ type: Number }) page!: number;
+  @ApiProperty({ type: Number }) pageSize!: number;
+  @ApiProperty({ type: Number }) total!: number;
+  @ApiProperty({ type: Number }) totalPages!: number;
 }
 
 export class ConfigureStockSettingsDto implements ConfigureStockSettingsRequest {
@@ -412,6 +509,14 @@ export class ReplenishmentStatusDto implements ReplenishmentStatus {
 export class SerialTracePartyDto implements SerialTraceParty {
   @ApiProperty({ type: String }) displayName!: string;
   @ApiProperty({ type: String, format: 'uuid' }) id!: string;
+}
+interface SerialTraceProduct {
+  displayName: string;
+  id?: string;
+}
+class SerialTraceProductDto implements SerialTraceProduct {
+  @ApiProperty({ type: String }) displayName!: string;
+  @ApiPropertyOptional({ type: String, format: 'uuid' }) id?: string;
 }
 export class SerialTraceDetailDto implements SerialTraceDetail {
   @ApiProperty({ type: String }) label!: string;
@@ -471,8 +576,9 @@ export class SerialTraceabilityDto implements SerialTraceability {
   @ApiPropertyOptional({ type: SerialTraceCustomerEquipmentDto })
   customerEquipment?: NonNullable<SerialTraceability['customerEquipment']>;
   @ApiProperty({ type: [SerialTraceEventDto] }) events!: SerialTraceEvent[];
-  @ApiProperty({ type: SerialTracePartyDto }) product!: SerialTraceParty;
-  @ApiProperty({ type: String, format: 'uuid' }) serialItemId!: string;
+  @ApiProperty({ type: Boolean }) inventoryRecordLinked!: boolean;
+  @ApiProperty({ type: SerialTraceProductDto }) product!: SerialTraceability['product'];
+  @ApiPropertyOptional({ type: String, format: 'uuid' }) serialItemId?: string;
   @ApiProperty({ type: String }) serialNumber!: string;
   @ApiProperty({ enum: ['available', 'issued', 'missing'] })
   status!: SerialTraceability['status'];

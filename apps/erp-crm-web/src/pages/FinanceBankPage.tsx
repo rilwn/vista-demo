@@ -24,6 +24,11 @@ import {
 } from '../api/finance';
 import { useAuth } from '../auth/AuthProvider';
 import { Icon } from '../components/Icon';
+import {
+  formatOperationsCurrency,
+  formatOperationsDate,
+  useLocalization,
+} from '../i18n/LocalizationProvider';
 import { Link } from '../routing/Router';
 
 interface DraftLine extends CreateFinanceBankStatementLineRequest {
@@ -32,6 +37,7 @@ interface DraftLine extends CreateFinanceBankStatementLineRequest {
 
 export function FinanceBankPage() {
   const { hasPermission, session } = useAuth();
+  useLocalization();
   const token = session?.sessionToken ?? '';
   const data = useBankStatements(token);
   const [creating, setCreating] = useState(false);
@@ -1153,14 +1159,10 @@ function today() {
   }).format(new Date());
 }
 function formatDate(value: string) {
-  return new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium' }).format(
-    new Date(`${value}T12:00:00Z`),
-  );
+  return formatOperationsDate(new Date(`${value}T12:00:00Z`), { dateStyle: 'medium' });
 }
 function formatMoney(value: string) {
-  return new Intl.NumberFormat('en-GB', { currency: 'BGN', style: 'currency' }).format(
-    Number(value),
-  );
+  return formatOperationsCurrency(value, 'BGN');
 }
 function maskIban(value: string) {
   return value.length > 8 ? `${value.slice(0, 4)} ···· ${value.slice(-4)}` : value;

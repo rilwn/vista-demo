@@ -6,6 +6,8 @@ import type {
   CrmTicketChannel,
   CrmTicketPage,
   CrmTicketPriority,
+  CrmTicketSlaDeliveryStatus,
+  CrmTicketSlaEvent,
   CrmTicketReferenceData,
   CrmTicketStatus,
   ServiceType,
@@ -24,6 +26,8 @@ import {
 } from '../api/crm-tickets';
 import { useAuth } from '../auth/AuthProvider';
 import { Icon } from '../components/Icon';
+import { formatOperationsDate, useLocalization } from '../i18n/LocalizationProvider';
+import type { TranslationKey } from '../i18n/catalog';
 import { Link, useRouter } from '../routing/Router';
 
 const emptyPage: CrmTicketPage = {
@@ -58,6 +62,7 @@ const statuses: CrmTicketStatus[] = [
 ];
 
 export function CrmTicketsPage() {
+  useLocalization();
   const { hasPermission, session } = useAuth();
   const { location } = useRouter();
   const openedFromNavigation = useRef(false);
@@ -298,13 +303,14 @@ export function CrmTicketsPage() {
 }
 
 export function CrmTabs() {
+  const { t } = useLocalization();
   const items = [
-    ['/modules/crm/locations-equipment', 'Locations & equipment'],
-    ['/modules/crm/timeline', 'Timeline'],
-    ['/modules/crm/leads', 'Leads & pipeline'],
-    ['/modules/crm/tickets', 'Tickets'],
-    ['/modules/crm/customer-care', 'Customer care'],
-    ['/modules/crm/analytics', 'Analytics'],
+    ['/modules/crm/locations-equipment', 'crm.tab.locationsEquipment'],
+    ['/modules/crm/timeline', 'crm.tab.timeline'],
+    ['/modules/crm/leads', 'crm.tab.leads'],
+    ['/modules/crm/tickets', 'crm.tab.tickets'],
+    ['/modules/crm/customer-care', 'crm.tab.customerCare'],
+    ['/modules/crm/analytics', 'crm.tab.analytics'],
   ] as const;
   return (
     <nav aria-label="CRM sections" className="workflow-tabs crm-tabs">
@@ -315,7 +321,7 @@ export function CrmTabs() {
           key={to}
           to={to}
         >
-          {label}
+          {t(label)}
         </Link>
       ))}
     </nav>
@@ -625,6 +631,7 @@ function TicketDrawer({
   token: string;
 }) {
   const { navigate } = useRouter();
+  const { t } = useLocalization();
   const [mode, setMode] = useState<'details' | 'respond' | 'status' | 'service'>('details');
   const [note, setNote] = useState('');
   const [nextStatus, setNextStatus] = useState<CrmTicketStatus | ''>('');
@@ -774,6 +781,38 @@ function TicketDrawer({
               timezone={references.businessTimezone}
             />
           </div>
+        </section>
+
+        <section aria-label={t('crm.ticket.slaHistory')} className="crm-ticket-sla-history">
+          <header>
+            <div>
+              <h3>{t('crm.ticket.slaHistory')}</h3>
+            </div>
+          </header>
+          {ticket.slaEvents.length ? (
+            <ol>
+              {ticket.slaEvents.map((event) => (
+                <li key={event.id}>
+                  <span
+                    aria-hidden="true"
+                    className={`crm-ticket-sla-history-marker is-${event.eventType}`}
+                  />
+                  <div>
+                    <strong>{slaEventLabel(event, t)}</strong>
+                    <span className={`crm-ticket-sla-delivery is-${event.deliveryStatus}`}>
+                      {slaDeliveryLabel(event.deliveryStatus, t)}
+                    </span>
+                    <p>
+                      {t('crm.ticket.slaRecipient')}: {event.recipientName}
+                    </p>
+                    <small>{formatDateTime(event.createdAt, references.businessTimezone)}</small>
+                  </div>
+                </li>
+              ))}
+            </ol>
+          ) : (
+            <p className="crm-ticket-sla-history-empty">{t('crm.ticket.slaHistoryEmpty')}</p>
+          )}
         </section>
 
         <section className="crm-ticket-preview-section">
@@ -1238,6 +1277,30 @@ function SlaTimer({
   );
 }
 
+function slaEventLabel(event: CrmTicketSlaEvent, t: (key: TranslationKey) => string): string {
+  if (event.timerType === 'response')
+    return event.eventType === 'at_risk'
+      ? t('crm.ticket.slaResponseAtRisk')
+      : t('crm.ticket.slaResponseBreached');
+  return event.eventType === 'at_risk'
+    ? t('crm.ticket.slaResolutionAtRisk')
+    : t('crm.ticket.slaResolutionBreached');
+}
+
+function slaDeliveryLabel(
+  status: CrmTicketSlaDeliveryStatus,
+  t: (key: TranslationKey) => string,
+): string {
+  const keys: Record<CrmTicketSlaDeliveryStatus, TranslationKey> = {
+    cancelled: 'crm.ticket.slaDelivery.cancelled',
+    delivered: 'crm.ticket.slaDelivery.delivered',
+    failed: 'crm.ticket.slaDelivery.failed',
+    pending: 'crm.ticket.slaDelivery.pending',
+    processing: 'crm.ticket.slaDelivery.processing',
+  };
+  return t(keys[status]);
+}
+
 const allowedTransitions: Record<CrmTicketStatus, CrmTicketStatus[]> = {
   cancelled: [],
   closed: [],
@@ -1307,11 +1370,11 @@ function duration(minutes: number) {
   return `${minutes / 60} h`;
 }
 function formatDateTime(value: string, timezone: string) {
-  return new Intl.DateTimeFormat(undefined, {
+  return formatOperationsDate(new Date(value), {
     dateStyle: 'medium',
     timeStyle: 'short',
     timeZone: timezone,
-  }).format(new Date(value));
+  });
 }
 function errorText(error: unknown, fallback: string) {
   return error instanceof ApiClientError ? error.message : fallback;

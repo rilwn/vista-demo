@@ -1,4 +1,5 @@
 import type { ErpReportDefinition } from '@vista/contracts';
+import { formatOperationsDate, getOperationsIntlLocale } from '../i18n/LocalizationProvider';
 
 // Start with a readable working view. Every field remains available in Customize view.
 const defaults: Partial<Record<ErpReportDefinition['key'], string[]>> = {
@@ -49,8 +50,12 @@ export function reportDecimal(value: string, money: boolean) {
   const match = /^(-?)(\d+)(?:\.(\d+))?$/.exec(value);
   if (!match) return value;
   const fraction = (match[3] ?? '').replace(/0+$/, '').padEnd(money ? 2 : 0, '0');
-  const whole = match[2]!.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-  return `${match[1]}${whole}${fraction ? `.${fraction}` : ''}`;
+  const locale = getOperationsIntlLocale();
+  const formatParts = new Intl.NumberFormat(locale).formatToParts(12345.6);
+  const group = formatParts.find((part) => part.type === 'group')?.value ?? ',';
+  const decimal = formatParts.find((part) => part.type === 'decimal')?.value ?? '.';
+  const whole = match[2]!.replace(/\B(?=(\d{3})+(?!\d))/g, group);
+  return `${match[1]}${whole}${fraction ? `${decimal}${fraction}` : ''}`;
 }
 
 export function reportDate(value: string) {
@@ -58,10 +63,10 @@ export function reportDate(value: string) {
   const date = new Date(`${value}T12:00:00Z`);
   return Number.isNaN(date.getTime())
     ? value
-    : new Intl.DateTimeFormat('en-GB', {
+    : formatOperationsDate(date, {
         day: 'numeric',
         month: 'short',
         year: 'numeric',
         timeZone: 'Europe/Sofia',
-      }).format(date);
+      });
 }

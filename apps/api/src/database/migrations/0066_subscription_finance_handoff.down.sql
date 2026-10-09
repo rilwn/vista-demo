@@ -1,0 +1,3 @@
+DROP INDEX finance.financial_document_subscription_draft_unique;
+ALTER TABLE finance.financial_documents DROP CONSTRAINT finance_subscription_source_valid;
+ALTER TABLE finance.financial_documents DROP COLUMN source_subscription_draft_id;

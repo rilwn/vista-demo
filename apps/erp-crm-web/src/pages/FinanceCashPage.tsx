@@ -18,6 +18,11 @@ import {
 } from '../api/finance';
 import { useAuth } from '../auth/AuthProvider';
 import { Icon } from '../components/Icon';
+import {
+  formatOperationsCurrency,
+  formatOperationsDate,
+  useLocalization,
+} from '../i18n/LocalizationProvider';
 import { Link } from '../routing/Router';
 import { FinanceTabs } from './FinanceBankPage';
 
@@ -30,6 +35,7 @@ const emptyReferences: FinanceCashReferenceData = {
 
 export function FinanceCashPage() {
   const { hasPermission, session } = useAuth();
+  useLocalization();
   const token = session?.sessionToken ?? '';
   const data = useCashData(token);
   const [view, setView] = useState<'vouchers' | 'report'>('vouchers');
@@ -953,19 +959,13 @@ function message(error: unknown, fallback: string) {
 }
 
 function formatMoney(value: string) {
-  return new Intl.NumberFormat('en-GB', { currency: 'BGN', style: 'currency' }).format(
-    Number(value),
-  );
+  return formatOperationsCurrency(value, 'BGN');
 }
 
 function formatDate(value: string) {
-  return new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium' }).format(
-    new Date(`${value}T00:00:00Z`),
-  );
+  return formatOperationsDate(new Date(`${value}T00:00:00Z`), { dateStyle: 'medium' });
 }
 
 function formatDateTime(value: string) {
-  return new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium', timeStyle: 'short' }).format(
-    new Date(value),
-  );
+  return formatOperationsDate(new Date(value), { dateStyle: 'medium', timeStyle: 'short' });
 }
