@@ -129,6 +129,24 @@ for (const [scope, module, search] of [
       path: test.info().outputPath(`${scope}-reports-desktop.png`),
       animations: 'disabled',
     });
+    await page.setViewportSize({ width: 768, height: 1024 });
+    await page.evaluate(() => window.scrollTo(0, 0));
+    expect(await page.locator('body').evaluate((el) => el.scrollWidth <= window.innerWidth)).toBe(
+      true,
+    );
+    const reportTable = page.locator('.erp-report-table-scroll');
+    await expect(reportTable).toBeVisible();
+    expect(await reportTable.evaluate((el) => el.scrollWidth >= el.clientWidth)).toBe(true);
+    await reportTable.evaluate((el) => {
+      el.scrollLeft = el.scrollWidth;
+    });
+    expect(
+      await reportTable.evaluate((el) => el.scrollLeft + el.clientWidth >= el.scrollWidth - 1),
+    ).toBe(true);
+    await page.screenshot({
+      path: test.info().outputPath(`${scope}-reports-tablet.png`),
+      animations: 'disabled',
+    });
     await page.setViewportSize({ width: 390, height: 844 });
     await page.evaluate(() => window.scrollTo(0, 0));
     expect(await page.locator('body').evaluate((el) => el.scrollWidth <= window.innerWidth)).toBe(

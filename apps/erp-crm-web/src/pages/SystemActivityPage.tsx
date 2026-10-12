@@ -153,6 +153,11 @@ export function SystemActivityPage() {
                     <tr key={event.id}>
                       <td>
                         <strong>{eventLabel(event.eventType)}</strong>
+                        {!event.hasRegisteredConsumer ? (
+                          <span className="system-activity-route-note">
+                            {messages.operations.awaitingIntegration}
+                          </span>
+                        ) : null}
                       </td>
                       <td>
                         <StatusBadge status={event.status} />
@@ -228,13 +233,17 @@ function ActivitySummary({
   loading: boolean;
   telemetry: IntegrationEventTelemetry | null;
 }) {
+  const unrouted = telemetry?.unrouted ?? 0;
   const cards = [
     [messages.operations.completed, telemetry?.completed ?? 0, 'is-positive'],
     [
       messages.operations.inProgress,
-      (telemetry?.pending ?? 0) + (telemetry?.publishing ?? 0) + (telemetry?.published ?? 0),
+      Math.max(0, (telemetry?.pending ?? 0) - unrouted) +
+        (telemetry?.publishing ?? 0) +
+        (telemetry?.published ?? 0),
       '',
     ],
+    [messages.operations.awaitingIntegration, unrouted, ''],
     [messages.operations.needsAttention, telemetry?.deadLetter ?? 0, 'is-warning'],
     [messages.operations.failedSteps, telemetry?.failedDeliveries ?? 0, ''],
   ] as const;
@@ -350,6 +359,9 @@ function ActivityDrawer({
                 <StatusBadge status={event.status} />
                 <span>{messages.operations.lastUpdated(dateTime(lastEventDate(event)))}</span>
               </div>
+              {!event.hasRegisteredConsumer ? (
+                <InlineAlert tone="warning">{messages.operations.noReceivingService}</InlineAlert>
+              ) : null}
               <dl className="system-activity-facts">
                 <div>
                   <dt>{messages.operations.received}</dt>
@@ -380,7 +392,7 @@ function ActivityDrawer({
                   <p>{messages.operations.noDeliverySteps}</p>
                 )}
               </section>
-              {event.status === 'dead_letter' && canRetry ? (
+              {event.status === 'dead_letter' && event.hasRegisteredConsumer && canRetry ? (
                 <div className="system-activity-recovery">
                   <strong>{messages.operations.retryTitle}</strong>
                   <p>{messages.operations.retryHint}</p>
@@ -450,7 +462,7 @@ function eventLabel(type: string): string {
     const scheduledLabels: Record<string, string> = {
       'backup.execute': 'Backup run scheduled',
       'backup.missed-detect': 'Missed backup check scheduled',
-      'backup.verify': 'Backup verification scheduled',
+      'backup.verify': messages.operations.backupVerificationScheduled,
       'crm.sla.evaluate': 'Ticket SLA review scheduled',
       'crm.warranty-expiration.prepare': 'Warranty reminder check scheduled',
       'finance.payment-notification.send': 'Payment reminder delivery scheduled',

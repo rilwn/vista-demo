@@ -20,7 +20,12 @@ visual acceptance remains open. UI-03 replaces UUID fragments with human
 context and bilingual copy controls across Operations, Procurement, Warehouse
 and POS checkout recovery. No purchase-order numbering is introduced before
 BUS-002 approval; local UI regressions and workspace validation pass, with
-hosted retest pending.
+hosted retest pending. UI-04 confirms 768 px table/board-local scrolling and
+viewport-bound partner/opportunity drawers. UI-05 fixes repeated overview copy,
+singular count grammar and missing Sales-reference separators; adds Escape
+dismissal and bilingual inline validation; and searches partners, Finance
+documents/collections and serials through permission-protected APIs. Isolated
+Chromium and PostgreSQL/Redis checks pass locally; hosted retest remains open.
 
 Operations QA second Finance batch, 9 October 2026 (AGENTS §§4.1–4.4, 6.1,
 6.4, 11–13, 15, 17): FIN-06 future-payment regressions now cover supplier
@@ -581,6 +586,16 @@ Sales/Finance API integration tests, all 54 ERP/CRM component tests and all five
 Finance browser journeys passed; migration rollback/reapply also passed on a
 clean disposable schema. Browser acceptance used the installed system Chromium.
 The QA register records FIN-10 as verified locally; hosted retest remains open.
+
+Shared-interface QA UI-04 evidence, 9 October 2026 (AGENTS §§3.3, 17):
+tablet-width report tables and the partner register keep horizontal scrolling
+inside their table regions; the six-stage CRM pipeline scrolls inside its board;
+partner and opportunity drawers fit the viewport and retain internal vertical
+scrolling. `tests/e2e/reports.spec.ts`, `tests/e2e/crm.spec.ts`, and
+`tests/e2e/organization.spec.ts` cover the 768 px acceptance. The partner record
+drawer uses border-box sizing so its padding is included in the viewport-bound
+width. Chromium browser checks passed locally; hosted visual retest remains
+pending.
 
 For an active vertical slice, split the relevant group row into individual
 requirements and add concrete identifiers, for example migration timestamp,

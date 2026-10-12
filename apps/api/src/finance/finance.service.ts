@@ -111,6 +111,25 @@ export class FinanceService {
     return Promise.all(result.rows.map((row) => this.document(row.id)));
   }
 
+  async searchDocuments(search: string): Promise<FinanceCustomerDocument[]> {
+    const normalized = search.trim();
+    if (normalized.length < 2) return [];
+    const pattern = `%${escapeLikeSearch(normalized)}%`;
+    const result = await this.database.getPool().query<{ id: string }>(
+      `SELECT document.id
+       FROM finance.customer_documents document
+       JOIN sales.invoices source ON source.id = document.source_sales_invoice_id
+       JOIN master_data.partners customer ON customer.id = document.customer_partner_id
+       WHERE document.document_number ILIKE $1 ESCAPE E'\\\\'
+          OR source.invoice_number ILIKE $1 ESCAPE E'\\\\'
+          OR customer.display_name ILIKE $1 ESCAPE E'\\\\'
+       ORDER BY document.created_at DESC, document.id DESC
+       LIMIT 8`,
+      [pattern],
+    );
+    return Promise.all(result.rows.map(({ id }) => this.document(id)));
+  }
+
   async document(id: string): Promise<FinanceCustomerDocument> {
     const client = await this.database.getPool().connect();
     try {
@@ -965,6 +984,10 @@ function documentQuery() {
           FROM finance.customer_documents document
           JOIN sales.invoices source ON source.id = document.source_sales_invoice_id
           JOIN master_data.partners customer ON customer.id = document.customer_partner_id`;
+}
+
+function escapeLikeSearch(value: string): string {
+  return value.replace(/[\\%_]/gu, '\\$&');
 }
 
 function mapDocument(

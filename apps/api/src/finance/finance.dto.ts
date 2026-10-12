@@ -10,6 +10,7 @@ import {
   Matches,
   MaxLength,
   Min,
+  MinLength,
 } from 'class-validator';
 import {
   financePaymentMethods,
@@ -35,6 +36,14 @@ export class CreateFinanceCustomerDocumentDto implements CreateFinanceCustomerDo
   @ApiProperty({ format: 'uuid', type: String })
   @IsUUID('loose')
   salesInvoiceId!: string;
+}
+
+export class FinanceCustomerDocumentSearchQueryDto {
+  @ApiProperty({ maxLength: 120, minLength: 2, type: String })
+  @IsString()
+  @MinLength(2)
+  @MaxLength(120)
+  search!: string;
 }
 
 export class CreateFinancePaymentDto implements CreateFinancePaymentRequest {

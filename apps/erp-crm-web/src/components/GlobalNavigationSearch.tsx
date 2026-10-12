@@ -1,6 +1,9 @@
 import { type KeyboardEvent, useEffect, useMemo, useRef, useState } from 'react';
 
 import { useAuth } from '../auth/AuthProvider';
+import { listFinancialDocuments, searchFinanceDocuments } from '../api/finance';
+import { listPartners } from '../api/partners';
+import { searchSerialTraceability } from '../api/inventory';
 import { useLocalization } from '../i18n/LocalizationProvider';
 import { localizeModule, moduleLabel, navigationGroupLabel } from '../i18n/navigation';
 import { allModuleItems, navigationGroups } from '../navigation';
@@ -17,10 +20,11 @@ interface SearchDestination {
   module?: string;
   path: string;
   permission?: string;
+  state?: unknown;
 }
 
 export function GlobalNavigationSearch() {
-  const { hasPermission } = useAuth();
+  const { hasPermission, session } = useAuth();
   const { locale, t } = useLocalization();
   const { location, navigate } = useRouter();
   const rootRef = useRef<HTMLDivElement | null>(null);
@@ -28,6 +32,8 @@ export function GlobalNavigationSearch() {
   const [activeIndex, setActiveIndex] = useState(0);
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
+  const [recordDestinations, setRecordDestinations] = useState<SearchDestination[]>([]);
+  const [searchingRecords, setSearchingRecords] = useState(false);
 
   const destinations = useMemo(() => {
     const groupByPath = new Map(
@@ -121,9 +127,102 @@ export function GlobalNavigationSearch() {
     return [...new Map(permitted.map((item) => [item.path, item])).values()];
   }, [hasPermission, locale, t]);
 
+  useEffect(() => {
+    const term = query.trim();
+    const token = session?.sessionToken;
+    if (!open || !token || term.length < 2) {
+      setRecordDestinations([]);
+      setSearchingRecords(false);
+      return;
+    }
+
+    let active = true;
+    const timer = window.setTimeout(() => {
+      setSearchingRecords(true);
+      const requests: Array<Promise<SearchDestination[]>> = [];
+      if (hasPermission('crm')) {
+        requests.push(
+          listPartners(token, { page: 1, pageSize: 5, search: term })
+            .then((page) =>
+              page.items.map((partner) => ({
+                description: t('search.partnerRecordDescription'),
+                group: t('search.partnerRecords'),
+                icon: 'customers' as const,
+                keywords: `${partner.displayName} ${partner.uic ?? ''} ${partner.vatNumber ?? ''}`,
+                label: partner.displayName,
+                path: '/partners',
+                state: { globalSearch: { search: partner.displayName, partnerId: partner.id } },
+              })),
+            )
+            .catch(() => []),
+        );
+      }
+      if (hasPermission('erp.finance')) {
+        requests.push(
+          listFinancialDocuments(token, { page: 1, pageSize: 5, search: term })
+            .then((page) =>
+              page.items.map((document) => ({
+                description: document.customerSnapshot.name,
+                group: t('search.financeRecords'),
+                icon: 'finance' as const,
+                keywords: `${document.number} ${document.customerSnapshot.name}`,
+                label: document.number,
+                path: '/modules/erp.finance/invoices',
+                state: { financialDocumentId: document.id },
+              })),
+            )
+            .catch(() => []),
+        );
+        requests.push(
+          searchFinanceDocuments(token, term)
+            .then((documents) =>
+              documents.map((document) => ({
+                description: `${t('search.collectionRecordDescription')} · ${document.customerName} · ${document.sourceInvoiceNumber}`,
+                group: t('search.collectionRecords'),
+                icon: 'finance' as const,
+                keywords: `${document.number} ${document.customerName} ${document.sourceInvoiceNumber}`,
+                label: document.number,
+                path: '/modules/erp.finance/payments',
+                state: { financeCollectionDocumentId: document.id },
+              })),
+            )
+            .catch(() => []),
+        );
+      }
+      if (hasPermission('erp.warehouse')) {
+        requests.push(
+          searchSerialTraceability(token, term)
+            .then((serials) =>
+              serials.map((serial) => ({
+                description: `${serial.product.displayName} · ${serial.customer?.displayName ?? serial.currentCustody.displayName}`,
+                group: t('search.serialRecords'),
+                icon: 'warehouse' as const,
+                keywords: `${serial.serialNumber} ${serial.product.displayName} ${serial.customer?.displayName ?? ''}`,
+                label: serial.serialNumber,
+                path: '/modules/erp.warehouse/reservations',
+                state: { serialSearch: serial.serialNumber },
+              })),
+            )
+            .catch(() => []),
+        );
+      }
+
+      void Promise.all(requests).then((groups) => {
+        if (active) {
+          setRecordDestinations(groups.flat());
+          setSearchingRecords(false);
+        }
+      });
+    }, 220);
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+    };
+  }, [hasPermission, open, query, session?.sessionToken, t]);
+
   const results = useMemo(
-    () => rankDestinations(destinations, query).slice(0, 8),
-    [destinations, query],
+    () => rankDestinations([...recordDestinations, ...destinations], query).slice(0, 8),
+    [destinations, query, recordDestinations],
   );
 
   useEffect(() => {
@@ -158,7 +257,7 @@ export function GlobalNavigationSearch() {
   }, [open]);
 
   function choose(destination: SearchDestination) {
-    navigate(destination.path);
+    navigate(destination.path, destination.state ? { state: destination.state } : undefined);
     setOpen(false);
     setQuery('');
     inputRef.current?.blur();
@@ -249,6 +348,11 @@ export function GlobalNavigationSearch() {
                   <Icon name="arrow" size={16} />
                 </button>
               ))
+            ) : searchingRecords ? (
+              <div className="global-search-empty" role="status">
+                <Icon name="search" size={20} />
+                <strong>{t('search.searchingRecords')}</strong>
+              </div>
             ) : (
               <div className="global-search-empty">
                 <Icon name="search" size={20} />

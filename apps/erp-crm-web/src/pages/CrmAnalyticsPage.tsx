@@ -210,6 +210,7 @@ function AnalyticsContent({
   onDimensionChange: (value: CrmAnalyticsRevenueDimension) => void;
   report: CrmAnalyticsOverview;
 }) {
+  const { t } = useLocalization();
   const revenue = report.revenue.filter((item) => item.dimension === dimension);
   return (
     <>
@@ -261,7 +262,12 @@ function AnalyticsContent({
         />
         <AnalyticsMetric
           label="Recorded net revenue"
-          supporting={`${report.customerMetrics.activeCustomers} active customers`}
+          supporting={t(
+            report.customerMetrics.activeCustomers === 1
+              ? 'crm.activeCustomers.one'
+              : 'crm.activeCustomers.other',
+            { count: report.customerMetrics.activeCustomers },
+          )}
           value={money(report.totalNetRevenueBgn)}
         />
       </DashboardCards>

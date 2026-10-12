@@ -42,3 +42,44 @@ test('manager edits, deactivates and restores a business structure record', asyn
     updatedEntity.getByRole('button', { name: 'Deactivate', exact: true }),
   ).toBeVisible();
 });
+
+test('partner register and record drawer stay contained at tablet width', async ({ page }) => {
+  await signIn(page, 'manager@vista.local');
+  await page.goto('/partners');
+  await expect(page.locator('.partner-table')).toBeVisible();
+  await page.setViewportSize({ width: 768, height: 720 });
+
+  expect(await page.locator('body').evaluate((el) => el.scrollWidth <= window.innerWidth)).toBe(
+    true,
+  );
+  const table = page.locator('.partner-table-wrap');
+  expect(await table.evaluate((el) => el.scrollWidth >= el.clientWidth)).toBe(true);
+  await table.evaluate((el) => {
+    el.scrollLeft = el.scrollWidth;
+  });
+  expect(await table.evaluate((el) => el.scrollLeft + el.clientWidth >= el.scrollWidth - 1)).toBe(
+    true,
+  );
+
+  await page.getByRole('button', { name: /Alfa Market Demo Ltd\./ }).click();
+  const drawer = page.getByRole('dialog');
+  await expect(drawer).toBeVisible();
+  await drawer.evaluate(async (el) => {
+    await Promise.all(el.getAnimations().map((animation) => animation.finished));
+  });
+  expect(
+    await drawer.evaluate((el) => el.getBoundingClientRect().right <= window.innerWidth + 1),
+  ).toBe(true);
+  expect(await drawer.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
+  expect(await drawer.evaluate((el) => el.scrollHeight > el.clientHeight)).toBe(true);
+  await drawer.evaluate((el) => {
+    el.scrollTop = el.scrollHeight;
+  });
+  expect(await drawer.evaluate((el) => el.scrollTop + el.clientHeight >= el.scrollHeight - 1)).toBe(
+    true,
+  );
+  await page.screenshot({
+    path: test.info().outputPath('partner-drawer-tablet.png'),
+    animations: 'disabled',
+  });
+});

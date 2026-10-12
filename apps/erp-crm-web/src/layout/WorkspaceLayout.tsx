@@ -7,7 +7,7 @@ import { Icon } from '../components/Icon';
 import { LanguageSwitcher } from '../components/LanguageSwitcher';
 import { NotificationCenter } from '../components/NotificationCenter';
 import { localizeModule, moduleLabel, navigationGroupLabel } from '../i18n/navigation';
-import { useLocalization } from '../i18n/LocalizationProvider';
+import { getOperationsLocale, useLocalization } from '../i18n/LocalizationProvider';
 import { allModuleItems, navigationGroups } from '../navigation';
 import { messages } from '../messages';
 import { Link, useRouter } from '../routing/Router';
@@ -20,6 +20,152 @@ export function WorkspaceLayout({ children }: PropsWithChildren) {
   const [signingOut, setSigningOut] = useState(false);
 
   useEffect(() => setNavigationOpen(false), [location.pathname]);
+
+  useEffect(() => {
+    const dismissPanel = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      const panels = document.querySelectorAll<HTMLElement>('[role="dialog"]');
+      const panel = panels.item(panels.length - 1);
+      if (!panel) return;
+      const header = panel.querySelector('header');
+      const buttons = [
+        ...(header ?? panel).querySelectorAll<HTMLButtonElement>('button:not(:disabled)'),
+      ];
+      const close =
+        buttons.find((button) => button.classList.contains('panel-close-button')) ??
+        buttons.find((button) =>
+          /close|back|cancel|затвар|назад|отказ/i.test(button.getAttribute('aria-label') ?? ''),
+        ) ??
+        buttons.find((button) =>
+          /^(back|close|cancel|назад|затвори|отказ)$/i.test(button.textContent?.trim() ?? ''),
+        );
+      if (!close) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      close.click();
+    };
+
+    let nextMessageId = 0;
+    const validationMessage = (
+      field: HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement,
+    ) => {
+      const locale = getOperationsLocale();
+      if (field.validity.valueMissing)
+        return locale === 'bg' ? 'Попълнете това поле.' : 'Complete this field.';
+      if (field.validity.typeMismatch && field.type === 'email')
+        return locale === 'bg' ? 'Въведете валиден имейл адрес.' : 'Enter a valid email address.';
+      if (field.validity.typeMismatch && field.type === 'url')
+        return locale === 'bg' ? 'Въведете валиден уеб адрес.' : 'Enter a valid web address.';
+      if (field.validity.patternMismatch)
+        return locale === 'bg'
+          ? 'Проверете формата на въведената стойност.'
+          : 'Check the format of this value.';
+      if (field.validity.rangeUnderflow || field.validity.rangeOverflow)
+        return locale === 'bg'
+          ? 'Стойността е извън допустимия диапазон.'
+          : 'The value is outside the allowed range.';
+      if (field.validity.stepMismatch)
+        return locale === 'bg'
+          ? 'Изберете стойност от допустимите стъпки.'
+          : 'Choose a value allowed by the field.';
+      if (field.validity.tooShort) {
+        const minimum = 'minLength' in field ? field.minLength : 0;
+        return locale === 'bg'
+          ? `Въведете поне ${minimum} знака.`
+          : `Enter at least ${minimum} characters.`;
+      }
+      if (field.validity.tooLong) {
+        const maximum = 'maxLength' in field ? field.maxLength : 0;
+        return locale === 'bg'
+          ? `Въведете не повече от ${maximum} знака.`
+          : `Enter no more than ${maximum} characters.`;
+      }
+      return locale === 'bg' ? 'Проверете въведената стойност.' : 'Check the value entered.';
+    };
+    const clearValidation = (field: Element) => {
+      if (!(
+        field instanceof HTMLInputElement ||
+        field instanceof HTMLSelectElement ||
+        field instanceof HTMLTextAreaElement
+      ))
+        return;
+      const message = field.dataset.nativeValidationMessage;
+      if (!message) return;
+      document.getElementById(message)?.remove();
+      const describedBy = (field.getAttribute('aria-describedby') ?? '')
+        .split(/\s+/u)
+        .filter((id) => id && id !== message);
+      if (describedBy.length) field.setAttribute('aria-describedby', describedBy.join(' '));
+      else field.removeAttribute('aria-describedby');
+      const previousInvalid = field.dataset.nativeValidationPreviousInvalid;
+      if (previousInvalid === '') field.removeAttribute('aria-invalid');
+      else if (previousInvalid) field.setAttribute('aria-invalid', previousInvalid);
+      delete field.dataset.nativeValidationMessage;
+      delete field.dataset.nativeValidationPreviousInvalid;
+    };
+    const explainInvalid = (event: Event) => {
+      const field = event.target;
+      if (!(
+        field instanceof HTMLInputElement ||
+        field instanceof HTMLSelectElement ||
+        field instanceof HTMLTextAreaElement
+      ))
+        return;
+      event.preventDefault();
+      const existingId = field.dataset.nativeValidationMessage;
+      const id = existingId ?? `field-validation-message-${++nextMessageId}`;
+      let message = document.getElementById(id);
+      if (!message) {
+        message = document.createElement('p');
+        message.className = 'native-validation-message';
+        message.id = id;
+        message.setAttribute('role', 'alert');
+        const fieldGroup = field.closest<HTMLElement>(
+          '.vista-field, .sales-field, .partner-field, .field, .form-field, .crm-field, .service-field, .finance-field, .warehouse-field, .logistics-field',
+        );
+        (fieldGroup ?? field.parentElement)?.after(message);
+      }
+      if (!existingId) {
+        field.dataset.nativeValidationMessage = id;
+        field.dataset.nativeValidationPreviousInvalid = field.getAttribute('aria-invalid') ?? '';
+        field.setAttribute(
+          'aria-describedby',
+          [
+            ...new Set(
+              [...(field.getAttribute('aria-describedby') ?? '').split(/\s+/u), id].filter(Boolean),
+            ),
+          ].join(' '),
+        );
+      }
+      field.setAttribute('aria-invalid', 'true');
+      message.textContent = validationMessage(field);
+    };
+    const updateValidation = (event: Event) => {
+      const field = event.target;
+      if (!(
+        field instanceof HTMLInputElement ||
+        field instanceof HTMLSelectElement ||
+        field instanceof HTMLTextAreaElement
+      ))
+        return;
+      if (field.validity.valid) clearValidation(field);
+      else if (field.dataset.nativeValidationMessage) {
+        const message = document.getElementById(field.dataset.nativeValidationMessage);
+        if (message) message.textContent = validationMessage(field);
+      }
+    };
+
+    document.addEventListener('keydown', dismissPanel, true);
+    document.addEventListener('invalid', explainInvalid, true);
+    document.addEventListener('input', updateValidation, true);
+    document.addEventListener('change', updateValidation, true);
+    return () => {
+      document.removeEventListener('keydown', dismissPanel, true);
+      document.removeEventListener('invalid', explainInvalid, true);
+      document.removeEventListener('input', updateValidation, true);
+      document.removeEventListener('change', updateValidation, true);
+    };
+  }, []);
 
   const visibleGroups = useMemo(
     () =>

@@ -6314,6 +6314,13 @@ select.vista-field-input {
   font-size: 0.72rem;
 }
 
+.native-validation-message {
+  color: var(--danger-strong, #a53c32);
+  font-size: 0.78rem;
+  line-height: 1.35;
+  margin: 0.25rem 0 0;
+}
+
 .sales-register-identity {
   align-items: center;
   display: flex !important;
@@ -10105,6 +10112,12 @@ select.vista-field-input {
 }
 .notification-state.is-error {
   color: #a53c34;
+}
+.notification-state.is-error p {
+  margin: 0;
+}
+.notification-state.is-error small {
+  color: #7c403a;
 }
 
 .topbar-session-state {
@@ -15981,7 +15994,7 @@ select.vista-field-input {
 .system-activity-summary {
   display: grid;
   gap: 0.75rem;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
 }
 
 .system-activity-summary article {
@@ -29401,6 +29414,7 @@ body:has(.security-drawer-layer) {
 .record-drawer.partner-detail-drawer {
   --drawer-body-inline: clamp(1rem, 2.25vw, 1.5rem);
 
+  box-sizing: border-box;
   width: min(52rem, 100vw);
   overflow-x: hidden;
   scrollbar-gutter: auto;
@@ -30545,6 +30559,13 @@ body .login-page .recovery-status-mark {
   display: block;
 }
 
+.system-activity-route-note {
+  margin-top: 0.22rem;
+  color: var(--text-secondary);
+  font-size: 0.68rem;
+  font-weight: 650;
+}
+
 .system-activity-pagination {
   display: flex;
   align-items: center;
@@ -30683,6 +30704,10 @@ body .login-page .recovery-status-mark {
   }
 
   .system-activity-summary article:nth-child(even) {
+    border-right: 0;
+  }
+
+  .system-activity-summary article:nth-child(5) {
     border-right: 0;
   }
 

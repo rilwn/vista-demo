@@ -22,6 +22,7 @@ import type {
 import { ApiErrorException } from '../common/api-error.exception.js';
 import { APP_ENVIRONMENT } from '../config/config.module.js';
 import { DatabaseService } from '../database/database.service.js';
+import { IntegrationEventConsumerRegistry } from './integration-event-consumer.registry.js';
 import type { IntegrationEventListQueryDto } from './integration-operations.dto.js';
 import { OutboxPublisherService } from './outbox-publisher.service.js';
 
@@ -75,9 +76,12 @@ export class IntegrationOperationsService {
     @Inject(DatabaseService) private readonly database: DatabaseService,
     @Inject(AuditService) private readonly audit: AuditService,
     @Inject(OutboxPublisherService) private readonly publisher: OutboxPublisherService,
+    @Inject(IntegrationEventConsumerRegistry)
+    private readonly consumers: IntegrationEventConsumerRegistry,
   ) {}
 
   async telemetry(): Promise<IntegrationEventTelemetry> {
+    const configuredEventTypes = this.consumers.eventTypes();
     const result = await this.database.getPool().query<{
       completed: string;
       dead_letter: string;
@@ -86,6 +90,7 @@ export class IntegrationOperationsService {
       pending: string;
       published: string;
       publishing: string;
+      unrouted: string;
     }>(
       `SELECT
          count(*) FILTER (WHERE event.status = 'pending')::text AS pending,
@@ -93,18 +98,24 @@ export class IntegrationOperationsService {
          count(*) FILTER (WHERE event.status = 'published')::text AS published,
          count(*) FILTER (WHERE event.status = 'completed')::text AS completed,
          count(*) FILTER (WHERE event.status = 'dead_letter')::text AS dead_letter,
+         count(*) FILTER (
+           WHERE event.status = 'pending'
+             AND NOT (event.event_type = ANY($1::varchar[]))
+         )::text AS unrouted,
          min(event.occurred_at) FILTER (
            WHERE event.status IN ('pending', 'publishing', 'published')
          ) AS oldest_pending_at,
          (SELECT count(*)::text FROM integration.outbox_deliveries
           WHERE status IN ('failed', 'dead_letter')) AS failed_deliveries
        FROM integration.outbox_events event`,
+      [configuredEventTypes],
     );
     const row = required(result.rows[0], 'Integration telemetry query failed');
     return {
       completed: Number(row.completed),
       deadLetter: Number(row.dead_letter),
       failedDeliveries: Number(row.failed_deliveries),
+      unrouted: Number(row.unrouted),
       ...(row.oldest_pending_at ? { oldestPendingAt: iso(row.oldest_pending_at) } : {}),
       pending: Number(row.pending),
       published: Number(row.published),
@@ -141,8 +152,9 @@ export class IntegrationOperationsService {
       parameters,
     );
     const total = Number(count.rows[0]?.total ?? 0);
+    const configuredEventTypes = new Set(this.consumers.eventTypes());
     return {
-      items: rows.rows.map(mapEvent),
+      items: rows.rows.map((row) => mapEvent(row, configuredEventTypes.has(row.event_type))),
       page,
       pageSize,
       total,
@@ -168,7 +180,10 @@ export class IntegrationOperationsService {
         HttpStatus.NOT_FOUND,
       );
     }
-    return { ...mapEvent(row), deliveries: deliveries.rows.map(mapDelivery) };
+    return {
+      ...mapEvent(row, this.consumers.bindingsFor(row.event_type).length > 0),
+      deliveries: deliveries.rows.map(mapDelivery),
+    };
   }
 
   async replay(
@@ -228,6 +243,13 @@ export class IntegrationOperationsService {
           HttpStatus.CONFLICT,
         );
       }
+      if (!this.consumers.bindingsFor(event.event_type).length) {
+        throw new ApiErrorException(
+          'INTEGRATION_CONSUMER_NOT_CONFIGURED',
+          'No receiving integration is configured for this event. Configure it before retrying.',
+          HttpStatus.CONFLICT,
+        );
+      }
       const retryable = await client.query(
         `SELECT 1 FROM integration.outbox_deliveries
          WHERE event_id = $1 AND status IN ('failed', 'dead_letter') LIMIT 1`,
@@ -280,7 +302,7 @@ export class IntegrationOperationsService {
         },
         client,
       );
-      response = await detailInTransaction(client, id);
+      response = await detailInTransaction(client, id, new Set(this.consumers.eventTypes()));
       await client.query(
         `UPDATE platform.idempotency_keys
          SET status = 'completed', response_status = 200, response_body = $3
@@ -302,6 +324,7 @@ export class IntegrationOperationsService {
 async function detailInTransaction(
   client: PoolClient,
   id: string,
+  configuredEventTypes: ReadonlySet<string>,
 ): Promise<IntegrationEventDetail> {
   const [event, deliveries] = await Promise.all([
     client.query<EventRow>(`${eventSelect} WHERE id = $1`, [id]),
@@ -312,13 +335,14 @@ async function detailInTransaction(
       [id],
     ),
   ]);
+  const row = required(event.rows[0], 'Integration replay reconciliation failed');
   return {
-    ...mapEvent(required(event.rows[0], 'Integration replay reconciliation failed')),
+    ...mapEvent(row, configuredEventTypes.has(row.event_type)),
     deliveries: deliveries.rows.map(mapDelivery),
   };
 }
 
-function mapEvent(row: EventRow): IntegrationEventSummary {
+function mapEvent(row: EventRow, hasRegisteredConsumer: boolean): IntegrationEventSummary {
   return {
     aggregateId: row.aggregate_id,
     aggregateType: row.aggregate_type,
@@ -328,6 +352,7 @@ function mapEvent(row: EventRow): IntegrationEventSummary {
     correlationId: row.correlation_id,
     ...(row.dead_lettered_at ? { deadLetteredAt: iso(row.dead_lettered_at) } : {}),
     eventType: row.event_type,
+    hasRegisteredConsumer,
     id: row.id,
     ...(row.last_error_code ? { lastErrorCode: row.last_error_code } : {}),
     occurredAt: iso(row.occurred_at),

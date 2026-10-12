@@ -1,6 +1,6 @@
 # Vista Integrated Information System — Remaining Implementation Plan
 
-Status date: 2026-10-09
+Status date: 2026-10-12
 Project: `BG16RFPR001-1.012-1324-C01`
 
 [`AGENTS.md`](AGENTS.md) is authoritative. This file contains only unfinished
@@ -42,15 +42,17 @@ values; verify each complete UI/API flow before asking the user to test.
   reconciliation, CRM-07 survey follow-up, CRM-08 practical telephone
   validation, CRM-09 quotation-stage guidance, POS-01 cross-app management
   reports, UI-01 bilingual workflow statuses/actions, and UI-02 locale-consistent
-  dates, quantities, currency and VAT, plus UI-03 technical-identifier display
-  are locally verified. UI-04 tablet-width layout and drawer overflow is next.
-  CRM-10 requires Vista's approved business-hours and holiday rules. Hosted
-  retests remain open. The POS image rehearsal must be retried after the npm
-  registry read timeout.
-- Complete the remaining in-progress work recorded in the register: worker and
-  notification recovery evidence, Finance provider readiness, authentic serial
-  source for WH-01, and approved quotation email delivery. Hosted retests remain
-  open for locally verified findings.
+  dates, quantities, currency and VAT, plus UI-03 technical-identifier display,
+  UI-04 tablet-width report/table/pipeline layout and drawer overflow, and UI-05
+  content, dismissal, inline validation and partner/document/serial record search
+  are locally verified. CRM-10 requires Vista's approved business-hours and
+  holiday rules. Hosted retests remain open. The POS image rehearsal must be
+  retried after the npm registry read timeout.
+- SYS-01 is locally verified, including detection of unhandled events and safe
+  replay refusal. Review the deployed activity backlog after release. Complete
+  SYS-02 hosted notification retest, Finance provider readiness, authentic
+  serial source for WH-01, and approved quotation email delivery. Hosted retests
+  remain open for locally verified findings.
 - Keep client decisions in Section B and never fabricate serial or financial
   history to make a test pass.
 - Verify each fix with regression tests and an end-to-end flow. Recheck hosted
@@ -133,8 +135,8 @@ development-only credentials or behavior.
 - Enable FIFO only if selected, with separate valuation, migration, concurrency,
   and reporting acceptance.
 
-**Depends on:** BUS-001, BUS-002, CAT-001, CRM-002, OPT-001, and the approved
-costing policy.
+**Depends on:** BUS-001, BUS-002, CAT-001, CRM-002, OPT-001, WH-001, and the
+approved costing policy.
 
 **Accept when:** ERP remains the authoritative shared master-data source;
 duplicate, stock, reservation, and valuation invariants are proven under

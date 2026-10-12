@@ -497,6 +497,56 @@ describe.skipIf(!runInfrastructureTests)('partner master-data vertical slice', (
       [poisonId],
     );
     expect(audit.rows[0]?.count).toBe('1');
+
+    const unconfiguredId = randomUUID();
+    await database.query(
+      `INSERT INTO integration.outbox_events (
+         id, aggregate_type, aggregate_id, event_type, event_version,
+         correlation_id, idempotency_key, payload, status, dead_lettered_at
+       ) VALUES ($1, 'scheduled_job', $2, 'scheduler.backup.verify.requested', 1,
+                 $3, $4, $5, 'dead_letter', now())`,
+      [
+        unconfiguredId,
+        randomUUID(),
+        `integration${runId}`,
+        `unconfigured-${runId}`,
+        { jobName: 'backup.verify' },
+      ],
+    );
+    const unconfigured = await request(application.getHttpServer())
+      .get(`/api/v1/platform/integrations/events/${unconfiguredId}`)
+      .set('authorization', `Bearer ${categoryCreatorToken}`)
+      .expect(200);
+    expect(unconfigured.body).toMatchObject({
+      hasRegisteredConsumer: false,
+      id: unconfiguredId,
+      status: 'dead_letter',
+    });
+    const refusedRetry = await request(application.getHttpServer())
+      .post(`/api/v1/platform/integrations/events/${unconfiguredId}/replay`)
+      .set('authorization', `Bearer ${categoryCreatorToken}`)
+      .set('idempotency-key', `replay-unconfigured-${runId}`)
+      .send({ expectedReplayCount: 0 })
+      .expect(409);
+    expect(refusedRetry.body).toMatchObject({
+      error: { code: 'INTEGRATION_CONSUMER_NOT_CONFIGURED' },
+    });
+    const unchanged = await database.query<{ replay_count: number; status: string }>(
+      'SELECT replay_count, status FROM integration.outbox_events WHERE id = $1',
+      [unconfiguredId],
+    );
+    expect(unchanged.rows[0]).toEqual({ replay_count: 0, status: 'dead_letter' });
+
+    await database.query(
+      `UPDATE integration.outbox_events SET status = 'pending', dead_lettered_at = NULL
+       WHERE id = $1`,
+      [unconfiguredId],
+    );
+    const metrics = await request(application.getHttpServer())
+      .get('/api/v1/platform/integrations/metrics')
+      .set('authorization', `Bearer ${categoryCreatorToken}`)
+      .expect(200);
+    expect(metrics.body.unrouted).toBeGreaterThanOrEqual(1);
   });
 
   it('creates normalized canonical partner data with roles, audit, and outbox atomically', async () => {
@@ -958,6 +1008,14 @@ describe.skipIf(!runInfrastructureTests)('partner master-data vertical slice', (
         referenceId: serviceRequestResponse.body.number,
       }),
     ]);
+
+    const serialSearch = await request(application.getHttpServer())
+      .get(`/api/v1/warehouse/serial-traceability/search?search=${encodeURIComponent(runId)}`)
+      .set('authorization', `Bearer ${categoryCreatorToken}`)
+      .expect(200);
+    expect(serialSearch.body).toEqual(
+      expect.arrayContaining([expect.objectContaining({ serialNumber: equipment.serialNumber })]),
+    );
 
     const duplicateSerial = await request(application.getHttpServer())
       .post(`/api/v1/master-data/partners/${primaryPartner.id}/locations/${location.id}/equipment`)

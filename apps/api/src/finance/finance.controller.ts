@@ -8,6 +8,7 @@ import {
   Inject,
   Param,
   Post,
+  Query,
   Req,
 } from '@nestjs/common';
 import {
@@ -17,6 +18,7 @@ import {
   ApiHeader,
   ApiOkResponse,
   ApiParam,
+  ApiQuery,
   ApiTags,
 } from '@nestjs/swagger';
 
@@ -30,6 +32,7 @@ import {
   CreateFinanceCustomerDocumentDto,
   CreateFinancePaymentDto,
   FinanceCustomerDocumentDto,
+  FinanceCustomerDocumentSearchQueryDto,
   FinanceReferenceDataDto,
   FinanceSummaryDto,
 } from './finance.dto.js';
@@ -56,6 +59,17 @@ export class FinanceController {
   @ApiOkResponse({ isArray: true, type: FinanceCustomerDocumentDto })
   documents(): Promise<FinanceCustomerDocumentDto[]> {
     return this.finance.documents();
+  }
+
+  @Get('documents/search')
+  @RateLimitPolicy('read')
+  @RequirePermissions({ action: 'view', module: 'erp.finance' })
+  @ApiQuery({ maxLength: 120, minLength: 2, name: 'search', type: String })
+  @ApiOkResponse({ isArray: true, type: FinanceCustomerDocumentDto })
+  searchDocuments(
+    @Query() query: FinanceCustomerDocumentSearchQueryDto,
+  ): Promise<FinanceCustomerDocumentDto[]> {
+    return this.finance.searchDocuments(query.search);
   }
 
   @Get('documents/:id')

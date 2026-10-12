@@ -85,6 +85,7 @@ export class FinancialDocumentsController {
   @ApiQuery({ format: 'uuid', name: 'customerPartnerId', required: false, type: String })
   @ApiQuery({ format: 'date', name: 'dateFrom', required: false, type: String })
   @ApiQuery({ format: 'date', name: 'dateTo', required: false, type: String })
+  @ApiQuery({ maxLength: 120, name: 'search', required: false, type: String })
   @ApiQuery({ default: 1, minimum: 1, name: 'page', required: false, type: Number })
   @ApiQuery({
     default: 25,

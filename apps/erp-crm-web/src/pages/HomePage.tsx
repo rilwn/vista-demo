@@ -15,14 +15,12 @@ export function HomePage() {
   const modules = allModuleItems
     .filter((module) => hasPermission(module.key))
     .map((module) => localizeModule(module, t));
-  const firstName = session.context.displayName.trim().split(/\s+/u)[0] ?? '';
-
   return (
     <div className="page-stack">
       <header className="page-header">
         <div>
           <p className="page-eyebrow">{t('home.eyebrow')}</p>
-          <h1>{t('home.welcome', { name: firstName })}</h1>
+          <h1>{t('home.welcome')}</h1>
           <p>{t('home.subtitle')}</p>
         </div>
       </header>

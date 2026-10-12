@@ -428,6 +428,15 @@ export class FinancialDocumentsService {
       filters.push(`document.customer_partner_id = ${add(query.customerPartnerId)}`);
     if (query.dateFrom) filters.push(`document.issue_date >= ${add(query.dateFrom)}`);
     if (query.dateTo) filters.push(`document.issue_date <= ${add(query.dateTo)}`);
+    const search = query.search?.trim();
+    if (search) {
+      const pattern = add(`%${escapeLikeSearch(search)}%`);
+      filters.push(
+        `(document.draft_number ILIKE ${pattern} ESCAPE E'\\\\'
+          OR document.official_number ILIKE ${pattern} ESCAPE E'\\\\'
+          OR document.customer_name ILIKE ${pattern} ESCAPE E'\\\\')`,
+      );
+    }
     const where = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
     const count = await this.database
       .getPool()
@@ -1928,4 +1937,8 @@ function financialDocumentUniqueConflict(constraint: string | undefined): ApiErr
 
 function asIso(value: string | Date) {
   return (value instanceof Date ? value : new Date(value)).toISOString();
+}
+
+function escapeLikeSearch(value: string): string {
+  return value.replace(/[\\%_]/gu, '\\$&');
 }

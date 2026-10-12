@@ -220,6 +220,14 @@ export class StockMovementJournalQueryDto implements StockMovementJournalQuery {
   warehouseId?: string;
 }
 
+export class SerialTraceabilitySearchQueryDto {
+  @ApiProperty({ maxLength: 120, minLength: 2, type: String })
+  @IsString()
+  @MinLength(2)
+  @MaxLength(120)
+  search!: string;
+}
+
 export class StockMovementJournalItemDto implements StockMovementJournalItem {
   @ApiProperty({ type: String }) actorDisplayName!: string;
   @ApiProperty({ type: String, format: 'uuid' }) id!: string;

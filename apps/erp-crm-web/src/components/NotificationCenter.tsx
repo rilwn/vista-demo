@@ -6,12 +6,19 @@ import { listNotifications, markNotificationRead } from '../api/notifications';
 import { useAuth } from '../auth/AuthProvider';
 import { formatOperationsCurrency, useLocalization } from '../i18n/LocalizationProvider';
 import { Icon } from './Icon';
+import { TechnicalIdentifier } from './TechnicalIdentifier';
+
+interface NotificationFailure {
+  code?: string;
+  correlationId?: string;
+  message: string;
+}
 
 export function NotificationCenter() {
   const { session } = useAuth();
   const { dateLocale, t } = useLocalization();
   const [data, setData] = useState<NotificationPage | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<NotificationFailure | null>(null);
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
   const token = session?.sessionToken;
@@ -33,10 +40,7 @@ export function NotificationCenter() {
           setError(null);
         }
       } catch (caught) {
-        if (active)
-          setError(
-            caught instanceof ApiClientError ? caught.message : t('notifications.loadError'),
-          );
+        if (active) setError(notificationFailure(caught, t('notifications.loadError')));
       } finally {
         refreshing = false;
         if (active && initial) setLoading(false);
@@ -67,7 +71,7 @@ export function NotificationCenter() {
           : current,
       );
     } catch (caught) {
-      setError(caught instanceof ApiClientError ? caught.message : t('notifications.readError'));
+      setError(notificationFailure(caught, t('notifications.readError')));
     }
   }
 
@@ -99,7 +103,22 @@ export function NotificationCenter() {
             </button>
           </header>
           {loading ? <p className="notification-state">{t('notifications.loading')}</p> : null}
-          {error ? <p className="notification-state is-error">{error}</p> : null}
+          {error ? (
+            <div className="notification-state is-error" role="alert">
+              <p>{error.message}</p>
+              {error.code ? (
+                <small>
+                  <strong>{t('notifications.errorCode')}:</strong> <code>{error.code}</code>
+                </small>
+              ) : null}
+              {error.correlationId ? (
+                <small>
+                  <strong>{t('notifications.errorReference')}:</strong>{' '}
+                  <TechnicalIdentifier kind="request" value={error.correlationId} />
+                </small>
+              ) : null}
+            </div>
+          ) : null}
           {!loading && !error && data?.items.length === 0 ? (
             <p className="notification-state">{t('notifications.empty')}</p>
           ) : null}
@@ -128,6 +147,15 @@ export function NotificationCenter() {
 }
 
 type Translator = ReturnType<typeof useLocalization>['t'];
+
+function notificationFailure(error: unknown, message: string): NotificationFailure {
+  if (!(error instanceof ApiClientError)) return { message };
+  return {
+    code: error.code,
+    ...(error.correlationId ? { correlationId: error.correlationId } : {}),
+    message,
+  };
+}
 
 function notificationTitle(notification: NotificationMessage, t: Translator): string {
   if (notification.templateKey === 'report.export.ready') return t('notifications.reportReady');

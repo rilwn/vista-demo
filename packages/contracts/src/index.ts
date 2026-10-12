@@ -191,6 +191,7 @@ export interface IntegrationEventSummary {
   correlationId: string;
   deadLetteredAt?: string;
   eventType: string;
+  hasRegisteredConsumer: boolean;
   id: string;
   lastErrorCode?: string;
   occurredAt: string;
@@ -229,6 +230,7 @@ export interface IntegrationEventTelemetry {
   completed: number;
   deadLetter: number;
   failedDeliveries: number;
+  unrouted: number;
   oldestPendingAt?: string;
   pending: number;
   published: number;

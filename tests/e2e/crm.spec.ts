@@ -80,6 +80,12 @@ test('qualified lead reuses a customer, links a quotation and retains its won op
   const dialog = page.getByRole('dialog');
   await dialog.getByLabel('Company or prospect name', { exact: true }).fill('Browser CRM enquiry');
   await dialog.getByLabel('Contact person', { exact: true }).fill('Browser CRM Contact');
+  await dialog.getByLabel('Email', { exact: true }).fill('not-an-email');
+  await dialog.getByRole('button', { name: 'Save lead', exact: true }).click();
+  await expect(dialog.locator('.native-validation-message').first()).toBeVisible();
+  await expect(dialog.locator('.native-validation-message').first()).toContainText(
+    'Enter a valid email address.',
+  );
   await dialog.getByLabel('Email', { exact: true }).fill('crm-acceptance@example.invalid');
   await dialog.getByRole('button', { name: 'Save lead', exact: true }).click();
   await expect(dialog).toHaveCount(0);
@@ -101,6 +107,7 @@ test('qualified lead reuses a customer, links a quotation and retains its won op
   await page.getByRole('button', { name: /^Sales pipeline/ }).click();
   await page.getByRole('button', { name: /Browser CRM equipment opportunity/ }).click();
   await dialog.getByRole('button', { name: 'Close panel', exact: true }).click();
+  await expect(dialog).toHaveCount(0);
   const opportunity = page.getByRole('button', { name: /Browser CRM equipment opportunity/ });
   await opportunity.dragTo(page.locator('.crm-kanban-column.is-quotation_sent'));
   await expect(dialog).toBeVisible();
@@ -126,11 +133,38 @@ test('qualified lead reuses a customer, links a quotation and retains its won op
   await dialog.getByRole('button', { name: 'Close panel', exact: true }).click();
   await page.reload();
   await page.getByRole('button', { name: /^Sales pipeline/ }).click();
+  await page.setViewportSize({ width: 768, height: 680 });
+  expect(await page.locator('body').evaluate((el) => el.scrollWidth <= window.innerWidth)).toBe(
+    true,
+  );
+  const board = page.locator('.crm-kanban');
+  await expect(board).toBeVisible();
+  expect(await board.evaluate((el) => el.scrollWidth > el.clientWidth)).toBe(true);
+  expect(await board.evaluate((el) => getComputedStyle(el).overflowX)).toBe('auto');
+  await page.screenshot({
+    path: test.info().outputPath('crm-pipeline-tablet.png'),
+    animations: 'disabled',
+  });
   await page.getByRole('button', { name: /Browser CRM equipment opportunity/ }).click();
+  expect(
+    await dialog.evaluate((el) => el.getBoundingClientRect().right <= window.innerWidth + 1),
+  ).toBe(true);
+  expect(await dialog.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
+  const preview = dialog.locator('.crm-pipeline-preview');
+  await preview.evaluate((el) => {
+    el.scrollTop = el.scrollHeight;
+  });
+  await expect(dialog.getByRole('button', { name: 'Update stage', exact: true })).toBeVisible();
+  await page.screenshot({
+    path: test.info().outputPath('crm-opportunity-drawer-tablet.png'),
+    animations: 'disabled',
+  });
   await expect(dialog.locator('.crm-opportunity-preview-hero')).toContainText('Won');
   await expect(dialog.locator('.crm-opportunity-quotations')).toContainText('DEV-Q-0001');
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await dialog.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
+  await page.keyboard.press('Escape');
+  await expect(dialog).toHaveCount(0);
 });
 
 test('ticket and Service round trips keep the same linked records', async ({ page }) => {

@@ -9,21 +9,21 @@ Status: **Pending** = not verified/fixed; **In progress** = partial implementati
 **Decision** = a recorded client/provider dependency, not a waived requirement.
 Local verification is not hosted, statutory or hardware acceptance.
 
-Current: **32 locally verified** (hosted retest pending), **5 in progress**,
-**13 decision-dependent**, and **2 pending** (52 findings total).
+Current: **36 locally verified** (hosted retest pending), **3 in progress**,
+**13 decision-dependent** (52 findings total).
 
 ## 1. Platform processing
 
-| Finding | Remaining work / verification                                                                                                                                   | Status      |
-| ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- |
-| SYS-01  | Execution evidence and real worker retry/replay verified; migration 0065 repairs eligible legacy markers. Unhandled handoffs and hosted backlog review remain.  | In progress |
-| SYS-02  | Notification retry recovery, bounded Redis reconnection and local bell HTTP 200 verified. Reproduce/recheck hosted 503 using its error code and correlation ID. | In progress |
+| Finding | Remaining work / verification                                                                                                                                                                                       | Status           |
+| ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------- |
+| SYS-01  | Events without a registered receiver are identified and cannot be replayed; the API returns a conflict without changing event state. Isolated API/browser tests passed. Review the hosted backlog after deployment. | Verified locally |
+| SYS-02  | Notification retry recovery, bounded Redis reconnection and local bell HTTP 200 verified. A dependency 503 now preserves its safe error code and copyable support reference. Hosted retest remains open.            | Verified locally |
 
 ## 2. Finance
 
 | Finding | Remaining work / verification                                                                                                                                            | Status           |
 | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------- |
-| FIN-01  | Official issuance, approved legal numbering, PDF/email, BNB, proforma conversion and fiscal linkage. FIN-001/002, DOC-001 and hardware decisions apply.                  | Decision         |
+| FIN-01  | Official issuance, approved legal numbering, PDF/email, BNB, proforma conversion and fiscal linkage. FIN-001/002, DOC-001 and POS-001 apply.                             | Decision         |
 | GEN-01  | Accountant-approved base-currency migration decision, FIN-004. Do not silently change the specification's BGN accounting or existing snapshots.                          | Decision         |
 | FIN-02  | Explicit foreign rate/source and cleared BGN defaults verified in API/browser. Approved automatic BNB provider remains pending, FIN-002.                                 | In progress      |
 | FIN-03  | Cumulative amount/quantity limits, original-line prefill, cancelled-note capacity and concurrent/idempotent credit regression verified.                                  | Verified locally |
@@ -44,9 +44,9 @@ Current: **32 locally verified** (hosted retest pending), **5 in progress**,
 | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------- |
 | ORG-01  | Bulgarian UIC 9/13-digit checksums and EU VAT formats are validated in Business Structure, Partners, and CRM lead conversion. VAT registration is not checked. Hosted retest remains.                                                                          | Verified locally |
 | ORG-02  | Version-checked edits and reversible deactivation for entities, branches, locations, operators and registers. Delete permission deactivates; Edit permission restores. Dependency guards prevent cascades; audit/outbox retain history. Hosted retest pending. | Verified locally |
-| ORG-03  | Fiscal-device registration metadata and hardware-specific validation.                                                                                                                                                                                          | Decision         |
+| ORG-03  | Fiscal-device registration metadata and hardware-specific validation require the selected certified model/protocol (POS-001).                                                                                                                                  | Decision         |
 | SEC-01  | Admin role creation/editing, distinct role descriptions, five-action permission matrix, no-View warning, and Manager POS view without cashier privileges verified locally. Hosted retest pending.                                                              | Verified locally |
-| SEC-02  | Define/enforce administrative-capability MFA classification and review Manager access. IAM decisions apply.                                                                                                                                                    | Decision         |
+| SEC-02  | Define/enforce administrative-capability MFA classification and review Manager access after the employee/role and non-admin MFA policy is approved (IAM-001).                                                                                                  | Decision         |
 | SEC-03  | Actual assigned role names, explicitly labelled active-session count and failed sign-in target display verified in API/browser. Hosted retest remains.                                                                                                         | Verified locally |
 
 ## 4. Warehouse
@@ -56,7 +56,7 @@ Current: **32 locally verified** (hosted retest pending), **5 in progress**,
 | WH-01   | Installed serials resolve to registered customer equipment and Service history without an inventory link. `DEMO-FR-ALFA-01` has no linked receipt/stock source in current demo data, so full supplier-to-sale acceptance remains open; do not fabricate its history.                                         | In progress      |
 | WH-02   | Unknown source references are rejected without saving. The permission-protected active register persists, shows document numbers instead of internal IDs, prevents duplicate reservations when an order is referenced by ID or number, and supports release. Local validation passed; hosted retest pending. | Verified locally |
 | WH-03   | Posted movement journal filters by warehouse, product, movement type and reference; linked receipts, shipments, returns, stocktakes and Service part issues open their source register. Internal UUIDs are not shown. Local API/UI tests passed; hosted retest pending.                                      | Verified locally |
-| WH-04   | BGN receipt-cost variance warning is bilingual and locally verified; entered cost drives weighted-average valuation. Approval gate and foreign-currency comparison require a client decision; hosted retest pending.                                                                                         | Decision         |
+| WH-04   | BGN receipt-cost variance warning is bilingual and locally verified; entered cost drives weighted-average valuation. Approval threshold/authority and foreign-currency comparison require WH-001 and FIN-002; hosted retest pending.                                                                         | Decision         |
 | WH-05   | Stock value summary now sums the displayed, cent-rounded line values using integer minor units; regression confirms the shown total reconciles. Hosted retest pending.                                                                                                                                       | Verified locally |
 
 ## 5. Sales
@@ -71,8 +71,8 @@ Current: **32 locally verified** (hosted retest pending), **5 in progress**,
 | Finding | Remaining work / verification                                                                                                                                                                                                                                 | Status           |
 | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------- |
 | SRV-01  | Technician drawer lists stocked batches with available quantities/expiry. Unknown batch returns a controlled 404; failed completion leaves work order and stock unchanged. Valid batch use, trace movement and deduction pass locally. Hosted retest pending. | Verified locally |
-| SRV-02  | Warranty-covered billing eligibility and explicit authorized exceptions. Approved warranty/billing policy.                                                                                                                                                    | Decision         |
-| SRV-03  | Separate stock cost from customer selling price; approved Service pricing policy.                                                                                                                                                                             | Decision         |
+| SRV-02  | Warranty-covered billing eligibility and explicit authorized exceptions require the approved warranty/billing policy (SVC-001).                                                                                                                               | Decision         |
+| SRV-03  | Separate stock cost from customer selling price using the approved Service labor, transport and pricing policy (SVC-001).                                                                                                                                     | Decision         |
 | SRV-04  | Unified equipment history now includes linked sales handovers, claim status history, unassigned requests, visits, completed repairs, used parts, technician and dates. Locally verified; hosted retest pending.                                               | Verified locally |
 | SRV-05  | Computed overdue flags appear for active scheduled/in-progress visits past their end and active inspections due before the Sofia business date. Due-today is distinct; stored workflow states are unchanged. API and Operations UI regressions pass locally.  | Verified locally |
 
@@ -89,15 +89,15 @@ Current: **32 locally verified** (hosted retest pending), **5 in progress**,
 | CRM-07  | Feedback & NPS lists completed Service jobs and accepted deliveries awaiting a survey; staff can open the preselected one-question survey, share it using their usual contact method, record the invitation and later save the customer's score. Duplicate attempts conflict; API/browser coverage passes locally. Automatic email remains subject to INT-001. Hosted retest pending. | Verified locally |
 | CRM-08  | Lead telephone values accept common local/international notation with 7–15 digits, without forcing a country. The form shows a bilingual field error and blocks invalid submission; API responds with a telephone-specific validation detail. Domain, CRM API, component, and browser checks pass locally. Hosted retest pending.                                                     | Verified locally |
 | CRM-09  | The pipeline now opens an unquoted opportunity when staff try to move it to Quotation sent, explains that a Sales quotation must be linked, and keeps the move disabled until linked. The API rejects direct attempts without changing stage/version; linking then moving passes locally. Hosted retest pending.                                                                      | Verified locally |
-| CRM-10  | Calendar vs business-hour SLA calculation; approved hours/holiday rules.                                                                                                                                                                                                                                                                                                              | Decision         |
+| CRM-10  | Calendar vs business-hour SLA calculation; approved working hours, holidays, warning thresholds and escalation paths (SLA-001).                                                                                                                                                                                                                                                       | Decision         |
 
 ## 8. Logistics, POS and Recovery
 
 | Finding | Remaining work / verification                                                                                                                                                                                                             | Status           |
 | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------- |
-| LOG-01  | Econt/Speedy credentials, approved adapters and tracking. INT-002.                                                                                                                                                                        | Decision         |
+| LOG-01  | Econt/Speedy credentials, approved adapters, label/tracking/return workflows and environments (INT-002).                                                                                                                                  | Decision         |
 | POS-01  | Operations opens POS Reports at the configured public URL. Manager can review all views without export/write access; POS Operator can create exports. Isolated API/browser checks and frontend build pass locally. Hosted retest pending. | Verified locally |
-| BCK-01  | Recheck Recovery using backup roles/MFA; approved source inventory, plan, storage/tape and witnessed restore acceptance remain required.                                                                                                  | Decision         |
+| BCK-01  | Recheck Recovery with approved backup roles/MFA, source inventory and plan, storage/tape, restore responsibilities and witnessed DR acceptance (BAK-001–005, IAM-001–003, DEP-001).                                                       | Decision         |
 
 ## 9. Shared interface
 
@@ -106,8 +106,8 @@ Current: **32 locally verified** (hosted retest pending), **5 in progress**,
 | UI-01   | EN/BG statuses, actions, modules, pipeline history/notices, and date language across nested workflows. Local component and CRM journeys pass; hosted retest pending.                                                                                                                                                                        | Verified locally |
 | UI-02   | Locale-consistent dates, decimals, currencies and VAT now use shared locale-aware formatters across Operations pages, notifications and reports. Operations component tests, typecheck and production build pass; hosted retest pending.                                                                                                    | Verified locally |
 | UI-03   | UUID fragments are no longer presented as business references across Operations, Procurement, Warehouse and POS checkout recovery. Human context is shown; full technical IDs are available through localized copy controls. No purchase-order numbering was invented; BUS-002 remains open. Local regressions pass; hosted retest pending. | Verified locally |
-| UI-04   | Tablet-width reports/tables/pipeline and drawer overflow acceptance.                                                                                                                                                                                                                                                                        | Pending          |
-| UI-05   | Correct descriptions/grammar, Escape dismissal, friendly form validation and global-search scope.                                                                                                                                                                                                                                           | Pending          |
+| UI-04   | Tablet acceptance at 768 px covers four ERP report tables, partner register, six-stage CRM pipeline, opportunity/partner drawers and internal vertical scrolling. Browser checks pass locally; hosted retest pending.                                                                                                                       | Verified locally |
+| UI-05   | System activity description and singular/plural labels corrected; record search covers partners, Finance legal documents, collection records, and serials with direct handoff; Escape closes drawers; browser-native validation is replaced by accessible inline EN/BG messages. Locally verified; hosted retest remains.                   | Verified locally |
 
 ## First batch evidence, 8 October 2026
 
@@ -605,6 +605,69 @@ decision-controlled requirements remain open.
   workspace typechecks, 376 enabled tests and production builds. The 91
   infrastructure-only API tests remain skipped by the default suite; the
   existing Operations bundle-size warning remains. Hosted retest is pending.
+
+## Thirty-first batch evidence, 9 October 2026
+
+- UI-04 is locally verified at a 768 px tablet viewport. Procurement, Warehouse,
+  Sales and Logistics report tables remain reachable within their own horizontal
+  scroll regions without widening the page. The partner register behaves the
+  same way; its record drawer now uses border-box sizing so its padding cannot
+  push it beyond the tablet edge, and its content remains vertically scrollable.
+- The six-stage CRM pipeline scrolls within the board, not the page. Its
+  opportunity drawer fits the viewport and keeps its content reachable. Browser
+  checks also cover the report table and partner table scroll positions.
+- Isolated Chromium browser checks passed for all 5 CRM journeys, 5 report
+  journeys, both Business Structure/partner journeys, plus a rerun of the
+  partner-drawer check after accounting for its opening animation. The drawer
+  screenshot was reviewed at tablet width. Hosted retest remains pending; no
+  hosted records were changed.
+
+## Thirty-second batch evidence, 9 October 2026
+
+- The full `npm run validate` passed: OpenAPI/client consistency, formatting,
+  lint, workspace typechecks, 377 enabled tests and all production builds. The
+  91 infrastructure-only API tests remain skipped by the default suite and are
+  covered by the separate isolated integration runs recorded above. The
+  Operations bundle-size warning remains.
+- UI-05 is locally verified. The overview greeting no longer includes an
+  employee's display name, the duplicate System activity description is
+  corrected, singular counts use singular grammar, and Sales identifiers have
+  a readable separator. Escape closes the active drawer, and invalid native
+  form values receive accessible inline English or Bulgarian messages.
+- Global search now covers partners, legal Finance documents, customer
+  collection records and serials through permission-protected APIs. Selecting
+  a result opens that record in its register; the demo journey confirms the
+  seeded customer, collection record and equipment serial.
+- Operations component tests passed 60/60, isolated QA PostgreSQL/Redis API
+  integration passed 45/45, the CRM lead validation/Escape journey passed, and
+  the Chromium global-search journey passed. Hosted retest remains pending; no
+  hosted records were changed. The new serial-search endpoint is explicitly
+  covered by the HTTP read-rate-limit policy regression.
+
+## Thirty-third batch evidence, 12 October 2026
+
+- SYS-01 is locally verified. System activity now identifies events that have
+  no registered receiving integration. They are not counted as work in
+  progress, their details explain why they are waiting, and retry is withheld.
+  The API rejects replay with `INTEGRATION_CONSUMER_NOT_CONFIGURED` and leaves
+  the event status and replay count unchanged.
+- Full `npm run validate` passed OpenAPI/client consistency, formatting, lint,
+  all workspace typechecks, 379 enabled tests, and production builds. The
+  default run skips 91 infrastructure-only tests; the isolated QA run passed
+  all 45 API integration tests and all 3 Operations browser journeys using
+  system Chromium. This includes the no-receiver replay and telemetry checks.
+- SYS-02 local recovery behavior is covered. A test-only dependency outage
+  returns a stable error code and the same correlation reference in the API
+  header and response. The Operations notification panel shows plain-language
+  guidance, the safe error code and a copyable support reference in English
+  and Bulgarian. The hosted 503 still needs to be captured and retested after
+  deployment; no hosted data was changed.
+- Reconciliation with the decision register moved SYS-02 to **Verified locally**
+  and recorded `WH-001` for the still-unapproved goods-receipt variance gate and
+  foreign-currency comparison. That keeps the local warning/valuation behavior
+  while making the approval needed for WH-04 explicit.
+- Hosted activity backlog review remains pending. No hosted records or local
+  business data were changed.
 
 ## Release checks
 

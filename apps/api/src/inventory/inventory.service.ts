@@ -728,6 +728,28 @@ export class InventoryService {
       status: row.status,
     };
   }
+
+  async searchSerialTraceability(search: string): Promise<SerialTraceability[]> {
+    const normalized = search.trim().toLocaleUpperCase();
+    if (normalized.length < 2) return [];
+    const pattern = `%${escapeLikeSearch(normalized)}%`;
+    const matches = await this.database.getPool().query<{ serial_number: string }>(
+      `SELECT min(serial_number) AS serial_number
+       FROM (
+         SELECT serial_number FROM inventory.serialized_items
+         UNION ALL
+         SELECT serial_number FROM master_data.customer_equipment
+       ) serial_records
+       WHERE upper(serial_number) LIKE $1 ESCAPE E'\\\\'
+       GROUP BY upper(serial_number)
+       ORDER BY upper(serial_number)
+       LIMIT 8`,
+      [pattern],
+    );
+    return Promise.all(
+      matches.rows.map(({ serial_number }) => this.serialTraceability(serial_number)),
+    );
+  }
   async createWarehouse(
     input: {
       businessLocationId?: string | undefined;
@@ -3422,4 +3444,8 @@ async function requireTechnicianOperator(
       'The active technician operator was not found at this business location',
       HttpStatus.BAD_REQUEST,
     );
+}
+
+function escapeLikeSearch(value: string): string {
+  return value.replace(/[\\%_]/gu, '\\$&');
 }

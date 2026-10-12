@@ -1252,6 +1252,22 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/finance/documents/search': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['FinanceController_searchDocuments'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/finance/financial-documents': {
     parameters: {
       query?: never;
@@ -4446,6 +4462,22 @@ export interface paths {
       cookie?: never;
     };
     get: operations['InventoryController_serialTraceability'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/warehouse/serial-traceability/search': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['InventoryController_searchSerialTraceability'];
     put?: never;
     post?: never;
     delete?: never;
@@ -7827,6 +7859,7 @@ export interface components {
       deadLetteredAt?: string;
       deliveries: components['schemas']['IntegrationDeliverySummaryDto'][];
       eventType: string;
+      hasRegisteredConsumer: boolean;
       /** Format: uuid */
       id: string;
       lastErrorCode?: string;
@@ -7860,6 +7893,7 @@ export interface components {
       /** Format: date-time */
       deadLetteredAt?: string;
       eventType: string;
+      hasRegisteredConsumer: boolean;
       /** Format: uuid */
       id: string;
       lastErrorCode?: string;
@@ -7884,6 +7918,7 @@ export interface components {
       publishing: number;
       /** Format: date-time */
       timestamp: string;
+      unrouted: number;
     };
     IssueAccountRecoveryHandoffDto: {
       expectedVersion: number;
@@ -14655,6 +14690,41 @@ export interface operations {
       };
     };
   };
+  FinanceController_searchDocuments: {
+    parameters: {
+      query: {
+        search: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['FinanceCustomerDocumentDto'][];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
   FinancialDocumentsController_list: {
     parameters: {
       query?: {
@@ -14663,6 +14733,7 @@ export interface operations {
         dateTo?: string;
         page?: number;
         pageSize?: number;
+        search?: string;
         status?: 'draft' | 'cancelled';
         type?: 'invoice' | 'proforma' | 'credit_note' | 'debit_note';
       };
@@ -23570,6 +23641,41 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['SerialTraceabilityDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  InventoryController_searchSerialTraceability: {
+    parameters: {
+      query: {
+        search: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SerialTraceabilityDto'][];
         };
       };
       /** @description The endpoint request limit was exceeded. */

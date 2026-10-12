@@ -1,6 +1,6 @@
 import 'reflect-metadata';
 
-import { Controller, Get, type INestApplication } from '@nestjs/common';
+import { Controller, Get, HttpException, HttpStatus, type INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import type { AppEnvironment } from '@vista/config';
 import request from 'supertest';
@@ -40,6 +40,11 @@ class RateLimitTestController {
   @Get()
   response(): { status: string } {
     return { status: 'ok' };
+  }
+
+  @Get('unavailable')
+  unavailable(): never {
+    throw new HttpException('A dependency is unavailable', HttpStatus.SERVICE_UNAVAILABLE);
   }
 }
 
@@ -114,6 +119,22 @@ describe('platform API', () => {
       },
     });
     expect(response.body.error.correlationId).toBe(response.headers['x-correlation-id']);
+  });
+
+  it('returns a safe error code and matching correlation reference for a 503', async () => {
+    const response = await request(application.getHttpServer())
+      .get('/api/v1/_test/rate-limit/unavailable')
+      .set('x-correlation-id', 'notification-list-503-reference')
+      .expect(503);
+
+    expect(response.body).toMatchObject({
+      error: {
+        code: 'DEPENDENCY_UNAVAILABLE',
+        correlationId: 'notification-list-503-reference',
+        message: 'A dependency is unavailable',
+      },
+    });
+    expect(response.headers['x-correlation-id']).toBe('notification-list-503-reference');
   });
 
   it('rate limits protected routes and preserves the stable error envelope', async () => {

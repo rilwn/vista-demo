@@ -139,6 +139,18 @@ export function listFinanceDocuments(token: string): Promise<FinanceCustomerDocu
   );
 }
 
+export function searchFinanceDocuments(
+  token: string,
+  search: string,
+): Promise<FinanceCustomerDocument[]> {
+  return unwrapApiResponse(
+    apiClient.GET('/api/v1/finance/documents/search', {
+      headers: authorizationHeaders(token),
+      params: { query: { search } },
+    }),
+  );
+}
+
 export function getFinanceSummary(token: string): Promise<FinanceSummary> {
   return unwrapApiResponse(
     apiClient.GET('/api/v1/finance/summary', { headers: authorizationHeaders(token) }),
@@ -334,10 +346,14 @@ export function getFinancialDocumentReferenceData(
   );
 }
 
-export function listFinancialDocuments(token: string): Promise<FinancialDocumentPage> {
+export function listFinancialDocuments(
+  token: string,
+  query: { page?: number; pageSize?: number; search?: string } = {},
+): Promise<FinancialDocumentPage> {
   return unwrapApiResponse(
     apiClient.GET('/api/v1/finance/financial-documents', {
       headers: authorizationHeaders(token),
+      params: { query },
     }),
   );
 }

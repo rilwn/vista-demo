@@ -250,7 +250,7 @@ describe('ERP and CRM authenticated workspace', () => {
 
     expect(
       await screen.findByRole('heading', {
-        name: `${messages.home.title}, Mila.`,
+        name: messages.home.title,
       }),
     ).toBeTruthy();
     expect(screen.getAllByText(moduleMessages['erp.warehouse'].label).length).toBeGreaterThan(0);
@@ -273,13 +273,15 @@ describe('ERP and CRM authenticated workspace', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     renderApplication(['/']);
-    await screen.findByRole('heading', { name: `${messages.home.title}, Mila.` });
+    await screen.findByRole('heading', { name: messages.home.title });
 
-    const search = screen.getByRole('combobox', { name: 'Search pages and work areas' });
+    const search = screen.getByRole('combobox', {
+      name: 'Search pages, customers, documents, or serials',
+    });
     fireEvent.focus(search);
     await screen.findByRole('listbox', { name: 'Workspace destinations' });
     fireEvent.change(search, { target: { value: 'Finance' } });
-    expect(await screen.findByText('No matching page')).toBeTruthy();
+    expect(await screen.findByText('No matching result')).toBeTruthy();
     fireEvent.change(search, { target: { value: 'Customers & CRM' } });
     fireEvent.click(await screen.findByRole('option', { name: /Customers & CRM/u }));
     expect(await screen.findByRole('heading', { name: moduleMessages.crm.label })).toBeTruthy();
@@ -290,6 +292,82 @@ describe('ERP and CRM authenticated workspace', () => {
     expect(within(menu).getByRole('menuitem', { name: 'Overview' })).toBeTruthy();
     expect(within(menu).getByRole('menuitem', { name: messages.navigation.signOut })).toBeTruthy();
     expect(within(menu).queryByRole('menuitem', { name: 'Security administration' })).toBeNull();
+  });
+
+  it('finds customers, finance documents and serials from global search and opens a customer result', async () => {
+    const searchContext = {
+      ...authenticationContext,
+      permissions: [
+        ...authenticationContext.permissions,
+        { action: 'view', module: 'erp.finance' },
+      ],
+    };
+    const searchPartner = { ...partner, displayName: 'QA-SRCH Customer Ltd.' };
+    const searchDocument = {
+      customerSnapshot: { name: 'QA-SRCH Customer Ltd.' },
+      id: '4df6b85a-4cb9-46be-9a0b-e23a5ab94d25',
+      number: 'QA-SRCH-INV-001',
+    };
+    const searchCollectionDocument = {
+      customerName: 'QA-SRCH Customer Ltd.',
+      id: '2525bbed-7d3b-43ef-bc3f-0c04b18a99f4',
+      number: 'QA-SRCH-COL-001',
+      sourceInvoiceNumber: 'QA-SRCH-SALE-001',
+    };
+    const searchSerial = {
+      currentCustody: { displayName: 'Alfa Market · Central Store', type: 'customer' },
+      customer: { displayName: 'Alfa Market Demo Ltd.' },
+      product: { displayName: 'Demo Fiscal Register X1' },
+      serialNumber: 'QA-SRCH-SERIAL-001',
+    };
+    storeAuthenticatedSession(searchContext);
+    const fetchMock = vi.fn((input: string) => {
+      const url = String(input);
+      if (url.endsWith('/auth/me')) return Promise.resolve(jsonResponse(searchContext));
+      if (url.endsWith(`/master-data/partners/${searchPartner.id}/profile`))
+        return Promise.resolve(jsonResponse(partnerProfile));
+      if (url.includes('/master-data/partners?'))
+        return Promise.resolve(
+          jsonResponse({ items: [searchPartner], page: 1, pageSize: 5, total: 1, totalPages: 1 }),
+        );
+      if (url.includes('/finance/financial-documents') && url.includes('search=QA-SRCH'))
+        return Promise.resolve(
+          jsonResponse({
+            items: [searchDocument],
+            page: 1,
+            pageSize: 5,
+            totalItems: 1,
+            totalPages: 1,
+          }),
+        );
+      if (url.includes('/finance/documents/search') && url.includes('search=QA-SRCH'))
+        return Promise.resolve(jsonResponse([searchCollectionDocument]));
+      if (url.includes('/warehouse/serial-traceability/search') && url.includes('search=QA-SRCH'))
+        return Promise.resolve(jsonResponse([searchSerial]));
+      return Promise.resolve(jsonResponse({}));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderApplication(['/']);
+    await screen.findByRole('heading', { name: messages.home.title });
+    const search = screen.getByRole('combobox', {
+      name: 'Search pages, customers, documents, or serials',
+    });
+    fireEvent.change(search, { target: { value: 'QA-SRCH' } });
+
+    expect(
+      await screen.findByRole('option', {
+        name: /QA-SRCH Customer Ltd\..*Customers and suppliers/u,
+      }),
+    ).toBeTruthy();
+    expect(await screen.findByRole('option', { name: /QA-SRCH-INV-001/u })).toBeTruthy();
+    expect(await screen.findByRole('option', { name: /QA-SRCH-COL-001/u })).toBeTruthy();
+    expect(await screen.findByRole('option', { name: /QA-SRCH-SERIAL-001/u })).toBeTruthy();
+    fireEvent.click(
+      screen.getByRole('option', { name: /QA-SRCH Customer Ltd\..*Customers and suppliers/u }),
+    );
+    expect(await screen.findByRole('dialog')).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: searchPartner.displayName })).toBeTruthy();
   });
 
   it('starts a newly signed-in employee at the overview instead of restoring a stale restricted page', async () => {
@@ -314,7 +392,7 @@ describe('ERP and CRM authenticated workspace', () => {
 
     expect(
       await screen.findByRole('heading', {
-        name: `${messages.home.title}, Mila.`,
+        name: messages.home.title,
       }),
     ).toBeTruthy();
     expect(screen.queryByText(messages.states.notFound)).toBeNull();
@@ -361,9 +439,7 @@ describe('ERP and CRM authenticated workspace', () => {
         3,
       ),
     );
-    expect(
-      await screen.findByRole('heading', { name: `${messages.home.title}, Mila.` }),
-    ).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: messages.home.title })).toBeTruthy();
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
       '/api/v1/auth/login',
@@ -388,9 +464,7 @@ describe('ERP and CRM authenticated workspace', () => {
     renderApplication(['/']);
 
     expect(screen.getByText(messages.states.loadingDetail)).toBeTruthy();
-    expect(
-      await screen.findByRole('heading', { name: `${messages.home.title}, Mila.` }),
-    ).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: messages.home.title })).toBeTruthy();
     expect(fetchMock.mock.calls.filter(([url]) => String(url).includes('/auth/'))).toHaveLength(1);
     expect(fetchMock.mock.calls[0]?.[0]).toBe('/api/v1/auth/me');
   });
@@ -605,7 +679,7 @@ describe('ERP and CRM authenticated workspace', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     renderApplication(['/']);
-    await screen.findByRole('heading', { name: `${messages.home.title}, Mila.` });
+    await screen.findByRole('heading', { name: messages.home.title });
     fireEvent.click(screen.getByRole('button', { name: 'Open notifications' }));
     expect(await screen.findByText('Low stock needs attention')).toBeTruthy();
     expect(screen.getByText('Payment is due soon')).toBeTruthy();
@@ -620,6 +694,49 @@ describe('ERP and CRM authenticated workspace', () => {
     );
     fireEvent.click(screen.getByRole('button', { name: 'BG' }));
     expect(await screen.findByText(/60,00 BGN/u)).toBeTruthy();
+  });
+
+  it('shows a safe notification error code and copyable support reference', async () => {
+    storeAuthenticatedSession(authenticationContext);
+    const fetchMock = vi.fn((input: string) => {
+      if (input.endsWith('/auth/me')) return Promise.resolve(jsonResponse(authenticationContext));
+      if (input.includes('/notifications?'))
+        return Promise.resolve(
+          jsonResponse(
+            {
+              error: {
+                code: 'DEPENDENCY_UNAVAILABLE',
+                correlationId: 'notification-list-503-reference',
+                message: 'A service dependency is unavailable',
+                timestamp: '2026-10-12T10:00:00.000Z',
+              },
+            },
+            503,
+          ),
+        );
+      return Promise.resolve(jsonResponse({}));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderApplication(['/']);
+    await screen.findByRole('heading', { name: messages.home.title });
+    fireEvent.click(screen.getByRole('button', { name: 'Open notifications' }));
+
+    const failure = await screen.findByRole('alert');
+    expect(within(failure).getByText('Notifications could not be loaded right now.')).toBeTruthy();
+    expect(within(failure).getByText('DEPENDENCY_UNAVAILABLE')).toBeTruthy();
+    expect(within(failure).getByRole('button', { name: 'Copy request ID' })).toBeTruthy();
+    expect(within(failure).queryByText('A service dependency is unavailable')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'BG' }));
+    expect(
+      await within(failure).findByText('Известията не могат да бъдат заредени в момента.'),
+    ).toBeTruthy();
+    expect(within(failure).getByText('Референция за поддръжка:')).toBeTruthy();
+    expect(
+      within(failure).getByRole('button', {
+        name: 'Копиране на идентификатора на заявката',
+      }),
+    ).toBeTruthy();
   });
 
   it('shows a safe API error and keeps its full correlation reference copyable', async () => {
@@ -3554,6 +3671,7 @@ describe('ERP and CRM authenticated workspace', () => {
       correlationId: 'stock-alert-request-01',
       deadLetteredAt: '2026-08-11T09:03:00.000Z',
       eventType: 'inventory.low_stock.detected',
+      hasRegisteredConsumer: true,
       id: 'a12dc4f4-1b4d-4d34-82c2-5ddbf351fb17',
       lastErrorCode: 'INTEGRATION_MESSAGE_REJECTED',
       occurredAt: '2026-08-11T09:00:00.000Z',
@@ -3561,6 +3679,13 @@ describe('ERP and CRM authenticated workspace', () => {
       publishedAt: '2026-08-11T09:00:01.000Z',
       replayCount: 0,
       sequenceNumber: '4',
+      status: 'dead_letter',
+    } as const;
+    const unroutedEvent = {
+      ...integrationEvent,
+      eventType: 'scheduler.backup.verify.requested',
+      hasRegisteredConsumer: false,
+      id: 'b23dc4f4-1b4d-4d34-82c2-5ddbf351fb17',
       status: 'dead_letter',
     } as const;
     const eventDetail = {
@@ -3577,6 +3702,7 @@ describe('ERP and CRM authenticated workspace', () => {
         },
       ],
     } as const;
+    const unroutedEventDetail = { ...unroutedEvent, deliveries: [] } as const;
     const fetchMock = vi.fn((input: string, options?: RequestInit) => {
       if (input.endsWith('/auth/me')) return Promise.resolve(jsonResponse(operationsContext));
       if (input.endsWith('/platform/integrations/metrics')) {
@@ -3588,6 +3714,7 @@ describe('ERP and CRM authenticated workspace', () => {
             pending: 2,
             published: 1,
             publishing: 0,
+            unrouted: 1,
             timestamp: '2026-08-11T09:05:00.000Z',
           }),
         );
@@ -3595,10 +3722,10 @@ describe('ERP and CRM authenticated workspace', () => {
       if (input.includes('/platform/integrations/events?')) {
         return Promise.resolve(
           jsonResponse({
-            items: [integrationEvent],
+            items: [integrationEvent, unroutedEvent],
             page: 1,
             pageSize: 50,
-            total: 1,
+            total: 2,
             totalPages: 1,
           }),
         );
@@ -3611,6 +3738,9 @@ describe('ERP and CRM authenticated workspace', () => {
       }
       if (input.endsWith(`/platform/integrations/events/${integrationEvent.id}`)) {
         return Promise.resolve(jsonResponse(eventDetail));
+      }
+      if (input.endsWith(`/platform/integrations/events/${unroutedEvent.id}`)) {
+        return Promise.resolve(jsonResponse(unroutedEventDetail));
       }
       return Promise.resolve(jsonResponse({}));
     });
@@ -3646,6 +3776,25 @@ describe('ERP and CRM authenticated workspace', () => {
         expectedReplayCount: 0,
       });
     });
+
+    expect(screen.getByText(messages.operations.backupVerificationScheduled)).toBeTruthy();
+    expect(screen.getAllByText(messages.operations.awaitingIntegration).length).toBeGreaterThan(0);
+    const awaitingLabel = screen
+      .getAllByText(messages.operations.awaitingIntegration)
+      .find((element) => element.closest('.system-activity-summary'));
+    expect(awaitingLabel?.closest('article')?.textContent).toContain('1');
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: `${messages.operations.open} ${messages.operations.backupVerificationScheduled}`,
+      }),
+    );
+    const unroutedDialog = await screen.findByRole('dialog', { name: messages.operations.details });
+    expect(
+      await within(unroutedDialog).findByText(messages.operations.noReceivingService),
+    ).toBeTruthy();
+    expect(
+      within(unroutedDialog).queryByRole('button', { name: messages.operations.retry }),
+    ).toBeNull();
   });
 
   it('creates and receives a purchase order through the connected procurement workspace', async () => {
@@ -7069,9 +7218,7 @@ describe('ERP and CRM authenticated workspace', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     renderApplication(['/']);
-    expect(
-      await screen.findByRole('heading', { name: `${messages.home.title}, Mila.` }),
-    ).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: messages.home.title })).toBeTruthy();
 
     fireEvent.click(screen.getByRole('link', { name: 'Service' }));
     expect(await screen.findByRole('heading', { name: 'Service' })).toBeTruthy();

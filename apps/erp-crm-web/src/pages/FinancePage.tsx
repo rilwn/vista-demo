@@ -58,10 +58,14 @@ function FinanceCollectionsPage({ view }: { view: FinanceView }) {
   const canViewSales = hasPermission('erp.sales');
   const routeState =
     location.state && typeof location.state === 'object'
-      ? (location.state as { paymentId?: unknown })
+      ? (location.state as { financeCollectionDocumentId?: unknown; paymentId?: unknown })
       : undefined;
   const requestedPaymentId =
     typeof routeState?.paymentId === 'string' ? routeState.paymentId : undefined;
+  const requestedCollectionDocumentId =
+    typeof routeState?.financeCollectionDocumentId === 'string'
+      ? routeState.financeCollectionDocumentId
+      : undefined;
   const pageTitle = view === 'invoices' ? 'Invoices' : 'Collections & payments';
   const pageDescription =
     view === 'invoices'
@@ -69,14 +73,30 @@ function FinanceCollectionsPage({ view }: { view: FinanceView }) {
       : 'Review every customer collection, then record and follow its payment allocations.';
 
   useEffect(() => {
-    if (!requestedPaymentId || data.loading || data.error) return;
+    if ((!requestedPaymentId && !requestedCollectionDocumentId) || data.loading || data.error)
+      return;
     navigate(location.pathname, { replace: true });
-    const document = data.documents.find((item) =>
-      item.payments.some((payment) => payment.id === requestedPaymentId),
-    );
+    const document = requestedCollectionDocumentId
+      ? data.documents.find((item) => item.id === requestedCollectionDocumentId)
+      : data.documents.find((item) =>
+          item.payments.some((payment) => payment.id === requestedPaymentId),
+        );
     if (document) setSelected(document);
-    else setNotice('The linked payment could not be found in the customer collection register.');
-  }, [data.documents, data.error, data.loading, location.pathname, navigate, requestedPaymentId]);
+    else
+      setNotice(
+        requestedCollectionDocumentId
+          ? 'The collection record could not be found in the customer register.'
+          : 'The linked payment could not be found in the customer collection register.',
+      );
+  }, [
+    data.documents,
+    data.error,
+    data.loading,
+    location.pathname,
+    navigate,
+    requestedCollectionDocumentId,
+    requestedPaymentId,
+  ]);
 
   if (data.loading) return <FinanceState title="Loading finance records" />;
   if (data.error)

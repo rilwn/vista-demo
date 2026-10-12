@@ -78,6 +78,7 @@ export class IntegrationEventSummaryDto implements IntegrationEventSummary {
   @ApiProperty({ type: String }) correlationId!: string;
   @ApiPropertyOptional({ format: 'date-time', type: String }) deadLetteredAt?: string;
   @ApiProperty({ type: String }) eventType!: string;
+  @ApiProperty({ type: Boolean }) hasRegisteredConsumer!: boolean;
   @ApiProperty({ format: 'uuid', type: String }) id!: string;
   @ApiPropertyOptional({ type: String }) lastErrorCode?: string;
   @ApiProperty({ format: 'date-time', type: String }) occurredAt!: string;
@@ -108,6 +109,7 @@ export class IntegrationEventTelemetryDto implements IntegrationEventTelemetry {
   @ApiProperty({ minimum: 0, type: Number }) completed!: number;
   @ApiProperty({ minimum: 0, type: Number }) deadLetter!: number;
   @ApiProperty({ minimum: 0, type: Number }) failedDeliveries!: number;
+  @ApiProperty({ minimum: 0, type: Number }) unrouted!: number;
   @ApiPropertyOptional({ format: 'date-time', type: String }) oldestPendingAt?: string;
   @ApiProperty({ minimum: 0, type: Number }) pending!: number;
   @ApiProperty({ minimum: 0, type: Number }) published!: number;

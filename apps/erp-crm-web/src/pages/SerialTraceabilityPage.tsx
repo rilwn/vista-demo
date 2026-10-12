@@ -1,6 +1,6 @@
 import { Button, InlineAlert, TextField } from '@vista/ui';
 import type { SerialTraceEvent, SerialTraceability } from '@vista/contracts';
-import { type FormEvent, useState } from 'react';
+import { type FormEvent, useCallback, useEffect, useRef, useState } from 'react';
 
 import { ApiClientError } from '../api/client';
 import { getSerialTraceability } from '../api/inventory';
@@ -8,35 +8,52 @@ import { useAuth } from '../auth/AuthProvider';
 import { Icon } from '../components/Icon';
 import { TechnicalIdentifier } from '../components/TechnicalIdentifier';
 import { formatOperationsDate, useLocalization } from '../i18n/LocalizationProvider';
+import { useRouter } from '../routing/Router';
 import { isReportUuid } from './erp-report-display';
 
 export function SerialTraceabilityPage({ compact = false }: { compact?: boolean }) {
   useLocalization();
   const { session } = useAuth();
+  const { location } = useRouter();
   const [serialNumber, setSerialNumber] = useState('');
   const [trace, setTrace] = useState<SerialTraceability | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const routedSerial = serialSearchHandoff(location.state);
+  const handledSerial = useRef<string | null>(null);
 
-  async function submit(event: FormEvent) {
+  const traceSerial = useCallback(
+    async (serial: string) => {
+      const token = session?.sessionToken;
+      if (!token || !serial) return;
+      setLoading(true);
+      setError(null);
+      try {
+        setTrace(await getSerialTraceability(token, serial));
+      } catch (caught) {
+        setTrace(null);
+        setError(
+          caught instanceof ApiClientError && caught.code === 'SERIAL_NOT_FOUND'
+            ? 'No inventory or customer equipment record matches this serial number.'
+            : 'The serial history could not be loaded. Try again.',
+        );
+      } finally {
+        setLoading(false);
+      }
+    },
+    [session?.sessionToken],
+  );
+
+  useEffect(() => {
+    if (!routedSerial || !session?.sessionToken || handledSerial.current === routedSerial) return;
+    handledSerial.current = routedSerial;
+    setSerialNumber(routedSerial);
+    void traceSerial(routedSerial);
+  }, [routedSerial, session?.sessionToken, traceSerial]);
+
+  function submit(event: FormEvent) {
     event.preventDefault();
-    const token = session?.sessionToken;
-    const serial = serialNumber.trim();
-    if (!token || !serial) return;
-    setLoading(true);
-    setError(null);
-    try {
-      setTrace(await getSerialTraceability(token, serial));
-    } catch (caught) {
-      setTrace(null);
-      setError(
-        caught instanceof ApiClientError && caught.code === 'SERIAL_NOT_FOUND'
-          ? 'No inventory or customer equipment record matches this serial number.'
-          : 'The serial history could not be loaded. Try again.',
-      );
-    } finally {
-      setLoading(false);
-    }
+    void traceSerial(serialNumber.trim());
   }
 
   return (
@@ -144,6 +161,12 @@ export function SerialTraceabilityPage({ compact = false }: { compact?: boolean 
       ) : null}
     </div>
   );
+}
+
+function serialSearchHandoff(state: unknown): string | undefined {
+  if (!state || typeof state !== 'object') return undefined;
+  const serial = (state as Record<string, unknown>).serialSearch;
+  return typeof serial === 'string' && serial.trim() ? serial.trim() : undefined;
 }
 
 function TraceEventCard({ event }: { event: SerialTraceEvent }) {

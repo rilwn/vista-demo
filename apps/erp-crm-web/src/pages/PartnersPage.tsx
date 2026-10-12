@@ -31,6 +31,7 @@ import { TechnicalIdentifier } from '../components/TechnicalIdentifier';
 import { formatOperationsDate, useLocalization } from '../i18n/LocalizationProvider';
 import { messages } from '../i18n/legacyMessages';
 import { businessIdentifierIssueMessage } from '../i18n/businessIdentifierMessages';
+import { useRouter } from '../routing/Router';
 import { CustomerAssetsPanel } from './CustomerAssetsPanel';
 import { CustomerOperationalOverviewPanel } from './CustomerOperationalOverviewPanel';
 import { PartnerDocumentsPanel } from './PartnerDocumentsPanel';
@@ -58,6 +59,7 @@ const emptyDraft: PartnerDraft = {
 
 export function PartnersPage() {
   const { hasPermission, session } = useAuth();
+  const { location } = useRouter();
   useLocalization();
   const [data, setData] = useState<PartnerPage | null>(null);
   const [error, setError] = useState(false);
@@ -70,6 +72,7 @@ export function PartnersPage() {
   const [selected, setSelected] = useState<PartnerSummary | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [success, setSuccess] = useState('');
+  const openedGlobalSearchPartner = useRef<string | null>(null);
 
   const token = session?.sessionToken;
   useEffect(() => {
@@ -102,6 +105,24 @@ export function PartnersPage() {
       window.clearTimeout(timer);
     };
   }, [kind, page, refresh, role, search, token]);
+
+  useEffect(() => {
+    const handoff = partnerSearchHandoff(location.state);
+    if (handoff?.search) {
+      setSearch(handoff.search);
+      setPage(1);
+    }
+  }, [location.pathname, location.state]);
+
+  useEffect(() => {
+    const handoff = partnerSearchHandoff(location.state);
+    if (!handoff?.partnerId || !data || openedGlobalSearchPartner.current === handoff.partnerId)
+      return;
+    const partner = data.items.find((item) => item.id === handoff.partnerId);
+    if (!partner) return;
+    openedGlobalSearchPartner.current = partner.id;
+    setSelected(partner);
+  }, [data, location.state]);
 
   const canCreate = hasPermission('crm', 'create');
   const hasFilters = Boolean(kind || role || search.trim());
@@ -261,6 +282,17 @@ export function PartnersPage() {
       ) : null}
     </div>
   );
+}
+
+function partnerSearchHandoff(state: unknown): { partnerId?: string; search?: string } | undefined {
+  if (!state || typeof state !== 'object') return undefined;
+  const value = (state as Record<string, unknown>).globalSearch;
+  if (!value || typeof value !== 'object') return undefined;
+  const handoff = value as Record<string, unknown>;
+  return {
+    ...(typeof handoff.partnerId === 'string' ? { partnerId: handoff.partnerId } : {}),
+    ...(typeof handoff.search === 'string' ? { search: handoff.search } : {}),
+  };
 }
 
 function PartnerTable({

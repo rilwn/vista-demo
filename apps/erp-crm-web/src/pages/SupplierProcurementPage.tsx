@@ -237,6 +237,7 @@ function SupplierList({
   onPreview: (supplier: ProcurementSupplierRecord) => void;
   suppliers: ProcurementSupplierRecord[];
 }) {
+  const { t } = useLocalization();
   if (!suppliers.length)
     return (
       <EmptyState title="No suppliers available">
@@ -258,7 +259,14 @@ function SupplierList({
               </span>
               <div>
                 <h2>{supplier.profile.supplierName}</h2>
-                <p>{supplier.contacts.length} active contacts</p>
+                <p>
+                  {t(
+                    supplier.contacts.length === 1
+                      ? 'supplier.activeContacts.one'
+                      : 'supplier.activeContacts.other',
+                    { count: supplier.contacts.length },
+                  )}
+                </p>
               </div>
               {latest ? <span className="supplier-score">{latest.score}/5</span> : null}
             </header>

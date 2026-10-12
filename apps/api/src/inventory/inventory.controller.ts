@@ -41,6 +41,7 @@ import {
   StockBalanceDto,
   StockMovementJournalPageDto,
   StockMovementJournalQueryDto,
+  SerialTraceabilitySearchQueryDto,
   StockIssueDto,
   StockReceiptDto,
   StockReturnDto,
@@ -280,6 +281,16 @@ export class InventoryController {
   @ApiOkResponse({ isArray: true, type: ReplenishmentStatusDto })
   replenishment(): Promise<ReplenishmentStatusDto[]> {
     return this.inventory.replenishment();
+  }
+  @Get('serial-traceability/search')
+  @RateLimitPolicy('read')
+  @RequirePermissions({ module: 'erp.warehouse', action: 'view' })
+  @ApiQuery({ maxLength: 120, minLength: 2, name: 'search', type: String })
+  @ApiOkResponse({ isArray: true, type: SerialTraceabilityDto })
+  searchSerialTraceability(
+    @Query() query: SerialTraceabilitySearchQueryDto,
+  ): Promise<SerialTraceabilityDto[]> {
+    return this.inventory.searchSerialTraceability(query.search);
   }
   @Get('serial-traceability/:serialNumber')
   @RateLimitPolicy('read')

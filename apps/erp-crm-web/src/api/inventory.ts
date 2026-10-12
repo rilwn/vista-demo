@@ -253,3 +253,15 @@ export function getSerialTraceability(
     }),
   );
 }
+
+export function searchSerialTraceability(
+  token: string,
+  search: string,
+): Promise<SerialTraceability[]> {
+  return unwrapApiResponse(
+    apiClient.GET('/api/v1/warehouse/serial-traceability/search', {
+      headers: authorizationHeaders(token),
+      params: { query: { search } },
+    }),
+  );
+}

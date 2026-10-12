@@ -425,15 +425,50 @@ same. This checks display only and does not create or change records.
 
 1. In Vista Operations, sign in as `local.admin@vista.local` and open
    **Administration → System activity**. Open an event.
-2. Confirm its ID and request reference are not printed as UUID text. Select
+2. If an event marked **Awaiting an integration** is present, open it. Confirm
+   the details explain that no receiver is configured and that **Retry** is
+   unavailable. Do not create or retry an unsupported event just for this check.
+3. Confirm its ID and request reference are not printed as UUID text. Select
    each copy icon and paste into a temporary local note; then close the note.
-3. Sign in as `procurement@vista.local`. Open
+   If a notification error occurs during normal use, record its displayed
+   error code and copyable support reference for the support team; do not
+   trigger an outage for this check.
+4. Sign in as `procurement@vista.local`. Open
    **ERP → Procurement → Purchase orders** and check an existing order. Confirm
    supplier, warehouse and date identify it; use the copy icon only if its full
    technical ID is needed. Open **Goods receipts** and check an existing receipt.
-4. In Vista POS, open **Recovery** if a saved checkout is already present.
+5. In Vista POS, open **Recovery** if a saved checkout is already present.
    Confirm its transaction ID is hidden until copied.
 
 Expected: the screen uses readable business context and never shows shortened
 UUIDs as document numbers. If a purchase order has no client-approved number,
 do not create one for this test. No records need to be changed.
+
+## 33. Check tablet tables and record panels
+
+1. In Chrome, open the responsive device toolbar and set the viewport to
+   `768 × 1024`.
+2. In Vista Operations, open **Reports → Report library**, then open a
+   Procurement report. Drag the report table's bottom scrollbar to the right.
+3. Open **Customers & CRM → Partners**. Scroll the partner table sideways, open
+   **Alfa Market Demo Ltd.**, and scroll its panel to the bottom.
+4. Open **Customers & CRM → Leads & pipeline → Sales pipeline**. Scroll the
+   six-stage board sideways, open an opportunity, and scroll its panel down.
+
+Expected: only the table/board scrolls sideways, the page does not gain a
+sideways gap, and each panel stays within the screen while its content scrolls.
+
+## 34. Search records and check form guidance
+
+1. From **Overview**, use the top search field to find **Alfa Market Demo Ltd.**
+   Open the result, then press **Esc**. Expected: the partner opens and the
+   panel closes.
+2. Search **DEV-FIN-REV-0001** and open the Finance collection record. Press
+   **Esc**. Search **DEMO-FR-ALFA-01** and open its serial trace.
+3. Open **Customers & CRM → Leads & opportunities → Leads & pipeline → New
+   lead**. Enter company `QA validation check`, contact `QA User`, and email
+   `not-an-email`, then select **Save lead**.
+
+Expected: the form shows a clear inline email error without saving. Correct it
+to `qa@example.invalid`, then select **Back** so no test lead is created. Search
+labels and results should follow the selected **EN/BG** language.

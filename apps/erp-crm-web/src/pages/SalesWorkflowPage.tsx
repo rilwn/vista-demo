@@ -221,7 +221,7 @@ function SalesRegister({
             <span className="sales-document-mark">Q</span>
             <div>
               <strong>{workflow.number}</strong>
-              <span>{workflow.customerName}</span>
+              <span>· {workflow.customerName}</span>
             </div>
           </div>
           <div>

@@ -933,6 +933,14 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
       .expect(201);
     expect((createReplay.body as FinanceCustomerDocument).id).toBe(created.id);
 
+    const searchedCollections = await request(application.getHttpServer())
+      .get(`/api/v1/finance/documents/search?search=${encodeURIComponent(created.number)}`)
+      .set('authorization', `Bearer ${token}`)
+      .expect(200);
+    expect(searchedCollections.body).toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: created.id, number: created.number })]),
+    );
+
     const supplierInvoiceId = await seedSupplierInvoiceEvidence(
       database,
       creatorAccountId,
@@ -2386,6 +2394,14 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
       .set('authorization', `Bearer ${token}`)
       .expect(200);
     expect(register.body).toMatchObject({ page: 1, pageSize: 10, totalItems: 7 });
+
+    const searchedDocuments = await request(application.getHttpServer())
+      .get(`/api/v1/finance/financial-documents?search=${encodeURIComponent(proformaNumbers[0]!)}`)
+      .set('authorization', `Bearer ${token}`)
+      .expect(200);
+    expect(searchedDocuments.body.items).toEqual(
+      expect.arrayContaining([expect.objectContaining({ number: proformaNumbers[0] })]),
+    );
 
     const evidence = await database.query<{ audit_count: string; outbox_count: string }>(
       `SELECT

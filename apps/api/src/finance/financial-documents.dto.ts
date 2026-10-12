@@ -195,6 +195,12 @@ export class CancelFinancialDocumentDto implements CancelFinancialDocumentReques
 }
 
 export class FinancialDocumentListQueryDto {
+  @ApiPropertyOptional({ maxLength: 120, type: String })
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  search?: string;
+
   @ApiPropertyOptional({ enum: financialDocumentStatuses })
   @IsOptional()
   @IsIn(financialDocumentStatuses)

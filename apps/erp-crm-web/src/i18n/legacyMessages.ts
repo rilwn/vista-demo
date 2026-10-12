@@ -13,6 +13,8 @@ const bulgarianMessages = {
     backLabel: 'Назад към системната активност',
     allStatuses: 'Всички състояния',
     attempts: 'Опити',
+    awaitingIntegration: 'Очаква свързване на система',
+    backupVerificationScheduled: 'Проверката на резервното копие е планирана',
     cancel: 'Отказ',
     close: 'Затваряне на подробностите',
     completed: 'Завършени',
@@ -42,6 +44,8 @@ const bulgarianMessages = {
     navigationLabel: 'Системна активност',
     needsAttention: 'Изисква внимание',
     noDeliverySteps: 'Все още няма създадена стъпка за доставка.',
+    noReceivingService:
+      'За тази актуализация няма свързана система получател. Тя ще остане тук, докато интеграцията бъде настроена.',
     open: 'Отваряне',
     pages: 'Страници с активност',
     previous: 'Предишна',

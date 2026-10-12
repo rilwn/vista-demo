@@ -167,6 +167,8 @@ export const messages = {
     backLabel: 'Back to system activity',
     allStatuses: 'All statuses',
     attempts: 'Attempts',
+    awaitingIntegration: 'Awaiting an integration',
+    backupVerificationScheduled: 'Backup verification scheduled',
     cancel: 'Cancel',
     close: 'Close activity details',
     completed: 'Completed',
@@ -195,6 +197,8 @@ export const messages = {
     navigationLabel: 'System activity',
     needsAttention: 'Needs attention',
     noDeliverySteps: 'No delivery step has been created yet.',
+    noReceivingService:
+      'This update has no connected receiving service. It will stay here until the integration is set up.',
     open: 'Open',
     pages: 'Activity pages',
     previous: 'Previous',
@@ -236,7 +240,7 @@ export const messages = {
     protectionCard: 'Session protection',
     standardAccess: 'Standard employee',
     subtitle: 'Choose an area to continue. Only modules available to your account are shown.',
-    title: 'Welcome back',
+    title: 'Welcome back.',
     twoFactor: 'Two-factor verified',
   },
   access: {

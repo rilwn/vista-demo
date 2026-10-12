@@ -35,7 +35,7 @@ export function localizeModule(item: ModuleNavigationItem, t: Translator): Modul
     return {
       ...item,
       label: t('navigation.systemActivity'),
-      description: t('module.platformDescription'),
+      description: t('module.systemActivityDescription'),
     };
   }
   const labelKey = labelKeys[item.key];
