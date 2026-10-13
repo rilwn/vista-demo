@@ -191,7 +191,10 @@ optional and approved enterprise API paths pass.
 
 - Connect approved fiscal, PIN-pad, and scanner hardware; issue certified H-18
   receipts and reversals, and complete approved physical receipt and
-  warranty-card printing.
+  warranty-card printing. Vista has reported DATECS FP-2000, Zebra DS2208 USB,
+  and Dell Pro 24 QC24250 with Windows 11 Pro as candidate equipment; confirm
+  exact H-18 registration, protocol/setup, test-device access, browser/version,
+  PIN-pad decision, and register/location mapping before acceptance.
 - Replace the development card simulator with the approved PIN-pad adapter and
   complete recoverable coordination between fiscal operation, payment, official
   invoice issuance, and stock posting.
@@ -278,8 +281,8 @@ Full decision detail is maintained in
 - Organization and master data: BUS-001, BUS-002, CAT-001, CRM-002, OPT-001.
 - Finance, documents, and logistics: FIN-001, FIN-002, FIN-003, FIN-004, FIN-005, DOC-001,
   INT-002.
-- Identity, files, providers, and deployment: IAM-001, IAM-002, IAM-003,
-  FILE-001, INT-001, DEP-001.
+- Identity, files, providers, deployment, and external systems: IAM-001, IAM-002,
+  IAM-003, FILE-001, INT-001, INT-003, DEP-001.
 - Service and CRM: SLA-001, CRM-001, KPI-001, SVC-001.
 - POS: POS-001, POS-002, POS-003, OPT-001.
 - Backup/DR: BAK-001, BAK-002, BAK-003, BAK-004, BAK-005.
