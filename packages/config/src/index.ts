@@ -41,6 +41,7 @@ const environmentSchema = z
     FEATURE_FIFO_COSTING: booleanString.default(false),
     FEATURE_POS_BACKUP_ROUTER: booleanString.default(false),
     FEATURE_POS_KIOSK: booleanString.default(false),
+    POS_FISCAL_SIMULATOR_ENABLED: booleanString.default(false),
     FILE_ALLOWED_MEDIA_TYPES: z
       .string()
       .min(1)
@@ -118,8 +119,19 @@ const environmentSchema = z
     TOTP_ENROLLMENT_TTL_SECONDS: z.coerce.number().int().min(60).max(3_600).default(900),
     TOTP_ISSUER: z.string().min(1).default('Vista Service'),
     TOTP_WINDOW_STEPS: z.coerce.number().int().min(0).max(2).default(1),
+    VISTA_DEPLOYMENT_STAGE: z.enum(['local', 'staging', 'production']).default('local'),
   })
   .superRefine((environment, context) => {
+    if (
+      environment.POS_FISCAL_SIMULATOR_ENABLED &&
+      environment.VISTA_DEPLOYMENT_STAGE !== 'staging'
+    ) {
+      context.addIssue({
+        code: 'custom',
+        message: 'The POS fiscal simulator can be enabled only for the staging deployment',
+        path: ['POS_FISCAL_SIMULATOR_ENABLED'],
+      });
+    }
     if (environment.NODE_ENV === 'production' && environment.API_RATE_LIMIT_STORE !== 'redis') {
       context.addIssue({
         code: 'custom',

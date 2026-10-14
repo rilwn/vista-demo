@@ -51,6 +51,7 @@ import { APP_ENVIRONMENT } from '../config/config.module.js';
 import { DatabaseService } from '../database/database.service.js';
 import { FinancialDocumentsService } from '../finance/financial-documents.service.js';
 import { renderPosWarrantyCard } from './pos-warranty-card-renderer.js';
+import { canUseFiscalSimulator } from './fiscal-mode-policy.js';
 
 interface AssignmentRow {
   business_location_id: string;
@@ -2633,7 +2634,7 @@ export class PosService {
         'Assign a fiscal device before opening a cashier shift',
         HttpStatus.CONFLICT,
       );
-    if (mode === 'simulator' && this.environment.NODE_ENV === 'production')
+    if (mode === 'simulator' && !canUseFiscalSimulator(this.environment))
       throw new ApiErrorException(
         'POS_FISCAL_SIMULATOR_FORBIDDEN',
         'The development fiscal simulator cannot be used in production',

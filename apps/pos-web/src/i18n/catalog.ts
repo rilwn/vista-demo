@@ -191,8 +191,8 @@ export const bgText: Readonly<Record<string, string>> = {
   'Count opening cash': 'Преброяване на началната наличност',
   'Enter the cash physically available in the drawer.':
     'Въведете наличните пари в касовото чекмедже.',
-  'Test receipt mode is available only on this local installation.':
-    'Режимът за тестови бележки е наличен само в тази локална инсталация.',
+  'Test receipts are simulated and are not certified fiscal receipts.':
+    'Тестовите бележки са симулирани и не са сертифицирани фискални бележки.',
   'Count the drawer before closing. The final Z report will keep this counted amount and any difference from expected cash.':
     'Пребройте касата преди затваряне. Окончателният Z отчет ще запази преброената сума и разликата спрямо очакваната наличност.',
   'Confirm the saved checkout in Recovery before closing this shift.':

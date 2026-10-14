@@ -102,3 +102,8 @@ only after `INT-001` is decided.
 Set `VISTA_DEPLOYMENT_STAGE=staging` in the Coolify resource. A separate,
 explicitly enabled command can create the disposable demo accounts and records;
 it refuses to run outside this staging designation. It is not a production seed.
+For POS demonstrations without the certified fiscal device, set
+`POS_FISCAL_SIMULATOR_ENABLED=true` only on this staging resource. Receipts in
+this mode are simulated and are not valid fiscal documents. The API refuses this
+setting outside staging; keep it `false` in production. Do not change
+`NODE_ENV=production` or label an unconnected device as hardware to enable POS.

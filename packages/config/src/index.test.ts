@@ -45,6 +45,8 @@ describe('parseEnvironment', () => {
     ]);
     expect(environment.FILE_UPLOAD_MAX_BYTES).toBe(10 * 1024 * 1024);
     expect(environment.IDEMPOTENCY_TTL_SECONDS).toBe(86_400);
+    expect(environment.POS_FISCAL_SIMULATOR_ENABLED).toBe(false);
+    expect(environment.VISTA_DEPLOYMENT_STAGE).toBe('local');
     expect(environment.JOB_DEFAULT_ATTEMPTS).toBe(5);
     expect(environment.JOB_QUEUE_NAME).toBe('platform');
     expect(environment.FINANCE_PAYMENT_REMINDER_LEAD_DAYS).toBe(7);
@@ -121,5 +123,24 @@ describe('parseEnvironment', () => {
         NODE_ENV: 'production',
       }).API_RATE_LIMIT_STORE,
     ).toBe('redis');
+  });
+
+  it('allows the fiscal simulator flag only in staging', () => {
+    expect(
+      parseEnvironment({
+        ...validEnvironment,
+        NODE_ENV: 'production',
+        API_RATE_LIMIT_STORE: 'redis',
+        POS_FISCAL_SIMULATOR_ENABLED: 'true',
+        VISTA_DEPLOYMENT_STAGE: 'staging',
+      }).POS_FISCAL_SIMULATOR_ENABLED,
+    ).toBe(true);
+    expect(() =>
+      parseEnvironment({
+        ...validEnvironment,
+        POS_FISCAL_SIMULATOR_ENABLED: 'true',
+        VISTA_DEPLOYMENT_STAGE: 'production',
+      }),
+    ).toThrow('POS_FISCAL_SIMULATOR_ENABLED');
   });
 });

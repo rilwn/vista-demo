@@ -2482,7 +2482,7 @@ function ShiftScreen({
             </div>
           </label>
           <div className="pos-open-shift-actions">
-            <p>Test receipt mode is available only on this local installation.</p>
+            <p>Test receipts are simulated and are not certified fiscal receipts.</p>
             <button
               className="pos-primary-button"
               disabled={!registerId || opening || Number(openingCash) < 0}
