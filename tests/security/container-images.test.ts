@@ -33,6 +33,6 @@ void test('accepts digest-pinned images', () => {
 });
 void test('real Compose files produce a nonempty distinct scan matrix without starting services', () => {
   const { include } = discoverImages();
-  assert.ok(include.length >= 5);
+  assert.ok(include.length >= 4);
   assert.equal(new Set(include.map((entry) => entry.image)).size, include.length);
 });

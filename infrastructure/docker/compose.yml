@@ -38,7 +38,7 @@ services:
       - no-new-privileges:true
 
   minio:
-    image: quay.io/minio/minio:RELEASE.2025-07-23T15-54-02Z
+    image: ghcr.io/coollabsio/minio:RELEASE.2025-10-15T17-29-55Z
     restart: unless-stopped
     command: ['server', '/data', '--console-address', ':9001']
     environment:
@@ -50,7 +50,11 @@ services:
     volumes:
       - minio-data:/data
     healthcheck:
-      test: ['CMD', 'curl', '-f', 'http://localhost:9000/minio/health/live']
+      test:
+        [
+          'CMD-SHELL',
+          'mc alias set --api S3v4 health http://localhost:9000 "$${MINIO_ROOT_USER}" "$${MINIO_ROOT_PASSWORD}" >/dev/null 2>&1 && mc ready health --quiet',
+        ]
       interval: 10s
       timeout: 5s
       retries: 20
