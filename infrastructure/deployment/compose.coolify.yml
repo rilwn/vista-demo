@@ -39,7 +39,6 @@ services:
 
   minio-init:
     image: vista-api:${VISTA_IMAGE_TAG:?Set VISTA_IMAGE_TAG in Coolify}
-    build: { context: ., dockerfile: infrastructure/deployment/Dockerfile, target: api }
     init: true
     read_only: true
     tmpfs: [/tmp]
@@ -67,7 +66,6 @@ services:
 
   migrate:
     image: vista-api:${VISTA_IMAGE_TAG:?Set VISTA_IMAGE_TAG in Coolify}
-    build: { context: ., dockerfile: infrastructure/deployment/Dockerfile, target: api }
     init: true
     read_only: true
     tmpfs: [/tmp]
