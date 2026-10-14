@@ -10,14 +10,17 @@ import {
   Post,
   Query,
   Req,
+  Res,
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
+  ApiAcceptedResponse,
   ApiBody,
   ApiCreatedResponse,
   ApiHeader,
   ApiOkResponse,
   ApiParam,
+  ApiProduces,
   ApiQuery,
   ApiTags,
 } from '@nestjs/swagger';
@@ -25,6 +28,7 @@ import {
 import { RequirePermissions } from '../auth/auth.decorators.js';
 import type { AuthenticatedRequest } from '../auth/authentication.types.js';
 import type { CorrelatedRequest } from '../common/correlation-id.middleware.js';
+import type { Response } from 'express';
 import { RateLimitPolicy } from '../security/rate-limit.decorator.js';
 import { SalesPricingService } from '../sales/sales-pricing.service.js';
 import { ResolveSalesPriceQueryDto, SalesResolvedPriceDto } from '../sales/sales-pricing.dto.js';
@@ -35,6 +39,11 @@ import {
   FinancialDocumentListQueryDto,
   FinancialDocumentPageDto,
   FinancialDocumentReferenceDataDto,
+  IssueFinancialDocumentDto,
+  QueuedEmailReceiptDto,
+  SendDocumentEmailDto,
+  FinanceExchangeRateDto,
+  FinanceExchangeRateQueryDto,
 } from './financial-documents.dto.js';
 import { FinancialDocumentsService } from './financial-documents.service.js';
 
@@ -56,13 +65,23 @@ export class FinancialDocumentsController {
     return this.documents.referenceData();
   }
 
+  @Get('exchange-rate')
+  @RateLimitPolicy('read')
+  @RequirePermissions({ action: 'view', module: 'erp.finance' })
+  @ApiQuery({ example: 'USD', name: 'currencyCode', type: String })
+  @ApiQuery({ format: 'date', name: 'rateDate', type: String })
+  @ApiOkResponse({ type: FinanceExchangeRateDto })
+  exchangeRate(@Query() query: FinanceExchangeRateQueryDto): Promise<FinanceExchangeRateDto> {
+    return this.documents.exchangeRate(query.currencyCode, query.rateDate);
+  }
+
   @Get('prices/resolve')
   @RateLimitPolicy('read')
   @RequirePermissions({ action: 'view', module: 'erp.finance' })
   @ApiOkResponse({ type: SalesResolvedPriceDto })
   @ApiQuery({ format: 'date', name: 'asOf', type: String })
   @ApiQuery({ format: 'uuid', name: 'customerPartnerId', type: String })
-  @ApiQuery({ example: 'BGN', name: 'currencyCode', type: String })
+  @ApiQuery({ example: 'EUR', name: 'currencyCode', type: String })
   @ApiQuery({ format: 'uuid', name: 'productId', type: String })
   resolvePrice(@Query() query: ResolveSalesPriceQueryDto): Promise<SalesResolvedPriceDto> {
     return this.pricing.resolvePrice(
@@ -76,7 +95,7 @@ export class FinancialDocumentsController {
   @Get()
   @RateLimitPolicy('read')
   @RequirePermissions({ action: 'view', module: 'erp.finance' })
-  @ApiQuery({ enum: ['draft', 'cancelled'], name: 'status', required: false })
+  @ApiQuery({ enum: ['draft', 'issued', 'cancelled'], name: 'status', required: false })
   @ApiQuery({
     enum: ['invoice', 'proforma', 'credit_note', 'debit_note'],
     name: 'type',
@@ -107,6 +126,60 @@ export class FinancialDocumentsController {
   @ApiParam({ format: 'uuid', name: 'id' })
   document(@Param('id') id: string): Promise<FinancialDocumentDto> {
     return this.documents.document(id);
+  }
+
+  @Get(':id/pdf')
+  @RateLimitPolicy('read')
+  @RequirePermissions({ action: 'view', module: 'erp.finance' })
+  @ApiParam({ format: 'uuid', name: 'id' })
+  @ApiProduces('application/pdf')
+  @ApiOkResponse({
+    content: { 'application/pdf': { schema: { format: 'binary', type: 'string' } } },
+    description: 'Printable financial document. Drafts are marked as drafts.',
+  })
+  async pdf(@Param('id') id: string, @Res() response: Response): Promise<void> {
+    const content = await this.documents.pdf(id);
+    response.setHeader('Cache-Control', 'private, no-store');
+    response.setHeader(
+      'Content-Disposition',
+      `attachment; filename*=UTF-8''${encodeURIComponent(content.fileName)}`,
+    );
+    response.setHeader('Content-Length', String(content.buffer.length));
+    response.setHeader('Content-Type', 'application/pdf');
+    response.setHeader('X-Content-Type-Options', 'nosniff');
+    response.status(HttpStatus.OK).send(content.buffer);
+  }
+
+  @Post(':id/email')
+  @HttpCode(HttpStatus.ACCEPTED)
+  @RequirePermissions({ action: 'edit', module: 'erp.finance' })
+  @ApiBody({ type: SendDocumentEmailDto })
+  @ApiAcceptedResponse({ type: QueuedEmailReceiptDto })
+  @ApiHeader({ name: 'Idempotency-Key', required: true })
+  @ApiParam({ format: 'uuid', name: 'id' })
+  email(
+    @Param('id') id: string,
+    @Body() input: SendDocumentEmailDto,
+    @Headers('idempotency-key') key: string | undefined,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<QueuedEmailReceiptDto> {
+    return this.documents.email(id, input, key, request.authentication, metadata(request));
+  }
+
+  @Post(':id/issue')
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissions({ action: 'edit', module: 'erp.finance' })
+  @ApiBody({ type: IssueFinancialDocumentDto })
+  @ApiOkResponse({ type: FinancialDocumentDto })
+  @ApiHeader({ name: 'Idempotency-Key', required: true })
+  @ApiParam({ format: 'uuid', name: 'id' })
+  issue(
+    @Param('id') id: string,
+    @Body() input: IssueFinancialDocumentDto,
+    @Headers('idempotency-key') key: string | undefined,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<FinancialDocumentDto> {
+    return this.documents.issue(id, input, key, request.authentication, metadata(request));
   }
 
   @Post()

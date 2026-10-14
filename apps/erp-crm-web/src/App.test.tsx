@@ -103,7 +103,7 @@ const partnerProfile = {
       active: true,
       bankName: 'Example Bank',
       bic: 'WESTGB22',
-      currencyCode: 'BGN',
+      currencyCode: 'EUR',
       iban: 'GB82WEST12345698765432',
       id: 'f8912828-81dd-491e-a12c-377d5bc97b68',
     },
@@ -659,7 +659,7 @@ describe('ERP and CRM authenticated workspace', () => {
         counterpartyName: 'Alfa Market Demo Ltd.',
         dueDate: '2026-08-27',
         number: 'FIN-REV-2026-000005',
-        outstandingBgn: '60.0000',
+        outstandingEur: '60.0000',
       },
       templateKey: 'finance.payment.upcoming',
       templateVersion: 1,
@@ -684,7 +684,7 @@ describe('ERP and CRM authenticated workspace', () => {
     expect(await screen.findByText('Low stock needs attention')).toBeTruthy();
     expect(screen.getByText('Payment is due soon')).toBeTruthy();
     expect(screen.getByText(/FIN-REV-2026-000005 · Alfa Market Demo Ltd\./u)).toBeTruthy();
-    expect(screen.getByText(/60\.00 BGN/u)).toBeTruthy();
+    expect(screen.getByText(/60\.00 EUR/u)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: /Low stock needs attention/u }));
     await waitFor(() =>
       expect(fetchMock).toHaveBeenCalledWith(
@@ -693,7 +693,7 @@ describe('ERP and CRM authenticated workspace', () => {
       ),
     );
     fireEvent.click(screen.getByRole('button', { name: 'BG' }));
-    expect(await screen.findByText(/60,00 BGN/u)).toBeTruthy();
+    expect(await screen.findByText(/60,00 EUR/u)).toBeTruthy();
   });
 
   it('shows a safe notification error code and copyable support reference', async () => {
@@ -1298,7 +1298,7 @@ describe('ERP and CRM authenticated workspace', () => {
       quotations: [
         {
           customerPartnerId: customerId,
-          currencyCode: 'BGN',
+          currencyCode: 'EUR',
           id: quotationId,
           number: 'Q-2026-000001',
           status: 'draft',
@@ -1324,9 +1324,9 @@ describe('ERP and CRM authenticated workspace', () => {
       pageSize: 200,
       summary: {
         openCount: opportunity && !['won', 'lost'].includes(opportunity.stage) ? 1 : 0,
-        openRevenueBgn: opportunity ? opportunity.estimatedRevenueBgn : '0',
-        weightedRevenueBgn: opportunity ? opportunity.weightedRevenueBgn : '0',
-        wonRevenueBgn: opportunity?.stage === 'won' ? opportunity.estimatedRevenueBgn : '0',
+        openRevenueEur: opportunity ? opportunity.estimatedRevenueEur : '0',
+        weightedRevenueEur: opportunity ? opportunity.weightedRevenueEur : '0',
+        wonRevenueEur: opportunity?.stage === 'won' ? opportunity.estimatedRevenueEur : '0',
       },
       total: opportunity ? 1 : 0,
       totalPages: opportunity ? 1 : 0,
@@ -1391,7 +1391,7 @@ describe('ERP and CRM authenticated workspace', () => {
           newCustomer: { displayName: string };
           opportunity: {
             description?: string;
-            estimatedRevenueBgn: string;
+            estimatedRevenueEur: string;
             expectedCloseOn?: string;
             ownerAccountId: string;
             probabilityPercent: number;
@@ -1421,7 +1421,7 @@ describe('ERP and CRM authenticated workspace', () => {
           createdAt: '2026-09-01T10:10:00.000Z',
           customer: customers[0]!,
           ...(body.opportunity.description ? { description: body.opportunity.description } : {}),
-          estimatedRevenueBgn: '1800.00',
+          estimatedRevenueEur: '1800.00',
           ...(body.opportunity.expectedCloseOn
             ? { expectedCloseOn: body.opportunity.expectedCloseOn }
             : {}),
@@ -1445,7 +1445,7 @@ describe('ERP and CRM authenticated workspace', () => {
           title: body.opportunity.title,
           updatedAt: '2026-09-01T10:10:00.000Z',
           version: 1,
-          weightedRevenueBgn: '720.00',
+          weightedRevenueEur: '720.00',
         };
         return Promise.resolve(jsonResponse({ customer: customers[0], lead, opportunity }));
       }
@@ -1472,7 +1472,7 @@ describe('ERP and CRM authenticated workspace', () => {
           ],
           quotations: [
             {
-              currencyCode: 'BGN',
+              currencyCode: 'EUR',
               id: quotationId,
               linkedAt,
               number: 'Q-2026-000001',
@@ -1511,7 +1511,7 @@ describe('ERP and CRM authenticated workspace', () => {
           stage: body.stage,
           updatedAt: '2026-09-01T10:15:00.000Z',
           version: 2,
-          weightedRevenueBgn: '720.00',
+          weightedRevenueEur: '720.00',
         };
         return Promise.resolve(jsonResponse(opportunity));
       }
@@ -1566,7 +1566,7 @@ describe('ERP and CRM authenticated workspace', () => {
     fireEvent.change(within(dialog).getByLabelText('Opportunity name'), {
       target: { value: 'Fiscal device and annual service' },
     });
-    fireEvent.change(within(dialog).getByLabelText('Estimated value (BGN)'), {
+    fireEvent.change(within(dialog).getByLabelText('Estimated value (EUR)'), {
       target: { value: '1800' },
     });
     fireEvent.change(within(dialog).getByLabelText('Company registration number (optional)'), {
@@ -1634,7 +1634,7 @@ describe('ERP and CRM authenticated workspace', () => {
       createOpportunity: true,
       expectedVersion: 2,
       newCustomer: { displayName: 'North Shop Demo Ltd.', kind: 'legal_entity' },
-      opportunity: { estimatedRevenueBgn: '1800', probabilityPercent: 40 },
+      opportunity: { estimatedRevenueEur: '1800', probabilityPercent: 40 },
     });
   });
 
@@ -1730,8 +1730,8 @@ describe('ERP and CRM authenticated workspace', () => {
     const overview: CustomerOperationalOverview = {
       financialDocuments: [
         {
-          bgnGrossTotal: '60.0000',
-          currencyCode: 'BGN',
+          eurGrossTotal: '60.0000',
+          currencyCode: 'EUR',
           documentType: 'invoice',
           draftNumber: 'DINV-2026-000001',
           dueDate: '2026-09-08',
@@ -1773,7 +1773,7 @@ describe('ERP and CRM authenticated workspace', () => {
       payments: [
         {
           amount: '20.0000',
-          currencyCode: 'BGN',
+          currencyCode: 'EUR',
           id: 'c3603397-2627-47a4-a104-fb8a14ca2b2d',
           number: 'PAY-2026-000001',
           paymentDate: '2026-08-26',
@@ -1785,7 +1785,7 @@ describe('ERP and CRM authenticated workspace', () => {
       profile: partnerProfile,
       purchases: [
         {
-          currencyCode: 'BGN',
+          currencyCode: 'EUR',
           id: '4d858c55-2579-4ed0-b0bd-91152013c987',
           lines: [
             {
@@ -1806,8 +1806,8 @@ describe('ERP and CRM authenticated workspace', () => {
       receivables: [
         {
           allocatedTotal: '20.0000',
-          bgnTotal: '60.0000',
-          currencyCode: 'BGN',
+          eurTotal: '60.0000',
+          currencyCode: 'EUR',
           documentDate: '2026-08-25',
           dueDate: '2026-09-08',
           id: '7ea2517a-1168-468f-9851-e74b8d884aa4',
@@ -1824,7 +1824,7 @@ describe('ERP and CRM authenticated workspace', () => {
         financialDocuments: 1,
         lastPurchaseAt: '2026-08-25T12:00:00.000Z',
         openReceivables: 1,
-        outstandingBgn: '40.0000',
+        outstandingEur: '40.0000',
         payments: 1,
         purchases: 1,
       },
@@ -2543,8 +2543,8 @@ describe('ERP and CRM authenticated workspace', () => {
           jsonResponse([
             {
               availableQuantity: '3.0000',
-              averageUnitCostBgn: '200.0000',
-              inventoryValueBgn: '1000.0000',
+              averageUnitCostEur: '200.0000',
+              inventoryValueEur: '1000.0000',
               productId: inventoryProductFixture.id,
               quantity: '5.0000',
               reservedQuantity: '2.0000',
@@ -2552,8 +2552,8 @@ describe('ERP and CRM authenticated workspace', () => {
             },
             {
               availableQuantity: '1.0000',
-              averageUnitCostBgn: '1.0060',
-              inventoryValueBgn: '1.0060',
+              averageUnitCostEur: '1.0060',
+              inventoryValueEur: '1.0060',
               productId: secondProduct.id,
               quantity: '1.0000',
               reservedQuantity: '0.0000',
@@ -2561,8 +2561,8 @@ describe('ERP and CRM authenticated workspace', () => {
             },
             {
               availableQuantity: '1.0000',
-              averageUnitCostBgn: '1.0060',
-              inventoryValueBgn: '1.0060',
+              averageUnitCostEur: '1.0060',
+              inventoryValueEur: '1.0060',
               productId: thirdProduct.id,
               quantity: '1.0000',
               reservedQuantity: '0.0000',
@@ -2605,15 +2605,15 @@ describe('ERP and CRM authenticated workspace', () => {
 
     expect(await screen.findByRole('heading', { name: 'Stock overview' })).toBeTruthy();
     expect((await screen.findAllByText('Fiscal device Alpha')).length).toBeGreaterThan(0);
-    expect(screen.getAllByText('1,000.00 BGN').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('1,000.00 EUR').length).toBeGreaterThan(0);
     for (const product of [secondProduct, thirdProduct]) {
       expect(
         within(screen.getByRole('row', { name: new RegExp(product.name, 'u') })).getAllByText(
-          '1.01 BGN',
+          '1.01 EUR',
         ),
       ).toHaveLength(2);
     }
-    expect(screen.getByText('1,002.02 BGN')).toBeTruthy();
+    expect(screen.getByText('1,002.02 EUR')).toBeTruthy();
     expect(screen.getAllByText('7').length).toBeGreaterThan(0);
     fireEvent.click(screen.getByRole('button', { name: 'Set stock thresholds' }));
     fireEvent.change(screen.getByLabelText('Minimum quantity'), { target: { value: '6' } });
@@ -2671,8 +2671,8 @@ describe('ERP and CRM authenticated workspace', () => {
               productId: inventoryProductFixture.id,
               quantity: '1.0000',
               serialItemIds: ['77886c8d-5812-413d-a93c-c2bcbb4f27df'],
-              totalCostBgn: '250.0000',
-              unitCostBgn: '250.0000',
+              totalCostEur: '250.0000',
+              unitCostEur: '250.0000',
               warehouseId: warehouseFixture.id,
             },
             201,
@@ -2688,7 +2688,7 @@ describe('ERP and CRM authenticated workspace', () => {
     fireEvent.change(screen.getByLabelText('Source reference'), {
       target: { value: 'GR-2026-0042' },
     });
-    fireEvent.change(screen.getByLabelText('Unit cost (BGN)'), { target: { value: '250' } });
+    fireEvent.change(screen.getByLabelText('Unit cost (EUR)'), { target: { value: '250' } });
     fireEvent.change(screen.getByLabelText('Serial numbers'), {
       target: { value: 'FDA-ALPHA-0001' },
     });
@@ -2706,7 +2706,7 @@ describe('ERP and CRM authenticated workspace', () => {
       productId: inventoryProductFixture.id,
       referenceId: 'GR-2026-0042',
       serialNumbers: ['FDA-ALPHA-0001'],
-      unitCostBgn: '250',
+      unitCostEur: '250',
       warehouseId: warehouseFixture.id,
     });
   });
@@ -2744,8 +2744,8 @@ describe('ERP and CRM authenticated workspace', () => {
               productId: inventoryProductFixture.id,
               quantity: '1.0000',
               serialItemIds: ['77886c8d-5812-413d-a93c-c2bcbb4f27df'],
-              totalCostBgn: '250.0000',
-              unitCostBgn: '250.0000',
+              totalCostEur: '250.0000',
+              unitCostEur: '250.0000',
             },
             201,
           ),
@@ -2816,8 +2816,8 @@ describe('ERP and CRM authenticated workspace', () => {
           referenceLabel: reference,
           referenceType: 'Stocktake',
           sourceHref: '/modules/erp.warehouse/stocktakes',
-          totalCostBgn: '250.0000',
-          unitCostBgn: '250.0000',
+          totalCostEur: '250.0000',
+          unitCostEur: '250.0000',
           warehouseId: warehouseFixture.id,
           warehouseName: warehouseFixture.name,
         },
@@ -3002,7 +3002,7 @@ describe('ERP and CRM authenticated workspace', () => {
                 description: 'Display connection repaired and tested.',
                 details: [
                   { label: 'Working time', value: '45 minutes' },
-                  { label: 'Repair cost', value: 'BGN 72.0000' },
+                  { label: 'Repair cost', value: 'EUR 72.0000' },
                 ],
                 eventId: 'repair-completed:one',
                 eventType: 'repair_completed',
@@ -3843,7 +3843,7 @@ describe('ERP and CRM authenticated workspace', () => {
       if (input.endsWith('/procurement/purchase-orders') && options?.method === 'POST') {
         const order = {
           createdAt: '2026-08-11T12:00:00.000Z',
-          currencyCode: 'BGN',
+          currencyCode: 'EUR',
           id: orderId,
           lines: [
             {
@@ -3883,8 +3883,8 @@ describe('ERP and CRM authenticated workspace', () => {
               quantity: '2.0000',
               serialItemIds: [],
               stockMovementId: '8ba45261-415b-4e9b-b857-b0f7f4ef3658',
-              totalCostBgn: '280.0000',
-              unitCostBgn: '140.0000',
+              totalCostEur: '280.0000',
+              unitCostEur: '140.0000',
             },
           ],
           purchaseOrderId: orderId,
@@ -3976,14 +3976,14 @@ describe('ERP and CRM authenticated workspace', () => {
         .disabled,
     ).toBe(false);
     const unitCostInput = within(receiptDialog).getByLabelText<HTMLInputElement>(
-      messages.procurement.unitCostBgn,
+      messages.procurement.unitCostEur,
     );
     fireEvent.change(unitCostInput, { target: { value: '140' } });
-    expect(within(receiptDialog).getByText(/differs from purchase-order price/u)).toBeTruthy();
+    expect(within(receiptDialog).queryByText(/differs from/u)).toBeNull();
     fireEvent.click(includeProduct);
-    expect(within(receiptDialog).queryByText(/differs from purchase-order price/u)).toBeNull();
+    expect(within(receiptDialog).queryByText(/differs from/u)).toBeNull();
     fireEvent.click(includeProduct);
-    expect(within(receiptDialog).getByText(/differs from purchase-order price/u)).toBeTruthy();
+    expect(within(receiptDialog).queryByText(/differs from/u)).toBeNull();
     fireEvent.change(within(receiptDialog).getByLabelText(messages.procurement.deliveryReference), {
       target: { value: 'DEL-2026-42' },
     });
@@ -4016,7 +4016,7 @@ describe('ERP and CRM authenticated workspace', () => {
         url.endsWith('/procurement/purchase-orders') && options?.method === 'POST',
     );
     expect(JSON.parse((createCall?.[1] as RequestInit).body as string)).toEqual({
-      currencyCode: 'BGN',
+      currencyCode: 'EUR',
       lines: [
         {
           expectedDeliveryDate: '2026-08-22',
@@ -4034,7 +4034,7 @@ describe('ERP and CRM authenticated workspace', () => {
         options?.method === 'POST',
     );
     expect(JSON.parse((receiveCall?.[1] as RequestInit).body as string)).toMatchObject({
-      lines: [{ orderLineId, quantity: '2.0000', unitCostBgn: '140' }],
+      lines: [{ orderLineId, quantity: '2.0000', unitCostEur: '140' }],
       supplierDeliveryReference: 'DEL-2026-42',
     });
   });
@@ -4070,7 +4070,7 @@ describe('ERP and CRM authenticated workspace', () => {
     };
     const order = {
       createdAt: '2026-08-11T12:00:00.000Z',
-      currencyCode: 'BGN',
+      currencyCode: 'EUR',
       id: orderId,
       lines: [
         {
@@ -4132,7 +4132,7 @@ describe('ERP and CRM authenticated workspace', () => {
       }
       if (input.endsWith('/procurement/supplier-invoices') && options?.method === 'POST') {
         const invoice = {
-          currencyCode: 'BGN',
+          currencyCode: 'EUR',
           id: 'b58ce02e-5042-4cf8-9d45-78d65d537e1a',
           invoiceDate: '2026-08-11',
           invoiceNumber: 'SUP-2026-101',
@@ -4251,8 +4251,8 @@ describe('ERP and CRM authenticated workspace', () => {
           dueDate: '2026-08-09',
           id: '0cedf0aa-52de-4d51-9685-ff8d52aeb004',
           number: 'FIN-REV-2026-000014',
-          originalBgnTotal: '180.0000',
-          outstandingBgnTotal: '140.0000',
+          originalEurTotal: '180.0000',
+          outstandingEurTotal: '140.0000',
           partnerId: '621806be-070c-4cf8-84cc-c1585dad9d3b',
           partnerName: 'Alfa Market Ltd.',
           paymentStatus: 'overdue',
@@ -4282,7 +4282,7 @@ describe('ERP and CRM authenticated workspace', () => {
           daysOverdue: 0,
           id: '7f107f45-14f9-4bb1-a39c-3c0ed3df049f',
           number: 'PAY-2026-000009',
-          outstandingBgnTotal: '75.0000',
+          outstandingEurTotal: '75.0000',
           partnerId: '54d6b7b1-330e-494f-85c4-2b781755aefd',
           partnerName: 'TechSupply Ltd.',
           paymentStatus: 'partially_paid',
@@ -4304,10 +4304,10 @@ describe('ERP and CRM authenticated workspace', () => {
       dateTo: '2026-08-21',
       items: [
         {
-          allocatedBgnTotal: '40.0000',
+          allocatedEurTotal: '40.0000',
           documentCount: 2,
-          grossBgnTotal: '240.0000',
-          outstandingBgnTotal: '200.0000',
+          grossEurTotal: '240.0000',
+          outstandingEurTotal: '200.0000',
           partnerId: receivableReport.items[0]!.partnerId,
           partnerName: 'Alfa Market Ltd.',
         },
@@ -4318,30 +4318,30 @@ describe('ERP and CRM authenticated workspace', () => {
       totalItems: 1,
       totalPages: 1,
       totals: {
-        allocatedBgnTotal: '40.0000',
+        allocatedEurTotal: '40.0000',
         documentCount: 2,
-        grossBgnTotal: '240.0000',
-        outstandingBgnTotal: '200.0000',
+        grossEurTotal: '240.0000',
+        outstandingEurTotal: '200.0000',
       },
     };
     const supplierTurnover: FinanceTurnoverReport = {
       ...customerTurnover,
       items: [
         {
-          allocatedBgnTotal: '25.0000',
+          allocatedEurTotal: '25.0000',
           documentCount: 1,
-          grossBgnTotal: '100.0000',
-          outstandingBgnTotal: '75.0000',
+          grossEurTotal: '100.0000',
+          outstandingEurTotal: '75.0000',
           partnerId: payableReport.items[0]!.partnerId,
           partnerName: 'TechSupply Ltd.',
         },
       ],
       kind: 'supplier',
       totals: {
-        allocatedBgnTotal: '25.0000',
+        allocatedEurTotal: '25.0000',
         documentCount: 1,
-        grossBgnTotal: '100.0000',
-        outstandingBgnTotal: '75.0000',
+        grossEurTotal: '100.0000',
+        outstandingEurTotal: '75.0000',
       },
     };
     const salesJournal: FinanceJournalReport = {
@@ -4349,13 +4349,13 @@ describe('ERP and CRM authenticated workspace', () => {
       dateTo: '2026-08-21',
       items: [
         {
-          currencyCode: 'BGN',
+          currencyCode: 'EUR',
           documentDate: '2026-08-18',
           documentType: 'invoice',
           exchangeRate: '1.00000000',
-          grossBgnTotal: '240.0000',
+          grossEurTotal: '240.0000',
           id: '4a3dd890-b862-45cc-b94d-b96e584186bf',
-          netBgnTotal: '200.0000',
+          netEurTotal: '200.0000',
           number: 'DINV-VR-2026-000014',
           partnerName: 'Alfa Market Ltd.',
           partnerVatNumber: 'BG204000001',
@@ -4363,7 +4363,7 @@ describe('ERP and CRM authenticated workspace', () => {
           status: 'draft',
           taxBreakdownComplete: true,
           taxEventDate: '2026-08-18',
-          vatBgnTotal: '40.0000',
+          vatEurTotal: '40.0000',
         },
       ],
       kind: 'sales',
@@ -4373,39 +4373,39 @@ describe('ERP and CRM authenticated workspace', () => {
       totalPages: 1,
       totals: {
         documentCount: 1,
-        grossBgnTotal: '240.0000',
+        grossEurTotal: '240.0000',
         incompleteTaxDocuments: 0,
-        netBgnTotal: '200.0000',
-        vatBgnTotal: '40.0000',
+        netEurTotal: '200.0000',
+        vatEurTotal: '40.0000',
       },
     };
     const purchaseJournal: FinanceJournalReport = {
       ...salesJournal,
       items: [
         {
-          currencyCode: 'BGN',
+          currencyCode: 'EUR',
           documentDate: '2026-08-19',
           documentType: 'supplier_invoice',
           exchangeRate: '1.00000000',
-          grossBgnTotal: '120.0000',
+          grossEurTotal: '120.0000',
           id: 'bc863e98-b977-421d-a426-eb74a7454d69',
-          netBgnTotal: '100.0000',
+          netEurTotal: '100.0000',
           number: 'SUP-2026-101',
           partnerName: 'TechSupply Ltd.',
           partnerVatNumber: 'BG205000002',
           status: 'recorded',
           taxBreakdownComplete: true,
           taxEventDate: '2026-08-19',
-          vatBgnTotal: '20.0000',
+          vatEurTotal: '20.0000',
         },
       ],
       kind: 'purchase',
       totals: {
         documentCount: 1,
-        grossBgnTotal: '120.0000',
+        grossEurTotal: '120.0000',
         incompleteTaxDocuments: 0,
-        netBgnTotal: '100.0000',
-        vatBgnTotal: '20.0000',
+        netEurTotal: '100.0000',
+        vatEurTotal: '20.0000',
       },
     };
     const vatReview: FinanceVatReviewReport = {
@@ -4417,23 +4417,23 @@ describe('ERP and CRM authenticated workspace', () => {
         {
           direction: 'output',
           documentCount: 1,
-          netBgnTotal: '200.0000',
-          vatBgnTotal: '40.0000',
+          netEurTotal: '200.0000',
+          vatEurTotal: '40.0000',
           vatRate: '20.0000',
           vatTreatment: 'standard_20',
         },
         {
           direction: 'input',
           documentCount: 1,
-          netBgnTotal: '100.0000',
-          vatBgnTotal: '20.0000',
+          netEurTotal: '100.0000',
+          vatEurTotal: '20.0000',
           vatRate: '20.0000',
           vatTreatment: 'standard_20',
         },
       ],
-      recordedDifferenceBgn: '20.0000',
-      recordedInputVatBgn: '20.0000',
-      recordedOutputVatBgn: '40.0000',
+      recordedDifferenceEur: '20.0000',
+      recordedInputVatEur: '20.0000',
+      recordedOutputVatEur: '40.0000',
     };
     const definitions: FinanceReportDefinition[] = [
       {
@@ -4461,8 +4461,8 @@ describe('ERP and CRM authenticated workspace', () => {
         description: 'Supplier document turnover for a selected period.',
         columns: [
           { key: 'partnerName', label: 'Partner', type: 'text' },
-          { key: 'grossBgnTotal', label: 'Gross BGN', type: 'money' },
-          { key: 'outstandingBgnTotal', label: 'Outstanding BGN', type: 'money' },
+          { key: 'grossEurTotal', label: 'Gross EUR', type: 'money' },
+          { key: 'outstandingEurTotal', label: 'Outstanding EUR', type: 'money' },
         ],
         formats: ['csv', 'xlsx', 'pdf'],
         key: 'finance.supplier-turnover',
@@ -4579,7 +4579,7 @@ describe('ERP and CRM authenticated workspace', () => {
     expect(within(exportDialog).getByLabelText<HTMLSelectElement>('Report').value).toBe(
       'finance.supplier-turnover',
     );
-    fireEvent.click(await within(exportDialog).findByRole('checkbox', { name: 'Outstanding BGN' }));
+    fireEvent.click(await within(exportDialog).findByRole('checkbox', { name: 'Outstanding EUR' }));
     fireEvent.change(within(exportDialog).getByLabelText('Save these options'), {
       target: { value: 'Supplier totals' },
     });
@@ -4587,7 +4587,7 @@ describe('ERP and CRM authenticated workspace', () => {
     expect(
       await within(exportDialog).findByRole('option', { name: 'Supplier totals' }),
     ).toBeTruthy();
-    expect(savedReports[0]?.columns).toEqual(['partnerName', 'grossBgnTotal']);
+    expect(savedReports[0]?.columns).toEqual(['partnerName', 'grossEurTotal']);
     fireEvent.click(within(exportDialog).getByRole('button', { name: 'Prepare export' }));
     expect(await within(exportDialog).findByText('Ready')).toBeTruthy();
     expect(within(exportDialog).getAllByText('Supplier turnover').length).toBeGreaterThan(1);
@@ -4609,10 +4609,10 @@ describe('ERP and CRM authenticated workspace', () => {
       target: { value: savedReports[0]!.id },
     });
     expect(
-      within(reopened).getByRole<HTMLInputElement>('checkbox', { name: 'Outstanding BGN' }).checked,
+      within(reopened).getByRole<HTMLInputElement>('checkbox', { name: 'Outstanding EUR' }).checked,
     ).toBe(false);
     fireEvent.click(within(reopened).getByRole('checkbox', { name: 'Partner' }));
-    fireEvent.click(within(reopened).getByRole('checkbox', { name: 'Gross BGN' }));
+    fireEvent.click(within(reopened).getByRole('checkbox', { name: 'Gross EUR' }));
     expect(
       within(reopened).getByRole<HTMLButtonElement>('button', { name: 'Prepare export' }).disabled,
     ).toBe(true);
@@ -4675,6 +4675,14 @@ describe('ERP and CRM authenticated workspace', () => {
       if (input.endsWith('/sales/reference-data')) return Promise.resolve(jsonResponse(references));
       if (input.endsWith('/sales/workflows'))
         return Promise.resolve(jsonResponse(workflow ? [workflow] : []));
+      if (
+        input.includes('/sales/quotations/') &&
+        input.endsWith('/email') &&
+        options?.method === 'POST'
+      )
+        return Promise.resolve(
+          jsonResponse({ recipientEmail: 'client@example.com', status: 'queued' }, 202),
+        );
       if (input.includes('/sales/quotations/') && options?.method === 'PUT') {
         if (typeof options.body !== 'string') throw new Error('Expected a JSON request body');
         const body = JSON.parse(options.body) as {
@@ -4713,7 +4721,7 @@ describe('ERP and CRM authenticated workspace', () => {
         return Promise.resolve(
           jsonResponse({
             asOf: '2026-08-12',
-            currencyCode: 'BGN',
+            currencyCode: 'EUR',
             matched: true,
             priceListCode: 'TRADE',
             priceListId: '5860227a-84d3-4a64-bfd0-99cb9faf2e53',
@@ -4726,7 +4734,7 @@ describe('ERP and CRM authenticated workspace', () => {
       if (input.endsWith('/sales/quotations') && options?.method === 'POST') {
         workflow = {
           createdAt: '2026-08-12T08:00:00.000Z',
-          currencyCode: 'BGN',
+          currencyCode: 'EUR',
           customerName: references.customers[0]!.name,
           customerPartnerId: customerId,
           id: '8ea0d4c4-0493-41b8-a224-f8466a05a578',
@@ -4829,7 +4837,7 @@ describe('ERP and CRM authenticated workspace', () => {
         workflow = {
           ...workflow!,
           invoice: {
-            currencyCode: 'BGN',
+            currencyCode: 'EUR',
             customerName: references.customers[0]!.name,
             customerPartnerId: customerId,
             id: '3b507b65-017f-4a10-a697-b2335af52acd',
@@ -4882,10 +4890,10 @@ describe('ERP and CRM authenticated workspace', () => {
     ).toBeTruthy();
     fireEvent.click(within(createDialog).getByRole('button', { name: 'Use customer price' }));
     expect(await within(createDialog).findByText(/Trade customers applied/u)).toBeTruthy();
-    expect(within(createDialog).getByLabelText<HTMLInputElement>('Unit price (BGN)').value).toBe(
+    expect(within(createDialog).getByLabelText<HTMLInputElement>('Unit price (EUR)').value).toBe(
       '38.0000',
     );
-    fireEvent.change(within(createDialog).getByLabelText('Unit price (BGN)'), {
+    fireEvent.change(within(createDialog).getByLabelText('Unit price (EUR)'), {
       target: { value: '40' },
     });
     fireEvent.change(within(createDialog).getByLabelText('Quantity'), {
@@ -4897,9 +4905,24 @@ describe('ERP and CRM authenticated workspace', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Preview' }));
     let preview = await screen.findByRole('dialog', { name: 'Q-2026-000001' });
     expect(within(preview).getByRole('button', { name: 'Download quotation PDF' })).toBeTruthy();
+    fireEvent.change(within(preview).getByLabelText('Recipient email'), {
+      target: { value: 'client@example.com' },
+    });
+    fireEvent.click(within(preview).getByRole('button', { name: 'Email quotation' }));
+    expect(
+      await within(preview).findByText('The quotation was queued for client@example.com.'),
+    ).toBeTruthy();
+    const quotationEmailCall = fetchMock.mock.calls.find(
+      ([url, options]) =>
+        url.endsWith(`/sales/quotations/${workflow?.id}/email`) && options?.method === 'POST',
+    );
+    expect(JSON.parse((quotationEmailCall?.[1] as RequestInit).body as string)).toEqual({
+      expectedVersion: 1,
+      recipientEmail: 'client@example.com',
+    });
     fireEvent.click(within(preview).getByRole('button', { name: 'Revise quotation' }));
     const reviseDialog = await screen.findByRole('dialog', { name: 'Revise quotation' });
-    fireEvent.change(within(reviseDialog).getByLabelText('Unit price (BGN)'), {
+    fireEvent.change(within(reviseDialog).getByLabelText('Unit price (EUR)'), {
       target: { value: '41' },
     });
     const revisedValidUntil = reviseDialog.querySelector<HTMLInputElement>('input[type="date"]');
@@ -4983,7 +5006,7 @@ describe('ERP and CRM authenticated workspace', () => {
     expect(await within(expiredPreview).findByText('Cancelled')).toBeTruthy();
     expect(
       fetchMock.mock.calls.some(
-        ([url]) => url.includes('/sales/prices/resolve?asOf=') && url.includes('currencyCode=BGN'),
+        ([url]) => url.includes('/sales/prices/resolve?asOf=') && url.includes('currencyCode=EUR'),
       ),
     ).toBe(true);
     const confirmationCall = fetchMock.mock.calls.find(
@@ -5033,7 +5056,7 @@ describe('ERP and CRM authenticated workspace', () => {
       campaign: { id: campaign.id, name: campaign.name },
       code: 'TRADE-AUTUMN',
       createdAt: '2026-08-12T08:10:00.000Z',
-      currencyCode: 'BGN',
+      currencyCode: 'EUR',
       customerGroup: { id: customerGroup.id, name: customerGroup.name },
       id: '2fc80532-0ec0-4f87-a8f3-8efcb60fb95d',
       lines: [
@@ -5115,7 +5138,7 @@ describe('ERP and CRM authenticated workspace', () => {
         return Promise.resolve(
           jsonResponse({
             asOf: '2026-08-12',
-            currencyCode: 'BGN',
+            currencyCode: 'EUR',
             matched: true,
             priceListCode: priceList.code,
             priceListId: priceList.id,
@@ -5308,7 +5331,7 @@ describe('ERP and CRM authenticated workspace', () => {
     };
     storeAuthenticatedSession(financeContext);
     const invoiceDraft = {
-      currencyCode: 'BGN',
+      currencyCode: 'EUR',
       customerName: 'River Market Ltd.',
       customerPartnerId: '2f1ac8d4-83ac-48d7-aa0e-57ce1f34dd83',
       id: '7ad369bc-3ad2-4b49-99bf-dab68f7f4b4f',
@@ -5319,9 +5342,9 @@ describe('ERP and CRM authenticated workspace', () => {
     let documents: Array<Record<string, unknown>> = [];
     const documentFor = (allocatedTotal: string, paymentStatus: string, payments: unknown[]) => ({
       allocatedTotal,
-      bgnTotal: '273.6000',
+      eurTotal: '273.6000',
       createdAt: '2026-08-14T09:05:00.000Z',
-      currencyCode: 'BGN',
+      currencyCode: 'EUR',
       customerName: invoiceDraft.customerName,
       customerPartnerId: invoiceDraft.customerPartnerId,
       documentDate: '2026-08-14',
@@ -5333,7 +5356,7 @@ describe('ERP and CRM authenticated workspace', () => {
       paymentStatus,
       payments,
       rateDate: '2026-08-14',
-      rateSource: 'internal_bgn_review',
+      rateSource: 'internal_eur_review',
       reviewState: 'pending_finance_review',
       sourceInvoiceNumber: invoiceDraft.number,
       sourceSalesInvoiceId: invoiceDraft.id,
@@ -5411,7 +5434,7 @@ describe('ERP and CRM authenticated workspace', () => {
     dialog = await screen.findByRole('dialog', { name: 'FIN-REV-2026-000001' });
     fireEvent.click(within(dialog).getByRole('button', { name: 'Record payment' }));
     dialog = await screen.findByRole('dialog', { name: 'Record payment' });
-    fireEvent.change(within(dialog).getByLabelText('Amount (BGN)'), { target: { value: '125' } });
+    fireEvent.change(within(dialog).getByLabelText('Amount (EUR)'), { target: { value: '125' } });
     fireEvent.change(within(dialog).getByLabelText('Reference (optional)'), {
       target: { value: 'BANK-101' },
     });
@@ -5473,7 +5496,7 @@ describe('ERP and CRM authenticated workspace', () => {
       ],
       outstandingBalance: '0.0000',
       terms: {
-        creditLimitBgn: '2000.0000',
+        creditLimitEur: '2000.0000',
         id: '4d263df9-af2a-4f30-9fd1-999325135f39',
         onAccountEnabled: true,
         paymentTermsDays: 14,
@@ -5500,14 +5523,14 @@ describe('ERP and CRM authenticated workspace', () => {
         return Promise.resolve(jsonResponse([account]));
       if (input.endsWith(`/finance/customer-accounts/${customerId}/terms`)) {
         const body = JSON.parse(typeof options?.body === 'string' ? options.body : '') as {
-          creditLimitBgn: string;
+          creditLimitEur: string;
         };
         account = {
           ...account,
-          availableCredit: Number(body.creditLimitBgn).toFixed(4),
+          availableCredit: Number(body.creditLimitEur).toFixed(4),
           terms: {
             ...account.terms!,
-            creditLimitBgn: Number(body.creditLimitBgn).toFixed(4),
+            creditLimitEur: Number(body.creditLimitEur).toFixed(4),
             version: 2,
           },
         };
@@ -5572,7 +5595,7 @@ describe('ERP and CRM authenticated workspace', () => {
     expect(within(dialog).getByText('DEV-ADV-ALFA-001')).toBeTruthy();
     fireEvent.click(within(dialog).getByRole('button', { name: 'Edit terms' }));
     dialog = await screen.findByRole('dialog', { name: 'Set payment terms' });
-    fireEvent.change(within(dialog).getByLabelText('Credit limit (BGN)'), {
+    fireEvent.change(within(dialog).getByLabelText('Credit limit (EUR)'), {
       target: { value: '1500' },
     });
     fireEvent.click(within(dialog).getByRole('button', { name: 'Save payment terms' }));
@@ -5591,7 +5614,7 @@ describe('ERP and CRM authenticated workspace', () => {
     dialog = await screen.findByRole('dialog', { name: 'Alfa Market Demo Ltd.' });
     fireEvent.click(within(dialog).getByRole('button', { name: 'Apply advance' }));
     dialog = await screen.findByRole('dialog', { name: 'Apply customer advance' });
-    expect(within(dialog).getByLabelText<HTMLInputElement>('Amount to apply (BGN)').value).toBe(
+    expect(within(dialog).getByLabelText<HTMLInputElement>('Amount to apply (EUR)').value).toBe(
       '80.0000',
     );
     fireEvent.click(within(dialog).getByRole('button', { name: 'Apply advance' }));
@@ -5635,7 +5658,7 @@ describe('ERP and CRM authenticated workspace', () => {
       ],
       supplierInvoices: [
         {
-          currencyCode: 'BGN',
+          currencyCode: 'EUR',
           id: supplierInvoiceId,
           invoiceDate: '2026-08-18',
           invoiceNumber: 'SUP-2026-0042',
@@ -5667,6 +5690,7 @@ describe('ERP and CRM authenticated workspace', () => {
       ],
       amount: '20.0000',
       availableTotal: '0.0000',
+      currencyCode: 'EUR',
       id: '73132729-d025-41c1-9536-84c92187ff0e',
       kind: 'payment',
       number: 'SPAY-2026-000001',
@@ -5686,9 +5710,9 @@ describe('ERP and CRM authenticated workspace', () => {
       version: number,
     ): FinanceSupplierPayable => ({
       allocatedTotal,
-      bgnTotal: '80.0000',
+      eurTotal: '80.0000',
       createdAt: '2026-08-20T10:00:00.000Z',
-      currencyCode: 'BGN',
+      currencyCode: 'EUR',
       documentDate: '2026-08-18',
       dueDate: '2026-09-01',
       exchangeRate: '1.00000000',
@@ -5698,7 +5722,7 @@ describe('ERP and CRM authenticated workspace', () => {
       paymentStatus: allocatedTotal === '0.0000' ? 'unpaid' : 'partially_paid',
       payments,
       rateDate: '2026-08-18',
-      rateSource: 'internal_bgn_review',
+      rateSource: 'internal_eur_review',
       sourceSupplierInvoiceId: supplierInvoiceId,
       sourceSupplierInvoiceNumber: 'SUP-2026-0042',
       supplierName: 'Dual-role Technical Supply Ltd.',
@@ -5882,7 +5906,7 @@ describe('ERP and CRM authenticated workspace', () => {
       ],
       salesDrafts: [
         {
-          currencyCode: 'BGN',
+          currencyCode: 'EUR',
           customerName: 'River Market Ltd.',
           customerPartnerId: customerId,
           id: sourceId,
@@ -5917,14 +5941,14 @@ describe('ERP and CRM authenticated workspace', () => {
       ],
     };
     const document = {
-      bgnGrossTotal: '120.0000',
-      bgnNetTotal: '100.0000',
-      bgnVatTotal: '20.0000',
+      eurGrossTotal: '120.0000',
+      eurNetTotal: '100.0000',
+      eurVatTotal: '20.0000',
       branchName: 'Vratsa Operations',
       businessLocationId: locationId,
       businessLocationName: 'Vratsa Service Centre',
       createdAt: '2026-08-19T08:00:00.000Z',
-      currencyCode: 'BGN',
+      currencyCode: 'EUR',
       customerPartnerId: customerId,
       customerSnapshot: {
         address: '1 Customer Street, Vratsa, BG',
@@ -5963,7 +5987,7 @@ describe('ERP and CRM authenticated workspace', () => {
       netTotal: '100.0000',
       number: 'DINV-VRATSA-2026-000001',
       rateDate: '2026-08-19',
-      rateSource: 'internal_bgn',
+      rateSource: 'internal_eur',
       sourceSalesInvoiceId: sourceId,
       sourceSalesInvoiceNumber: 'INV-DRAFT-2026-000014',
       status: 'draft',
@@ -5981,12 +6005,12 @@ describe('ERP and CRM authenticated workspace', () => {
     };
     const linkedSalesWorkflow = {
       createdAt: '2026-08-18T08:00:00.000Z',
-      currencyCode: 'BGN',
+      currencyCode: 'EUR',
       customerName: 'River Market Ltd.',
       customerPartnerId: customerId,
       id: 'a8ee6c19-bc7e-46d2-9d20-a59fa0e435b8',
       invoice: {
-        currencyCode: 'BGN',
+        currencyCode: 'EUR',
         customerName: 'River Market Ltd.',
         customerPartnerId: customerId,
         id: sourceId,
@@ -6071,6 +6095,21 @@ describe('ERP and CRM authenticated workspace', () => {
         documents = [document];
         return Promise.resolve(jsonResponse(document, 201));
       }
+      if (
+        input.endsWith(`/finance/financial-documents/${document.id}/issue`) &&
+        options?.method === 'POST'
+      ) {
+        const issued = { ...document, officialNumber: '0000000123', status: 'issued', version: 2 };
+        documents = [issued];
+        return Promise.resolve(jsonResponse(issued));
+      }
+      if (
+        input.endsWith(`/finance/financial-documents/${document.id}/email`) &&
+        options?.method === 'POST'
+      )
+        return Promise.resolve(
+          jsonResponse({ recipientEmail: 'client@example.com', status: 'queued' }, 202),
+        );
       if (input.endsWith('/finance/financial-documents'))
         return Promise.resolve(
           jsonResponse({
@@ -6117,6 +6156,25 @@ describe('ERP and CRM authenticated workspace', () => {
     fireEvent.click(within(reloadedPreview).getByRole('button', { name: 'Upload' }));
     expect(await within(reloadedPreview).findByText('support.pdf')).toBeTruthy();
     expect(within(reloadedPreview).getByRole('button', { name: 'Replace' })).toBeTruthy();
+    fireEvent.click(within(reloadedPreview).getByRole('checkbox'));
+    fireEvent.click(within(reloadedPreview).getByRole('button', { name: 'Issue document' }));
+    expect(await within(reloadedPreview).findByText('0000000123')).toBeTruthy();
+    fireEvent.change(within(reloadedPreview).getByLabelText('Recipient email'), {
+      target: { value: 'client@example.com' },
+    });
+    fireEvent.click(within(reloadedPreview).getByRole('button', { name: 'Send email' }));
+    expect(
+      await within(reloadedPreview).findByText('The document was queued for client@example.com.'),
+    ).toBeTruthy();
+    const emailCall = fetchMock.mock.calls.find(
+      ([url, options]) =>
+        url.endsWith(`/finance/financial-documents/${document.id}/email`) &&
+        options?.method === 'POST',
+    );
+    expect(JSON.parse((emailCall?.[1] as RequestInit).body as string)).toEqual({
+      expectedVersion: 2,
+      recipientEmail: 'client@example.com',
+    });
     expect(
       within(reloadedPreview).getByRole('button', { name: 'Back to financial documents' }),
     ).toBeTruthy();
@@ -6160,6 +6218,10 @@ describe('ERP and CRM authenticated workspace', () => {
       },
       completedAt: '2026-08-24T12:00:00.000Z',
       completionNotes: 'Printer feed adjusted and final test passed.',
+      customerChargeRecorded: true,
+      customerLaborChargeEur: '70.0000',
+      customerPartsChargeEur: '0.0000',
+      customerTransportChargeEur: '10.0000',
       createdAt: '2026-08-24T09:00:00.000Z',
       customerEquipmentId: 'b3d80ea3-3b8b-469d-9b9f-8d48494e9374',
       customerLocationId: 'f58ccfd8-054c-4563-ab90-af5ee609b489',
@@ -6177,11 +6239,11 @@ describe('ERP and CRM authenticated workspace', () => {
         },
       ],
       id: workOrderId,
-      laborCostBgn: '75.0000',
+      laborCostEur: '75.0000',
       laborMinutes: 90,
       number: 'DEV-WO-FIN-0001',
       parts: [],
-      partsCostBgn: '0.0000',
+      partsCostEur: '0.0000',
       photos: [],
       priority: 'normal',
       problemDescription: 'Printer feed requires adjustment.',
@@ -6195,8 +6257,9 @@ describe('ERP and CRM authenticated workspace', () => {
       startedAt: '2026-08-24T10:00:00.000Z',
       status: 'completed',
       timeEntries: [],
-      totalCostBgn: '90.0000',
-      transportCostBgn: '15.0000',
+      totalCostEur: '90.0000',
+      totalCustomerChargeEur: '80.0000',
+      transportCostEur: '15.0000',
       updatedAt: '2026-08-24T12:00:00.000Z',
       version: 3,
     };
@@ -6206,7 +6269,7 @@ describe('ERP and CRM authenticated workspace', () => {
         discountPercent: '0.0000',
         quantity: '1.0000',
         unitCode: 'SERVICE',
-        unitPrice: '75.0000',
+        unitPrice: '70.0000',
         vatTreatment: 'standard_20',
       },
       {
@@ -6214,7 +6277,7 @@ describe('ERP and CRM authenticated workspace', () => {
         discountPercent: '0.0000',
         quantity: '1.0000',
         unitCode: 'SERVICE',
-        unitPrice: '15.0000',
+        unitPrice: '10.0000',
         vatTreatment: 'standard_20',
       },
     ];
@@ -6227,14 +6290,14 @@ describe('ERP and CRM authenticated workspace', () => {
       subscriptionDrafts: [],
       serviceDrafts: [
         {
-          currencyCode: 'BGN',
+          currencyCode: 'EUR',
           customerName: 'River Market Ltd.',
           customerPartnerId: customerId,
           id: workOrderId,
           linkedDocumentTypes: [],
           lines: serviceLines,
           number: 'DEV-WO-FIN-0001',
-          total: '90.0000',
+          total: '80.0000',
         },
       ],
       scopes: [
@@ -6251,50 +6314,50 @@ describe('ERP and CRM authenticated workspace', () => {
       ],
     };
     const financialDocument = {
-      bgnGrossTotal: '108.0000',
-      bgnNetTotal: '90.0000',
-      bgnVatTotal: '18.0000',
+      eurGrossTotal: '96.0000',
+      eurNetTotal: '80.0000',
+      eurVatTotal: '16.0000',
       branchName: 'Vratsa Operations',
       businessLocationId: locationId,
       businessLocationName: 'Vratsa Service Centre',
       createdAt: '2026-08-25T08:00:00.000Z',
-      currencyCode: 'BGN',
+      currencyCode: 'EUR',
       customerPartnerId: customerId,
       customerSnapshot: { address: '1 Customer Street, Vratsa, BG', name: 'River Market Ltd.' },
       documentType: 'invoice',
       dueDate: '2026-09-08',
       exchangeRate: '1.00000000',
-      grossTotal: '108.0000',
+      grossTotal: '96.0000',
       id: '44a1a302-4353-4b2e-a95a-e9023848b4ea',
       issueDate: '2026-08-25',
       issuerSnapshot: { address: '1 Service Street, Vratsa, BG', name: 'Vista Service Demo Ltd.' },
       legalEntityId: entityId,
       lines: serviceLines.map((line, index) => ({
         ...line,
-        grossTotal: index ? '18.0000' : '90.0000',
+        grossTotal: index ? '12.0000' : '84.0000',
         id: index ? 'dbe84bb9-7a79-43d1-9993-a32705a81dbe' : '7da9b87b-b947-4ad0-8a33-af7f511a20d7',
         lineNumber: index + 1,
-        netTotal: index ? '15.0000' : '75.0000',
-        vatAmount: index ? '3.0000' : '15.0000',
+        netTotal: index ? '10.0000' : '70.0000',
+        vatAmount: index ? '2.0000' : '14.0000',
         vatRate: '20.0000',
       })),
-      netTotal: '90.0000',
+      netTotal: '80.0000',
       number: 'DINV-VRATSA-2026-000021',
       rateDate: '2026-08-25',
-      rateSource: 'internal_bgn',
+      rateSource: 'internal_eur',
       sourceServiceWorkOrderId: workOrderId,
       sourceServiceWorkOrderNumber: 'DEV-WO-FIN-0001',
       status: 'draft',
       taxEventDate: '2026-08-25',
       vatSummary: [
         {
-          netTotal: '90.0000',
-          vatAmount: '18.0000',
+          netTotal: '80.0000',
+          vatAmount: '16.0000',
           vatRate: '20.0000',
           vatTreatment: 'standard_20',
         },
       ],
-      vatTotal: '18.0000',
+      vatTotal: '16.0000',
       version: 1,
     };
     let documents: unknown[] = [];
@@ -6375,7 +6438,7 @@ describe('ERP and CRM authenticated workspace', () => {
         url.endsWith('/finance/financial-documents') && options?.method === 'POST',
     );
     expect(JSON.parse((createCall?.[1] as RequestInit).body as string)).toMatchObject({
-      currencyCode: 'BGN',
+      currencyCode: 'EUR',
       lines: serviceLines,
       sourceServiceWorkOrderId: workOrderId,
     });
@@ -6434,7 +6497,7 @@ describe('ERP and CRM authenticated workspace', () => {
       counterpartyName: 'Balkan Retail Demo Ltd.',
       counterpartyPartnerId: customerId,
       createdAt: '2026-08-20T10:00:00.000Z',
-      currencyCode: 'BGN',
+      currencyCode: 'EUR',
       customerDocumentId: collectionId,
       direction: 'receipt',
       id: '5048ff04-f004-4462-a4be-dcd160bda357',
@@ -6522,7 +6585,7 @@ describe('ERP and CRM authenticated workspace', () => {
     fireEvent.click(within(preview).getByRole('button', { name: 'Back' }));
     fireEvent.click(screen.getByRole('button', { name: 'Daily cash report' }));
     expect(await screen.findByText('1 receipt')).toBeTruthy();
-    expect(screen.getAllByText(/60\.00\s*BGN/u).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/60\.00\s*EUR/u).length).toBeGreaterThan(0);
   });
 
   it('keeps statement lines separate and automatically matches only an exact reference', async () => {
@@ -6541,7 +6604,7 @@ describe('ERP and CRM authenticated workspace', () => {
       bankName: 'Demo Bank',
       closingBalance: '140.0000',
       createdAt: '2026-08-19T09:00:00.000Z',
-      currencyCode: 'BGN',
+      currencyCode: 'EUR',
       id: '19e23adf-78dd-4f87-b680-e6254dfb6d17',
       incomingTotal: '40.0000',
       matchedIncomingCount: 1,
@@ -6699,7 +6762,7 @@ describe('ERP and CRM authenticated workspace', () => {
       bankName: 'Vista Demo Bank',
       closingBalance: '87.0000',
       createdAt: '2026-08-20T11:00:00.000Z',
-      currencyCode: 'BGN',
+      currencyCode: 'EUR',
       id: statementId,
       incomingTotal: '0.0000',
       matchedIncomingCount: 0,
@@ -7490,7 +7553,7 @@ describe('ERP and CRM authenticated workspace', () => {
           completedCount: 2,
           displayName: 'Mila Petrova',
           laborMinutes: 150,
-          totalCostBgn: '170.0000',
+          totalCostEur: '170.0000',
         },
       ],
       totals: {
@@ -7498,7 +7561,7 @@ describe('ERP and CRM authenticated workspace', () => {
         completedRequests: 2,
         laborMinutes: 150,
         openRequests: 1,
-        totalCostBgn: '170.0000',
+        totalCostEur: '170.0000',
         totalRequests: 3,
       },
       typeTotals: [
@@ -7506,7 +7569,7 @@ describe('ERP and CRM authenticated workspace', () => {
           completedCount: 2,
           requestCount: 3,
           serviceType: 'warranty',
-          totalCostBgn: '170.0000',
+          totalCostEur: '170.0000',
         },
       ],
     };
@@ -7571,7 +7634,7 @@ describe('ERP and CRM authenticated workspace', () => {
     expect(await screen.findByRole('heading', { name: 'Service reports' })).toBeTruthy();
     expect((await screen.findAllByText('Mila Petrova')).length).toBeGreaterThan(0);
     expect((await screen.findAllByText('2h 30m')).length).toBeGreaterThan(0);
-    expect((await screen.findAllByText(/170\.00\s*BGN/u)).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText(/170\.00\s*EUR/u)).length).toBeGreaterThan(0);
     const serviceTabs = screen.getByRole('navigation', { name: 'Service sections' });
     expect(serviceTabs.classList.contains('service-tabs')).toBe(true);
     expect(
@@ -7755,9 +7818,9 @@ describe('ERP and CRM authenticated workspace', () => {
     const overview: CrmAnalyticsOverview = {
       customerMetrics: {
         activeCustomers: 2,
-        averageTransactionValueBgn: '72.00',
+        averageTransactionValueEur: '72.00',
         churnPercent: '0.00',
-        observedLifetimeValueBgn: '100.00',
+        observedLifetimeValueEur: '100.00',
         purchaseFrequency: '1.50',
         retentionPercent: '100.00',
       },
@@ -7785,9 +7848,9 @@ describe('ERP and CRM authenticated workspace', () => {
       generatedAt: '2026-09-02T12:00:00.000Z',
       pipeline: {
         createdOpportunities: 2,
-        estimatedRevenueBgn: '1800.00',
+        estimatedRevenueEur: '1800.00',
         lostCount: 0,
-        openPipelineValueBgn: '800.00',
+        openPipelineValueEur: '800.00',
         stages: [
           { currentCount: 0, enteredCount: 2, stage: 'new' },
           {
@@ -7824,15 +7887,15 @@ describe('ERP and CRM authenticated workspace', () => {
           documentCount: 2,
           kind: 'product',
           label: 'Demo Fiscal Register X1',
-          netRevenueBgn: '100.00',
+          netRevenueEur: '100.00',
           quantity: '2.0000',
         },
       ],
       previousCustomerMetrics: {
         activeCustomers: 1,
-        averageTransactionValueBgn: '60.00',
+        averageTransactionValueEur: '60.00',
         churnPercent: '0.00',
-        observedLifetimeValueBgn: '80.00',
+        observedLifetimeValueEur: '80.00',
         purchaseFrequency: '1.00',
         retentionPercent: '100.00',
       },
@@ -7844,7 +7907,7 @@ describe('ERP and CRM authenticated workspace', () => {
           documentCount: 2,
           key: 'product-1',
           label: 'Demo Fiscal Register X1',
-          netRevenueBgn: '100.00',
+          netRevenueEur: '100.00',
           sharePercent: '100.00',
         },
         {
@@ -7852,12 +7915,12 @@ describe('ERP and CRM authenticated workspace', () => {
           documentCount: 2,
           key: partner.id,
           label: 'Alfa Market Demo Ltd.',
-          netRevenueBgn: '100.00',
+          netRevenueEur: '100.00',
           sharePercent: '100.00',
         },
       ],
       timezone: 'Europe/Sofia',
-      totalNetRevenueBgn: '100.00',
+      totalNetRevenueEur: '100.00',
     };
     const definitions: CrmReportDefinition[] = [
       {

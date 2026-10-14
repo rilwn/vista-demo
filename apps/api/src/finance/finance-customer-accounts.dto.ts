@@ -30,7 +30,7 @@ export class UpsertCustomerPaymentTermsDto implements UpsertCustomerPaymentTerms
   @ApiProperty({ example: '2000.0000', type: String })
   @IsString()
   @Matches(amountPattern)
-  creditLimitBgn!: string;
+  creditLimitEur!: string;
 
   @ApiPropertyOptional({ minimum: 1, type: Number })
   @IsOptional()
@@ -90,7 +90,7 @@ export class CreateCustomerAdvanceDto implements CreateCustomerAdvanceRequest {
 }
 
 export class CustomerPaymentTermsDto implements CustomerPaymentTerms {
-  @ApiProperty({ type: String }) creditLimitBgn!: string;
+  @ApiProperty({ type: String }) creditLimitEur!: string;
   @ApiProperty({ format: 'uuid', type: String }) id!: string;
   @ApiProperty({ type: Boolean }) onAccountEnabled!: boolean;
   @ApiProperty({ type: Number }) paymentTermsDays!: number;

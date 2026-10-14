@@ -28,7 +28,7 @@ class ServiceReportTypeTotalDto implements ServiceReportTypeTotal {
   @ApiProperty({ minimum: 0, type: Number }) requestCount!: number;
   @ApiProperty({ enum: ['warranty', 'out_of_warranty', 'subscription'] })
   serviceType!: ServiceReportTypeTotal['serviceType'];
-  @ApiProperty({ type: String }) totalCostBgn!: string;
+  @ApiProperty({ type: String }) totalCostEur!: string;
 }
 
 class ServiceTechnicianPerformanceDto implements ServiceTechnicianPerformance {
@@ -36,7 +36,7 @@ class ServiceTechnicianPerformanceDto implements ServiceTechnicianPerformance {
   @ApiProperty({ minimum: 0, type: Number }) completedCount!: number;
   @ApiProperty({ type: String }) displayName!: string;
   @ApiProperty({ minimum: 0, type: Number }) laborMinutes!: number;
-  @ApiProperty({ type: String }) totalCostBgn!: string;
+  @ApiProperty({ type: String }) totalCostEur!: string;
 }
 
 class ServiceReportTotalsDto {
@@ -44,7 +44,7 @@ class ServiceReportTotalsDto {
   @ApiProperty({ minimum: 0, type: Number }) completedRequests!: number;
   @ApiProperty({ minimum: 0, type: Number }) laborMinutes!: number;
   @ApiProperty({ minimum: 0, type: Number }) openRequests!: number;
-  @ApiProperty({ type: String }) totalCostBgn!: string;
+  @ApiProperty({ type: String }) totalCostEur!: string;
   @ApiProperty({ minimum: 0, type: Number }) totalRequests!: number;
 }
 

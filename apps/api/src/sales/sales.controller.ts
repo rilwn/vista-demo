@@ -15,6 +15,7 @@ import {
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
+  ApiAcceptedResponse,
   ApiBody,
   ApiCreatedResponse,
   ApiHeader,
@@ -56,6 +57,8 @@ import {
   CreateSalesShipmentDto,
   SalesReferenceDataDto,
   SalesWorkflowDto,
+  QueuedSalesEmailDto,
+  SendSalesQuotationEmailDto,
   UpdateSalesQuotationDto,
 } from './sales.dto.js';
 import {
@@ -173,6 +176,22 @@ export class SalesController {
     response.setHeader('Content-Type', content.mediaType);
     response.setHeader('X-Content-Type-Options', 'nosniff');
     response.status(HttpStatus.OK).send(content.buffer);
+  }
+
+  @Post('quotations/:id/email')
+  @HttpCode(HttpStatus.ACCEPTED)
+  @RequirePermissions({ action: 'edit', module: 'erp.sales' })
+  @ApiBody({ type: SendSalesQuotationEmailDto })
+  @ApiAcceptedResponse({ type: QueuedSalesEmailDto })
+  @ApiHeader({ name: 'Idempotency-Key', required: true })
+  @ApiParam({ format: 'uuid', name: 'id' })
+  emailQuotation(
+    @Param('id') id: string,
+    @Body() input: SendSalesQuotationEmailDto,
+    @Headers('idempotency-key') key: string | undefined,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<QueuedSalesEmailDto> {
+    return this.sales.emailQuotation(id, input, key, request.authentication, metadata(request));
   }
 
   @Post('quotations/:id/confirm')
@@ -470,7 +489,7 @@ export class SalesController {
   @ApiOkResponse({ type: SalesResolvedPriceDto })
   @ApiQuery({ format: 'date', name: 'asOf', type: String })
   @ApiQuery({ format: 'uuid', name: 'customerPartnerId', type: String })
-  @ApiQuery({ example: 'BGN', name: 'currencyCode', type: String })
+  @ApiQuery({ example: 'EUR', name: 'currencyCode', type: String })
   @ApiQuery({ format: 'uuid', name: 'productId', type: String })
   resolvePrice(@Query() query: ResolveSalesPriceQueryDto): Promise<SalesResolvedPriceDto> {
     return this.pricing.resolvePrice(

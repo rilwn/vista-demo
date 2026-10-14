@@ -86,9 +86,9 @@ export function CustomerOperationalOverviewPanel({
 
       <section className="customer-overview-metrics" aria-label="Customer summary">
         <OverviewMetric
-          emphasis={Number(data.summary.outstandingBgn) > 0}
+          emphasis={Number(data.summary.outstandingEur) > 0}
           label="Outstanding"
-          value={money(data.summary.outstandingBgn, 'BGN')}
+          value={money(data.summary.outstandingEur, 'EUR')}
         />
         <OverviewMetric label="Purchases" value={String(data.summary.purchases)} />
         <OverviewMetric

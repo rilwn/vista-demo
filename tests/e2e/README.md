@@ -89,7 +89,7 @@ payment records, not bank-provider reconciliation. Lost acknowledgements after
 server commit are not simulated by this disconnection test.
 `service.spec.ts` dispatches a new request using a manager session, then completes
 the assigned work in a separate technician session at phone width. It checks
-mandatory signature capture, 45 minutes, one batch-tracked part, 106 BGN costs,
+mandatory signature capture, 45 minutes, one batch-tracked part, EUR costs,
 and technician stock falling from 5 to 4 through real reference-data responses.
 The manager reopens the record from a stale list without refreshing and prepares
 its linked Finance draft. This guards against reopening cached work-order details.

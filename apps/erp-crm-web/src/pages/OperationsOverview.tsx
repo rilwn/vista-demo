@@ -139,12 +139,12 @@ export function OperationsOverview({
       {data && !hasVisibleCards ? <p>{copy.hidden}</p> : null}
       {data ? (
         <div className="operations-metrics">
-          {data.recordedRevenueBgn !== undefined &&
-          !data.preferences?.hiddenCards.includes('recordedRevenueBgn') ? (
+          {data.recordedRevenueEur !== undefined &&
+          !data.preferences?.hiddenCards.includes('recordedRevenueEur') ? (
             <Metric
               title={copy.revenue}
               icon="chart"
-              value={money(data.recordedRevenueBgn)}
+              value={money(data.recordedRevenueEur)}
               to="/modules/erp.finance/registers"
               link={copy.financeLink}
             >
@@ -175,12 +175,12 @@ export function OperationsOverview({
               {copy.nextDays(data.warrantyDays)}
             </Metric>
           ) : null}
-          {data.overdueReceivablesBgn !== undefined &&
-          !data.preferences?.hiddenCards.includes('overdueReceivablesBgn') ? (
+          {data.overdueReceivablesEur !== undefined &&
+          !data.preferences?.hiddenCards.includes('overdueReceivablesEur') ? (
             <Metric
               title={copy.overdue}
               icon="finance"
-              value={money(data.overdueReceivablesBgn)}
+              value={money(data.overdueReceivablesEur)}
               to="/modules/erp.finance/payments"
               link={copy.collectionsLink}
             >
@@ -191,8 +191,8 @@ export function OperationsOverview({
       ) : null}
       {data && hasVisibleCards ? (
         <div className="operations-context">
-          {data.recordedRevenueBgn !== undefined &&
-          !data.preferences?.hiddenCards.includes('recordedRevenueBgn') ? (
+          {data.recordedRevenueEur !== undefined &&
+          !data.preferences?.hiddenCards.includes('recordedRevenueEur') ? (
             <p>{copy.revenueNote}</p>
           ) : null}
           <details className="operations-calculations">
@@ -201,8 +201,8 @@ export function OperationsOverview({
               <Icon name="chevron" size={14} />
             </summary>
             <dl>
-              {data.recordedRevenueBgn !== undefined &&
-              !data.preferences?.hiddenCards.includes('recordedRevenueBgn') ? (
+              {data.recordedRevenueEur !== undefined &&
+              !data.preferences?.hiddenCards.includes('recordedRevenueEur') ? (
                 <div>
                   <dt>{copy.revenue}</dt>
                   <dd>{copy.revenueDetails}</dd>
@@ -224,8 +224,8 @@ export function OperationsOverview({
                   </dd>
                 </div>
               ) : null}
-              {data.overdueReceivablesBgn !== undefined &&
-              !data.preferences?.hiddenCards.includes('overdueReceivablesBgn') ? (
+              {data.overdueReceivablesEur !== undefined &&
+              !data.preferences?.hiddenCards.includes('overdueReceivablesEur') ? (
                 <div>
                   <dt>{copy.overdue}</dt>
                   <dd>{copy.overdueDetails}</dd>
@@ -291,5 +291,5 @@ function dateRange(from: string, to: string): string {
 }
 
 function money(value: string): string {
-  return formatOperationsCurrency(value, 'BGN');
+  return formatOperationsCurrency(value, 'EUR');
 }

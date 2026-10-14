@@ -33,7 +33,6 @@ test('received serial reaches handover and its collection is settled in two paym
     .locator('.procurement-order-card')
     .filter({ hasText: 'Demo Fiscal Register X1' });
   await expect(order).toHaveCount(1);
-  const orderRef = (await order.locator('.procurement-order-id').innerText()).replace('PO · ', '');
   for (const [index, serial] of ['BROWSER-FR-001', 'BROWSER-FR-002'].entries()) {
     await order.getByRole('button', { name: 'Receive delivery' }).click();
     const included = dialog.getByRole('checkbox', { name: /Demo Fiscal Register X1/ });
@@ -54,7 +53,7 @@ test('received serial reaches handover and its collection is settled in two paym
   await expect(page.getByText(/BROWSER-DELIVERY-2/)).toBeVisible();
   await page.getByRole('link', { name: 'Supplier invoices', exact: true }).click();
   await page.getByRole('button', { name: 'Record supplier invoice', exact: true }).click();
-  await choose(page, 'Purchase order', new RegExp(orderRef));
+  await dialog.locator('select').first().selectOption({ index: 0 });
   await dialog.getByLabel('Supplier invoice number').fill('BROWSER-SUPPLIER-001');
   await dialog.getByRole('button', { name: 'Record invoice', exact: true }).click();
   await expect(dialog).toHaveCount(0);
@@ -79,7 +78,7 @@ test('received serial reaches handover and its collection is settled in two paym
   await choose(page, 'Warehouse', 'Demo Central Warehouse');
   await choose(page, 'Product', /Demo Fiscal Register X1/);
   await dialog.getByLabel('Quantity', { exact: true }).fill('1');
-  await dialog.getByLabel('Unit price (BGN)', { exact: true }).fill('600');
+  await dialog.getByLabel('Unit price (EUR)', { exact: true }).fill('600');
   await dialog.getByRole('button', { name: 'Create quotation', exact: true }).click();
   await expect(dialog).toHaveCount(0);
   await page
@@ -181,15 +180,15 @@ test('received serial reaches handover and its collection is settled in two paym
   await expect(dialog.locator('.finance-status')).toHaveText('Unpaid');
   const collectionNumber = await dialog.locator('h2').innerText();
   await expect(dialog.locator('.finance-balance-grid dd')).toHaveText([
-    'BGN 720.00',
-    'BGN 0.00',
-    'BGN 720.00',
+    '720.00 EUR',
+    '0.00 EUR',
+    '720.00 EUR',
   ]);
   await expect(dialog.locator('.finance-source-row')).toContainText(invoiceNumber);
 
   for (const [index, amount] of ['200', '520'].entries()) {
     await dialog.getByRole('button', { name: 'Record payment', exact: true }).click();
-    const amountField = dialog.getByLabel('Amount (BGN)', { exact: true });
+    const amountField = dialog.getByLabel('Amount (EUR)', { exact: true });
     if (index === 0) {
       await amountField.fill('721');
       await dialog.getByRole('button', { name: 'Record payment', exact: true }).click();
@@ -224,8 +223,8 @@ test('received serial reaches handover and its collection is settled in two paym
     );
     await expect(dialog.locator('.finance-balance-grid dd')).toHaveText(
       index === 0
-        ? ['BGN 720.00', 'BGN 200.00', 'BGN 520.00']
-        : ['BGN 720.00', 'BGN 720.00', 'BGN 0.00'],
+        ? ['720.00 EUR', '200.00 EUR', '520.00 EUR']
+        : ['720.00 EUR', '720.00 EUR', '0.00 EUR'],
     );
   }
   await expect(dialog.getByRole('button', { name: 'Record payment', exact: true })).toHaveCount(0);

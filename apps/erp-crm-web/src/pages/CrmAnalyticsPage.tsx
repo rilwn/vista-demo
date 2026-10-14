@@ -238,11 +238,11 @@ function AnalyticsContent({
         />
         <AnalyticsMetric
           comparison={comparison(
-            report.customerMetrics.averageTransactionValueBgn,
-            report.previousCustomerMetrics.averageTransactionValueBgn,
+            report.customerMetrics.averageTransactionValueEur,
+            report.previousCustomerMetrics.averageTransactionValueEur,
           )}
           label="Average transaction"
-          value={money(report.customerMetrics.averageTransactionValueBgn)}
+          value={money(report.customerMetrics.averageTransactionValueEur)}
         />
         <AnalyticsMetric
           comparison={comparison(
@@ -254,11 +254,11 @@ function AnalyticsContent({
         />
         <AnalyticsMetric
           comparison={comparison(
-            report.customerMetrics.observedLifetimeValueBgn,
-            report.previousCustomerMetrics.observedLifetimeValueBgn,
+            report.customerMetrics.observedLifetimeValueEur,
+            report.previousCustomerMetrics.observedLifetimeValueEur,
           )}
           label="Observed customer value"
-          value={money(report.customerMetrics.observedLifetimeValueBgn)}
+          value={money(report.customerMetrics.observedLifetimeValueEur)}
         />
         <AnalyticsMetric
           label="Recorded net revenue"
@@ -268,7 +268,7 @@ function AnalyticsContent({
               : 'crm.activeCustomers.other',
             { count: report.customerMetrics.activeCustomers },
           )}
-          value={money(report.totalNetRevenueBgn)}
+          value={money(report.totalNetRevenueEur)}
         />
       </DashboardCards>
 
@@ -288,7 +288,7 @@ function AnalyticsContent({
           <div className="crm-pipeline-summary">
             <div>
               <span>Open pipeline</span>
-              <strong>{money(report.pipeline.openPipelineValueBgn)}</strong>
+              <strong>{money(report.pipeline.openPipelineValueEur)}</strong>
             </div>
             <div>
               <span>Won</span>
@@ -345,7 +345,7 @@ function AnalyticsContent({
                       {item.documentCount === 1 ? 'document' : 'documents'}
                     </small>
                   </div>
-                  <strong>{money(item.netRevenueBgn)}</strong>
+                  <strong>{money(item.netRevenueEur)}</strong>
                 </article>
               ))}
             </div>
@@ -362,7 +362,7 @@ function AnalyticsContent({
             <h2>Revenue breakdown</h2>
             <p>
               Invoices and debit notes less credit notes, excluding VAT and using each document’s
-              BGN snapshot.
+              EUR snapshot.
             </p>
           </div>
           <div aria-label="Revenue grouping" className="crm-revenue-tabs" role="tablist">
@@ -403,7 +403,7 @@ function AnalyticsContent({
                   {formatDecimal(item.sharePercent)}%
                 </span>
                 <strong data-label="Net value" role="cell">
-                  {money(item.netRevenueBgn)}
+                  {money(item.netRevenueEur)}
                 </strong>
               </div>
             ))}
@@ -1071,7 +1071,7 @@ function localDate(value: Date): string {
 }
 
 function money(value: string): string {
-  return formatOperationsCurrency(value, 'BGN');
+  return formatOperationsCurrency(value, 'EUR');
 }
 
 function formatDecimal(value: string): string {

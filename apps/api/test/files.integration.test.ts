@@ -153,10 +153,10 @@ describe.skipIf(!runInfrastructureTests)('managed partner files', () => {
         (id,draft_number,document_type,legal_entity_id,branch_id,business_location_id,
          customer_partner_id,issue_date,tax_event_date,due_date,currency_code,
          exchange_rate,rate_date,rate_source,issuer_name,issuer_address,customer_name,
-         customer_address,net_total,vat_total,gross_total,bgn_net_total,bgn_vat_total,
-         bgn_gross_total,created_by)
+         customer_address,net_total,vat_total,gross_total,eur_net_total,eur_vat_total,
+         eur_gross_total,created_by)
       SELECT $2,'FILES-DRAFT','invoice',branch.legal_entity_id,branch.id,location.id,
-        $3,CURRENT_DATE,CURRENT_DATE,CURRENT_DATE,'BGN',1,CURRENT_DATE,'internal_bgn',
+        $3,CURRENT_DATE,CURRENT_DATE,CURRENT_DATE,'EUR',1,CURRENT_DATE,'internal_eur',
         'Files issuer','Test address','Files customer','Test address',50,10,60,50,10,60,$1
       FROM branch JOIN location ON location.branch_id=branch.id`,
       [finance.accountId, financialDocumentId, partnerId],

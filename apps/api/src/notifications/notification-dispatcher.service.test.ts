@@ -9,18 +9,28 @@ import { NotificationDispatcherService } from './notification-dispatcher.service
 
 describe('NotificationDispatcherService', () => {
   it('records a rolled-back attempt and stops retrying after the final attempt', async () => {
-    const { dispatcher, transactionQuery, failureQuery } = subject();
+    const { dispatcher, transactionQuery, poolQuery } = subject();
     transactionQuery.mockImplementation((sql: string) => {
       if (sql.includes('RETURNING id, channel'))
         return Promise.resolve({
-          rows: [{ channel: 'in_system', recipient_account_id: 'account' }],
+          rows: [
+            {
+              channel: 'in_system',
+              id: 'notification',
+              payload: {},
+              recipient_account_id: 'account',
+              template_key: 'test',
+            },
+          ],
         });
-      if (sql.includes("SET status = 'delivered'")) throw new Error('Write failed');
       return Promise.resolve({ rows: [] });
     });
-    await expect(dispatcher.dispatch('notification', false)).rejects.toThrow('Write failed');
-    expect(transactionQuery).toHaveBeenCalledWith('ROLLBACK');
-    expect(failureQuery).toHaveBeenCalledWith(expect.stringContaining("status = 'pending'"), [
+    poolQuery.mockRejectedValueOnce(new Error('Write failed'));
+    await expect(dispatcher.dispatch('notification', false)).rejects.toThrow(
+      'Notification delivery failed after the final attempt',
+    );
+    expect(transactionQuery).toHaveBeenCalledWith('COMMIT');
+    expect(poolQuery).toHaveBeenCalledWith(expect.stringContaining('SET status = $2'), [
       'notification',
       'failed',
       'Error',
@@ -28,10 +38,20 @@ describe('NotificationDispatcherService', () => {
   });
 
   it('does not turn an unconfigured delivery channel into an endless retry', async () => {
-    const { dispatcher, transactionQuery, failureQuery } = subject();
+    const { dispatcher, transactionQuery, poolQuery } = subject();
     transactionQuery.mockImplementation((sql: string) =>
       Promise.resolve({
-        rows: sql.includes('RETURNING id, channel') ? [{ channel: 'email' }] : [],
+        rows: sql.includes('RETURNING id, channel')
+          ? [
+              {
+                channel: 'sms',
+                id: 'notification',
+                payload: {},
+                recipient_account_id: null,
+                template_key: 'test',
+              },
+            ]
+          : [],
       }),
     );
     await expect(dispatcher.dispatch('notification', true)).rejects.toBeInstanceOf(
@@ -39,9 +59,13 @@ describe('NotificationDispatcherService', () => {
     );
     expect(transactionQuery).toHaveBeenCalledWith(
       expect.stringContaining("status = 'processing'"),
-      ['notification', 'failed', 'NOTIFICATION_CHANNEL_NOT_CONFIGURED'],
+      ['notification'],
     );
-    expect(failureQuery).not.toHaveBeenCalled();
+    expect(poolQuery).toHaveBeenCalledWith(expect.stringContaining('SET status = $2'), [
+      'notification',
+      'failed',
+      'NOTIFICATION_CHANNEL_NOT_CONFIGURED',
+    ]);
   });
 
   it('requeues recovered pending notifications behind retained failed jobs', async () => {
@@ -54,15 +78,14 @@ describe('NotificationDispatcherService', () => {
 
 function subject() {
   const transactionQuery = vi.fn().mockResolvedValue({ rows: [] });
-  const failureQuery = vi.fn().mockResolvedValue({ rows: [] });
-  let connections = 0;
+  const poolQuery = vi.fn().mockResolvedValue({ rows: [], rowCount: 1 });
   const pool = {
     connect: () =>
       Promise.resolve({
-        query: connections++ === 0 ? transactionQuery : failureQuery,
+        query: transactionQuery,
         release: vi.fn(),
       }),
-    query: vi.fn().mockImplementation((sql: string) =>
+    query: poolQuery.mockImplementation((sql: string) =>
       Promise.resolve({
         rows: sql.includes('SELECT id, idempotency_key')
           ? [{ id: 'notification', idempotency_key: 'key' }]
@@ -86,6 +109,7 @@ function subject() {
     new JobHandlerRegistry(),
     jobs as unknown as JobQueueService,
     { event: vi.fn() } as unknown as StructuredLogger,
+    { send: vi.fn().mockResolvedValue(undefined) } as never,
   );
-  return { dispatcher, transactionQuery, failureQuery, jobs };
+  return { dispatcher, transactionQuery, poolQuery, jobs };
 }

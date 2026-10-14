@@ -111,6 +111,9 @@ const environmentSchema = z
     SMTP_FROM: z.email(),
     SMTP_HOST: z.string().min(1),
     SMTP_PORT: z.coerce.number().int().positive().max(65_535),
+    SMTP_TLS_MODE: z.enum(['none', 'starttls', 'implicit']).default('none'),
+    SMTP_USERNAME: z.string().optional().default(''),
+    SMTP_PASSWORD: z.string().optional().default(''),
     TOTP_ENCRYPTION_KEY: z.string().min(32),
     TOTP_ENROLLMENT_TTL_SECONDS: z.coerce.number().int().min(60).max(3_600).default(900),
     TOTP_ISSUER: z.string().min(1).default('Vista Service'),
@@ -122,6 +125,19 @@ const environmentSchema = z
         code: 'custom',
         message: 'Production deployments must use the Redis rate-limit store',
         path: ['API_RATE_LIMIT_STORE'],
+      });
+    }
+    if (
+      environment.NODE_ENV === 'production' &&
+      ((environment.SMTP_TLS_MODE === 'none' &&
+        !['localhost', '127.0.0.1', 'mailpit'].includes(environment.SMTP_HOST)) ||
+        Boolean(environment.SMTP_USERNAME) !== Boolean(environment.SMTP_PASSWORD))
+    ) {
+      context.addIssue({
+        code: 'custom',
+        message:
+          'External production email requires TLS and complete credentials when authentication is used',
+        path: ['SMTP_TLS_MODE'],
       });
     }
   });

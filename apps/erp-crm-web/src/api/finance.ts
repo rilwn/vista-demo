@@ -8,6 +8,7 @@ import type {
   CreateFinanceBankStatementRequest,
   CreateFinanceCashVoucherRequest,
   CreateFinancePaymentRequest,
+  ReverseFinancePaymentRequest,
   FinanceBankMatchCandidate,
   FinanceBankStatement,
   FinanceBankStatementPage,
@@ -23,6 +24,7 @@ import type {
   FinancialDocument,
   FinancialDocumentPage,
   FinancialDocumentReferenceData,
+  FinanceExchangeRate,
   SalesResolvedPrice,
   FinanceReferenceData,
   FinanceAgingKind,
@@ -54,6 +56,9 @@ import type {
   MatchFinanceBankTransactionRequest,
   CancelFinancialDocumentRequest,
   CreateFinancialDocumentRequest,
+  IssueFinancialDocumentRequest,
+  QueuedEmailReceipt,
+  SendDocumentEmailRequest,
 } from '@vista/contracts';
 
 import {
@@ -306,6 +311,25 @@ export function recordFinancePayment(
   );
 }
 
+export function reverseFinancePayment(
+  token: string,
+  documentId: string,
+  paymentId: string,
+  key: string,
+  input: ReverseFinancePaymentRequest,
+): Promise<FinanceCustomerDocument> {
+  return unwrapApiResponse(
+    apiClient.POST('/api/v1/finance/documents/{id}/payments/{paymentId}/reverse', {
+      body: input,
+      headers: authorizationHeaders(token),
+      params: {
+        header: idempotencyParameters(key).header,
+        path: { id: documentId, paymentId },
+      },
+    }),
+  );
+}
+
 export function allocateCustomerAdvance(
   token: string,
   documentId: string,
@@ -346,6 +370,18 @@ export function getFinancialDocumentReferenceData(
   );
 }
 
+export function getFinancialDocumentExchangeRate(
+  token: string,
+  query: { currencyCode: string; rateDate: string },
+): Promise<FinanceExchangeRate> {
+  return unwrapApiResponse(
+    apiClient.GET('/api/v1/finance/financial-documents/exchange-rate', {
+      headers: authorizationHeaders(token),
+      params: { query },
+    }),
+  );
+}
+
 export function listFinancialDocuments(
   token: string,
   query: { page?: number; pageSize?: number; search?: string } = {},
@@ -365,6 +401,43 @@ export function getFinancialDocument(token: string, id: string): Promise<Financi
       params: { path: { id } },
     }),
   );
+}
+
+export async function downloadFinancialDocumentPdf(token: string, id: string): Promise<Blob> {
+  const response = await fetch(`${apiV1BaseUrl}/finance/financial-documents/${id}/pdf`, {
+    headers: authorizationHeaders(token),
+  });
+  if (!response.ok)
+    throw new ApiClientError(
+      'The financial document PDF could not be downloaded.',
+      'FINANCE_DOCUMENT_PDF_DOWNLOAD_FAILED',
+      response.status,
+    );
+  return response.blob();
+}
+
+export async function sendFinancialDocumentEmail(
+  token: string,
+  id: string,
+  key: string,
+  input: SendDocumentEmailRequest,
+): Promise<QueuedEmailReceipt> {
+  const response = await fetch(`${apiV1BaseUrl}/finance/financial-documents/${id}/email`, {
+    body: JSON.stringify(input),
+    headers: {
+      ...authorizationHeaders(token),
+      'content-type': 'application/json',
+      'idempotency-key': key,
+    },
+    method: 'POST',
+  });
+  if (!response.ok)
+    throw new ApiClientError(
+      'The financial document email could not be queued.',
+      'FINANCE_DOCUMENT_EMAIL_FAILED',
+      response.status,
+    );
+  return response.json() as Promise<QueuedEmailReceipt>;
 }
 
 export function createFinancialDocument(
@@ -389,6 +462,21 @@ export function cancelFinancialDocument(
 ): Promise<FinancialDocument> {
   return unwrapApiResponse(
     apiClient.POST('/api/v1/finance/financial-documents/{id}/cancel', {
+      body: input,
+      headers: authorizationHeaders(token),
+      params: { header: idempotencyParameters(key).header, path: { id } },
+    }),
+  );
+}
+
+export function issueFinancialDocument(
+  token: string,
+  id: string,
+  key: string,
+  input: IssueFinancialDocumentRequest,
+): Promise<FinancialDocument> {
+  return unwrapApiResponse(
+    apiClient.POST('/api/v1/finance/financial-documents/{id}/issue', {
       body: input,
       headers: authorizationHeaders(token),
       params: { header: idempotencyParameters(key).header, path: { id } },

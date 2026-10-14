@@ -34,7 +34,7 @@ test.beforeAll(async () => {
     FROM master_data.products p CROSS JOIN generate_series(1,1001) n
     WHERE p.product_code = 'DEV-ADAPTER-12V'
     RETURNING id
-  ) INSERT INTO inventory.stock_balances (warehouse_id, product_id, quantity, average_unit_cost_bgn)
+  ) INSERT INTO inventory.stock_balances (warehouse_id, product_id, quantity, average_unit_cost_eur)
     SELECT w.id, p.id, 2, 3 FROM products p CROSS JOIN master_data.warehouses w WHERE w.code = 'WH-CENTRAL'`,
     [prefix],
   );

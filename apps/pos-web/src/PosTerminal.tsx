@@ -814,7 +814,7 @@ function SellScreen({
                   >
                     <span>{item.productCode}</span>
                     <strong>{item.name}</strong>
-                    <small>{grossUnitPrice(item).toFixed(2)} BGN</small>
+                    <small>{grossUnitPrice(item).toFixed(2)} EUR</small>
                   </button>
                 ))}
               </div>
@@ -873,7 +873,7 @@ function SellScreen({
                   available
                 </small>
                 <span className="pos-product-price">
-                  {item.unitPrice ? `${grossUnitPrice(item).toFixed(2)} BGN` : 'Price unavailable'}
+                  {item.unitPrice ? `${grossUnitPrice(item).toFixed(2)} EUR` : 'Price unavailable'}
                 </span>
               </button>
             ))}
@@ -1499,7 +1499,7 @@ function QuickAccessDialog({
                       </small>
                     </span>
                     <em>
-                      {item.unitPrice ? `${grossUnitPrice(item).toFixed(2)} BGN` : 'No price'}
+                      {item.unitPrice ? `${grossUnitPrice(item).toFixed(2)} EUR` : 'No price'}
                     </em>
                   </label>
                 );
@@ -1559,7 +1559,7 @@ function MoneyEntry({
           type="number"
           value={value}
         />
-        <span>BGN</span>
+        <span>EUR</span>
       </div>
     </label>
   );
@@ -1891,7 +1891,7 @@ function DiscountAuthorizationDialog({
               </select>
             </label>
             <label>
-              <span>{discountType === 'percentage' ? 'Percentage' : 'Amount (BGN)'}</span>
+              <span>{discountType === 'percentage' ? 'Percentage' : 'Amount (EUR)'}</span>
               <input
                 max={discountType === 'percentage' ? 100 : undefined}
                 min="0.01"
@@ -2308,7 +2308,7 @@ function ShiftScreen({
   const [openingCash, setOpeningCash] = useState('100.00');
   const [opening, setOpening] = useState(false);
   const [registerId, setRegisterId] = useState(context?.registers[0]?.id ?? '');
-  const [closingCash, setClosingCash] = useState(current?.expectedCashBgn ?? '0.00');
+  const [closingCash, setClosingCash] = useState(current?.expectedCashEur ?? '0.00');
   const [closing, setClosing] = useState(false);
 
   async function open() {
@@ -2317,7 +2317,7 @@ function ShiftScreen({
     try {
       await openPosShift(
         token,
-        { cashRegisterId: registerId, openingCashBgn: Number(openingCash).toFixed(4) },
+        { cashRegisterId: registerId, openingCashEur: Number(openingCash).toFixed(4) },
         crypto.randomUUID(),
       );
       await onOpened();
@@ -2339,7 +2339,7 @@ function ShiftScreen({
       await closePosShift(
         token,
         current.id,
-        { closingCashBgn: Number(closingCash).toFixed(4), version: current.version },
+        { closingCashEur: Number(closingCash).toFixed(4), version: current.version },
         crypto.randomUUID(),
       );
       await onOpened();
@@ -2392,7 +2392,7 @@ function ShiftScreen({
             </div>
             <div>
               <dt>Expected cash</dt>
-              <dd>{money(Number(current.expectedCashBgn))}</dd>
+              <dd>{money(Number(current.expectedCashEur))}</dd>
             </div>
           </dl>
           <div className="pos-close-shift">
@@ -2406,7 +2406,7 @@ function ShiftScreen({
                   type="number"
                   value={closingCash}
                 />
-                <span>BGN</span>
+                <span>EUR</span>
               </div>
             </label>
             <div>
@@ -2478,7 +2478,7 @@ function ShiftScreen({
                 type="number"
                 value={openingCash}
               />
-              <span>BGN</span>
+              <span>EUR</span>
             </div>
           </label>
           <div className="pos-open-shift-actions">
@@ -3455,7 +3455,7 @@ function allocateRefunds(sale: PosSale, total: number) {
   return unallocated <= 0.00005 ? refunds : [];
 }
 function money(value: number) {
-  return `${value.toLocaleString('en-BG', { maximumFractionDigits: 2, minimumFractionDigits: 2 })} BGN`;
+  return `${value.toLocaleString('en-BG', { maximumFractionDigits: 2, minimumFractionDigits: 2 })} EUR`;
 }
 function quantity(value: string) {
   return Number(value).toLocaleString('en-BG', { maximumFractionDigits: 4 });

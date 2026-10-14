@@ -34,9 +34,9 @@ export interface CalculatedFinancialLine {
 }
 
 export interface CalculatedFinancialDocument {
-  bgnGrossTotal: string;
-  bgnNetTotal: string;
-  bgnVatTotal: string;
+  eurGrossTotal: string;
+  eurNetTotal: string;
+  eurVatTotal: string;
   grossTotal: string;
   lines: CalculatedFinancialLine[];
   netTotal: string;
@@ -192,9 +192,9 @@ export function calculateFinancialDocument(
     summaries.set(key, current);
   }
   return {
-    bgnGrossTotal: formatUnits(divideHalfUp(gross * rate, rateScale), 4),
-    bgnNetTotal: formatUnits(divideHalfUp(net * rate, rateScale), 4),
-    bgnVatTotal: formatUnits(divideHalfUp(vat * rate, rateScale), 4),
+    eurGrossTotal: formatUnits(divideHalfUp(gross * rate, rateScale), 4),
+    eurNetTotal: formatUnits(divideHalfUp(net * rate, rateScale), 4),
+    eurVatTotal: formatUnits(divideHalfUp(vat * rate, rateScale), 4),
     grossTotal: formatUnits(gross, 4),
     lines: calculatedLines,
     netTotal: formatUnits(net, 4),

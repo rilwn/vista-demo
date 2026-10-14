@@ -15,6 +15,7 @@
     "@vista/contracts": "0.1.0",
     "@vista/domain": "0.1.0",
     "@vista/ui": "0.1.0",
+    "exceljs": "^4.4.0",
     "qrcode": "^1.5.4",
     "react": "^19.1.1",
     "react-dom": "^19.1.1"

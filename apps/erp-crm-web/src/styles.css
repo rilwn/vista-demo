@@ -4637,6 +4637,24 @@ body {
   gap: 0.8rem;
 }
 
+.financial-document-delivery-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 560px) {
+  .sales-quotation-email {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .sales-quotation-email > .vista-button {
+    justify-self: stretch;
+    width: 100%;
+  }
+}
+
 .financial-document-source-link {
   display: flex;
   align-items: center;
@@ -4761,6 +4779,28 @@ body {
   gap: 0.65rem;
   justify-items: end;
   padding-top: 0.4rem;
+}
+
+.financial-document-issue-confirm {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+  width: 100%;
+  padding: 0.7rem 0.8rem;
+  border: 1px solid var(--vista-line);
+  border-radius: 0.75rem;
+  background: var(--vista-surface-soft, #f7faf6);
+  color: var(--vista-ink-soft);
+  font-size: 0.76rem;
+  line-height: 1.4;
+}
+
+.financial-document-issue-confirm input {
+  flex: 0 0 auto;
+  width: 1rem;
+  height: 1rem;
+  margin: 0.05rem 0 0;
+  accent-color: var(--vista-green, #1c563b);
 }
 
 .financial-document-cancel > .financial-document-field {
@@ -6374,6 +6414,17 @@ select.vista-field-input {
   gap: 0.6rem;
   justify-content: flex-end;
   padding-top: 0.8rem;
+}
+
+.sales-quotation-email {
+  align-items: end;
+  display: grid;
+  gap: 0.65rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.sales-quotation-email > .vista-button {
+  justify-self: end;
 }
 
 .sales-quotation-actions .sales-cancel-confirmation {
@@ -20964,6 +21015,34 @@ select.vista-field-input {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
+.service-cost-grid-heading {
+  grid-column: 1 / -1;
+  border-bottom: 1px solid var(--vista-line);
+  background: color-mix(in srgb, var(--vista-accent-soft) 40%, var(--vista-surface-muted));
+}
+
+.service-cost-grid .service-cost-grid-heading dd {
+  color: var(--vista-muted);
+  font-size: 0.72rem;
+  font-weight: 500;
+}
+
+.service-cost-grid > .service-cost-grid-heading + div {
+  border-left: 0;
+}
+
+.service-customer-charge-grid {
+  margin-top: 0.7rem;
+  border-color: color-mix(in srgb, var(--vista-accent) 24%, var(--vista-line));
+}
+
+.service-cost-subheading {
+  margin: 0.8rem 0 0.5rem;
+  color: var(--vista-ink);
+  font-size: 0.76rem;
+  font-weight: 720;
+}
+
 .service-fact-grid > div,
 .service-cost-grid > div,
 .service-evidence-grid > div {
@@ -21163,7 +21242,9 @@ select.vista-field-input {
 }
 
 .service-part-editor-row {
-  grid-template-columns: minmax(0, 1fr) 6rem minmax(0, 1fr) 2rem;
+  grid-template-columns:
+    minmax(11rem, 1.4fr) minmax(5.5rem, 0.65fr)
+    minmax(8.5rem, 1fr) minmax(8.5rem, 1fr) 2rem;
 }
 
 .service-remove-row {
@@ -22020,6 +22101,34 @@ select.vista-field-input {
 
 .bank-match-source {
   color: var(--vista-ink);
+}
+
+.bank-possible-duplicate-note {
+  margin: 0.45rem 0 0;
+  padding: 0.6rem 0.7rem;
+  border: 1px solid color-mix(in srgb, var(--vista-warning) 28%, var(--vista-line));
+  border-radius: 0.65rem;
+  color: var(--vista-warning-strong);
+  background: color-mix(in srgb, var(--vista-warning) 7%, var(--vista-surface));
+  font-size: 0.75rem;
+}
+
+.bank-duplicate-review-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  padding: 0.85rem;
+  border: 1px solid var(--vista-line);
+  border-radius: 0.75rem;
+  color: var(--vista-ink);
+  background: var(--vista-surface-muted);
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+.bank-duplicate-review-check input {
+  flex: 0 0 auto;
+  margin-top: 0.1rem;
 }
 
 .bank-match-source > span {
@@ -31329,4 +31438,61 @@ body .login-page .recovery-status-mark {
 
 .supplier-invoice-order-context .technical-identifier {
   justify-self: start;
+}
+.bank-import-preview {
+  display: grid;
+  gap: 8px;
+  margin: 14px 0;
+  min-width: 0;
+}
+
+.bank-import-preview > span {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+.bank-import-preview-table {
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  overflow: auto;
+  background: var(--surface-raised);
+}
+
+.bank-import-preview-table > div {
+  display: grid;
+  grid-auto-columns: minmax(120px, 1fr);
+  grid-auto-flow: column;
+  min-width: max-content;
+}
+
+.bank-import-preview-table > div + div {
+  border-top: 1px solid var(--border-subtle);
+}
+
+.bank-import-preview-table > div:first-child {
+  color: var(--text-muted);
+  font-size: 0.76rem;
+  font-weight: 650;
+  background: var(--surface-soft);
+}
+
+.bank-import-preview-table span {
+  overflow: hidden;
+  padding: 9px 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bank-import-review-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin: 12px 0;
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+}
+
+.bank-import-review-check input {
+  flex: 0 0 auto;
+  margin-top: 2px;
 }

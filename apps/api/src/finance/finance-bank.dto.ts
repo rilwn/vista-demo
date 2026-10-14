@@ -4,6 +4,7 @@ import {
   ArrayMaxSize,
   ArrayMinSize,
   IsArray,
+  IsBoolean,
   IsDateString,
   IsIn,
   IsInt,
@@ -83,7 +84,7 @@ export class CreateFinanceBankStatementDto implements CreateFinanceBankStatement
   @Matches(balance)
   closingBalance!: string;
 
-  @ApiProperty({ example: 'BGN', type: String })
+  @ApiProperty({ example: 'EUR', type: String })
   @IsString()
   @Matches(currency)
   currencyCode!: string;
@@ -121,6 +122,11 @@ export class MatchFinanceBankTransactionDto implements MatchFinanceBankTransacti
   @IsInt()
   @Min(1)
   expectedVersion!: number;
+
+  @ApiPropertyOptional({ type: Boolean })
+  @IsOptional()
+  @IsBoolean()
+  reviewPossibleDuplicate?: boolean;
 }
 
 export class FinanceBankStatementListQueryDto {
@@ -178,6 +184,7 @@ class FinanceBankTransactionDto implements FinanceBankTransaction {
   @ApiProperty({ enum: ['matched', 'unmatched'] })
   matchStatus!: FinanceBankTransaction['matchStatus'];
   @ApiProperty({ type: String }) paymentReference!: string;
+  @ApiPropertyOptional({ type: Boolean }) possibleDuplicate?: boolean;
   @ApiProperty({ format: 'date', type: String }) transactionDate!: string;
   @ApiPropertyOptional({ type: FinanceSupplierBankTransactionMatchDto })
   supplierMatch?: NonNullable<FinanceBankTransaction['supplierMatch']>;

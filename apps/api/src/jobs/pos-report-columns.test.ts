@@ -32,7 +32,7 @@ describe('POS report field selection', () => {
           {
             productName: 'Sample product',
             quantitySold: 7,
-            netRevenueBgn: '120.0000',
+            netRevenueEur: '120.0000',
           },
         ],
         title: 'POS product sales',
@@ -53,7 +53,7 @@ describe('POS report field selection', () => {
       workbook.worksheets[0]?.eachRow((row) => row.eachCell((cell) => values.push(cell.value)));
       expect(values).toContain('Sample product');
       expect(values).toContain(7);
-      expect(values).not.toContain('Net revenue BGN');
+      expect(values).not.toContain('Net revenue EUR');
       expect(values).not.toContain(120);
     } else expect(rendered.buffer.subarray(0, 5).toString()).toBe('%PDF-');
   });

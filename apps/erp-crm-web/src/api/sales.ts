@@ -6,6 +6,8 @@ import type {
   CreateSalesShipmentRequest,
   SalesReferenceData,
   SalesWorkflow,
+  QueuedEmailReceipt,
+  SendDocumentEmailRequest,
   UpdateSalesQuotationRequest,
 } from '@vista/contracts';
 
@@ -87,6 +89,30 @@ export async function downloadSalesQuotationPdf(token: string, id: string): Prom
     );
   }
   return response.blob();
+}
+
+export async function emailSalesQuotation(
+  token: string,
+  id: string,
+  key: string,
+  input: SendDocumentEmailRequest,
+): Promise<QueuedEmailReceipt> {
+  const response = await fetch(`${apiV1BaseUrl}/sales/quotations/${id}/email`, {
+    body: JSON.stringify(input),
+    headers: {
+      ...authorizationHeaders(token),
+      'content-type': 'application/json',
+      'idempotency-key': key,
+    },
+    method: 'POST',
+  });
+  if (!response.ok)
+    throw new ApiClientError(
+      'The quotation email could not be queued.',
+      'SALES_QUOTATION_EMAIL_FAILED',
+      response.status,
+    );
+  return response.json() as Promise<QueuedEmailReceipt>;
 }
 
 export function confirmSalesQuotation(

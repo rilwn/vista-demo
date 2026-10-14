@@ -8,7 +8,7 @@ import { CreateSalesQuotationDto } from './sales.dto.js';
 describe('CreateSalesQuotationDto', () => {
   it('accepts stable PostgreSQL UUID references returned by development fixtures', async () => {
     const input = plainToInstance(CreateSalesQuotationDto, {
-      currencyCode: 'BGN',
+      currencyCode: 'EUR',
       customerPartnerId: fixtureId('partner:balkan'),
       lines: [
         {
@@ -29,7 +29,7 @@ describe('CreateSalesQuotationDto', () => {
 
   it('still rejects malformed Sales references', async () => {
     const input = plainToInstance(CreateSalesQuotationDto, {
-      currencyCode: 'BGN',
+      currencyCode: 'EUR',
       customerPartnerId: fixtureId('partner:balkan'),
       lines: [
         {

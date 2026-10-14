@@ -7,7 +7,7 @@ describe('sales quotation PDF renderer', () => {
   it('renders a printable bilingual quotation with reconciled stored totals', async () => {
     const workflow: SalesWorkflow = {
       createdAt: '2026-10-09T09:00:00.000Z',
-      currencyCode: 'BGN',
+      currencyCode: 'EUR',
       customerName: 'Алфа Маркет ООД',
       customerPartnerId: 'a4eaf510-58f1-49c2-90cc-ce61c102352c',
       id: '8ea0d4c4-0493-41b8-a224-f8466a05a578',

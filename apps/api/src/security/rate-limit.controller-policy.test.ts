@@ -14,6 +14,7 @@ import { CustomerAssetsController } from '../partners/customer-assets.controller
 import { PartnersController } from '../partners/partners.controller.js';
 import { ProductCategoriesController } from '../product-categories/product-categories.controller.js';
 import { ProcurementController } from '../procurement/procurement.controller.js';
+import { FinancialDocumentsController } from '../finance/financial-documents.controller.js';
 import { RootController } from '../root.controller.js';
 import { SalesController } from '../sales/sales.controller.js';
 import { SecurityAdministrationController } from '../security-administration/security-administration.controller.js';
@@ -23,6 +24,7 @@ const controllers = [
   AuthController,
   CatalogController,
   FilesController,
+  FinancialDocumentsController,
   InventoryController,
   IntegrationOperationsController,
   JobsController,
@@ -51,7 +53,7 @@ describe('HTTP rate-limit coverage', () => {
       })),
     );
 
-    expect(assignments).toHaveLength(152);
+    expect(assignments).toHaveLength(163);
     expect(assignments.filter(({ policy }) => policy === undefined)).toEqual([]);
     expect(assignments).toEqual(
       expect.arrayContaining([
@@ -115,6 +117,21 @@ describe('HTTP rate-limit coverage', () => {
           controller: 'SalesController',
           name: 'quotationPdf',
           policy: 'read',
+        }),
+        expect.objectContaining({
+          controller: 'SalesController',
+          name: 'emailQuotation',
+          policy: 'write',
+        }),
+        expect.objectContaining({
+          controller: 'FinancialDocumentsController',
+          name: 'pdf',
+          policy: 'read',
+        }),
+        expect.objectContaining({
+          controller: 'FinancialDocumentsController',
+          name: 'email',
+          policy: 'write',
         }),
         expect.objectContaining({
           controller: 'PartnersController',

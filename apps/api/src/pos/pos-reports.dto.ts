@@ -71,23 +71,23 @@ export class PosReportReferenceDataDto implements PosReportReferenceData {
 }
 
 class PosReportTotalsDto implements PosReportTotals {
-  @ApiProperty({ type: String }) averageSaleBgn!: string;
-  @ApiProperty({ type: String }) grossReturnsBgn!: string;
-  @ApiProperty({ type: String }) grossSalesBgn!: string;
+  @ApiProperty({ type: String }) averageSaleEur!: string;
+  @ApiProperty({ type: String }) grossReturnsEur!: string;
+  @ApiProperty({ type: String }) grossSalesEur!: string;
   @ApiProperty({ type: String }) itemQuantityReturned!: string;
   @ApiProperty({ type: String }) itemQuantitySold!: string;
-  @ApiProperty({ type: String }) netRevenueBgn!: string;
-  @ApiProperty({ type: String }) netSalesBgn!: string;
+  @ApiProperty({ type: String }) netRevenueEur!: string;
+  @ApiProperty({ type: String }) netSalesEur!: string;
   @ApiProperty({ minimum: 0, type: Number }) returnCount!: number;
   @ApiProperty({ minimum: 0, type: Number }) saleCount!: number;
-  @ApiProperty({ type: String }) vatSalesBgn!: string;
+  @ApiProperty({ type: String }) vatSalesEur!: string;
 }
 
 class PosCashierReportRowDto implements PosCashierReportRow {
-  @ApiProperty({ type: String }) grossReturnsBgn!: string;
-  @ApiProperty({ type: String }) grossSalesBgn!: string;
+  @ApiProperty({ type: String }) grossReturnsEur!: string;
+  @ApiProperty({ type: String }) grossSalesEur!: string;
   @ApiProperty({ type: String }) name!: string;
-  @ApiProperty({ type: String }) netRevenueBgn!: string;
+  @ApiProperty({ type: String }) netRevenueEur!: string;
   @ApiProperty({ type: String }) operatorCode!: string;
   @ApiProperty({ format: 'uuid', type: String }) operatorId!: string;
   @ApiProperty({ minimum: 0, type: Number }) returnCount!: number;
@@ -96,9 +96,9 @@ class PosCashierReportRowDto implements PosCashierReportRow {
 
 class PosProductReportRowDto implements PosProductReportRow {
   @ApiProperty({ type: String }) categoryName!: string;
-  @ApiProperty({ type: String }) grossReturnsBgn!: string;
-  @ApiProperty({ type: String }) grossSalesBgn!: string;
-  @ApiProperty({ type: String }) netRevenueBgn!: string;
+  @ApiProperty({ type: String }) grossReturnsEur!: string;
+  @ApiProperty({ type: String }) grossSalesEur!: string;
+  @ApiProperty({ type: String }) netRevenueEur!: string;
   @ApiProperty({ type: String }) productCode!: string;
   @ApiProperty({ format: 'uuid', type: String }) productId!: string;
   @ApiProperty({ type: String }) productName!: string;
@@ -109,27 +109,27 @@ class PosProductReportRowDto implements PosProductReportRow {
 class PosCategoryReportRowDto implements PosCategoryReportRow {
   @ApiProperty({ format: 'uuid', type: String }) categoryId!: string;
   @ApiProperty({ type: String }) categoryName!: string;
-  @ApiProperty({ type: String }) grossReturnsBgn!: string;
-  @ApiProperty({ type: String }) grossSalesBgn!: string;
-  @ApiProperty({ type: String }) netRevenueBgn!: string;
+  @ApiProperty({ type: String }) grossReturnsEur!: string;
+  @ApiProperty({ type: String }) grossSalesEur!: string;
+  @ApiProperty({ type: String }) netRevenueEur!: string;
   @ApiProperty({ type: String }) quantityReturned!: string;
   @ApiProperty({ type: String }) quantitySold!: string;
 }
 
 class PosPaymentReportRowDto implements PosPaymentReportRow {
-  @ApiProperty({ type: String }) collectedBgn!: string;
+  @ApiProperty({ type: String }) collectedEur!: string;
   @ApiProperty({ enum: ['card', 'cash'] }) method!: 'card' | 'cash';
-  @ApiProperty({ type: String }) netBgn!: string;
-  @ApiProperty({ type: String }) refundedBgn!: string;
+  @ApiProperty({ type: String }) netEur!: string;
+  @ApiProperty({ type: String }) refundedEur!: string;
 }
 
 class PosLocationReportRowDto implements PosLocationReportRow {
-  @ApiProperty({ type: String }) averageSaleBgn!: string;
+  @ApiProperty({ type: String }) averageSaleEur!: string;
   @ApiProperty({ format: 'uuid', type: String }) businessLocationId!: string;
-  @ApiProperty({ type: String }) grossReturnsBgn!: string;
-  @ApiProperty({ type: String }) grossSalesBgn!: string;
+  @ApiProperty({ type: String }) grossReturnsEur!: string;
+  @ApiProperty({ type: String }) grossSalesEur!: string;
   @ApiProperty({ type: String }) locationName!: string;
-  @ApiProperty({ type: String }) netRevenueBgn!: string;
+  @ApiProperty({ type: String }) netRevenueEur!: string;
   @ApiProperty({ type: Number }) revenueSharePercent!: number;
   @ApiProperty({ minimum: 0, type: Number }) returnCount!: number;
   @ApiProperty({ minimum: 0, type: Number }) saleCount!: number;
@@ -139,21 +139,21 @@ class PosShiftReportRowDto implements PosShiftReportRow {
   @ApiProperty({ type: String }) cashRegisterCode!: string;
   @ApiProperty({ format: 'uuid', type: String }) cashRegisterId!: string;
   @ApiProperty({ type: String }) cashRegisterName!: string;
-  @ApiProperty({ type: String }) cashRefundsBgn!: string;
-  @ApiProperty({ type: String }) cashSalesBgn!: string;
+  @ApiProperty({ type: String }) cashRefundsEur!: string;
+  @ApiProperty({ type: String }) cashSalesEur!: string;
   @ApiPropertyOptional({ format: 'date-time', type: String }) closedAt?: string;
-  @ApiPropertyOptional({ type: String }) closingCashBgn?: string;
-  @ApiPropertyOptional({ type: String }) differenceBgn?: string;
-  @ApiProperty({ type: String }) expectedCashBgn!: string;
+  @ApiPropertyOptional({ type: String }) closingCashEur?: string;
+  @ApiPropertyOptional({ type: String }) differenceEur?: string;
+  @ApiProperty({ type: String }) expectedCashEur!: string;
   @ApiProperty({ enum: ['disabled', 'hardware', 'simulator'] })
   fiscalMode!: PosShiftReportRow['fiscalMode'];
-  @ApiProperty({ type: String }) grossReturnsBgn!: string;
-  @ApiProperty({ type: String }) grossSalesBgn!: string;
+  @ApiProperty({ type: String }) grossReturnsEur!: string;
+  @ApiProperty({ type: String }) grossSalesEur!: string;
   @ApiProperty({ format: 'uuid', type: String }) id!: string;
   @ApiProperty({ type: String }) locationName!: string;
-  @ApiProperty({ type: String }) netRevenueBgn!: string;
+  @ApiProperty({ type: String }) netRevenueEur!: string;
   @ApiProperty({ format: 'date-time', type: String }) openedAt!: string;
-  @ApiProperty({ type: String }) openingCashBgn!: string;
+  @ApiProperty({ type: String }) openingCashEur!: string;
   @ApiProperty({ type: String }) operatorCode!: string;
   @ApiProperty({ format: 'uuid', type: String }) operatorId!: string;
   @ApiProperty({ type: String }) operatorName!: string;

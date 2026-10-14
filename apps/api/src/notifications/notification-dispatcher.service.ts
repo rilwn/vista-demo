@@ -7,7 +7,6 @@ import {
 } from '@nestjs/common';
 import type { AppEnvironment } from '@vista/config';
 import { UnrecoverableError } from 'bullmq';
-import type { PoolClient } from 'pg';
 
 import { APP_ENVIRONMENT } from '../config/config.module.js';
 import { DatabaseService } from '../database/database.service.js';
@@ -17,6 +16,7 @@ import {
 } from '../jobs/job-handler-registry.service.js';
 import { JobQueueService } from '../jobs/job-queue.service.js';
 import { StructuredLogger } from '../logging/structured-logger.service.js';
+import { SmtpMailerService, type SmtpMessage } from './smtp-mailer.service.js';
 
 export const notificationDispatchJobName = 'notification.dispatch';
 
@@ -28,6 +28,7 @@ interface PendingNotificationRow {
 interface ClaimedNotificationRow {
   channel: 'email' | 'in_system' | 'sms';
   id: string;
+  payload: Record<string, unknown>;
   recipient_account_id: string | null;
   template_key: string;
 }
@@ -45,6 +46,7 @@ export class NotificationDispatcherService
     @Inject(JobHandlerRegistry) private readonly handlers: JobHandlerRegistry,
     @Inject(JobQueueService) private readonly jobs: JobQueueService,
     @Inject(StructuredLogger) private readonly logger: StructuredLogger,
+    @Inject(SmtpMailerService) private readonly mailer: SmtpMailerService,
   ) {}
 
   onModuleInit(): void {
@@ -67,40 +69,18 @@ export class NotificationDispatcherService
   }
 
   async dispatch(notificationId: string, retryAllowed = false): Promise<void> {
-    const client = await this.database.getPool().connect();
-    let transactionOpen = false;
+    const claimed = await this.claim(notificationId);
+    if (!claimed) return;
     try {
-      await client.query('BEGIN');
-      transactionOpen = true;
-      const claimed = await this.claim(client, notificationId);
-      if (!claimed) {
-        await client.query('COMMIT');
-        transactionOpen = false;
-        return;
+      if (claimed.channel === 'in_system') {
+        if (!claimed.recipient_account_id)
+          throw new UnrecoverableError('An in-system notification requires a recipient account');
+      } else if (claimed.channel === 'email') {
+        await this.mailer.send(emailMessage(claimed.payload));
+      } else {
+        throw new UnrecoverableError('SMS delivery is not configured for this environment');
       }
-      if (claimed.channel !== 'in_system') {
-        await this.fail(client, notificationId, 'NOTIFICATION_CHANNEL_NOT_CONFIGURED', false);
-        await client.query('COMMIT');
-        transactionOpen = false;
-        throw new UnrecoverableError(
-          `${claimed.channel} notification delivery is not configured for this environment`,
-        );
-      }
-      if (!claimed.recipient_account_id) {
-        await this.fail(client, notificationId, 'NOTIFICATION_RECIPIENT_REQUIRED', false);
-        await client.query('COMMIT');
-        transactionOpen = false;
-        throw new UnrecoverableError('An in-system notification requires a recipient account');
-      }
-      await client.query(
-        `UPDATE notifications.messages
-         SET status = 'delivered', delivered_at = now(), processing_started_at = NULL,
-             last_error_code = NULL
-         WHERE id = $1 AND status = 'processing'`,
-        [notificationId],
-      );
-      await client.query('COMMIT');
-      transactionOpen = false;
+      await this.finish(notificationId, 'delivered');
       this.logger.event('info', 'notification.delivered', {
         channel: claimed.channel,
         notificationId,
@@ -108,12 +88,20 @@ export class NotificationDispatcherService
         templateKey: claimed.template_key,
       });
     } catch (error) {
-      if (transactionOpen) await client.query('ROLLBACK');
+      const isTerminal = error instanceof UnrecoverableError || !retryAllowed;
+      await this.finish(
+        notificationId,
+        isTerminal ? 'failed' : 'pending',
+        error instanceof UnrecoverableError
+          ? 'NOTIFICATION_CHANNEL_NOT_CONFIGURED'
+          : error instanceof Error
+            ? error.constructor.name
+            : 'NOTIFICATION_DELIVERY_FAILED',
+      );
       if (error instanceof UnrecoverableError) throw error;
-      await this.recordUnexpectedFailure(notificationId, retryAllowed, error);
+      if (isTerminal)
+        throw new UnrecoverableError('Notification delivery failed after the final attempt');
       throw error;
-    } finally {
-      client.release();
     }
   }
 
@@ -161,67 +149,42 @@ export class NotificationDispatcherService
     }
   }
 
-  private async claim(
-    client: PoolClient,
-    notificationId: string,
-  ): Promise<ClaimedNotificationRow | undefined> {
-    const result = await client.query<ClaimedNotificationRow>(
-      `UPDATE notifications.messages
-       SET status = 'processing', attempt_count = attempt_count + 1,
-           last_error_code = NULL, processing_started_at = now()
-       WHERE id = $1 AND status = 'pending' AND available_at <= now()
-       RETURNING id, channel, recipient_account_id, template_key`,
-      [notificationId],
-    );
-    return result.rows[0];
-  }
-
-  private async fail(
-    client: PoolClient,
-    notificationId: string,
-    errorCode: string,
-    retryAllowed: boolean,
-  ): Promise<void> {
-    await client.query(
-      `UPDATE notifications.messages
-       SET status = $2, last_error_code = $3, processing_started_at = NULL,
-           available_at = CASE WHEN $2 = 'pending' THEN now() ELSE available_at END
-       WHERE id = $1 AND status = 'processing'`,
-      [notificationId, retryAllowed ? 'pending' : 'failed', errorCode],
-    );
-  }
-
-  private async recordUnexpectedFailure(
-    notificationId: string,
-    retryAllowed: boolean,
-    error: unknown,
-  ): Promise<void> {
+  private async claim(notificationId: string): Promise<ClaimedNotificationRow | undefined> {
     const client = await this.database.getPool().connect();
     try {
       await client.query('BEGIN');
-      // The delivery transaction was rolled back, including its claim. Record
-      // this attempt on the pending row, without overwriting another delivery.
-      await client.query(
+      const result = await client.query<ClaimedNotificationRow>(
         `UPDATE notifications.messages
-         SET status = $2, attempt_count = attempt_count + 1, last_error_code = $3,
-             processing_started_at = NULL
-         WHERE id = $1 AND status = 'pending'`,
-        [
-          notificationId,
-          retryAllowed ? 'pending' : 'failed',
-          error instanceof Error ? error.constructor.name : 'NOTIFICATION_DELIVERY_FAILED',
-        ],
+         SET status = 'processing', attempt_count = attempt_count + 1,
+             last_error_code = NULL, processing_started_at = now()
+         WHERE id = $1 AND status = 'pending' AND available_at <= now()
+         RETURNING id, channel, recipient_account_id, template_key, payload`,
+        [notificationId],
       );
       await client.query('COMMIT');
+      return result.rows[0];
     } catch (failure) {
       await client.query('ROLLBACK');
-      this.logger.event('error', 'notification.failure.recording_failed', {
-        errorType: failure instanceof Error ? failure.constructor.name : 'UnknownError',
-        notificationId,
-      });
+      throw failure;
     } finally {
       client.release();
     }
+  }
+
+  private async finish(
+    notificationId: string,
+    status: 'delivered' | 'failed' | 'pending',
+    errorCode?: string,
+  ): Promise<void> {
+    await this.database.getPool().query(
+      `UPDATE notifications.messages
+       SET status = $2::varchar,
+           delivered_at = CASE WHEN $2::varchar = 'delivered' THEN now() ELSE delivered_at END,
+           last_error_code = $3, processing_started_at = NULL,
+           available_at = CASE WHEN $2::varchar = 'pending' THEN now() ELSE available_at END
+       WHERE id = $1 AND status = 'processing'`,
+      [notificationId, status, errorCode ?? null],
+    );
   }
 
   private async recoverStaleClaims(): Promise<void> {
@@ -238,4 +201,40 @@ export class NotificationDispatcherService
       this.logger.event('warn', 'notification.processing.recovered', { count: result.rowCount });
     }
   }
+}
+
+function emailMessage(payload: Record<string, unknown>): SmtpMessage {
+  const attachment = payload['attachment'];
+  if (
+    typeof payload['to'] !== 'string' ||
+    typeof payload['subject'] !== 'string' ||
+    typeof payload['text'] !== 'string' ||
+    typeof payload['messageId'] !== 'string'
+  )
+    throw new UnrecoverableError('The queued email is missing required message details');
+  if (attachment !== undefined && attachment !== null && typeof attachment !== 'object')
+    throw new UnrecoverableError('The queued email attachment is invalid');
+  const file = attachment as Record<string, unknown> | undefined;
+  let decodedAttachment: SmtpMessage['attachment'];
+  if (file) {
+    if (
+      typeof file['fileName'] !== 'string' ||
+      typeof file['mediaType'] !== 'string' ||
+      typeof file['contentBase64'] !== 'string' ||
+      file['contentBase64'].length > 11_184_812
+    )
+      throw new UnrecoverableError('The queued email attachment is incomplete or too large');
+    decodedAttachment = {
+      content: Buffer.from(file['contentBase64'], 'base64'),
+      fileName: file['fileName'],
+      mediaType: file['mediaType'],
+    };
+  }
+  return {
+    ...(decodedAttachment ? { attachment: decodedAttachment } : {}),
+    messageId: payload['messageId'],
+    subject: payload['subject'],
+    text: payload['text'],
+    to: payload['to'],
+  };
 }

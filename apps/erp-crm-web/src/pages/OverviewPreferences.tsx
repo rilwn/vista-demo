@@ -33,10 +33,10 @@ export function OverviewPreferences({
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
   const labels = {
-    recordedRevenueBgn: copy.revenue,
+    recordedRevenueEur: copy.revenue,
     activeServiceRequests: copy.service,
     expiringWarranties: copy.warranties,
-    overdueReceivablesBgn: copy.overdue,
+    overdueReceivablesEur: copy.overdue,
   };
   async function save() {
     if (pending.current) return;

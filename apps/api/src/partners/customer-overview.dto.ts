@@ -43,7 +43,7 @@ export class CustomerOverviewSummaryDto implements CustomerOverviewSummary {
   openReceivables!: number;
 
   @ApiProperty({ example: '60.0000', type: String })
-  outstandingBgn!: string;
+  outstandingEur!: string;
 
   @ApiProperty({ type: Number })
   payments!: number;
@@ -70,7 +70,7 @@ export class CustomerPurchaseLineDto implements CustomerPurchaseLine {
 }
 
 export class CustomerPurchaseHistoryEntryDto implements CustomerPurchaseHistoryEntry {
-  @ApiProperty({ example: 'BGN', type: String })
+  @ApiProperty({ example: 'EUR', type: String })
   currencyCode!: string;
 
   @ApiProperty({ format: 'uuid', type: String })
@@ -97,9 +97,9 @@ export class CustomerPurchaseHistoryEntryDto implements CustomerPurchaseHistoryE
 
 export class CustomerFinancialDocumentSummaryDto implements CustomerFinancialDocumentSummary {
   @ApiProperty({ example: '60.0000', type: String })
-  bgnGrossTotal!: string;
+  eurGrossTotal!: string;
 
-  @ApiProperty({ example: 'BGN', type: String })
+  @ApiProperty({ example: 'EUR', type: String })
   currencyCode!: string;
 
   @ApiProperty({ enum: ['invoice', 'proforma', 'credit_note', 'debit_note'] })
@@ -135,9 +135,9 @@ export class CustomerReceivableSummaryDto implements CustomerReceivableSummary {
   allocatedTotal!: string;
 
   @ApiProperty({ example: '60.0000', type: String })
-  bgnTotal!: string;
+  eurTotal!: string;
 
-  @ApiProperty({ example: 'BGN', type: String })
+  @ApiProperty({ example: 'EUR', type: String })
   currencyCode!: string;
 
   @ApiProperty({ format: 'date', type: String })
@@ -169,7 +169,7 @@ export class CustomerPaymentSummaryDto implements CustomerPaymentSummary {
   @ApiProperty({ example: '20.0000', type: String })
   amount!: string;
 
-  @ApiProperty({ example: 'BGN', type: String })
+  @ApiProperty({ example: 'EUR', type: String })
   currencyCode!: string;
 
   @ApiProperty({ format: 'uuid', type: String })

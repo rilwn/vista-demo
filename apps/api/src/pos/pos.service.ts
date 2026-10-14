@@ -74,11 +74,11 @@ interface ShiftRow {
   cash_register_id: string;
   cash_register_name: string;
   closed_at: Date | string | null;
-  closing_cash_bgn: string | null;
-  expected_cash_bgn: string;
+  closing_cash_eur: string | null;
+  expected_cash_eur: string;
   id: string;
   opened_at: Date | string;
-  opening_cash_bgn: string;
+  opening_cash_eur: string;
   operator_code: string;
   operator_id: string;
   shift_number: string;
@@ -111,7 +111,7 @@ interface CatalogRow {
 }
 
 interface SaleProductRow {
-  average_unit_cost_bgn: string;
+  average_unit_cost_eur: string;
   category_id: string;
   category_name: string;
   id: string;
@@ -131,7 +131,7 @@ interface SaleRow {
   cash_tendered: string;
   change_amount: string;
   completed_at: Date | string;
-  currency_code: 'BGN';
+  currency_code: 'EUR';
   customer_name: string | null;
   customer_partner_id: string | null;
   fiscal_adapter: string;
@@ -269,7 +269,7 @@ interface LoyaltyAccountRow {
   card_number: string;
   id: string;
   program_name: string;
-  redemption_value_bgn: string;
+  redemption_value_eur: string;
   status: PosLoyaltyAccount['status'];
 }
 
@@ -334,7 +334,7 @@ export class PosService {
   ): Promise<PosShift> {
     const normalized = {
       cashRegisterId: input.cashRegisterId,
-      openingCashBgn: decimal(input.openingCashBgn, false),
+      openingCashEur: decimal(input.openingCashEur, false),
     };
     return this.command(
       'pos.shift.open',
@@ -372,7 +372,7 @@ export class PosService {
         await client.query(
           `INSERT INTO pos.shifts (
              id, shift_number, cash_register_id, operator_id, warehouse_id,
-             opening_cash_bgn, opened_by
+             opening_cash_eur, opened_by
            ) VALUES ($1,$2,$3,$4,$5,$6,$7)`,
           [
             shiftId,
@@ -380,7 +380,7 @@ export class PosService {
             selected.cash_register_id,
             selected.operator_id,
             selected.warehouse_id,
-            normalized.openingCashBgn,
+            normalized.openingCashEur,
             authentication.accountId,
           ],
         );
@@ -408,7 +408,7 @@ export class PosService {
     metadata: RequestSecurityMetadata,
   ): Promise<PosShift> {
     const normalized = {
-      closingCashBgn: decimal(input.closingCashBgn, false),
+      closingCashEur: decimal(input.closingCashEur, false),
       id,
       version: input.version,
     };
@@ -433,10 +433,10 @@ export class PosService {
             HttpStatus.CONFLICT,
           );
         const updated = await client.query(
-          `UPDATE pos.shifts SET status = 'closed', closing_cash_bgn = $3,
+          `UPDATE pos.shifts SET status = 'closed', closing_cash_eur = $3,
              closed_by = $2, closed_at = now(), version = version + 1
            WHERE id = $1 AND version = $4`,
-          [id, authentication.accountId, normalized.closingCashBgn, normalized.version],
+          [id, authentication.accountId, normalized.closingCashEur, normalized.version],
         );
         if (!updated.rowCount)
           throw new ApiErrorException(
@@ -580,7 +580,7 @@ export class PosService {
       loyalty_card_number: string | null;
       loyalty_id: string | null;
       loyalty_program_name: string | null;
-      loyalty_redemption_value_bgn: string | null;
+      loyalty_redemption_value_eur: string | null;
       loyalty_status: PosLoyaltyAccount['status'] | null;
       locations: Array<{ city: string; id: string; name: string }>;
       uic: string | null;
@@ -589,7 +589,7 @@ export class PosService {
       `SELECT partner.id, partner.display_name, partner.uic, partner.vat_number,
         loyalty.id AS loyalty_id, loyalty.card_number AS loyalty_card_number,
         loyalty.status AS loyalty_status, program.name AS loyalty_program_name,
-        program.redemption_value_bgn::text AS loyalty_redemption_value_bgn,
+        program.redemption_value_eur::text AS loyalty_redemption_value_eur,
         CASE WHEN loyalty.id IS NULL THEN NULL ELSE COALESCE((
           SELECT sum(entry.points) FROM pos.loyalty_points_ledger entry
           WHERE entry.loyalty_account_id = loyalty.id
@@ -620,7 +620,7 @@ export class PosService {
       ...(row.loyalty_id &&
       row.loyalty_card_number &&
       row.loyalty_program_name &&
-      row.loyalty_redemption_value_bgn &&
+      row.loyalty_redemption_value_eur &&
       row.loyalty_status
         ? {
             loyalty: {
@@ -628,7 +628,7 @@ export class PosService {
               cardNumber: row.loyalty_card_number,
               id: row.loyalty_id,
               programName: row.loyalty_program_name,
-              redemptionValueBgn: row.loyalty_redemption_value_bgn,
+              redemptionValueEur: row.loyalty_redemption_value_eur,
               status: row.loyalty_status,
             },
           }
@@ -663,7 +663,7 @@ export class PosService {
            AND terms.on_account_enabled
            AND terms.valid_from <= (now() AT TIME ZONE $2)::date
            AND (terms.valid_to IS NULL OR terms.valid_to >= (now() AT TIME ZONE $2)::date)
-           THEN greatest(terms.credit_limit_bgn - COALESCE(account_balance.outstanding, 0), 0)
+           THEN greatest(terms.credit_limit_eur - COALESCE(account_balance.outstanding, 0), 0)
            ELSE 0 END::text AS available_credit,
          (terms.id IS NOT NULL AND terms.status = 'active'
            AND terms.on_account_enabled
@@ -1086,7 +1086,7 @@ export class PosService {
           if (!product.unit_price)
             throw new ApiErrorException(
               'POS_PRICE_UNAVAILABLE',
-              `${product.name} does not have an active BGN selling price`,
+              `${product.name} does not have an active EUR selling price`,
               HttpStatus.CONFLICT,
             );
           if (!product.vat_treatment)
@@ -1196,8 +1196,8 @@ export class PosService {
         );
 
         for (const line of preparedLines) {
-          const balance = await client.query<{ average_unit_cost_bgn: string }>(
-            `SELECT balance.average_unit_cost_bgn::text
+          const balance = await client.query<{ average_unit_cost_eur: string }>(
+            `SELECT balance.average_unit_cost_eur::text
              FROM inventory.stock_balances balance
              WHERE balance.warehouse_id = $1 AND balance.product_id = $2 FOR UPDATE`,
             [shift.warehouseId, line.productId],
@@ -1281,7 +1281,7 @@ export class PosService {
           await client.query(
             `INSERT INTO inventory.stock_movements (
                id, warehouse_id, product_id, movement_type, quantity, reference_type,
-               reference_id, actor_account_id, correlation_id, unit_cost_bgn,
+               reference_id, actor_account_id, correlation_id, unit_cost_eur,
                customer_partner_id, batch_id
              ) VALUES ($1,$2,$3,'issue',$4,'pos_sale',$5,$6,$7,$8,$9,$10)`,
             [
@@ -1292,7 +1292,7 @@ export class PosService {
               saleLineId,
               authentication.accountId,
               metadata.correlationId,
-              valuation.average_unit_cost_bgn,
+              valuation.average_unit_cost_eur,
               normalized.customerPartnerId ?? null,
               line.batchId ?? null,
             ],
@@ -1372,15 +1372,15 @@ export class PosService {
           : undefined;
         let loyaltyPointsEarned = 0;
         if (loyalty?.status === 'active') {
-          const program = await client.query<{ earn_points_per_bgn: number }>(
-            `SELECT program.earn_points_per_bgn
+          const program = await client.query<{ earn_points_per_eur: number }>(
+            `SELECT program.earn_points_per_eur
              FROM pos.loyalty_accounts account
              JOIN pos.loyalty_programs program ON program.id = account.program_id
              WHERE account.id = $1`,
             [loyalty.id],
           );
           loyaltyPointsEarned = Number(
-            (units(grossTotal) * BigInt(program.rows[0]?.earn_points_per_bgn ?? 0)) / 10_000n,
+            (units(grossTotal) * BigInt(program.rows[0]?.earn_points_per_eur ?? 0)) / 10_000n,
           );
           if (basketPricing.loyaltyPointsRedeemed > 0)
             await client.query(
@@ -1460,7 +1460,7 @@ export class PosService {
             await client.query(
               `INSERT INTO finance.customer_account_entries (
                  id, customer_partner_id, payment_terms_id, entry_type, amount,
-                 due_on, credit_limit_bgn, payment_terms_days, pos_sale_id,
+                 due_on, credit_limit_eur, payment_terms_days, pos_sale_id,
                  actor_account_id, correlation_id
                ) VALUES ($1,$2,$3,'charge',$4,$5,$6,$7,$8,$9,$10)`,
               [
@@ -1469,7 +1469,7 @@ export class PosService {
                 payment.paymentTermsId,
                 payment.amount,
                 payment.accountDueOn,
-                payment.creditLimitBgn,
+                payment.creditLimitEur,
                 payment.paymentTermsDays,
                 saleId,
                 authentication.accountId,
@@ -1742,7 +1742,7 @@ export class PosService {
           returned_vat_total: string;
           stock_movement_id: string;
           tracking_mode: PosTrackingMode;
-          unit_cost_bgn: string;
+          unit_cost_eur: string;
           unit_price: string;
           vat_total: string;
           vat_treatment: PosVatTreatment;
@@ -1752,7 +1752,7 @@ export class PosService {
              line.quantity::text, line.unit_price::text, line.vat_treatment,
              line.net_total::text, line.vat_total::text, line.gross_total::text,
              line.stock_movement_id, line.batch_id, category.tracking_mode,
-             movement.unit_cost_bgn::text,
+             movement.unit_cost_eur::text,
              COALESCE((SELECT sum(return_line.quantity)
                FROM pos.return_lines return_line
                WHERE return_line.original_sale_line_id = line.id), 0)::text
@@ -1976,13 +1976,13 @@ export class PosService {
           }
           if (refund.method === 'on_account') {
             const source = await client.query<{
-              credit_limit_bgn: string;
+              credit_limit_eur: string;
               due_on: string;
               id: string;
               payment_terms_days: number;
               payment_terms_id: string;
             }>(
-              `SELECT id, payment_terms_id, due_on::text, credit_limit_bgn::text,
+              `SELECT id, payment_terms_id, due_on::text, credit_limit_eur::text,
                  payment_terms_days
                FROM finance.customer_account_entries
                WHERE pos_sale_id = $1 AND entry_type = 'charge'`,
@@ -1992,7 +1992,7 @@ export class PosService {
             await client.query(
               `INSERT INTO finance.customer_account_entries (
                  id, customer_partner_id, payment_terms_id, entry_type, amount,
-                 due_on, credit_limit_bgn, payment_terms_days, pos_sale_id,
+                 due_on, credit_limit_eur, payment_terms_days, pos_sale_id,
                  pos_return_id, source_entry_id, actor_account_id, correlation_id
                ) VALUES ($1,$2,$3,'return_credit',$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
               [
@@ -2001,7 +2001,7 @@ export class PosService {
                 charge.payment_terms_id,
                 refund.amount,
                 charge.due_on,
-                charge.credit_limit_bgn,
+                charge.credit_limit_eur,
                 charge.payment_terms_days,
                 original.id,
                 returnId,
@@ -2019,7 +2019,7 @@ export class PosService {
           await client.query(
             `INSERT INTO inventory.stock_movements (
                id, warehouse_id, product_id, movement_type, quantity, reference_type,
-               reference_id, actor_account_id, correlation_id, unit_cost_bgn,
+               reference_id, actor_account_id, correlation_id, unit_cost_eur,
                customer_partner_id, batch_id
              ) VALUES ($1,$2,$3,'return_in',$4,$5,$6,$7,$8,$9,$10,$11)`,
             [
@@ -2031,19 +2031,19 @@ export class PosService {
               returnLineId,
               authentication.accountId,
               metadata.correlationId,
-              prepared.line.unit_cost_bgn,
+              prepared.line.unit_cost_eur,
               original.customer_partner_id,
               prepared.line.batch_id,
             ],
           );
           await client.query(
             `INSERT INTO inventory.stock_balances (
-               warehouse_id, product_id, quantity, average_unit_cost_bgn
+               warehouse_id, product_id, quantity, average_unit_cost_eur
              ) VALUES ($1,$2,$3,$4)
              ON CONFLICT (warehouse_id, product_id) DO UPDATE SET
-               average_unit_cost_bgn = round((
-                 inventory.stock_balances.quantity * inventory.stock_balances.average_unit_cost_bgn
-                 + EXCLUDED.quantity * EXCLUDED.average_unit_cost_bgn
+               average_unit_cost_eur = round((
+                 inventory.stock_balances.quantity * inventory.stock_balances.average_unit_cost_eur
+                 + EXCLUDED.quantity * EXCLUDED.average_unit_cost_eur
                ) / (inventory.stock_balances.quantity + EXCLUDED.quantity), 4),
                quantity = inventory.stock_balances.quantity + EXCLUDED.quantity,
                updated_at = now()`,
@@ -2051,7 +2051,7 @@ export class PosService {
               prepared.destinationWarehouseId,
               prepared.line.product_id,
               prepared.input.quantity,
-              prepared.line.unit_cost_bgn,
+              prepared.line.unit_cost_eur,
             ],
           );
           if (prepared.line.batch_id)
@@ -2340,7 +2340,7 @@ export class PosService {
       if (!product.unit_price)
         throw new ApiErrorException(
           'POS_PRICE_UNAVAILABLE',
-          `${product.name} does not have an active BGN selling price`,
+          `${product.name} does not have an active EUR selling price`,
           HttpStatus.CONFLICT,
         );
       if (!product.vat_treatment)
@@ -2519,7 +2519,7 @@ export class PosService {
         weight: line.base - line.automatic - line.manual,
       }));
       const available = remaining.reduce((total, line) => total + line.weight, 0n);
-      const pointValue = units(loyaltyAccount.redemptionValueBgn);
+      const pointValue = units(loyaltyAccount.redemptionValueEur);
       loyaltyPointsRedeemed = Math.min(
         input.loyaltyPointsToRedeem,
         Number(pointValue > 0n ? available / pointValue : 0n),
@@ -2586,7 +2586,7 @@ export class PosService {
       );
     const result = await client.query<LoyaltyAccountRow>(
       `SELECT account.id, account.card_number, account.status, program.name AS program_name,
-         program.redemption_value_bgn::text,
+         program.redemption_value_eur::text,
          COALESCE(sum(entry.points), 0)::text AS balance
        FROM pos.loyalty_accounts account
        JOIN pos.loyalty_programs program ON program.id = account.program_id
@@ -2602,7 +2602,7 @@ export class PosService {
           cardNumber: row.card_number,
           id: row.id,
           programName: row.program_name,
-          redemptionValueBgn: row.redemption_value_bgn,
+          redemptionValueEur: row.redemption_value_eur,
           status: row.status,
         }
       : undefined;
@@ -2965,9 +2965,9 @@ const assignmentSql = `
 const shiftSql = `
   SELECT shift.id, shift.shift_number, shift.cash_register_id, register.name AS cash_register_name,
     shift.operator_id, operator.code AS operator_code, shift.warehouse_id,
-    warehouse.name AS warehouse_name, shift.status, shift.opening_cash_bgn::text,
-    shift.closing_cash_bgn::text, shift.closed_at,
-    (shift.opening_cash_bgn + COALESCE((
+    warehouse.name AS warehouse_name, shift.status, shift.opening_cash_eur::text,
+    shift.closing_cash_eur::text, shift.closed_at,
+    (shift.opening_cash_eur + COALESCE((
       SELECT sum(payment.amount)
       FROM pos.sales sale
       JOIN pos.payments payment ON payment.sale_id = sale.id
@@ -2977,7 +2977,7 @@ const shiftSql = `
       FROM pos.returns pos_return
       JOIN pos.return_refunds refund ON refund.return_id = pos_return.id
       WHERE pos_return.shift_id = shift.id AND refund.refund_method = 'cash'
-    ), 0))::text AS expected_cash_bgn,
+    ), 0))::text AS expected_cash_eur,
     shift.opened_at, shift.version
   FROM pos.shifts shift
   JOIN organization.cash_registers register ON register.id = shift.cash_register_id
@@ -2990,7 +2990,7 @@ function applicablePriceSql(customerParameter: number) {
   FROM sales.price_list_lines line
   JOIN sales.price_lists list ON list.id = line.price_list_id
   LEFT JOIN sales.promotional_campaigns campaign ON campaign.id = list.campaign_id
-  WHERE line.product_id = product.id AND list.active AND list.currency_code = 'BGN'
+  WHERE line.product_id = product.id AND list.active AND list.currency_code = 'EUR'
     AND CURRENT_DATE BETWEEN list.valid_from AND list.valid_to
     AND (campaign.id IS NULL OR (
       campaign.active AND CURRENT_DATE BETWEEN campaign.valid_from AND campaign.valid_to
@@ -3105,7 +3105,7 @@ const saleProductsSql = `
     category.name AS category_name, category.tracking_mode,
     unit.code AS unit_code,
     product.pos_vat_treatment AS vat_treatment, product.warranty_months,
-    balance.average_unit_cost_bgn::text, price.id AS price_list_id, price.unit_price
+    balance.average_unit_cost_eur::text, price.id AS price_list_id, price.unit_price
   FROM master_data.products product
   JOIN master_data.product_categories category
     ON category.id = product.category_id AND category.active
@@ -3362,7 +3362,7 @@ async function prepareReturnRefunds(
   if (units(sum(refunds.map((refund) => refund.amount))) !== units(grossTotal))
     throw new ApiErrorException(
       'POS_REFUND_TOTAL_MISMATCH',
-      `Refunds must equal the BGN ${plain(grossTotal)} return total`,
+      `Refunds must equal the EUR ${plain(grossTotal)} return total`,
       HttpStatus.BAD_REQUEST,
     );
   const selectedPayments = await client.query<{
@@ -3500,7 +3500,7 @@ async function prepareSalePayments(
   if (units(sum(payments.map((payment) => payment.amount))) !== units(grossTotal))
     throw new ApiErrorException(
       'POS_PAYMENT_TOTAL_MISMATCH',
-      `Payments must equal the BGN ${plain(grossTotal)} sale total`,
+      `Payments must equal the EUR ${plain(grossTotal)} sale total`,
       HttpStatus.BAD_REQUEST,
     );
   if (
@@ -3518,7 +3518,7 @@ async function prepareSalePayments(
     advanceId?: string;
     amount: string;
     changeAmount: string;
-    creditLimitBgn?: string;
+    creditLimitEur?: string;
     method: PosSalePayment['method'];
     paymentTermsDays?: number;
     paymentTermsId?: string;
@@ -3538,7 +3538,7 @@ async function prepareSalePayments(
       if (units(tenderedAmount) < units(payment.amount))
         throw new ApiErrorException(
           'POS_CASH_TENDER_INSUFFICIENT',
-          `Cash received must be at least BGN ${plain(payment.amount)}`,
+          `Cash received must be at least EUR ${plain(payment.amount)}`,
           HttpStatus.BAD_REQUEST,
         );
       prepared.push({
@@ -3610,13 +3610,13 @@ async function prepareSalePayments(
           HttpStatus.BAD_REQUEST,
         );
       const terms = await client.query<{
-        credit_limit_bgn: string;
+        credit_limit_eur: string;
         due_on: string;
         id: string;
         outstanding_balance: string;
         payment_terms_days: number;
       }>(
-        `SELECT terms.id, terms.credit_limit_bgn::text, terms.payment_terms_days,
+        `SELECT terms.id, terms.credit_limit_eur::text, terms.payment_terms_days,
            ((now() AT TIME ZONE $2)::date + terms.payment_terms_days)::text AS due_on,
            COALESCE((SELECT sum(CASE entry.entry_type
              WHEN 'charge' THEN entry.amount ELSE -entry.amount END)
@@ -3640,7 +3640,7 @@ async function prepareSalePayments(
         );
       if (
         units(account.outstanding_balance) + units(payment.amount) >
-        units(account.credit_limit_bgn)
+        units(account.credit_limit_eur)
       )
         throw new ApiErrorException(
           'POS_ACCOUNT_CREDIT_EXCEEDED',
@@ -3652,7 +3652,7 @@ async function prepareSalePayments(
         adapter: 'customer-account',
         amount: payment.amount,
         changeAmount: '0.0000',
-        creditLimitBgn: account.credit_limit_bgn,
+        creditLimitEur: account.credit_limit_eur,
         method: payment.method,
         paymentTermsDays: account.payment_terms_days,
         paymentTermsId: account.id,
@@ -3703,11 +3703,11 @@ function mapShift(row: ShiftRow): PosShift {
     cashRegisterId: row.cash_register_id,
     cashRegisterName: row.cash_register_name,
     ...(row.closed_at ? { closedAt: iso(row.closed_at) } : {}),
-    ...(row.closing_cash_bgn ? { closingCashBgn: row.closing_cash_bgn } : {}),
-    expectedCashBgn: row.expected_cash_bgn,
+    ...(row.closing_cash_eur ? { closingCashEur: row.closing_cash_eur } : {}),
+    expectedCashEur: row.expected_cash_eur,
     id: row.id,
     openedAt: iso(row.opened_at),
-    openingCashBgn: row.opening_cash_bgn,
+    openingCashEur: row.opening_cash_eur,
     operatorCode: row.operator_code,
     operatorId: row.operator_id,
     shiftNumber: row.shift_number,
@@ -3728,7 +3728,7 @@ function mapCatalogItem(row: CatalogRow): PosCatalogItem {
       ...(batch.expiresOn ? { expiresOn: batch.expiresOn } : {}),
       quantity: batch.quantity,
     })),
-    currencyCode: 'BGN',
+    currencyCode: 'EUR',
     id: row.id,
     name: row.name,
     ...(row.price_list_id ? { priceListId: row.price_list_id } : {}),

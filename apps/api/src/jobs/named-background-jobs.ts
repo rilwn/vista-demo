@@ -1,6 +1,7 @@
 export const namedBackgroundJobs = [
   'finance.payment-status.detect',
   'finance.payment-notification.prepare',
+  'finance.currency-rates.refresh',
   'sales.subscription-invoice.generate',
   'service.inspection-reminder.prepare',
   'service.plan-visit.generate',

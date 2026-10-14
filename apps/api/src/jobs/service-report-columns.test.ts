@@ -28,7 +28,7 @@ describe('Service report field selection', () => {
             {
               requestNumber: 'SR-TEST-001',
               customerName: 'Sample customer',
-              totalCostBgn: '120.0000',
+              totalCostEur: '120.0000',
             },
           ],
           title: 'Service request register',
@@ -49,7 +49,7 @@ describe('Service report field selection', () => {
         workbook.worksheets[0]?.eachRow((row) => row.eachCell((cell) => values.push(cell.value)));
         expect(values).toContain('SR-TEST-001');
         expect(values).toContain('Sample customer');
-        expect(values).not.toContain('Total BGN');
+        expect(values).not.toContain('Total EUR');
         expect(values).not.toContain(120);
       } else expect(rendered.buffer.subarray(0, 5).toString()).toBe('%PDF-');
     },

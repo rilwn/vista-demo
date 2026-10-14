@@ -37,6 +37,8 @@ type OrderRow = {
 };
 
 type OrderLineRow = {
+  cost_baseline_eur: string | null;
+  cost_baseline_source: 'latest_product_cost' | 'supplier_invoice' | null;
   delivered_quantity: string;
   expected_delivery_date: string;
   id: string;
@@ -55,6 +57,9 @@ type ReceiptRow = {
 
 type ReceiptLineRow = {
   batch_id: string | null;
+  cost_baseline_eur: string | null;
+  cost_baseline_source: 'latest_product_cost' | 'supplier_invoice' | null;
+  cost_variance_percent: string | null;
   goods_receipt_id: string;
   id: string;
   order_line_id: string;
@@ -62,8 +67,8 @@ type ReceiptLineRow = {
   quantity: string;
   serial_item_ids: string[];
   stock_movement_id: string;
-  total_cost_bgn: string;
-  unit_cost_bgn: string;
+  total_cost_eur: string;
+  unit_cost_eur: string;
 };
 
 type ClaimedCommand = { request_hash: string; response_body: unknown; status: string };
@@ -295,14 +300,37 @@ export class ProcurementService {
 
         for (const receivedLine of normalized.lines) {
           const line = await client.query<{
+            cost_baseline_eur: string | null;
+            cost_baseline_source: 'latest_product_cost' | 'supplier_invoice' | null;
             id: string;
             product_id: string;
             unit_price: string;
           }>(
-            `SELECT id, product_id, unit_price::text
-             FROM procurement.purchase_order_lines
-             WHERE id = $1 AND purchase_order_id = $2
-             FOR UPDATE`,
+            `SELECT line.id, line.product_id, line.unit_price::text,
+                    COALESCE(invoice_cost.unit_price, movement_cost.unit_cost_eur)::text
+                      AS cost_baseline_eur,
+                    CASE WHEN invoice_cost.unit_price IS NOT NULL THEN 'supplier_invoice'
+                         WHEN movement_cost.unit_cost_eur IS NOT NULL THEN 'latest_product_cost'
+                         ELSE NULL END AS cost_baseline_source
+             FROM procurement.purchase_order_lines line
+             LEFT JOIN LATERAL (
+               SELECT invoice_line.unit_price
+               FROM procurement.supplier_invoice_lines invoice_line
+               JOIN procurement.supplier_invoices invoice ON invoice.id=invoice_line.supplier_invoice_id
+               JOIN procurement.purchase_order_lines source_line
+                 ON source_line.id=invoice_line.purchase_order_line_id
+               WHERE source_line.product_id=line.product_id AND invoice.currency_code='EUR'
+               ORDER BY invoice.invoice_date DESC, invoice.recorded_at DESC, invoice.id DESC
+               LIMIT 1
+             ) invoice_cost ON true
+             LEFT JOIN LATERAL (
+               SELECT movement.unit_cost_eur
+               FROM inventory.stock_movements movement
+               WHERE movement.product_id=line.product_id AND movement.unit_cost_eur>0
+               ORDER BY movement.occurred_at DESC, movement.id DESC LIMIT 1
+             ) movement_cost ON true
+             WHERE line.id = $1 AND line.purchase_order_id = $2
+             FOR UPDATE OF line`,
             [receivedLine.orderLineId, orderId],
           );
           const orderLine = line.rows[0];
@@ -325,15 +353,15 @@ export class ProcurementService {
               'The received quantity exceeds the quantity still due',
               HttpStatus.CONFLICT,
             );
-          const unitCostBgn =
-            receivedLine.unitCostBgn ??
-            (orderRow.currency_code === 'BGN' ? normalizeMoney(orderLine.unit_price) : undefined);
-          if (!unitCostBgn)
+          const unitCostEur =
+            receivedLine.unitCostEur ??
+            (orderRow.currency_code === 'EUR' ? normalizeMoney(orderLine.unit_price) : undefined);
+          if (!unitCostEur)
             throw new ApiErrorException(
-              'RECEIPT_BGN_COST_REQUIRED',
-              'A BGN unit cost is required when the purchase order uses another currency',
+              'RECEIPT_EUR_COST_REQUIRED',
+              'A EUR unit cost is required when the purchase order uses another currency',
               HttpStatus.BAD_REQUEST,
-              [{ field: 'unitCostBgn', message: 'Enter the BGN unit cost used for valuation' }],
+              [{ field: 'unitCostEur', message: 'Enter the EUR unit cost used for valuation' }],
             );
           const stock = await this.inventory.receivePurchaseOrderStock(
             client,
@@ -345,7 +373,7 @@ export class ProcurementService {
               referenceId: goodsReceiptId,
               ...(receivedLine.serialNumbers ? { serialNumbers: receivedLine.serialNumbers } : {}),
               supplierPartnerId: orderRow.supplier_partner_id,
-              unitCostBgn,
+              unitCostEur,
               warehouseId: orderRow.warehouse_id,
             },
             goodsReceiptId,
@@ -356,15 +384,17 @@ export class ProcurementService {
           await client.query(
             `INSERT INTO procurement.goods_receipt_lines (
                id, goods_receipt_id, purchase_order_line_id, stock_movement_id,
-               quantity, unit_cost_bgn
-             ) VALUES ($1, $2, $3, $4, $5, $6)`,
+               quantity, unit_cost_eur, cost_baseline_eur, cost_baseline_source
+             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
             [
               randomUUID(),
               goodsReceiptId,
               receivedLine.orderLineId,
               stock.id,
               receivedLine.quantity,
-              unitCostBgn,
+              unitCostEur,
+              orderLine.cost_baseline_eur,
+              orderLine.cost_baseline_source,
             ],
           );
         }
@@ -427,9 +457,31 @@ export class ProcurementService {
       `SELECT line.id, line.product_id, product.name AS product_name,
               line.ordered_quantity::text, line.delivered_quantity::text,
               line.invoiced_quantity::text, line.unit_price::text,
-              line.expected_delivery_date::text
+              line.expected_delivery_date::text,
+              COALESCE(invoice_cost.unit_price, movement_cost.unit_cost_eur)::text
+                AS cost_baseline_eur,
+              CASE WHEN invoice_cost.unit_price IS NOT NULL THEN 'supplier_invoice'
+                   WHEN movement_cost.unit_cost_eur IS NOT NULL THEN 'latest_product_cost'
+                   ELSE NULL END AS cost_baseline_source
        FROM procurement.purchase_order_lines line
        JOIN master_data.products product ON product.id = line.product_id
+       LEFT JOIN LATERAL (
+         SELECT invoice_line.unit_price
+         FROM procurement.supplier_invoice_lines invoice_line
+         JOIN procurement.supplier_invoices invoice ON invoice.id = invoice_line.supplier_invoice_id
+         JOIN procurement.purchase_order_lines source_line
+           ON source_line.id = invoice_line.purchase_order_line_id
+         WHERE source_line.product_id = line.product_id AND invoice.currency_code = 'EUR'
+         ORDER BY invoice.invoice_date DESC, invoice.recorded_at DESC, invoice.id DESC
+         LIMIT 1
+       ) invoice_cost ON true
+       LEFT JOIN LATERAL (
+         SELECT movement.unit_cost_eur
+         FROM inventory.stock_movements movement
+         WHERE movement.product_id = line.product_id AND movement.unit_cost_eur > 0
+         ORDER BY movement.occurred_at DESC, movement.id DESC
+         LIMIT 1
+       ) movement_cost ON true
        WHERE line.purchase_order_id = $1
        ORDER BY line.expected_delivery_date, product.name, line.id`,
       [id],
@@ -444,8 +496,10 @@ export class ProcurementService {
       `SELECT receipt_line.id, receipt_line.goods_receipt_id,
               receipt_line.purchase_order_line_id AS order_line_id,
               order_line.product_id, receipt_line.stock_movement_id,
-              receipt_line.quantity::text, receipt_line.unit_cost_bgn::text,
-              movement.total_cost_bgn::text, movement.batch_id,
+              receipt_line.quantity::text, receipt_line.unit_cost_eur::text,
+              receipt_line.cost_baseline_eur::text, receipt_line.cost_baseline_source,
+              receipt_line.cost_variance_percent::text,
+              movement.total_cost_eur::text, movement.batch_id,
               COALESCE((
                 SELECT array_agg(item.id::text ORDER BY item.id)
                 FROM inventory.serialized_items item
@@ -606,6 +660,8 @@ export class ProcurementService {
 
 function orderLine(row: OrderLineRow): PurchaseOrderLine {
   return {
+    ...(row.cost_baseline_eur ? { costBaselineEur: row.cost_baseline_eur } : {}),
+    ...(row.cost_baseline_source ? { costBaselineSource: row.cost_baseline_source } : {}),
     deliveredQuantity: row.delivered_quantity,
     expectedDeliveryDate: row.expected_delivery_date,
     id: row.id,
@@ -620,14 +676,17 @@ function orderLine(row: OrderLineRow): PurchaseOrderLine {
 function goodsReceiptLine(row: ReceiptLineRow): GoodsReceiptLine {
   return {
     ...(row.batch_id ? { batchId: row.batch_id } : {}),
+    ...(row.cost_baseline_eur ? { costBaselineEur: row.cost_baseline_eur } : {}),
+    ...(row.cost_baseline_source ? { costBaselineSource: row.cost_baseline_source } : {}),
+    ...(row.cost_variance_percent ? { costVariancePercent: row.cost_variance_percent } : {}),
     id: row.id,
     orderLineId: row.order_line_id,
     productId: row.product_id,
     quantity: row.quantity,
     serialItemIds: row.serial_item_ids,
     stockMovementId: row.stock_movement_id,
-    totalCostBgn: row.total_cost_bgn,
-    unitCostBgn: row.unit_cost_bgn,
+    totalCostEur: row.total_cost_eur,
+    unitCostEur: row.unit_cost_eur,
   };
 }
 
@@ -674,7 +733,7 @@ function normalizeReceipt(input: ReceivePurchaseOrderRequest) {
       orderLineId: line.orderLineId,
       quantity: normalizePositiveQuantity(line.quantity),
       ...(line.serialNumbers ? { serialNumbers: line.serialNumbers } : {}),
-      ...(line.unitCostBgn ? { unitCostBgn: normalizeMoney(line.unitCostBgn) } : {}),
+      ...(line.unitCostEur ? { unitCostEur: normalizeMoney(line.unitCostEur) } : {}),
     })),
     ...(supplierDeliveryReference ? { supplierDeliveryReference } : {}),
   };

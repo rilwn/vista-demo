@@ -167,9 +167,10 @@ Ordinary users must not be able to delete backup audit logs.
 ### 4.4 Time, money, tax, and numbering
 
 - Store monetary values using fixed-precision decimal types, never floating point.
-- Accounting is maintained in BGN.
-- Support multiple currencies using automatic Bulgarian National Bank exchange rates.
-- Store the rate, rate date, source, and converted BGN amount used for every posted document.
+- Current accounting is maintained in EUR, effective 1 January 2026. BGN is not an active transaction currency. Convert existing BGN development/test data to EUR using an audited migration; do not merely relabel amounts. Preserve other source currencies and their rate snapshots where they are used.
+- EUR is the default for new money-related work across ERP/CRM and POS, and for any currency choice shown in another app. Reject BGN in new transactions. Recovery has no currency default unless a monetary workflow is added.
+- Convert BGN-denominated balances and comparative figures to EUR using the statutory conversion rate and rounding rules. Record and reconcile every migration; the official rate is EUR 1 = BGN 1.95583. Verify a pre-migration database backup because conversion to stored precision is lossy.
+- Support multiple document currencies using Bulgarian National Bank exchange rates. Store the source-currency amount, rate, rate date, source, and converted EUR accounting amount used for every posted document.
 - Support VAT treatments: 20%, 9%, 0%, exempt, and intra-community acquisition.
 - Preserve links between source, correction, fiscal, accounting, and payment documents.
 - Use separate automatic numbering sequences by branch/location, cash register, and operator.
@@ -260,7 +261,7 @@ Implement:
 - PDF printing and email sending with the company logo and signature.
 - Invoice creation from an existing POS/fiscal receipt with bidirectional linkage.
 - VAT treatments of 20%, 9%, 0%, exempt, and intra-community acquisition.
-- Multi-currency documents with automatic Bulgarian National Bank rates while accounting remains in BGN.
+- Multi-currency documents with automatic Bulgarian National Bank rates while accounting is maintained in EUR. BGN is excluded from new documents; other document currencies remain supported.
 
 #### Payment tracking
 
@@ -1087,7 +1088,7 @@ Work incrementally. Keep the system runnable after every phase.
 
 ### Phase 0: Discovery and decisions
 
-- Confirm business locations, warehouses, operators, document sequences, tax settings, initial roles, SLA rules, accounting export formats, Bulgarian bank formats, fiscal-device models, PIN pad, Econt/Speedy credentials, backup sources, hardware, RPO/RTO, and deployment target.
+- Apply recorded implementation defaults in `docs/architecture/decisions/`. Obtain client input only where production source data, statutory settings, external credentials, hardware acceptance, backup targets, or destructive-operation approval cannot safely be defaulted. Apply the EUR transition effective 1 January 2026 by converting current BGN development/test data, rejecting new BGN transactions, and preserving other source currencies.
 - Record unresolved decisions in `docs/architecture/decisions/`.
 - Build a traceability matrix from SRS requirements to modules, migrations, APIs, UI screens, and tests.
 

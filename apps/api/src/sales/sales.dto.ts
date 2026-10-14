@@ -5,6 +5,7 @@ import {
   ArrayMinSize,
   IsArray,
   IsDateString,
+  IsEmail,
   IsIn,
   IsInt,
   IsOptional,
@@ -37,10 +38,33 @@ import {
   type SalesShipment,
   type SalesShipmentLine,
   type SalesWorkflow,
+  type QueuedEmailReceipt,
+  type SendDocumentEmailRequest,
   type VatTreatment,
 } from '@vista/contracts';
 
 const decimalPattern = /^\d+(\.\d{1,4})?$/u;
+
+export class SendSalesQuotationEmailDto implements SendDocumentEmailRequest {
+  @ApiProperty({ example: 'customer@example.com', type: String })
+  @IsEmail()
+  @MaxLength(254)
+  recipientEmail!: string;
+
+  @ApiProperty({ minimum: 1, type: Number })
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  expectedVersion!: number;
+}
+
+export class QueuedSalesEmailDto implements QueuedEmailReceipt {
+  @ApiProperty({ example: 'customer@example.com', type: String })
+  recipientEmail!: string;
+
+  @ApiProperty({ enum: ['queued'] })
+  status!: 'queued';
+}
 
 export class CreateSalesQuotationLineDto implements CreateSalesQuotationLineRequest {
   @ApiProperty({ example: '0.0000', type: String })
@@ -68,7 +92,7 @@ export class CreateSalesQuotationLineDto implements CreateSalesQuotationLineRequ
 }
 
 export class CreateSalesQuotationDto implements CreateSalesQuotationRequest {
-  @ApiProperty({ example: 'BGN', type: String })
+  @ApiProperty({ example: 'EUR', type: String })
   @IsString()
   @Matches(/^[A-Za-z]{3}$/u)
   currencyCode!: string;

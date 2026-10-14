@@ -154,7 +154,7 @@ describe.skipIf(!runInfrastructureTests)('POS split payment and linked return li
       dateFrom: '2026-01-01',
       dateTo: '2026-12-31',
       format: 'xlsx',
-      columns: ['productName', 'netRevenueBgn'],
+      columns: ['productName', 'netRevenueEur'],
     };
     const send = (input: object) =>
       request(application.getHttpServer())
@@ -378,7 +378,7 @@ describe.skipIf(!runInfrastructureTests)('POS split payment and linked return li
       '/api/v1/pos/shifts',
       posToken,
       `open-pos-shift-${runId}`,
-      { cashRegisterId: register?.id, openingCashBgn: '100.00' },
+      { cashRegisterId: register?.id, openingCashEur: '100.00' },
     );
     const beforeStock = await stockQuantity();
     const catalog = await get<PosCatalogPage>(
@@ -387,7 +387,7 @@ describe.skipIf(!runInfrastructureTests)('POS split payment and linked return li
       posToken,
     );
     const product = catalog.items.find((item) => item.productCode === 'DEV-ADAPTER-12V');
-    expect(product).toMatchObject({ unitPrice: '50.0000', vatTreatment: 'standard_20' });
+    expect(product).toMatchObject({ unitPrice: '25.5646', vatTreatment: 'standard_20' });
 
     const initialQuickAccess = await get<PosQuickAccess>(
       application,
@@ -427,11 +427,11 @@ describe.skipIf(!runInfrastructureTests)('POS split payment and linked return li
       },
     );
     expect(automaticPricing).toMatchObject({
-      automaticDiscountTotal: '10.0000',
-      baseNetTotal: '100.0000',
-      grossTotal: '108.0000',
-      netTotal: '90.0000',
-      vatTotal: '18.0000',
+      automaticDiscountTotal: '5.1129',
+      baseNetTotal: '51.1292',
+      grossTotal: '55.2196',
+      netTotal: '46.0163',
+      vatTotal: '9.2033',
     });
     expect(automaticPricing.lines[0]?.pricingAdjustments[0]).toMatchObject({
       code: 'DEMO-QTY-ADAPTER',
@@ -443,8 +443,8 @@ describe.skipIf(!runInfrastructureTests)('POS split payment and linked return li
       clientTransactionId: randomUUID(),
       lines: [{ productId: product?.id, quantity: '2' }],
       payments: [
-        { amount: '54.00', method: 'cash', tenderedAmount: '64.00' },
-        { amount: '54.00', method: 'card' },
+        { amount: '27.6098', method: 'cash', tenderedAmount: '32.7200' },
+        { amount: '27.6098', method: 'card' },
       ],
       shiftId: opening.id,
     };
@@ -457,26 +457,26 @@ describe.skipIf(!runInfrastructureTests)('POS split payment and linked return li
       salePayload,
     );
     expect(sale).toMatchObject({
-      automaticDiscountTotal: '10.0000',
-      baseNetTotal: '100.0000',
-      cashTendered: '64.0000',
-      changeAmount: '10.0000',
+      automaticDiscountTotal: '5.1129',
+      baseNetTotal: '51.1292',
+      cashTendered: '32.7200',
+      changeAmount: '5.1102',
       fiscalStatus: 'simulated',
-      grossTotal: '108.0000',
+      grossTotal: '55.2196',
       status: 'completed',
     });
     expect(sale.payments).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          amount: '54.0000',
+          amount: '27.6098',
           method: 'cash',
-          refundableAmount: '54.0000',
+          refundableAmount: '27.6098',
           status: 'completed',
         }),
         expect.objectContaining({
-          amount: '54.0000',
+          amount: '27.6098',
           method: 'card',
-          refundableAmount: '54.0000',
+          refundableAmount: '27.6098',
           status: 'simulated',
         }),
       ]),
@@ -522,8 +522,8 @@ describe.skipIf(!runInfrastructureTests)('POS split payment and linked return li
       originalSaleId: sale.id,
       reason: 'Customer changed their order',
       refunds: [
-        { amount: '27.00', method: 'cash', originalPaymentId: cashPayment?.id },
-        { amount: '27.00', method: 'card', originalPaymentId: cardPayment?.id },
+        { amount: '13.8048', method: 'cash', originalPaymentId: cashPayment?.id },
+        { amount: '13.8049', method: 'card', originalPaymentId: cardPayment?.id },
       ],
       shiftId: opening.id,
     };
@@ -536,13 +536,13 @@ describe.skipIf(!runInfrastructureTests)('POS split payment and linked return li
       firstReturnPayload,
     );
     expect(firstReturn).toMatchObject({
-      grossTotal: '54.0000',
+      grossTotal: '27.6097',
       originalSaleId: sale.id,
     });
     expect(firstReturn.refunds).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ amount: '27.0000', method: 'cash', status: 'completed' }),
-        expect.objectContaining({ amount: '27.0000', method: 'card', status: 'simulated' }),
+        expect.objectContaining({ amount: '13.8048', method: 'cash', status: 'completed' }),
+        expect.objectContaining({ amount: '13.8049', method: 'card', status: 'simulated' }),
       ]),
     );
     const replayedReturn = await post<PosReturn>(
@@ -560,8 +560,15 @@ describe.skipIf(!runInfrastructureTests)('POS split payment and linked return li
       '/api/v1/pos/returns',
       posToken,
       `second-pos-return-${runId}`,
-      firstReturnPayload,
+      {
+        ...firstReturnPayload,
+        refunds: [
+          { amount: '13.8050', method: 'cash', originalPaymentId: cashPayment?.id },
+          { amount: '13.8049', method: 'card', originalPaymentId: cardPayment?.id },
+        ],
+      },
     );
+    expect(secondReturn.grossTotal).toBe('27.6099');
     expect(secondReturn.id).not.toBe(firstReturn.id);
     expect(await stockQuantity()).toBe(beforeStock);
 
@@ -617,14 +624,14 @@ describe.skipIf(!runInfrastructureTests)('POS split payment and linked return li
       },
     );
     expect(commercialPricing).toMatchObject({
-      baseNetTotal: '50.0000',
-      grossTotal: '52.8000',
+      baseNetTotal: '25.5646',
+      grossTotal: '24.0655',
       loyaltyBalance: 300,
-      loyaltyDiscountTotal: '1.0000',
+      loyaltyDiscountTotal: '0.5100',
       loyaltyPointsRedeemed: 100,
       manualDiscountTotal: '5.0000',
-      netTotal: '44.0000',
-      vatTotal: '8.8000',
+      netTotal: '20.0546',
+      vatTotal: '4.0109',
     });
     const commercialSale = await post<PosSale>(
       application,
@@ -642,14 +649,14 @@ describe.skipIf(!runInfrastructureTests)('POS split payment and linked return li
           discountType: 'fixed_amount',
           discountValue: '5.00',
         },
-        payments: [{ amount: '52.80', method: 'cash', tenderedAmount: '52.80' }],
+        payments: [{ amount: '24.0655', method: 'cash', tenderedAmount: '24.0655' }],
         shiftId: opening.id,
       },
     );
     expect(commercialSale).toMatchObject({
-      grossTotal: '52.8000',
-      loyaltyDiscountTotal: '1.0000',
-      loyaltyPointsEarned: 52,
+      grossTotal: '24.0655',
+      loyaltyDiscountTotal: '0.5100',
+      loyaltyPointsEarned: 48,
       loyaltyPointsRedeemed: 100,
       manualDiscountTotal: '5.0000',
     });
@@ -673,7 +680,7 @@ describe.skipIf(!runInfrastructureTests)('POS split payment and linked return li
       `/api/v1/pos/loyalty/customers/${fixtureId('partner:alfa')}`,
       posToken,
     );
-    expect(ledgerAfterSale.account.balance).toBe(252);
+    expect(ledgerAfterSale.account.balance).toBe(248);
     expect(ledgerAfterSale.entries.map((entry) => entry.entryType)).toEqual(
       expect.arrayContaining(['adjustment', 'earned', 'redeemed']),
     );
@@ -694,7 +701,7 @@ describe.skipIf(!runInfrastructureTests)('POS split payment and linked return li
         reason: 'Customer cancelled the discounted purchase',
         refunds: [
           {
-            amount: '52.80',
+            amount: '24.0655',
             method: 'cash',
             originalPaymentId: commercialSale.payments[0]?.id,
           },
@@ -703,8 +710,8 @@ describe.skipIf(!runInfrastructureTests)('POS split payment and linked return li
       },
     );
     expect(commercialReturn).toMatchObject({
-      grossTotal: '52.8000',
-      loyaltyPointsEarnedReversed: 52,
+      grossTotal: '24.0655',
+      loyaltyPointsEarnedReversed: 48,
       loyaltyPointsRedeemedRestored: 100,
     });
     const ledgerAfterReturn = await get<PosLoyaltyLedger>(
@@ -732,8 +739,8 @@ describe.skipIf(!runInfrastructureTests)('POS split payment and linked return li
     );
     const initialAccount = accounts.find((account) => account.customerPartnerId === customerId);
     expect(initialAccount).toMatchObject({
-      advanceBalance: '80.0000',
-      availableCredit: '2000.0000',
+      advanceBalance: '40.9034',
+      availableCredit: '1022.5838',
       outstandingBalance: '0.0000',
     });
     const creditAccount = await put<CustomerPaymentAccount>(
@@ -742,7 +749,7 @@ describe.skipIf(!runInfrastructureTests)('POS split payment and linked return li
       managerToken,
       `set-customer-credit-${runId}`,
       {
-        creditLimitBgn: '70.00',
+        creditLimitEur: '50.00',
         expectedVersion: initialAccount?.terms?.version,
         onAccountEnabled: true,
         paymentTermsDays: 14,
@@ -752,8 +759,8 @@ describe.skipIf(!runInfrastructureTests)('POS split payment and linked return li
       },
     );
     expect(creditAccount).toMatchObject({
-      availableCredit: '70.0000',
-      terms: { creditLimitBgn: '70.0000', paymentTermsDays: 14, version: 2 },
+      availableCredit: '50.0000',
+      terms: { creditLimitEur: '50.0000', paymentTermsDays: 14, version: 2 },
     });
 
     const accountSalePayload = () => ({
@@ -761,7 +768,7 @@ describe.skipIf(!runInfrastructureTests)('POS split payment and linked return li
       customerLocationId: fixtureId('customer-location:alfa-store'),
       customerPartnerId: customerId,
       lines: [{ productId: product?.id, quantity: '1' }],
-      payments: [{ amount: '60.00', method: 'on_account' }],
+      payments: [{ amount: '30.6775', method: 'on_account' }],
       shiftId: opening.id,
     });
     const concurrentSales = await Promise.allSettled([
@@ -789,7 +796,7 @@ describe.skipIf(!runInfrastructureTests)('POS split payment and linked return li
     const accountPayment = accountSale.payments.find((payment) => payment.method === 'on_account');
     expect(accountPayment).toMatchObject({
       adapter: 'customer-account',
-      amount: '60.0000',
+      amount: '30.6775',
     });
     expect(accountPayment?.accountDueOn).toMatch(/^\d{4}-\d{2}-\d{2}$/u);
     const optionsWithBalance = await get<PosCustomerPaymentOptions>(
@@ -798,9 +805,9 @@ describe.skipIf(!runInfrastructureTests)('POS split payment and linked return li
       posToken,
     );
     expect(optionsWithBalance).toMatchObject({
-      availableCredit: '10.0000',
+      availableCredit: '19.3225',
       onAccountAvailable: true,
-      outstandingBalance: '60.0000',
+      outstandingBalance: '30.6775',
       paymentTermsDays: 14,
     });
     await post<PosReturn>(application, '/api/v1/pos/returns', posToken, `account-return-${runId}`, {
@@ -815,7 +822,7 @@ describe.skipIf(!runInfrastructureTests)('POS split payment and linked return li
       reason: 'Customer cancelled the account purchase',
       refunds: [
         {
-          amount: '60.00',
+          amount: '30.6775',
           method: 'on_account',
           originalPaymentId: accountPayment?.id,
         },
@@ -829,7 +836,7 @@ describe.skipIf(!runInfrastructureTests)('POS split payment and linked return li
       managerToken,
       `record-customer-advance-${runId}`,
       {
-        amount: '30.00',
+        amount: '15.3388',
         customerPartnerId: customerId,
         paymentMethod: 'bank_transfer',
         paymentReference: `TEST-ADV-${runId.slice(0, 8)}`,
@@ -837,8 +844,8 @@ describe.skipIf(!runInfrastructureTests)('POS split payment and linked return li
       },
     );
     expect(recordedAdvance).toMatchObject({
-      amount: '30.0000',
-      availableAmount: '30.0000',
+      amount: '15.3388',
+      availableAmount: '15.3388',
     });
     expect(recordedAdvance.number).toMatch(/^ADV-\d{4}-/u);
     const customerSale = await post<PosSale>(
@@ -852,8 +859,8 @@ describe.skipIf(!runInfrastructureTests)('POS split payment and linked return li
         customerPartnerId: customerId,
         lines: [{ productId: product?.id, quantity: '1' }],
         payments: [
-          { advanceId: recordedAdvance.id, amount: '30.00', method: 'advance' },
-          { amount: '30.00', method: 'on_account' },
+          { advanceId: recordedAdvance.id, amount: '15.3388', method: 'advance' },
+          { amount: '15.3387', method: 'on_account' },
         ],
         shiftId: opening.id,
       },
@@ -867,10 +874,10 @@ describe.skipIf(!runInfrastructureTests)('POS split payment and linked return li
         expect.objectContaining({
           advanceId: recordedAdvance.id,
           advanceNumber: recordedAdvance.number,
-          amount: '30.0000',
+          amount: '15.3388',
           method: 'advance',
         }),
-        expect.objectContaining({ amount: '30.0000', method: 'on_account' }),
+        expect.objectContaining({ amount: '15.3387', method: 'on_account' }),
       ]),
     );
     await post<PosReturn>(
@@ -890,12 +897,12 @@ describe.skipIf(!runInfrastructureTests)('POS split payment and linked return li
         reason: 'Customer returned the advance purchase',
         refunds: [
           {
-            amount: '30.00',
+            amount: '15.3388',
             method: 'advance',
             originalPaymentId: advancePayment?.id,
           },
           {
-            amount: '30.00',
+            amount: '15.3387',
             method: 'on_account',
             originalPaymentId: remainderPayment?.id,
           },
@@ -909,8 +916,8 @@ describe.skipIf(!runInfrastructureTests)('POS split payment and linked return li
       managerToken,
     );
     expect(restoredAccount).toMatchObject({
-      advanceBalance: '110.0000',
-      availableCredit: '70.0000',
+      advanceBalance: '56.2422',
+      availableCredit: '50.0000',
       outstandingBalance: '0.0000',
     });
     expect(restoredAccount.entries.map((entry) => entry.entryType)).toEqual(
@@ -938,7 +945,7 @@ describe.skipIf(!runInfrastructureTests)('POS split payment and linked return li
     const serialNumber = serialProduct?.serialNumbers[0];
     expect(serialProduct).toMatchObject({
       trackingMode: 'serial',
-      unitPrice: '600.0000',
+      unitPrice: '306.7751',
       vatTreatment: 'standard_20',
     });
     expect(serialNumber).toBeTruthy();
@@ -958,13 +965,13 @@ describe.skipIf(!runInfrastructureTests)('POS split payment and linked return li
             serialNumbers: [serialNumber],
           },
         ],
-        payments: [{ amount: '720.00', method: 'card' }],
+        payments: [{ amount: '368.1301', method: 'card' }],
         shiftId: opening.id,
       },
     );
     expect(serialSale).toMatchObject({
       customerName: 'Alfa Market Demo Ltd.',
-      grossTotal: '720.0000',
+      grossTotal: '368.1301',
     });
     expect(serialSale.lines[0]?.serialNumbers).toEqual([serialNumber]);
     expect(serialSale.warrantyCards).toEqual([
@@ -993,21 +1000,21 @@ describe.skipIf(!runInfrastructureTests)('POS split payment and linked return li
     ]);
     expect(concurrentInvoice.id).toBe(invoice.id);
     expect(invoice).toMatchObject({
-      bgnGrossTotal: '720.0000',
+      eurGrossTotal: '368.1301',
       customerPartnerId: fixtureId('partner:alfa'),
       documentType: 'invoice',
-      grossTotal: '720.0000',
+      grossTotal: '368.1301',
       sourceFiscalReceiptNumber: serialSale.fiscalReceiptNumber,
       sourcePosSaleId: serialSale.id,
       sourcePosSaleNumber: serialSale.saleNumber,
       status: 'draft',
     });
     expect(invoice.lines[0]).toMatchObject({
-      grossTotal: '720.0000',
+      grossTotal: '368.1301',
       productId: serialProduct?.id,
       quantity: '1.0000',
       unitCode: 'PCS',
-      vatAmount: '120.0000',
+      vatAmount: '61.3550',
     });
     const card = serialSale.warrantyCards[0];
     const warrantyPdf = await request(application.getHttpServer())
@@ -1039,7 +1046,7 @@ describe.skipIf(!runInfrastructureTests)('POS split payment and linked return li
         reason: 'Device requires inspection',
         refunds: [
           {
-            amount: '720.00',
+            amount: '368.1301',
             method: 'card',
             originalPaymentId: serialSale.payments[0]?.id,
           },
@@ -1127,7 +1134,7 @@ describe.skipIf(!runInfrastructureTests)('POS split payment and linked return li
       '/api/v1/pos/terminal-context',
       posToken,
     );
-    expect(refreshedTerminal.currentShift?.expectedCashBgn).toBe('100.0000');
+    expect(refreshedTerminal.currentShift?.expectedCashEur).toBe('100.0000');
 
     const evidence = await database.query<{
       audit_count: string;
@@ -1159,25 +1166,25 @@ describe.skipIf(!runInfrastructureTests)('POS split payment and linked return li
       posToken,
     );
     expect(overview.totals).toMatchObject({
-      grossReturnsBgn: '1000.8000',
-      grossSalesBgn: '1000.8000',
-      netRevenueBgn: '0.0000',
+      grossReturnsEur: '508.7702',
+      grossSalesEur: '508.7702',
+      netRevenueEur: '0.0000',
       returnCount: 6,
       saleCount: 5,
     });
     expect(overview.products.find((item) => item.productCode === 'DEV-ADAPTER-12V')).toMatchObject({
-      grossReturnsBgn: '280.8000',
-      grossSalesBgn: '280.8000',
-      netRevenueBgn: '0.0000',
+      grossReturnsEur: '140.6401',
+      grossSalesEur: '140.6401',
+      netRevenueEur: '0.0000',
       quantityReturned: '5.0000',
       quantitySold: '5.0000',
     });
     expect(overview.payments).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ method: 'cash', netBgn: '0.0000' }),
-        expect.objectContaining({ method: 'card', netBgn: '0.0000' }),
-        expect.objectContaining({ method: 'advance', netBgn: '0.0000' }),
-        expect.objectContaining({ method: 'on_account', netBgn: '0.0000' }),
+        expect.objectContaining({ method: 'cash', netEur: '0.0000' }),
+        expect.objectContaining({ method: 'card', netEur: '0.0000' }),
+        expect.objectContaining({ method: 'advance', netEur: '0.0000' }),
+        expect.objectContaining({ method: 'on_account', netEur: '0.0000' }),
       ]),
     );
     const definitions = await get<PosReportDefinition[]>(
@@ -1219,14 +1226,14 @@ describe.skipIf(!runInfrastructureTests)('POS split payment and linked return li
       `/api/v1/pos/shifts/${opening.id}/close`,
       posToken,
       `close-pos-shift-${runId}`,
-      { closingCashBgn: '100.00', version: opening.version },
+      { closingCashEur: '100.00', version: opening.version },
     );
-    expect(closed).toMatchObject({ closingCashBgn: '100.0000', status: 'closed' });
+    expect(closed).toMatchObject({ closingCashEur: '100.0000', status: 'closed' });
     expect((await get<PosSale>(application, lookupPath, posToken)).id).toBe(sale.id);
     const zReport = await reports.exportData('pos.z-report', { shiftId: opening.id });
     expect(zReport.rows[0]).toMatchObject({
-      closingCashBgn: '100.0000',
-      differenceBgn: '0.0000',
+      closingCashEur: '100.0000',
+      differenceEur: '0.0000',
       reportType: 'Z',
     });
   }, 20_000);

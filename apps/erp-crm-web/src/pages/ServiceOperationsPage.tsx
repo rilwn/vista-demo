@@ -3216,6 +3216,7 @@ function ServiceWorkEvidence({
   timezone: string;
   workOrder: ServiceWorkOrder;
 }) {
+  const { locale } = useLocalization();
   return (
     <>
       <section className="service-preview-section">
@@ -3249,10 +3250,12 @@ function ServiceWorkEvidence({
                 <div>
                   <strong>{part.productName}</strong>
                   <span>
-                    {part.quantity} from {part.warehouseName}
+                    {part.quantity} · {part.warehouseName} ·{' '}
+                    {formatMoney(part.customerTotalChargeEur)}{' '}
+                    {locale === 'bg' ? 'за клиента' : 'customer charge'}
                   </span>
                 </div>
-                <strong>{formatMoney(part.totalCostBgn)}</strong>
+                <strong>{formatMoney(part.totalCostEur)}</strong>
               </div>
             ))}
           </div>
@@ -3270,21 +3273,51 @@ function ServiceWorkEvidence({
             </div>
           </header>
           <dl className="service-cost-grid">
-            <div>
-              <dt>Labour</dt>
-              <dd>{formatMoney(workOrder.laborCostBgn)}</dd>
+            <div className="service-cost-grid-heading">
+              <dt>{locale === 'bg' ? 'Вътрешна себестойност' : 'Internal cost'}</dt>
+              <dd>
+                {locale === 'bg' ? 'Не се фактурира автоматично' : 'Not billed automatically'}
+              </dd>
             </div>
             <div>
-              <dt>Parts</dt>
-              <dd>{formatMoney(workOrder.partsCostBgn)}</dd>
+              <dt>{locale === 'bg' ? 'Труд' : 'Labour'}</dt>
+              <dd>{formatMoney(workOrder.laborCostEur)}</dd>
             </div>
             <div>
-              <dt>Transport</dt>
-              <dd>{formatMoney(workOrder.transportCostBgn)}</dd>
+              <dt>{locale === 'bg' ? 'Части' : 'Parts'}</dt>
+              <dd>{formatMoney(workOrder.partsCostEur)}</dd>
             </div>
             <div>
-              <dt>Total service cost</dt>
-              <dd>{formatMoney(workOrder.totalCostBgn)}</dd>
+              <dt>{locale === 'bg' ? 'Транспорт' : 'Transport'}</dt>
+              <dd>{formatMoney(workOrder.transportCostEur)}</dd>
+            </div>
+            <div>
+              <dt>{locale === 'bg' ? 'Обща себестойност' : 'Total internal cost'}</dt>
+              <dd>{formatMoney(workOrder.totalCostEur)}</dd>
+            </div>
+          </dl>
+          <dl className="service-cost-grid service-customer-charge-grid">
+            <div className="service-cost-grid-heading">
+              <dt>{locale === 'bg' ? 'Начисления към клиента' : 'Customer charges'}</dt>
+              <dd>
+                {locale === 'bg' ? 'Основа за чернова на фактура' : 'Used for the invoice draft'}
+              </dd>
+            </div>
+            <div>
+              <dt>{locale === 'bg' ? 'Труд' : 'Labour'}</dt>
+              <dd>{formatMoney(workOrder.customerLaborChargeEur)}</dd>
+            </div>
+            <div>
+              <dt>{locale === 'bg' ? 'Части' : 'Parts'}</dt>
+              <dd>{formatMoney(workOrder.customerPartsChargeEur)}</dd>
+            </div>
+            <div>
+              <dt>{locale === 'bg' ? 'Транспорт' : 'Transport'}</dt>
+              <dd>{formatMoney(workOrder.customerTransportChargeEur)}</dd>
+            </div>
+            <div>
+              <dt>{locale === 'bg' ? 'Общо за клиента' : 'Customer total'}</dt>
+              <dd>{formatMoney(workOrder.totalCustomerChargeEur)}</dd>
             </div>
           </dl>
           {workOrder.signature ? (
@@ -3296,7 +3329,8 @@ function ServiceWorkEvidence({
               </span>
             </div>
           ) : null}
-          {Number(workOrder.totalCostBgn) > 0 &&
+          {workOrder.customerChargeRecorded &&
+          Number(workOrder.totalCustomerChargeEur) > 0 &&
           ((workOrder.financialDocumentId && canViewFinance) || canCreateFinance) ? (
             <div className="service-finance-handoff">
               <div>
@@ -3363,8 +3397,10 @@ function CompleteWorkOrderDrawer({
 }) {
   const { locale } = useLocalization();
   const [completionNotes, setCompletionNotes] = useState('');
-  const [laborCostBgn, setLaborCostBgn] = useState('0');
-  const [transportCostBgn, setTransportCostBgn] = useState('0');
+  const [laborCostEur, setLaborCostEur] = useState('0');
+  const [transportCostEur, setTransportCostEur] = useState('0');
+  const [customerLaborChargeEur, setCustomerLaborChargeEur] = useState('0');
+  const [customerTransportChargeEur, setCustomerTransportChargeEur] = useState('0');
   const [timeEntries, setTimeEntries] = useState<ServiceWorkTimeEntryInput[]>([
     { minutes: 30, workDate: today(timezone) },
   ]);
@@ -3380,7 +3416,10 @@ function CompleteWorkOrderDrawer({
   function addPart() {
     const first = availableParts[0];
     if (!first) return;
-    setParts((current) => [...current, { productId: first.productId, quantity: '1' }]);
+    setParts((current) => [
+      ...current,
+      { customerUnitPriceEur: '0', productId: first.productId, quantity: '1' },
+    ]);
   }
 
   function updatePart(index: number, patch: Partial<PartForm>) {
@@ -3412,13 +3451,16 @@ function CompleteWorkOrderDrawer({
     try {
       const input: CompleteServiceWorkOrderRequest = {
         completionNotes,
+        customerLaborChargeEur,
+        customerTransportChargeEur:
+          workOrder.serviceType === 'warranty' ? '0' : customerTransportChargeEur,
         expectedVersion: workOrder.version,
-        laborCostBgn,
+        laborCostEur,
         parts: parts.map(partInput),
         signatureImageDataUrl,
         signerName,
         timeEntries,
-        transportCostBgn,
+        transportCostEur,
       };
       onSaved(await completeServiceWorkOrder(token, workOrder.id, crypto.randomUUID(), input));
     } catch (caught) {
@@ -3561,29 +3603,69 @@ function CompleteWorkOrderDrawer({
         </FormSection>
         <FormSection
           index="2"
-          title="Parts and costs"
-          description="Parts are deducted from the assigned technician warehouse when saved."
+          title={locale === 'bg' ? 'Разходи и начисления' : 'Costs and customer charges'}
+          description={
+            locale === 'bg'
+              ? 'Частите се приспадат от склада на техника. Вътрешните разходи и начисленията към клиента се записват отделно.'
+              : 'Parts are deducted from the technician warehouse. Internal costs and customer charges are recorded separately.'
+          }
         >
+          <h4 className="service-cost-subheading">
+            {locale === 'bg' ? 'Вътрешна себестойност (EUR)' : 'Internal cost (EUR)'}
+          </h4>
           <div className="service-cost-inputs">
-            <ServiceField label="Labour cost (BGN)">
+            <ServiceField label={locale === 'bg' ? 'Разход за труд' : 'Labour cost'}>
               <input
                 min="0"
-                onChange={(event) => setLaborCostBgn(event.target.value)}
+                onChange={(event) => setLaborCostEur(event.target.value)}
                 required
                 step="0.0001"
                 type="number"
-                value={laborCostBgn}
+                value={laborCostEur}
               />
             </ServiceField>
-            <ServiceField label="Transport cost (BGN)">
+            <ServiceField label={locale === 'bg' ? 'Транспортен разход' : 'Transport cost'}>
               <input
                 min="0"
-                onChange={(event) => setTransportCostBgn(event.target.value)}
+                onChange={(event) => setTransportCostEur(event.target.value)}
                 required
                 step="0.0001"
                 type="number"
-                value={transportCostBgn}
+                value={transportCostEur}
               />
+            </ServiceField>
+          </div>
+          <h4 className="service-cost-subheading">
+            {locale === 'bg' ? 'Начисления към клиента (EUR)' : 'Customer charges (EUR)'}
+          </h4>
+          <div className="service-cost-inputs service-customer-charge-inputs">
+            <ServiceField label={locale === 'bg' ? 'Начисление за труд' : 'Labour charge'}>
+              <input
+                min="0"
+                onChange={(event) => setCustomerLaborChargeEur(event.target.value)}
+                required
+                step="0.0001"
+                type="number"
+                value={customerLaborChargeEur}
+              />
+            </ServiceField>
+            <ServiceField label={locale === 'bg' ? 'Транспортно начисление' : 'Transport charge'}>
+              <input
+                disabled={workOrder.serviceType === 'warranty'}
+                min="0"
+                onChange={(event) => setCustomerTransportChargeEur(event.target.value)}
+                required
+                step="0.0001"
+                type="number"
+                value={workOrder.serviceType === 'warranty' ? '0' : customerTransportChargeEur}
+              />
+              {workOrder.serviceType === 'warranty' ? (
+                <small>
+                  {locale === 'bg'
+                    ? 'Транспортът не се начислява при гаранционен ремонт.'
+                    : 'Transport is not charged for warranty work.'}
+                </small>
+              ) : null}
             </ServiceField>
           </div>
           {!availableParts.length ? (
@@ -3627,6 +3709,20 @@ function CompleteWorkOrderDrawer({
                       step="0.0001"
                       type="number"
                       value={part.quantity}
+                    />
+                  </ServiceField>
+                  <ServiceField
+                    label={locale === 'bg' ? 'Цена за клиента (EUR)' : 'Customer unit price (EUR)'}
+                  >
+                    <input
+                      min="0"
+                      onChange={(event) =>
+                        updatePart(index, { customerUnitPriceEur: event.target.value })
+                      }
+                      required
+                      step="0.0001"
+                      type="number"
+                      value={part.customerUnitPriceEur}
                     />
                   </ServiceField>
                   {reference?.trackingMode === 'batch' ? (
@@ -4156,6 +4252,7 @@ function useServiceData(
 
 interface PartForm {
   batchNumber?: string;
+  customerUnitPriceEur: string;
   productId: string;
   quantity: string;
   serialNumbers?: string;
@@ -4164,6 +4261,7 @@ interface PartForm {
 function partInput(part: PartForm): ServicePartUsageInput {
   return {
     ...(part.batchNumber?.trim() ? { batchNumber: part.batchNumber.trim() } : {}),
+    customerUnitPriceEur: part.customerUnitPriceEur,
     productId: part.productId,
     quantity: part.quantity,
     ...(part.serialNumbers?.trim()
@@ -4340,7 +4438,7 @@ function formatTime(value: string, timezone: string) {
 }
 
 function formatMoney(value: string) {
-  return formatOperationsCurrency(value, 'BGN');
+  return formatOperationsCurrency(value, 'EUR');
 }
 
 function formatMinutes(value: number) {

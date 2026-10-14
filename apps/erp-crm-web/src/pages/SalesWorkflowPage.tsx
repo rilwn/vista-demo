@@ -16,6 +16,7 @@ import {
   createSalesQuotation,
   createSalesShipment,
   downloadSalesQuotationPdf,
+  emailSalesQuotation,
   getSalesReferenceData,
   listSalesWorkflows,
   updateSalesQuotation,
@@ -297,7 +298,7 @@ function QuotationDrawer({
   const [validUntil, setValidUntil] = useState(
     editing?.validUntil ?? futureDate(14, references.businessTimezone),
   );
-  const [currencyCode, setCurrencyCode] = useState(editing?.currencyCode ?? 'BGN');
+  const [currencyCode, setCurrencyCode] = useState(editing?.currencyCode ?? 'EUR');
   const [overallDiscountPercent, setOverallDiscountPercent] = useState(
     editing?.overallDiscountPercent ?? '0',
   );
@@ -695,6 +696,8 @@ function WorkflowDrawer({
   const [batches, setBatches] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [emailRecipient, setEmailRecipient] = useState('');
+  const [emailNotice, setEmailNotice] = useState<string | null>(null);
   const [acceptedByName, setAcceptedByName] = useState('');
   const [acceptanceNotes, setAcceptanceNotes] = useState('');
   const [customerLocationId, setCustomerLocationId] = useState('');
@@ -796,6 +799,34 @@ function WorkflowDrawer({
       setBusy(false);
     }
   }
+  async function sendQuotationEmail() {
+    if (!emailRecipient.trim()) return;
+    setBusy(true);
+    setError(null);
+    setEmailNotice(null);
+    try {
+      const receipt = await emailSalesQuotation(token, workflow.id, crypto.randomUUID(), {
+        expectedVersion: workflow.version,
+        recipientEmail: emailRecipient,
+      });
+      setEmailNotice(
+        locale === 'bg'
+          ? `Офертата е добавена за изпращане до ${receipt.recipientEmail}.`
+          : `The quotation was queued for ${receipt.recipientEmail}.`,
+      );
+    } catch (caught) {
+      setError(
+        errorText(
+          caught,
+          locale === 'bg'
+            ? 'Офертата не може да бъде добавена за изпращане.'
+            : 'The quotation email could not be queued.',
+        ),
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
   const canReviseOrCancel = canEdit && ['draft', 'expired'].includes(workflow.status);
   const availabilityWarnings = workflow.lines.flatMap((line) => {
     const available = availableQuantity(references, workflow.warehouseId, line.productId);
@@ -811,6 +842,7 @@ function WorkflowDrawer({
       title={workflow.number}
     >
       {error ? <InlineAlert tone="error">{error}</InlineAlert> : null}
+      {emailNotice ? <InlineAlert tone="success">{emailNotice}</InlineAlert> : null}
       <WorkflowTimeline workflow={workflow} />
       <section className="sales-preview-section">
         <header>
@@ -871,6 +903,27 @@ function WorkflowDrawer({
         <Button disabled={busy} onClick={() => void downloadPdf()} variant="secondary">
           Download quotation PDF
         </Button>
+        {canEdit && workflow.status === 'draft' ? (
+          <div className="sales-quotation-email">
+            <SalesField label={locale === 'bg' ? 'Имейл на получателя' : 'Recipient email'}>
+              <input
+                autoComplete="email"
+                onChange={(event) => setEmailRecipient(event.target.value)}
+                placeholder="name@example.com"
+                type="email"
+                value={emailRecipient}
+              />
+            </SalesField>
+            <Button
+              busy={busy}
+              disabled={!emailRecipient.trim()}
+              onClick={() => void sendQuotationEmail()}
+              variant="secondary"
+            >
+              {locale === 'bg' ? 'Изпращане на офертата' : 'Email quotation'}
+            </Button>
+          </div>
+        ) : null}
         {canReviseOrCancel ? (
           <div className="sales-quotation-lifecycle">
             <Button disabled={busy} onClick={() => onEdit(workflow)} variant="secondary">

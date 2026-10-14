@@ -9,9 +9,9 @@ const report: FinanceReportExportData = {
   columns: [
     { key: 'partner', label: 'Partner', type: 'text' },
     { key: 'documentCount', label: 'Documents', type: 'number' },
-    { key: 'amount', label: 'Outstanding BGN', type: 'money' },
+    { key: 'amount', label: 'Outstanding EUR', type: 'money' },
   ],
-  criteria: ['Period: 2026-08-01 to 2026-08-25', 'Currency: BGN'],
+  criteria: ['Period: 2026-08-01 to 2026-08-25', 'Currency: EUR'],
   generatedAt: '2026-08-25T10:30:00.000Z',
   rows: [
     { amount: '60.0000', documentCount: 1, partner: 'Алфа Маркет ООД' },
@@ -36,7 +36,7 @@ describe('Finance report renderer', () => {
     const output = await renderFinanceReport(format, selected);
     expect(output.buffer.length).toBeGreaterThan(0);
     if (format === 'csv') {
-      expect(output.buffer.toString('utf8')).toContain('Outstanding BGN');
+      expect(output.buffer.toString('utf8')).toContain('Outstanding EUR');
       expect(output.buffer.toString('utf8')).not.toContain('Алфа Маркет');
     }
     if (format === 'xlsx') {

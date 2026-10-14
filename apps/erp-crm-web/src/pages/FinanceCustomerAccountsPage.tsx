@@ -275,7 +275,7 @@ function AccountPreview({
             <dl className="customer-account-detail-grid">
               <div>
                 <dt>Credit limit</dt>
-                <dd>{money(account.terms.creditLimitBgn)}</dd>
+                <dd>{money(account.terms.creditLimitEur)}</dd>
               </div>
               <div>
                 <dt>Payment due</dt>
@@ -453,7 +453,7 @@ function AllocateAdvancePanel({
               value={`${receivable.number} · ${money(receivable.outstandingTotal)} outstanding`}
             />
           </Field>
-          <Field label="Amount to apply (BGN)">
+          <Field label="Amount to apply (EUR)">
             <input
               max={
                 advance
@@ -496,7 +496,7 @@ function TermsPanel({
     account?.customerPartnerId ?? customerPartnerId ?? references.customers[0]?.id ?? '';
   const [customerId, setCustomerId] = useState(initialCustomerId);
   const [enabled, setEnabled] = useState(account?.terms?.onAccountEnabled ?? true);
-  const [creditLimit, setCreditLimit] = useState(account?.terms?.creditLimitBgn ?? '2000.00');
+  const [creditLimit, setCreditLimit] = useState(account?.terms?.creditLimitEur ?? '2000.00');
   const [days, setDays] = useState(String(account?.terms?.paymentTermsDays ?? 14));
   const [validFrom, setValidFrom] = useState(account?.terms?.validFrom ?? today());
   const [validTo, setValidTo] = useState(account?.terms?.validTo ?? '');
@@ -508,7 +508,7 @@ function TermsPanel({
   useEffect(() => {
     if (account) return;
     setEnabled(selectedAccount?.terms?.onAccountEnabled ?? true);
-    setCreditLimit(selectedAccount?.terms?.creditLimitBgn ?? '2000.00');
+    setCreditLimit(selectedAccount?.terms?.creditLimitEur ?? '2000.00');
     setDays(String(selectedAccount?.terms?.paymentTermsDays ?? 14));
     setValidFrom(selectedAccount?.terms?.validFrom ?? today());
     setValidTo(selectedAccount?.terms?.validTo ?? '');
@@ -526,7 +526,7 @@ function TermsPanel({
     setError('');
     try {
       const input: UpsertCustomerPaymentTermsRequest = {
-        creditLimitBgn: normalizedCreditLimit,
+        creditLimitEur: normalizedCreditLimit,
         ...(selectedAccount?.terms ? { expectedVersion: selectedAccount.terms.version } : {}),
         onAccountEnabled: enabled,
         paymentTermsDays: Number(days),
@@ -597,7 +597,7 @@ function TermsPanel({
             </span>
           </label>
           <div className="customer-account-form-grid">
-            <Field label="Credit limit (BGN)">
+            <Field label="Credit limit (EUR)">
               <input
                 disabled={!enabled}
                 min={enabled ? '0.0001' : '0'}
@@ -737,7 +737,7 @@ function AdvancePanel({
                 ))}
               </select>
             </Field>
-            <Field label="Amount (BGN)">
+            <Field label="Amount (EUR)">
               <input
                 min="0.0001"
                 onChange={(event) => setAmount(event.target.value)}
@@ -940,7 +940,7 @@ function money(value: string) {
   const negative = units < 0n;
   const absoluteUnits = negative ? -units : units;
   const cents = (absoluteUnits + 50n) / 100n;
-  return formatOperationsMinorCurrency(negative ? -cents : cents, 'BGN');
+  return formatOperationsMinorCurrency(negative ? -cents : cents, 'EUR');
 }
 function sum(values: string[]) {
   return decimalText(values.reduce((total, value) => total + decimalUnits(value), 0n));

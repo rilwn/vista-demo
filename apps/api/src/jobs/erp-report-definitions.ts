@@ -53,7 +53,7 @@ const specifications = [
     key: 'warehouse.stock-balances',
     name: 'Stock and valuation',
     description:
-      'Current recorded stock by warehouse and product, including active reservations and weighted-average BGN value. This is not a historical stock snapshot.',
+      'Current recorded stock by warehouse and product, including active reservations and weighted-average EUR value. This is not a historical stock snapshot.',
     from: "inventory.stock_balances b JOIN master_data.products p ON p.id=b.product_id JOIN master_data.units u ON u.id=p.unit_id JOIN master_data.warehouses w ON w.id=b.warehouse_id LEFT JOIN (SELECT warehouse_id,product_id,sum(remaining_quantity) quantity FROM inventory.stock_reservations WHERE status='active' GROUP BY warehouse_id,product_id) r ON r.warehouse_id=b.warehouse_id AND r.product_id=b.product_id",
     id: 'b.warehouse_id::text||b.product_id::text',
     columns: [
@@ -64,8 +64,8 @@ const specifications = [
       ['physical', 'On hand', 'number', 'b.quantity::text'],
       ['reserved', 'Reserved', 'number', 'coalesce(r.quantity,0)::text'],
       ['available', 'Available', 'number', '(b.quantity-coalesce(r.quantity,0))::text'],
-      ['cost', 'Average unit cost (BGN)', 'money', 'b.average_unit_cost_bgn::text'],
-      ['value', 'Stock value (BGN)', 'money', 'round(b.quantity*b.average_unit_cost_bgn,4)::text'],
+      ['cost', 'Average unit cost (EUR)', 'money', 'b.average_unit_cost_eur::text'],
+      ['value', 'Stock value (EUR)', 'money', 'round(b.quantity*b.average_unit_cost_eur,4)::text'],
     ],
   },
   {
@@ -84,7 +84,7 @@ const specifications = [
       ['type', 'Movement type', 'text', "replace(initcap(m.movement_type),'_',' ')"],
       ['quantity', 'Quantity', 'number', 'm.quantity::text'],
       ['reference', 'Source reference', 'text', 'm.reference_id'],
-      ['cost', 'Unit cost (BGN)', 'money', 'm.unit_cost_bgn::text'],
+      ['cost', 'Unit cost (EUR)', 'money', 'm.unit_cost_eur::text'],
       ['operator', 'Recorded by', 'text', 'employee.display_name'],
     ],
   },

@@ -5,6 +5,7 @@ import { Inject, Injectable, type OnModuleInit } from '@nestjs/common';
 import { DatabaseService } from '../database/database.service.js';
 import { CrmTicketsService } from '../crm/crm-tickets.service.js';
 import { FinanceService } from '../finance/finance.service.js';
+import { BnbCurrencyRatesService } from '../finance/bnb-currency-rates.service.js';
 import { StructuredLogger } from '../logging/structured-logger.service.js';
 import { SalesSubscriptionsService } from '../sales/sales-subscriptions.service.js';
 import { ServiceCareService } from '../service/service-care.service.js';
@@ -31,6 +32,7 @@ export class NamedJobTriggerHandlersService implements OnModuleInit {
     @Inject(StructuredLogger) private readonly logger: StructuredLogger,
     @Inject(SalesSubscriptionsService) private readonly subscriptions: SalesSubscriptionsService,
     @Inject(FinanceService) private readonly finance: FinanceService,
+    @Inject(BnbCurrencyRatesService) private readonly currencyRates: BnbCurrencyRatesService,
     @Inject(FinanceReportExportsService)
     private readonly reportExports: FinanceReportExportsService,
     @Inject(ServiceCareService) private readonly serviceCare: ServiceCareService,
@@ -50,17 +52,19 @@ export class NamedJobTriggerHandlersService implements OnModuleInit {
         : context.name === 'finance.payment-status.detect' ||
             context.name === 'finance.payment-notification.prepare'
           ? await this.finance.detectPaymentStatuses(context)
-          : context.name === 'report.generate' && typeof context.payload['exportId'] === 'string'
-            ? await this.reportExports.generate(context)
-            : context.name === 'service.inspection-reminder.prepare'
-              ? await this.serviceCare.prepareInspectionReminders(context)
-              : context.name === 'service.plan-visit.generate'
-                ? await this.serviceCare.generateServicePlanVisits(context)
-                : context.name === 'crm.warranty-expiration.prepare'
-                  ? await this.serviceCare.prepareWarrantyReminders(context)
-                  : context.name === 'crm.sla.evaluate'
-                    ? await this.crmTickets.evaluateSla(context)
-                    : undefined;
+          : context.name === 'finance.currency-rates.refresh'
+            ? await this.currencyRates.refresh()
+            : context.name === 'report.generate' && typeof context.payload['exportId'] === 'string'
+              ? await this.reportExports.generate(context)
+              : context.name === 'service.inspection-reminder.prepare'
+                ? await this.serviceCare.prepareInspectionReminders(context)
+                : context.name === 'service.plan-visit.generate'
+                  ? await this.serviceCare.generateServicePlanVisits(context)
+                  : context.name === 'crm.warranty-expiration.prepare'
+                    ? await this.serviceCare.prepareWarrantyReminders(context)
+                    : context.name === 'crm.sla.evaluate'
+                      ? await this.crmTickets.evaluateSla(context)
+                      : undefined;
     // A fulfilled domain call is execution evidence, not another request for an
     // unregistered consumer. Keep genuine future handoffs pending.
     const completed = domainResult !== undefined;

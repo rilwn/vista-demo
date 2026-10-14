@@ -76,7 +76,7 @@ export class CreatePurchaseOrderLineDto implements CreatePurchaseOrderLineReques
 }
 
 export class CreatePurchaseOrderDto implements CreatePurchaseOrderRequest {
-  @ApiProperty({ example: 'BGN', maxLength: 3, minLength: 3, type: String })
+  @ApiProperty({ example: 'EUR', maxLength: 3, minLength: 3, type: String })
   @IsString()
   @Matches(/^[A-Za-z]{3}$/u)
   currencyCode!: string;
@@ -130,7 +130,7 @@ export class ReceivePurchaseOrderLineDto implements ReceivePurchaseOrderLineRequ
   @IsOptional()
   @IsString()
   @Matches(decimalPattern)
-  unitCostBgn?: string;
+  unitCostEur?: string;
 }
 
 export class ReceivePurchaseOrderDto implements ReceivePurchaseOrderRequest {
@@ -177,6 +177,9 @@ export class ListPurchaseOrdersQueryDto {
 }
 
 export class PurchaseOrderLineDto implements PurchaseOrderLine {
+  @ApiPropertyOptional({ enum: ['latest_product_cost', 'supplier_invoice'] })
+  costBaselineSource?: 'latest_product_cost' | 'supplier_invoice';
+  @ApiPropertyOptional({ type: String }) costBaselineEur?: string;
   @ApiProperty({ type: String }) deliveredQuantity!: string;
   @ApiProperty({ format: 'date', type: String }) expectedDeliveryDate!: string;
   @ApiProperty({ format: 'uuid', type: String }) id!: string;
@@ -189,14 +192,18 @@ export class PurchaseOrderLineDto implements PurchaseOrderLine {
 
 export class GoodsReceiptLineDto implements GoodsReceiptLine {
   @ApiPropertyOptional({ format: 'uuid', type: String }) batchId?: string;
+  @ApiPropertyOptional({ enum: ['latest_product_cost', 'supplier_invoice'] })
+  costBaselineSource?: 'latest_product_cost' | 'supplier_invoice';
+  @ApiPropertyOptional({ type: String }) costBaselineEur?: string;
+  @ApiPropertyOptional({ type: String }) costVariancePercent?: string;
   @ApiProperty({ format: 'uuid', type: String }) id!: string;
   @ApiProperty({ format: 'uuid', type: String }) orderLineId!: string;
   @ApiProperty({ format: 'uuid', type: String }) productId!: string;
   @ApiProperty({ type: String }) quantity!: string;
   @ApiProperty({ isArray: true, type: String }) serialItemIds!: string[];
   @ApiProperty({ format: 'uuid', type: String }) stockMovementId!: string;
-  @ApiProperty({ type: String }) totalCostBgn!: string;
-  @ApiProperty({ type: String }) unitCostBgn!: string;
+  @ApiProperty({ type: String }) totalCostEur!: string;
+  @ApiProperty({ type: String }) unitCostEur!: string;
 }
 
 export class GoodsReceiptDto implements GoodsReceipt {

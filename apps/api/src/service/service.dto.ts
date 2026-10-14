@@ -163,6 +163,11 @@ export class ServicePartUsageInputDto implements ServicePartUsageInput {
   @MaxLength(100)
   batchNumber?: string;
 
+  @ApiProperty({ example: '20.0000', type: String })
+  @IsString()
+  @Matches(decimalPattern)
+  customerUnitPriceEur!: string;
+
   @ApiProperty({ format: 'uuid', type: String })
   @IsUUID(postgresUuid)
   productId!: string;
@@ -187,6 +192,16 @@ export class CompleteServiceWorkOrderDto implements CompleteServiceWorkOrderRequ
   @MaxLength(4000)
   completionNotes!: string;
 
+  @ApiProperty({ example: '60.0000', type: String })
+  @IsString()
+  @Matches(decimalPattern)
+  customerLaborChargeEur!: string;
+
+  @ApiProperty({ example: '0.0000', type: String })
+  @IsString()
+  @Matches(decimalPattern)
+  customerTransportChargeEur!: string;
+
   @ApiProperty({ minimum: 1, type: Number })
   @Type(() => Number)
   @IsInt()
@@ -196,7 +211,7 @@ export class CompleteServiceWorkOrderDto implements CompleteServiceWorkOrderRequ
   @ApiProperty({ example: '60.0000', type: String })
   @IsString()
   @Matches(decimalPattern)
-  laborCostBgn!: string;
+  laborCostEur!: string;
 
   @ApiProperty({ isArray: true, maxItems: 50, type: ServicePartUsageInputDto })
   @IsArray()
@@ -230,7 +245,7 @@ export class CompleteServiceWorkOrderDto implements CompleteServiceWorkOrderRequ
   @ApiProperty({ example: '10.0000', type: String })
   @IsString()
   @Matches(decimalPattern)
-  transportCostBgn!: string;
+  transportCostEur!: string;
 }
 
 export class CancelServiceRequestDto implements CancelServiceRequest {
@@ -535,14 +550,16 @@ class ServiceWorkOrderTimeEntryDto implements ServiceWorkOrderTimeEntry {
 
 class ServiceWorkOrderPartUsageDto implements ServiceWorkOrderPartUsage {
   @ApiPropertyOptional({ type: String }) batchNumber?: string;
+  @ApiProperty({ type: String }) customerTotalChargeEur!: string;
+  @ApiProperty({ type: String }) customerUnitPriceEur!: string;
   @ApiProperty({ format: 'uuid', type: String }) id!: string;
   @ApiProperty({ format: 'uuid', type: String }) productId!: string;
   @ApiProperty({ type: String }) productName!: string;
   @ApiProperty({ type: String }) quantity!: string;
   @ApiProperty({ isArray: true, type: String }) serialNumbers!: string[];
   @ApiProperty({ format: 'uuid', type: String }) stockIssueId!: string;
-  @ApiProperty({ type: String }) totalCostBgn!: string;
-  @ApiProperty({ type: String }) unitCostBgn!: string;
+  @ApiProperty({ type: String }) totalCostEur!: string;
+  @ApiProperty({ type: String }) unitCostEur!: string;
   @ApiProperty({ format: 'uuid', type: String }) warehouseId!: string;
   @ApiProperty({ type: String }) warehouseName!: string;
 }
@@ -577,6 +594,10 @@ export class ServiceWorkOrderDto implements ServiceWorkOrder {
   assignedTechnician?: ServiceTechnicianReference;
   @ApiPropertyOptional({ format: 'date-time', type: String }) completedAt?: string;
   @ApiPropertyOptional({ type: String }) completionNotes?: string;
+  @ApiProperty({ type: Boolean }) customerChargeRecorded!: boolean;
+  @ApiProperty({ type: String }) customerLaborChargeEur!: string;
+  @ApiProperty({ type: String }) customerPartsChargeEur!: string;
+  @ApiProperty({ type: String }) customerTransportChargeEur!: string;
   @ApiProperty({ format: 'date-time', type: String }) createdAt!: string;
   @ApiProperty({ format: 'uuid', type: String }) customerEquipmentId!: string;
   @ApiProperty({ format: 'uuid', type: String }) customerLocationId!: string;
@@ -588,12 +609,12 @@ export class ServiceWorkOrderDto implements ServiceWorkOrder {
   history!: ServiceWorkOrder['history'];
   @ApiProperty({ format: 'uuid', type: String }) id!: string;
   @ApiProperty({ type: Boolean }) isOverdue!: boolean;
-  @ApiProperty({ type: String }) laborCostBgn!: string;
+  @ApiProperty({ type: String }) laborCostEur!: string;
   @ApiProperty({ type: Number }) laborMinutes!: number;
   @ApiProperty({ type: String }) number!: string;
   @ApiProperty({ isArray: true, type: ServiceWorkOrderPartUsageDto })
   parts!: ServiceWorkOrder['parts'];
-  @ApiProperty({ type: String }) partsCostBgn!: string;
+  @ApiProperty({ type: String }) partsCostEur!: string;
   @ApiProperty({ isArray: true, type: ServiceWorkOrderPhotoDto })
   photos!: ServiceWorkOrder['photos'];
   @ApiProperty({ enum: servicePriorities }) priority!: ServiceWorkOrder['priority'];
@@ -613,8 +634,9 @@ export class ServiceWorkOrderDto implements ServiceWorkOrder {
   @ApiPropertyOptional({ format: 'uuid', type: String }) subscriptionContractId?: string;
   @ApiProperty({ isArray: true, type: ServiceWorkOrderTimeEntryDto })
   timeEntries!: ServiceWorkOrder['timeEntries'];
-  @ApiProperty({ type: String }) totalCostBgn!: string;
-  @ApiProperty({ type: String }) transportCostBgn!: string;
+  @ApiProperty({ type: String }) totalCostEur!: string;
+  @ApiProperty({ type: String }) totalCustomerChargeEur!: string;
+  @ApiProperty({ type: String }) transportCostEur!: string;
   @ApiProperty({ format: 'date-time', type: String }) updatedAt!: string;
   @ApiProperty({ minimum: 1, type: Number }) version!: number;
 }

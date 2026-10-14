@@ -173,7 +173,7 @@ describe.skipIf(!runInfrastructureTests)('purchase order to warehouse receipt', 
       .expect(201);
     const created = createdResponse.body as PurchaseOrder;
     expect(created).toMatchObject({
-      currencyCode: 'BGN',
+      currencyCode: 'EUR',
       status: 'open',
       supplierPartnerId: supplierId,
       warehouseId,
@@ -196,7 +196,7 @@ describe.skipIf(!runInfrastructureTests)('purchase order to warehouse receipt', 
       'Serial product order line was not returned',
     );
     const firstReceiptInput = {
-      lines: [{ orderLineId: ordinaryLine.id, quantity: '2', unitCostBgn: '20' }],
+      lines: [{ orderLineId: ordinaryLine.id, quantity: '2', unitCostEur: '20' }],
       supplierDeliveryReference: `DEL-${runId.slice(0, 8)}-1`,
     };
     const firstReceiptKey = `goods-receipt-1-${runId}`;
@@ -210,7 +210,7 @@ describe.skipIf(!runInfrastructureTests)('purchase order to warehouse receipt', 
     expect(firstReceipt.lines[0]).toMatchObject({
       productId: ordinaryProductId,
       quantity: '2.0000',
-      unitCostBgn: '20.0000',
+      unitCostEur: '20.0000',
     });
     const receiptReplay = await request(application.getHttpServer())
       .post(`/api/v1/procurement/purchase-orders/${created.id}/receipts`)
@@ -242,7 +242,7 @@ describe.skipIf(!runInfrastructureTests)('purchase order to warehouse receipt', 
       .set('idempotency-key', `goods-receipt-2-${runId}`)
       .send({
         lines: [
-          { orderLineId: ordinaryLine.id, quantity: '3' },
+          { orderLineId: ordinaryLine.id, quantity: '3', unitCostEur: '10' },
           {
             orderLineId: serialLine.id,
             quantity: '1',
@@ -260,6 +260,16 @@ describe.skipIf(!runInfrastructureTests)('purchase order to warehouse receipt', 
     const completed = completedResponse.body as PurchaseOrder;
     expect(completed.status).toBe('received');
     expect(completed.receipts).toHaveLength(2);
+    expect(completed.receipts[1]?.lines).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          costBaselineEur: '20.0000',
+          costBaselineSource: 'latest_product_cost',
+          costVariancePercent: '-50.0000',
+          unitCostEur: '10.0000',
+        }),
+      ]),
+    );
     expect(completed.lines).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -277,11 +287,11 @@ describe.skipIf(!runInfrastructureTests)('purchase order to warehouse receipt', 
     expect(list.body).toMatchObject({ page: 1, total: 1, totalPages: 1 });
 
     const balances = await database.query<{
-      average_unit_cost_bgn: string;
+      average_unit_cost_eur: string;
       product_id: string;
       quantity: string;
     }>(
-      `SELECT product_id, quantity::text, average_unit_cost_bgn::text
+      `SELECT product_id, quantity::text, average_unit_cost_eur::text
        FROM inventory.stock_balances
        WHERE warehouse_id = $1 ORDER BY product_id`,
       [warehouseId],
@@ -289,12 +299,12 @@ describe.skipIf(!runInfrastructureTests)('purchase order to warehouse receipt', 
     expect(balances.rows).toEqual(
       expect.arrayContaining([
         {
-          average_unit_cost_bgn: '14.0000',
+          average_unit_cost_eur: '14.0000',
           product_id: ordinaryProductId,
           quantity: '5.0000',
         },
         {
-          average_unit_cost_bgn: '250.0000',
+          average_unit_cost_eur: '250.0000',
           product_id: serialProductId,
           quantity: '1.0000',
         },
@@ -329,7 +339,7 @@ describe.skipIf(!runInfrastructureTests)('purchase order to warehouse receipt', 
       .set('authorization', `Bearer ${creatorToken}`)
       .set('idempotency-key', `duplicate-serial-order-${runId}`)
       .send({
-        currencyCode: 'BGN',
+        currencyCode: 'EUR',
         lines: [
           {
             expectedDeliveryDate: '2099-08-29',
@@ -435,7 +445,7 @@ describe.skipIf(!runInfrastructureTests)('purchase order to warehouse receipt', 
       .set('authorization', `Bearer ${creatorToken}`)
       .set('idempotency-key', `matched-order-${runId}`)
       .send({
-        currencyCode: 'BGN',
+        currencyCode: 'EUR',
         lines: [
           {
             expectedDeliveryDate: '2099-09-01',
@@ -483,7 +493,7 @@ describe.skipIf(!runInfrastructureTests)('purchase order to warehouse receipt', 
       .send(invoiceInput)
       .expect(201);
     const invoice = invoiceResponse.body as SupplierInvoice;
-    expect(invoice).toMatchObject({ currencyCode: 'BGN', total: '24.0000' });
+    expect(invoice).toMatchObject({ currencyCode: 'EUR', total: '24.0000' });
     const invoiceReplay = await request(application.getHttpServer())
       .post('/api/v1/procurement/supplier-invoices')
       .set('authorization', `Bearer ${creatorToken}`)
@@ -567,7 +577,7 @@ describe.skipIf(!runInfrastructureTests)('purchase order to warehouse receipt', 
 
   function orderInput() {
     return {
-      currencyCode: 'bgn',
+      currencyCode: 'eur',
       lines: [
         {
           expectedDeliveryDate: '2099-08-20',

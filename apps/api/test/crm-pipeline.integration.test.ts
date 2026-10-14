@@ -233,7 +233,7 @@ describe.skipIf(!runInfrastructureTests)('CRM lead and opportunity pipeline', ()
       note: 'Customer details confirmed during qualification.',
       opportunity: {
         description: 'One fiscal device with installation and annual service.',
-        estimatedRevenueBgn: '1800.00',
+        estimatedRevenueEur: '1800.00',
         expectedCloseOn: '2026-10-30',
         ownerAccountId: editorAccountId,
         probabilityPercent: 40,
@@ -273,12 +273,12 @@ describe.skipIf(!runInfrastructureTests)('CRM lead and opportunity pipeline', ()
     });
     expect(opportunity).toMatchObject({
       customer: { id: convertedCustomerId },
-      estimatedRevenueBgn: '1800.00',
+      estimatedRevenueEur: '1800.00',
       probabilityPercent: 40,
       sourceLeadId: lead.id,
       stage: 'qualified',
       version: 1,
-      weightedRevenueBgn: '720.00',
+      weightedRevenueEur: '720.00',
     });
     await request(application.getHttpServer())
       .post(`/api/v1/crm/leads/${lead.id}/convert`)
@@ -309,7 +309,7 @@ describe.skipIf(!runInfrastructureTests)('CRM lead and opportunity pipeline', ()
       `INSERT INTO sales.quotations (
          id, quotation_number, customer_partner_id, warehouse_id, valid_until,
          currency_code, subtotal, vat_total, total, created_by
-      ) VALUES ($1,$2,$3,$4,'2026-10-31','BGN',1500,300,1800,$5)`,
+      ) VALUES ($1,$2,$3,$4,'2026-10-31','EUR',1500,300,1800,$5)`,
       [quotationId, `Q-${runId.slice(0, 18)}`, convertedCustomerId, warehouseId, editorAccountId],
     );
     await request(application.getHttpServer())
@@ -371,7 +371,7 @@ describe.skipIf(!runInfrastructureTests)('CRM lead and opportunity pipeline', ()
       .set('authorization', `Bearer ${viewerToken}`)
       .expect(200);
     const page = pipeline.body as CrmOpportunityPage;
-    expect(page.summary).toMatchObject({ openCount: 0, wonRevenueBgn: '1800.00' });
+    expect(page.summary).toMatchObject({ openCount: 0, wonRevenueEur: '1800.00' });
     expect(page).toMatchObject({ total: 1, totalPages: 1 });
     expect(page.items[0]).toMatchObject({ id: opportunity.id, stage: 'won' });
     const sideEffects = await database.query<{ audit_total: string; outbox_total: string }>(
@@ -392,7 +392,7 @@ describe.skipIf(!runInfrastructureTests)('CRM lead and opportunity pipeline', ()
       .send({
         customerPartnerId: convertedCustomerId,
         title: 'Deferred equipment purchase',
-        estimatedRevenueBgn: '600.00',
+        estimatedRevenueEur: '600.00',
         probabilityPercent: 40,
         ownerAccountId: editorAccountId,
       })
@@ -416,7 +416,7 @@ describe.skipIf(!runInfrastructureTests)('CRM lead and opportunity pipeline', ()
       expect(saved).toMatchObject({
         stage: 'lost',
         probabilityPercent: 0,
-        weightedRevenueBgn: '0.00',
+        weightedRevenueEur: '0.00',
         version: 2,
       });
       expect(saved.history.filter((item) => item.type === 'stage_changed')).toHaveLength(1);

@@ -74,8 +74,8 @@ type StockMovementJournalRow = {
   reference_label: string;
   reference_type: string;
   source_href: string | null;
-  total_cost_bgn: string;
-  unit_cost_bgn: string;
+  total_cost_eur: string;
+  unit_cost_eur: string;
   warehouse_id: string;
   warehouse_name: string;
 };
@@ -109,7 +109,7 @@ type TraceMovementRow = {
   supplier_name: string | null;
   technician_id: string | null;
   technician_name: string | null;
-  unit_cost_bgn: string;
+  unit_cost_eur: string;
   warehouse_id: string;
   warehouse_name: string;
 };
@@ -162,10 +162,10 @@ type TraceServiceRow = {
   customer_location_id: string;
   customer_location_name: string;
   customer_name: string;
-  labor_cost_bgn: string | null;
+  labor_cost_eur: string | null;
   labor_minutes: number | null;
   part_summary: string | null;
-  parts_cost_bgn: string | null;
+  parts_cost_eur: string | null;
   problem_description: string;
   request_created_at: string;
   request_id: string;
@@ -176,8 +176,8 @@ type TraceServiceRow = {
   started_at: string | null;
   technician_id: string | null;
   technician_name: string | null;
-  total_cost_bgn: string | null;
-  transport_cost_bgn: string | null;
+  total_cost_eur: string | null;
+  transport_cost_eur: string | null;
   work_order_id: string | null;
   work_order_number: string | null;
 };
@@ -188,7 +188,7 @@ const traceMovementSelect = `SELECT movement.id AS movement_id,
        WHEN movement.movement_type = 'return_in' THEN 'return_received'
        ELSE 'stocktake' END AS event_type,
   movement.occurred_at::text, movement.reference_type, movement.reference_id,
-  movement.unit_cost_bgn::text, warehouse.id AS warehouse_id,
+  movement.unit_cost_eur::text, warehouse.id AS warehouse_id,
   warehouse.name AS warehouse_name, actor.id AS actor_id,
   employee.display_name AS actor_name, supplier.id AS supplier_id,
   supplier.display_name AS supplier_name, customer.id AS customer_id,
@@ -257,16 +257,16 @@ export class InventoryService {
   async balances(): Promise<StockBalance[]> {
     const result = await this.database.getPool().query<{
       available_quantity: string;
-      average_unit_cost_bgn: string;
-      inventory_value_bgn: string;
+      average_unit_cost_eur: string;
+      inventory_value_eur: string;
       product_id: string;
       quantity: string;
       reserved_quantity: string;
       warehouse_id: string;
     }>(
       `SELECT balance.warehouse_id, balance.product_id, balance.quantity::text,
-           balance.average_unit_cost_bgn::text,
-           round(balance.quantity * balance.average_unit_cost_bgn, 4)::text AS inventory_value_bgn,
+           balance.average_unit_cost_eur::text,
+           round(balance.quantity * balance.average_unit_cost_eur, 4)::text AS inventory_value_eur,
            COALESCE(reserved.quantity, 0)::numeric(18, 4)::text AS reserved_quantity,
            GREATEST(balance.quantity - COALESCE(reserved.quantity, 0), 0)::numeric(18, 4)::text AS available_quantity
          FROM inventory.stock_balances balance
@@ -279,8 +279,8 @@ export class InventoryService {
     );
     return result.rows.map((row) => ({
       availableQuantity: row.available_quantity,
-      averageUnitCostBgn: row.average_unit_cost_bgn,
-      inventoryValueBgn: row.inventory_value_bgn,
+      averageUnitCostEur: row.average_unit_cost_eur,
+      inventoryValueEur: row.inventory_value_eur,
       warehouseId: row.warehouse_id,
       productId: row.product_id,
       quantity: row.quantity,
@@ -354,8 +354,8 @@ export class InventoryService {
          movement.movement_type,
          (CASE WHEN movement.movement_type IN ('issue', 'transfer_out', 'stocktake_out')
            THEN -movement.quantity ELSE movement.quantity END)::text AS quantity,
-         movement.unit_cost_bgn::text AS unit_cost_bgn,
-         movement.total_cost_bgn::text AS total_cost_bgn,
+         movement.unit_cost_eur::text AS unit_cost_eur,
+         movement.total_cost_eur::text AS total_cost_eur,
          product.id::text AS product_id, product.product_code, product.name AS product_name,
          warehouse.id::text AS warehouse_id, warehouse.name AS warehouse_name,
          employee.display_name AS actor_display_name,
@@ -397,8 +397,8 @@ export class InventoryService {
       referenceLabel: row.reference_label,
       referenceType: humanToken(row.reference_type),
       ...(row.source_href ? { sourceHref: row.source_href } : {}),
-      totalCostBgn: row.total_cost_bgn,
-      unitCostBgn: row.unit_cost_bgn,
+      totalCostEur: row.total_cost_eur,
+      unitCostEur: row.unit_cost_eur,
       warehouseId: row.warehouse_id,
       warehouseName: row.warehouse_name,
     }));
@@ -564,7 +564,7 @@ export class InventoryService {
       this.database.getPool().query<TraceTransferRow>(
         `SELECT event.transfer_out_movement_id AS movement_id,
            movement.occurred_at::text, movement.reference_type, movement.reference_id,
-           movement.unit_cost_bgn::text, movement.warehouse_id,
+           movement.unit_cost_eur::text, movement.warehouse_id,
            source.name AS warehouse_name, source.id AS from_warehouse_id,
            source.name AS from_warehouse_name, destination.id AS to_warehouse_id,
            destination.name AS to_warehouse_name, actor.id AS actor_id,
@@ -625,9 +625,9 @@ export class InventoryService {
                 work_order.id AS work_order_id, work_order.work_order_number,
                 work_order.scheduled_start::text, work_order.started_at::text,
                 work_order.completed_at::text, work_order.completion_notes,
-                work_order.labor_minutes, work_order.labor_cost_bgn::text,
-                work_order.parts_cost_bgn::text, work_order.transport_cost_bgn::text,
-                work_order.total_cost_bgn::text,
+                work_order.labor_minutes, work_order.labor_cost_eur::text,
+                work_order.parts_cost_eur::text, work_order.transport_cost_eur::text,
+                work_order.total_cost_eur::text,
                 technician.id AS technician_id,
                 technician_employee.display_name AS technician_name,
                 scheduled.changed_at::text AS scheduled_at, parts.part_summary
@@ -998,13 +998,13 @@ export class InventoryService {
     if (normalized.supplierPartnerId)
       await requirePartnerRole(client, normalized.supplierPartnerId, 'supplier');
     const movementId = randomUUID();
-    const movement = await client.query<{ total_cost_bgn: string; unit_cost_bgn: string }>(
+    const movement = await client.query<{ total_cost_eur: string; unit_cost_eur: string }>(
       `INSERT INTO inventory.stock_movements (
          id, warehouse_id, product_id, movement_type, quantity, reference_type,
-         reference_id, actor_account_id, correlation_id, unit_cost_bgn,
+         reference_id, actor_account_id, correlation_id, unit_cost_eur,
          supplier_partner_id
        ) VALUES ($1, $2, $3, 'receipt', $4, $5, $6, $7, $8, $9, $10)
-       RETURNING unit_cost_bgn::text, total_cost_bgn::text`,
+       RETURNING unit_cost_eur::text, total_cost_eur::text`,
       [
         movementId,
         normalized.warehouseId,
@@ -1014,22 +1014,22 @@ export class InventoryService {
         normalized.referenceId,
         auth.accountId,
         metadata.correlationId,
-        normalized.unitCostBgn,
+        normalized.unitCostEur,
         normalized.supplierPartnerId ?? null,
       ],
     );
     await client.query(
       `INSERT INTO inventory.stock_balances (
-         warehouse_id, product_id, quantity, average_unit_cost_bgn
+         warehouse_id, product_id, quantity, average_unit_cost_eur
        ) VALUES ($1, $2, $3, $4)
        ON CONFLICT (warehouse_id, product_id) DO UPDATE SET
-         average_unit_cost_bgn = round((
-           inventory.stock_balances.quantity * inventory.stock_balances.average_unit_cost_bgn
-           + EXCLUDED.quantity * EXCLUDED.average_unit_cost_bgn
+         average_unit_cost_eur = round((
+           inventory.stock_balances.quantity * inventory.stock_balances.average_unit_cost_eur
+           + EXCLUDED.quantity * EXCLUDED.average_unit_cost_eur
          ) / (inventory.stock_balances.quantity + EXCLUDED.quantity), 4),
          quantity = inventory.stock_balances.quantity + EXCLUDED.quantity,
          updated_at = now()`,
-      [normalized.warehouseId, normalized.productId, normalized.quantity, normalized.unitCostBgn],
+      [normalized.warehouseId, normalized.productId, normalized.quantity, normalized.unitCostEur],
     );
     let batchId: string | undefined;
     if (normalized.batchNumber) {
@@ -1061,8 +1061,8 @@ export class InventoryService {
       productId: normalized.productId,
       quantity: normalized.quantity,
       serialItemIds,
-      totalCostBgn: required(movement.rows[0], 'Receipt valuation insert failed').total_cost_bgn,
-      unitCostBgn: required(movement.rows[0], 'Receipt valuation insert failed').unit_cost_bgn,
+      totalCostEur: required(movement.rows[0], 'Receipt valuation insert failed').total_cost_eur,
+      unitCostEur: required(movement.rows[0], 'Receipt valuation insert failed').unit_cost_eur,
       ...(batchId ? { batchId } : {}),
     };
     await this.sideEffects(
@@ -1141,11 +1141,11 @@ export class InventoryService {
         normalized.quantity,
       );
     const movementId = randomUUID();
-    const balance = await client.query<{ average_unit_cost_bgn: string; quantity: string }>(
+    const balance = await client.query<{ average_unit_cost_eur: string; quantity: string }>(
       `UPDATE inventory.stock_balances
        SET quantity = quantity - $3, updated_at = now()
        WHERE warehouse_id = $1 AND product_id = $2 AND quantity >= $3
-       RETURNING quantity::text, average_unit_cost_bgn::text`,
+       RETURNING quantity::text, average_unit_cost_eur::text`,
       [normalized.warehouseId, normalized.productId, normalized.quantity],
     );
     if (!balance.rowCount)
@@ -1157,14 +1157,14 @@ export class InventoryService {
     const issueCost = required(
       balance.rows[0],
       'Issue balance update failed',
-    ).average_unit_cost_bgn;
-    const movement = await client.query<{ total_cost_bgn: string }>(
+    ).average_unit_cost_eur;
+    const movement = await client.query<{ total_cost_eur: string }>(
       `INSERT INTO inventory.stock_movements (
          id, warehouse_id, product_id, movement_type, quantity, reference_type,
-         reference_id, actor_account_id, correlation_id, unit_cost_bgn,
+         reference_id, actor_account_id, correlation_id, unit_cost_eur,
          customer_partner_id, technician_account_id
        ) VALUES ($1, $2, $3, 'issue', $4, $5, $6, $7, $8, $9, $10, $11)
-       RETURNING total_cost_bgn::text`,
+       RETURNING total_cost_eur::text`,
       [
         movementId,
         normalized.warehouseId,
@@ -1220,8 +1220,8 @@ export class InventoryService {
       quantity: normalized.quantity,
       reason: normalized.reason,
       serialItemIds,
-      totalCostBgn: required(movement.rows[0], 'Issue valuation insert failed').total_cost_bgn,
-      unitCostBgn: issueCost,
+      totalCostEur: required(movement.rows[0], 'Issue valuation insert failed').total_cost_eur,
+      unitCostEur: issueCost,
       ...(batchId ? { batchId: batchId.id } : {}),
       ...(normalized.reservationId ? { reservationId: normalized.reservationId } : {}),
     };
@@ -1257,9 +1257,9 @@ export class InventoryService {
         movement_type: string;
         product_id: string;
         quantity: string;
-        unit_cost_bgn: string;
+        unit_cost_eur: string;
       }>(
-        `SELECT movement_type, product_id, quantity::text, unit_cost_bgn::text,
+        `SELECT movement_type, product_id, quantity::text, unit_cost_eur::text,
            batch_id, customer_partner_id
          FROM inventory.stock_movements
          WHERE id = $1 FOR UPDATE`,
@@ -1298,13 +1298,13 @@ export class InventoryService {
       validateReturnTracking(product, normalized, original.batch_id);
       const serialItems = await returnedSerialItems(client, normalized, original.product_id);
       const movementId = randomUUID();
-      const movement = await client.query<{ total_cost_bgn: string }>(
+      const movement = await client.query<{ total_cost_eur: string }>(
         `INSERT INTO inventory.stock_movements (
            id, warehouse_id, product_id, movement_type, quantity, reference_type,
-           reference_id, actor_account_id, correlation_id, unit_cost_bgn,
+           reference_id, actor_account_id, correlation_id, unit_cost_eur,
            customer_partner_id, batch_id
          ) VALUES ($1, $2, $3, 'return_in', $4, $5, $6, $7, $8, $9, $10, $11)
-         RETURNING total_cost_bgn::text`,
+         RETURNING total_cost_eur::text`,
         [
           movementId,
           normalized.destinationWarehouseId,
@@ -1314,19 +1314,19 @@ export class InventoryService {
           normalized.referenceId,
           auth.accountId,
           metadata.correlationId,
-          original.unit_cost_bgn,
+          original.unit_cost_eur,
           original.customer_partner_id,
           original.batch_id,
         ],
       );
       await client.query(
         `INSERT INTO inventory.stock_balances (
-           warehouse_id, product_id, quantity, average_unit_cost_bgn
+           warehouse_id, product_id, quantity, average_unit_cost_eur
          ) VALUES ($1, $2, $3, $4)
          ON CONFLICT (warehouse_id, product_id) DO UPDATE SET
-           average_unit_cost_bgn = round((
-             inventory.stock_balances.quantity * inventory.stock_balances.average_unit_cost_bgn
-             + EXCLUDED.quantity * EXCLUDED.average_unit_cost_bgn
+           average_unit_cost_eur = round((
+             inventory.stock_balances.quantity * inventory.stock_balances.average_unit_cost_eur
+             + EXCLUDED.quantity * EXCLUDED.average_unit_cost_eur
            ) / (inventory.stock_balances.quantity + EXCLUDED.quantity), 4),
            quantity = inventory.stock_balances.quantity + EXCLUDED.quantity,
            updated_at = now()`,
@@ -1334,7 +1334,7 @@ export class InventoryService {
           normalized.destinationWarehouseId,
           original.product_id,
           normalized.quantity,
-          original.unit_cost_bgn,
+          original.unit_cost_eur,
         ],
       );
       if (original.batch_id)
@@ -1382,8 +1382,8 @@ export class InventoryService {
         productId: original.product_id,
         quantity: normalized.quantity,
         serialItemIds,
-        totalCostBgn: required(movement.rows[0], 'Return valuation insert failed').total_cost_bgn,
-        unitCostBgn: original.unit_cost_bgn,
+        totalCostEur: required(movement.rows[0], 'Return valuation insert failed').total_cost_eur,
+        unitCostEur: original.unit_cost_eur,
       };
       await this.sideEffects(
         client,
@@ -1433,11 +1433,11 @@ export class InventoryService {
       );
       const fromMovementId = randomUUID();
       const toMovementId = randomUUID();
-      const sourceBalance = await client.query<{ average_unit_cost_bgn: string }>(
+      const sourceBalance = await client.query<{ average_unit_cost_eur: string }>(
         `UPDATE inventory.stock_balances
          SET quantity = quantity - $3, updated_at = now()
          WHERE warehouse_id = $1 AND product_id = $2 AND quantity >= $3
-         RETURNING average_unit_cost_bgn::text`,
+         RETURNING average_unit_cost_eur::text`,
         [normalized.fromWarehouseId, normalized.productId, normalized.quantity],
       );
       if (!sourceBalance.rowCount)
@@ -1449,16 +1449,16 @@ export class InventoryService {
       const transferCost = required(
         sourceBalance.rows[0],
         'Transfer balance update failed',
-      ).average_unit_cost_bgn;
+      ).average_unit_cost_eur;
       await client.query(
         `INSERT INTO inventory.stock_balances (
-           warehouse_id, product_id, quantity, average_unit_cost_bgn
+           warehouse_id, product_id, quantity, average_unit_cost_eur
          ) VALUES ($1, $2, $3, $4)
          ON CONFLICT (warehouse_id, product_id)
          DO UPDATE SET
-           average_unit_cost_bgn = round((
-             inventory.stock_balances.quantity * inventory.stock_balances.average_unit_cost_bgn
-             + EXCLUDED.quantity * EXCLUDED.average_unit_cost_bgn
+           average_unit_cost_eur = round((
+             inventory.stock_balances.quantity * inventory.stock_balances.average_unit_cost_eur
+             + EXCLUDED.quantity * EXCLUDED.average_unit_cost_eur
            ) / (inventory.stock_balances.quantity + EXCLUDED.quantity), 4),
            quantity = inventory.stock_balances.quantity + EXCLUDED.quantity,
            updated_at = now()`,
@@ -1467,7 +1467,7 @@ export class InventoryService {
       await client.query(
         `INSERT INTO inventory.stock_movements (
            id, warehouse_id, product_id, movement_type, quantity, reference_type,
-           reference_id, actor_account_id, correlation_id, unit_cost_bgn
+           reference_id, actor_account_id, correlation_id, unit_cost_eur
          ) VALUES
            ($1, $2, $3, 'transfer_out', $4, 'transfer', $5, $6, $7, $10),
            ($8, $9, $3, 'transfer_in', $4, 'transfer', $5, $6, $7, $10)`,
@@ -1495,8 +1495,8 @@ export class InventoryService {
         productId: normalized.productId,
         quantity: normalized.quantity,
         serialItemIds,
-        totalCostBgn: multiplyFixed(normalized.quantity, transferCost),
-        unitCostBgn: transferCost,
+        totalCostEur: multiplyFixed(normalized.quantity, transferCost),
+        unitCostEur: transferCost,
         ...(batchId ? { batchId } : {}),
       };
       await this.sideEffects(
@@ -1961,7 +1961,7 @@ export class InventoryService {
           HttpStatus.CONFLICT,
         );
       const counts = await client.query<{
-        average_unit_cost_bgn: string;
+        average_unit_cost_eur: string;
         id: string;
         product_id: string;
         expected_quantity: string;
@@ -1970,7 +1970,7 @@ export class InventoryService {
       }>(
         `SELECT count.id, count.product_id, count.expected_quantity::text,
            count.counted_quantity::text, category.tracking_mode,
-           COALESCE(balance.average_unit_cost_bgn, 0)::numeric(18, 4)::text AS average_unit_cost_bgn
+           COALESCE(balance.average_unit_cost_eur, 0)::numeric(18, 4)::text AS average_unit_cost_eur
          FROM inventory.stocktake_counts count JOIN master_data.products product ON product.id = count.product_id
          JOIN master_data.product_categories category ON category.id = product.category_id
          LEFT JOIN inventory.stock_balances balance
@@ -2003,7 +2003,7 @@ export class InventoryService {
           await client.query(
             `INSERT INTO inventory.stock_movements (
                id, warehouse_id, product_id, movement_type, quantity, reference_type,
-               reference_id, actor_account_id, correlation_id, unit_cost_bgn
+               reference_id, actor_account_id, correlation_id, unit_cost_eur
              ) VALUES ($1, $2, $3, $4, $5, 'stocktake', $6, $7, $8, $9)`,
             [
               movementId,
@@ -2014,7 +2014,7 @@ export class InventoryService {
               stocktakeId,
               auth.accountId,
               metadata.correlationId,
-              count.average_unit_cost_bgn,
+              count.average_unit_cost_eur,
             ],
           );
         if (count.tracking_mode === 'serial')
@@ -2344,7 +2344,7 @@ function traceMovement(row: TraceMovementRow): SerialTraceEvent {
             : row.goods_receipt_number
               ? 'Supplier delivery'
               : humanToken(row.reference_type),
-    unitCostBgn: row.unit_cost_bgn,
+    unitCostEur: row.unit_cost_eur,
     warehouse: { id: row.warehouse_id, displayName: row.warehouse_name },
     ...(row.supplier_id && row.supplier_name
       ? { supplier: { id: row.supplier_id, displayName: row.supplier_name } }
@@ -2368,7 +2368,7 @@ function traceTransfer(row: TraceTransferRow): SerialTraceEvent {
     referenceId: row.reference_id,
     referenceType: row.reference_type,
     toWarehouse: { id: row.to_warehouse_id, displayName: row.to_warehouse_name },
-    unitCostBgn: row.unit_cost_bgn,
+    unitCostEur: row.unit_cost_eur,
     warehouse: { id: row.warehouse_id, displayName: row.warehouse_name },
   };
 }
@@ -2467,8 +2467,8 @@ function traceServiceEvents(row: TraceServiceRow): SerialTraceEvent[] {
     if (row.labor_minutes !== null)
       details.push({ label: 'Working time', value: `${row.labor_minutes} minutes` });
     if (row.part_summary) details.push({ label: 'Parts used', value: row.part_summary });
-    if (row.total_cost_bgn)
-      details.push({ label: 'Repair cost', value: `BGN ${row.total_cost_bgn}` });
+    if (row.total_cost_eur)
+      details.push({ label: 'Repair cost', value: `EUR ${row.total_cost_eur}` });
     events.push({
       customer,
       customerLocation,
@@ -2561,7 +2561,7 @@ function normalizeReceipt(input: ReceiveStockRequest) {
     quantity: normalizePositiveQuantity(input.quantity),
     referenceId: clean(input.referenceId, 'RECEIPT_REFERENCE_REQUIRED'),
     serialNumbers,
-    unitCostBgn: normalizeMoney(input.unitCostBgn ?? '0'),
+    unitCostEur: normalizeMoney(input.unitCostEur ?? '0'),
     ...(input.supplierPartnerId ? { supplierPartnerId: input.supplierPartnerId } : {}),
     ...(input.batchNumber
       ? { batchNumber: clean(input.batchNumber, 'BATCH_NUMBER_REQUIRED') }

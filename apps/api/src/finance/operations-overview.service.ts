@@ -118,21 +118,21 @@ export class OperationsOverviewService {
       };
       if (hasPermission(auth.permissions, { module: 'erp.finance', action: 'view' })) {
         const revenue = await client.query<{ value: string }>(
-          `SELECT coalesce(sum(CASE WHEN document_type = 'credit_note' THEN -bgn_net_total ELSE bgn_net_total END),0)::text AS value
+          `SELECT coalesce(sum(CASE WHEN document_type = 'credit_note' THEN -eur_net_total ELSE eur_net_total END),0)::text AS value
            FROM finance.financial_documents
            WHERE status NOT IN ('draft', 'cancelled') AND official_number IS NOT NULL
            AND document_type IN ('invoice','credit_note','debit_note')
            AND issue_date BETWEEN $1::date AND $2::date`,
           [query.dateFrom, query.dateTo],
         );
-        result.recordedRevenueBgn = revenue.rows[0]!.value;
+        result.recordedRevenueEur = revenue.rows[0]!.value;
         const overdue = await client.query<{ value: string }>(
           `SELECT coalesce(sum(round(outstanding_total * exchange_rate,4)),0)::text AS value
            FROM finance.customer_documents WHERE review_state = 'pending_finance_review'
            AND outstanding_total > 0 AND due_date < $1::date`,
           [asOf],
         );
-        result.overdueReceivablesBgn = overdue.rows[0]!.value;
+        result.overdueReceivablesEur = overdue.rows[0]!.value;
       }
       // Global Service metrics follow the existing supervisor-only Service reports policy.
       if (hasPermission(auth.permissions, { module: 'erp.service', action: 'approve' })) {

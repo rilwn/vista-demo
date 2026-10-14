@@ -56,8 +56,8 @@ export class OperationsOverviewDto implements OperationsOverview {
   @ApiProperty({ format: 'date', type: String }) dateFrom!: string;
   @ApiProperty({ format: 'date', type: String }) dateTo!: string;
   @ApiProperty({ type: Number }) warrantyDays!: number;
-  @ApiPropertyOptional({ type: String }) recordedRevenueBgn?: string;
-  @ApiPropertyOptional({ type: String }) overdueReceivablesBgn?: string;
+  @ApiPropertyOptional({ type: String }) recordedRevenueEur?: string;
+  @ApiPropertyOptional({ type: String }) overdueReceivablesEur?: string;
   @ApiPropertyOptional({ type: Number }) activeServiceRequests?: number;
   @ApiPropertyOptional({ type: Number }) expiringWarranties?: number;
 }

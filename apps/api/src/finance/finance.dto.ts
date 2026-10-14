@@ -24,6 +24,7 @@ import {
   type FinancePaymentStatusHistoryEntry,
   type FinanceReferenceData,
   type FinanceSummary,
+  type ReverseFinancePaymentRequest,
 } from '@vista/contracts';
 
 const decimalPattern = /^\d+(\.\d{1,4})?$/u;
@@ -44,6 +45,17 @@ export class FinanceCustomerDocumentSearchQueryDto {
   @MinLength(2)
   @MaxLength(120)
   search!: string;
+}
+
+class FinanceLinkedDocumentReferenceDto implements NonNullable<
+  FinanceCustomerDocument['financialDocument']
+> {
+  @ApiProperty({ format: 'uuid', type: String }) id!: string;
+  @ApiProperty({ type: String }) number!: string;
+  @ApiProperty({ enum: ['draft', 'issued', 'cancelled'] })
+  status!: NonNullable<FinanceCustomerDocument['financialDocument']>['status'];
+  @ApiProperty({ enum: ['invoice', 'proforma', 'credit_note', 'debit_note'] })
+  type!: NonNullable<FinanceCustomerDocument['financialDocument']>['type'];
 }
 
 export class CreateFinancePaymentDto implements CreateFinancePaymentRequest {
@@ -71,6 +83,27 @@ export class CreateFinancePaymentDto implements CreateFinancePaymentRequest {
   @IsString()
   @MaxLength(255)
   paymentReference?: string;
+}
+
+export class ReverseFinancePaymentDto implements ReverseFinancePaymentRequest {
+  @ApiProperty({ minimum: 1, type: Number })
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  expectedDocumentVersion!: number;
+
+  @ApiProperty({ maxLength: 1000, minLength: 10, type: String })
+  @IsString()
+  @MinLength(10)
+  @MaxLength(1000)
+  reason!: string;
+}
+
+class FinancePaymentReversalDto {
+  @ApiProperty({ type: String }) number!: string;
+  @ApiProperty({ type: String }) reason!: string;
+  @ApiProperty({ format: 'date-time', type: String }) reversedAt!: string;
+  @ApiProperty({ format: 'date', type: String }) reversedOn!: string;
 }
 
 export class AllocateCustomerAdvanceDto implements AllocateCustomerAdvanceRequest {
@@ -123,6 +156,8 @@ class FinancePaymentDto implements FinancePayment {
   @ApiPropertyOptional({ type: String }) paymentReference?: string;
   @ApiPropertyOptional({ type: String }) sourceCustomerAdvanceNumber?: string;
   @ApiProperty({ format: 'date-time', type: String }) recordedAt!: string;
+  @ApiPropertyOptional({ type: FinancePaymentReversalDto })
+  reversal?: NonNullable<FinancePayment['reversal']>;
 }
 
 class FinancePaymentStatusHistoryEntryDto {
@@ -138,11 +173,13 @@ class FinancePaymentStatusHistoryEntryDto {
 
 export class FinanceCustomerDocumentDto implements FinanceCustomerDocument {
   @ApiProperty({ type: String }) allocatedTotal!: string;
-  @ApiProperty({ type: String }) bgnTotal!: string;
+  @ApiProperty({ type: String }) eurTotal!: string;
   @ApiProperty({ format: 'date-time', type: String }) createdAt!: string;
   @ApiProperty({ type: String }) currencyCode!: string;
   @ApiProperty({ type: String }) customerName!: string;
   @ApiProperty({ format: 'uuid', type: String }) customerPartnerId!: string;
+  @ApiPropertyOptional({ type: FinanceLinkedDocumentReferenceDto })
+  financialDocument?: FinanceLinkedDocumentReferenceDto;
   @ApiProperty({ format: 'date', type: String }) documentDate!: string;
   @ApiProperty({ format: 'date', type: String }) dueDate!: string;
   @ApiProperty({ type: String }) exchangeRate!: string;

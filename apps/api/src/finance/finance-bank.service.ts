@@ -62,6 +62,7 @@ interface TransactionRow {
   matched_supplier_payment_id: string | null;
   payment_number: string | null;
   payment_reference: string;
+  possible_duplicate: boolean;
   supplier_name: string | null;
   supplier_partner_id: string | null;
   supplier_payable_number: string | null;
@@ -151,7 +152,7 @@ export class FinanceBankService {
        JOIN sales.invoices source ON source.id = document.source_sales_invoice_id
        JOIN master_data.partners customer ON customer.id = document.customer_partner_id
        WHERE document.review_state = 'pending_finance_review'
-         AND document.currency_code = 'BGN'
+         AND document.currency_code = 'EUR'
          AND document.outstanding_total >= $2::numeric
        ORDER BY reference_matched DESC,
                 (lower(customer.display_name) = lower($3)) DESC,
@@ -213,12 +214,50 @@ export class FinanceBankService {
           ],
         );
         for (const [index, line] of normalized.lines.entries()) {
+          // Serialize identical imported rows so two statements created at the same time
+          // cannot both be treated as the first occurrence.
+          await client.query(
+            `SELECT pg_advisory_xact_lock(hashtextextended(
+              concat_ws(
+                '|', $1::text, $2::date::text, $3::text, $4::numeric::text,
+                upper(btrim($5::text))
+              ), 0
+            ))`,
+            [
+              normalized.accountIban,
+              line.transactionDate,
+              line.direction,
+              line.amount,
+              line.paymentReference,
+            ],
+          );
+          const duplicateResult = await client.query<{ duplicate: boolean }>(
+            `SELECT EXISTS (
+               SELECT 1
+               FROM finance.bank_transactions existing
+               JOIN finance.bank_statements statement
+                 ON statement.id = existing.bank_statement_id
+               WHERE statement.account_iban = $1
+                 AND existing.transaction_date = $2::date
+                 AND existing.direction = $3
+                 AND existing.amount = $4::numeric
+                 AND upper(btrim(existing.payment_reference)) = upper(btrim($5))
+             ) AS duplicate`,
+            [
+              normalized.accountIban,
+              line.transactionDate,
+              line.direction,
+              line.amount,
+              line.paymentReference,
+            ],
+          );
+          const possibleDuplicate = duplicateResult.rows[0]?.duplicate ?? false;
           const transactionId = randomUUID();
           await client.query(
             `INSERT INTO finance.bank_transactions (
              id, bank_statement_id, line_number, transaction_date, value_date, direction,
-             amount, counterparty_name, counterparty_iban, payment_reference
-           ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+             amount, counterparty_name, counterparty_iban, payment_reference, possible_duplicate
+           ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
             [
               transactionId,
               id,
@@ -230,9 +269,10 @@ export class FinanceBankService {
               line.counterpartyName,
               line.counterpartyIban ?? null,
               line.paymentReference,
+              possibleDuplicate,
             ],
           );
-          if (line.direction === 'incoming') {
+          if (line.direction === 'incoming' && !possibleDuplicate) {
             const exact = await exactReferenceCandidates(
               client,
               line.paymentReference,
@@ -276,6 +316,7 @@ export class FinanceBankService {
     const normalized = {
       customerDocumentId: input.customerDocumentId,
       expectedVersion: input.expectedVersion,
+      reviewPossibleDuplicate: input.reviewPossibleDuplicate === true,
     };
     return this.command(
       `finance.bank-transaction.match:${id}`,
@@ -299,6 +340,7 @@ export class FinanceBankService {
           auth,
           metadata,
           idempotencyKey,
+          normalized.reviewPossibleDuplicate,
         );
         return loadStatement(client, transaction.bank_statement_id);
       },
@@ -313,9 +355,15 @@ export class FinanceBankService {
     auth: AuthenticationContext,
     metadata: RequestSecurityMetadata,
     commandKey: string,
+    reviewPossibleDuplicate = false,
   ) {
     const transaction = await lockTransaction(client, transactionId);
     if (transaction.match_status === 'matched') return;
+    if (transaction.possible_duplicate && !reviewPossibleDuplicate)
+      throw conflict(
+        'FINANCE_BANK_POSSIBLE_DUPLICATE_REVIEW_REQUIRED',
+        'Review the possible duplicate and confirm it is a separate transaction before matching.',
+      );
     if (transaction.value_date > (await this.businessDate(client)))
       throw inputError(
         'FINANCE_PAYMENT_FUTURE_DATE_INVALID',
@@ -359,7 +407,7 @@ export class FinanceBankService {
       `INSERT INTO finance.payments (
          id, payment_number, customer_partner_id, payment_date, payment_method,
          currency_code, amount, payment_reference, notes, recorded_by
-       ) VALUES ($1,$2,$3,$4,'bank_transfer','BGN',$5,$6,$7,$8)`,
+       ) VALUES ($1,$2,$3,$4,'bank_transfer','EUR',$5,$6,$7,$8)`,
       [
         paymentId,
         paymentNumber,
@@ -407,7 +455,7 @@ export class FinanceBankService {
       `UPDATE finance.bank_transactions
        SET match_status = 'matched', match_method = $2, matched_customer_document_id = $3,
            matched_payment_id = $4, matched_by = $5, matched_at = now(),
-           version = version + 1, updated_at = now()
+           possible_duplicate = false, version = version + 1, updated_at = now()
        WHERE id = $1`,
       [transactionId, method, customerDocumentId, paymentId, auth.accountId],
     );
@@ -424,6 +472,7 @@ export class FinanceBankService {
         amount: transaction.amount,
         customerDocumentId,
         matchMethod: method,
+        possibleDuplicateReviewed: transaction.possible_duplicate,
         paymentId,
         paymentNumber,
         transactionId,
@@ -546,9 +595,9 @@ function normalizeStatement(input: CreateFinanceBankStatementRequest) {
     'Enter the statement reference.',
   );
   const currencyCode = input.currencyCode.trim().toUpperCase();
-  if (currencyCode !== 'BGN')
+  if (currencyCode !== 'EUR')
     throw new ApiErrorException(
-      'FINANCE_BANK_BGN_ONLY',
+      'FINANCE_BANK_EUR_ONLY',
       'Foreign-currency bank statements require the approved BNB rate workflow.',
       HttpStatus.UNPROCESSABLE_ENTITY,
     );
@@ -604,7 +653,7 @@ async function exactReferenceCandidates(client: PoolClient, reference: string, a
      FROM finance.customer_documents document
      JOIN sales.invoices source ON source.id = document.source_sales_invoice_id
      WHERE document.review_state = 'pending_finance_review'
-       AND document.currency_code = 'BGN'
+       AND document.currency_code = 'EUR'
        AND document.outstanding_total >= $2::numeric
        AND ($1 ILIKE ('%' || document.document_number || '%')
          OR $1 ILIKE ('%' || source.invoice_number || '%'))
@@ -622,6 +671,7 @@ async function lockTransaction(client: PoolClient, id: string) {
     direction: string;
     line_number: number;
     match_status: string;
+    possible_duplicate: boolean;
     payment_reference: string;
     statement_number: string;
     value_date: string;
@@ -629,7 +679,8 @@ async function lockTransaction(client: PoolClient, id: string) {
   }>(
     `SELECT transaction.id, transaction.bank_statement_id, transaction.line_number,
             transaction.direction, transaction.amount::text, transaction.payment_reference,
-            transaction.value_date::text, transaction.match_status, transaction.version,
+            transaction.value_date::text, transaction.match_status, transaction.possible_duplicate,
+            transaction.version,
             statement.statement_number
      FROM finance.bank_transactions transaction
      JOIN finance.bank_statements statement ON statement.id = transaction.bank_statement_id
@@ -653,6 +704,7 @@ async function loadStatement(client: PoolClient, id: string): Promise<FinanceBan
             transaction.value_date::text, transaction.direction, transaction.amount::text,
             transaction.counterparty_name, transaction.counterparty_iban,
             transaction.payment_reference, transaction.match_status, transaction.match_method,
+            transaction.possible_duplicate,
             transaction.matched_customer_document_id, transaction.matched_payment_id,
             transaction.matched_supplier_payable_id, transaction.matched_supplier_payment_id,
             transaction.matched_at, transaction.version, document.document_number,
@@ -788,6 +840,7 @@ function mapTransaction(row: TransactionRow): FinanceBankTransaction {
       : {}),
     matchStatus: row.match_status,
     paymentReference: row.payment_reference,
+    ...(row.possible_duplicate ? { possibleDuplicate: true } : {}),
     transactionDate: row.transaction_date,
     valueDate: row.value_date,
     version: row.version,

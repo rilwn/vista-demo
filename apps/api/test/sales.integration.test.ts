@@ -79,6 +79,7 @@ import { migrateDown, migrateUp } from '../src/database/migration-runner.js';
 import { JobHandlerRegistry } from '../src/jobs/job-handler-registry.service.js';
 import { ReportingHubService } from '../src/jobs/reporting-hub.service.js';
 import { NotificationDispatcherService } from '../src/notifications/notification-dispatcher.service.js';
+import { SmtpMailerService, type SmtpMessage } from '../src/notifications/smtp-mailer.service.js';
 import { ObjectStorageService } from '../src/storage/object-storage.service.js';
 
 const runInfrastructureTests = process.env['RUN_INFRASTRUCTURE_TESTS'] === 'true';
@@ -100,6 +101,7 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
   let equipmentId: string;
   let productId: string;
   let serialProductId: string;
+  let supplierId: string;
   let warehouseId: string;
   let technicianWarehouseId: string;
   let serialNumber: string;
@@ -109,6 +111,8 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
   let registeredLogisticsReturnId: string;
   let registeredLogisticsReturnVersion: number;
   const storedObjects = new Map<string, Buffer>();
+  const deliveredEmails: SmtpMessage[] = [];
+  let failNextEmailDelivery = false;
   const runId = randomUUID().replaceAll('-', '');
 
   beforeAll(async () => {
@@ -129,6 +133,22 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
       new URL('../src/database/migrations', import.meta.url),
     );
     await migrateUp(database, migrationDirectory);
+    expect(await migrateDown(database, migrationDirectory)).toBe(
+      '0078_finance_proforma_conversion_link',
+    );
+    expect(await migrateDown(database, migrationDirectory)).toBe(
+      '0077_finance_income_outcome_exports',
+    );
+    expect(await migrateDown(database, migrationDirectory)).toBe(
+      '0076_financial_document_issuance',
+    );
+    expect(await migrateDown(database, migrationDirectory)).toBe('0075_bnb_currency_rates');
+    expect(await migrateDown(database, migrationDirectory)).toBe('0074_finance_payment_reversals');
+    expect(await migrateDown(database, migrationDirectory)).toBe('0073_bank_duplicate_review');
+    expect(await migrateDown(database, migrationDirectory)).toBe('0072_receipt_cost_baseline');
+    expect(await migrateDown(database, migrationDirectory)).toBe('0071_service_customer_charges');
+    expect(await migrateDown(database, migrationDirectory)).toBe('0070_eur_demo_price_lists');
+    expect(await migrateDown(database, migrationDirectory)).toBe('0069_eur_transition');
     expect(await migrateDown(database, migrationDirectory)).toBe('0068_sales_quotation_lifecycle');
     expect(await migrateDown(database, migrationDirectory)).toBe(
       '0067_customer_advance_collection_allocation',
@@ -140,7 +160,13 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
       '0065_scheduled_execution_evidence',
     );
     expect(await migrateDown(database, migrationDirectory)).toBe('0064_reporting_hub');
-    expect(await migrateUp(database, migrationDirectory)).toContain('0064_reporting_hub');
+    const restoredMigrations = await migrateUp(database, migrationDirectory);
+    expect(restoredMigrations).toContain('0064_reporting_hub');
+    expect(restoredMigrations).toContain('0074_finance_payment_reversals');
+    expect(restoredMigrations).toContain('0075_bnb_currency_rates');
+    expect(restoredMigrations).toContain('0076_financial_document_issuance');
+    expect(restoredMigrations).toContain('0077_finance_income_outcome_exports');
+    expect(restoredMigrations).toContain('0078_finance_proforma_conversion_link');
 
     Object.assign(process.env, {
       // This suite deliberately sends many invalid/replayed reporting commands.
@@ -163,6 +189,8 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
       SMTP_PORT: '1025',
       TOTP_ENCRYPTION_KEY: 'a-test-totp-key-with-at-least-32-characters',
     });
+    deliveredEmails.length = 0;
+    failNextEmailDelivery = false;
     const module = await Test.createTestingModule({ imports: [AppModule] })
       .overrideProvider(ObjectStorageService)
       .useValue({
@@ -178,6 +206,17 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
         ping: () => Promise.resolve(1),
         putObject: ({ body, key }: { body: Buffer; key: string }) => {
           storedObjects.set(key, Buffer.from(body));
+          return Promise.resolve();
+        },
+      })
+      .overrideProvider(SmtpMailerService)
+      .useValue({
+        send: (message: SmtpMessage) => {
+          if (failNextEmailDelivery) {
+            failNextEmailDelivery = false;
+            return Promise.reject(new Error('Temporary SMTP outage'));
+          }
+          deliveredEmails.push(message);
           return Promise.resolve();
         },
       })
@@ -197,13 +236,14 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
     viewerAccountId = viewerId;
     await grantPermissions(database, creatorId, ['create', 'edit', 'view']);
     await grantPermissions(database, viewerId, ['view']);
-    await grantFinancePermissions(database, creatorId, ['create', 'edit', 'view']);
+    await grantFinancePermissions(database, creatorId, ['approve', 'create', 'edit', 'view']);
     await grantFinancePermissions(database, viewerId, ['view']);
     await grantServicePermissions(database, creatorId, ['approve', 'create', 'edit', 'view']);
     await grantWarehouseViewPermission(database, creatorId);
     await grantCrmPermissions(database, creatorId, ['create', 'delete', 'edit', 'view']);
     await grantLogisticsPermissions(database, creatorId, ['create', 'edit', 'view']);
     await grantLogisticsPermissions(database, viewerId, ['view']);
+    await grantProcurementPermissions(database, creatorId, ['create', 'edit', 'view']);
     ({
       customerId,
       customerLocationId,
@@ -211,6 +251,7 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
       productId,
       serialNumber,
       serialProductId,
+      supplierId,
       warehouseId,
     } = await seedSalesData(database, creatorId, runId));
     ({ cashOperatorId, cashRegisterId, technicianWarehouseId } =
@@ -218,7 +259,91 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
     await seedServiceSchedulePolicy(database, creatorId, creatorId);
     token = await login(application, `sales-${runId}@example.invalid`);
     viewerToken = await login(application, `sales-viewer-${runId}@example.invalid`);
+    await receiveSerialFromSupplier();
   }, 30_000);
+
+  async function receiveSerialFromSupplier() {
+    const purchaseOrderResponse = await request(application.getHttpServer())
+      .post('/api/v1/procurement/purchase-orders')
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', `wh01-purchase-order-${runId}`)
+      .send({
+        currencyCode: 'EUR',
+        lines: [
+          {
+            expectedDeliveryDate: '2099-12-31',
+            productId: serialProductId,
+            quantity: '1',
+            unitPrice: '200',
+          },
+        ],
+        supplierPartnerId: supplierId,
+        warehouseId,
+      })
+      .expect(201);
+    const purchaseOrder = purchaseOrderResponse.body as {
+      id: string;
+      lines: Array<{ id: string; productId: string }>;
+    };
+    const orderLine = purchaseOrder.lines.find((line) => line.productId === serialProductId);
+    if (!orderLine) throw new Error('Serial purchase-order line was not created');
+
+    const deliveryReference = `WH01-${runId.slice(0, 12).toUpperCase()}`;
+    await request(application.getHttpServer())
+      .post(`/api/v1/procurement/purchase-orders/${purchaseOrder.id}/receipts`)
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', `wh01-goods-receipt-${runId}`)
+      .send({
+        lines: [
+          {
+            orderLineId: orderLine.id,
+            quantity: '1',
+            serialNumbers: [serialNumber],
+            unitCostEur: '120',
+          },
+        ],
+        supplierDeliveryReference: deliveryReference,
+      })
+      .expect(201);
+
+    const traceResponse = await request(application.getHttpServer())
+      .get(`/api/v1/warehouse/serial-traceability/${encodeURIComponent(serialNumber)}`)
+      .set('authorization', `Bearer ${token}`)
+      .expect(200);
+    const trace = traceResponse.body as SerialTraceability;
+    expect(trace.inventoryRecordLinked).toBe(true);
+    expect(trace.status).toBe('available');
+    const receiptEvent = trace.events.find(
+      (event) => event.eventType === 'receipt' && event.referenceId === deliveryReference,
+    );
+    expect(receiptEvent?.referenceType).toBe('Supplier delivery');
+    expect(receiptEvent?.supplier?.id).toBe(supplierId);
+    const stockEvidence = await database.query<{
+      quantity: string | null;
+      serialStatus: string;
+      serialWarehouseId: string;
+    }>(
+      `SELECT item.status AS "serialStatus", item.warehouse_id AS "serialWarehouseId",
+              balance.quantity::text AS quantity
+       FROM inventory.serialized_items item
+       LEFT JOIN inventory.stock_balances balance
+         ON balance.warehouse_id = item.warehouse_id AND balance.product_id = item.product_id
+       WHERE item.serial_number = $1`,
+      [serialNumber],
+    );
+    expect(stockEvidence.rows[0]).toEqual({
+      quantity: '1.0000',
+      serialStatus: 'available',
+      serialWarehouseId: warehouseId,
+    });
+    const salesReferences = await request(application.getHttpServer())
+      .get('/api/v1/sales/reference-data')
+      .set('authorization', `Bearer ${token}`)
+      .expect(200);
+    expect((salesReferences.body as SalesReferenceData).serials).toContainEqual(
+      expect.objectContaining({ serialNumber, warehouseId }),
+    );
+  }
 
   afterAll(async () => {
     if (application) await application.close();
@@ -238,7 +363,7 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
       dateFrom: '2026-09-01',
       dateTo: '2026-09-30',
       format: 'csv',
-      columns: ['partnerName', 'grossBgnTotal'],
+      columns: ['partnerName', 'grossEurTotal'],
     };
     const endpoint = '/api/v1/finance/saved-reports';
     await request(application.getHttpServer()).post(endpoint).send(saved).expect(401);
@@ -312,7 +437,7 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
       .expect(201);
     const created = createdResponse.body as SalesWorkflow;
     expect(created).toMatchObject({
-      currencyCode: 'BGN',
+      currencyCode: 'EUR',
       overallDiscountPercent: '5.0000',
       status: 'draft',
       subtotal: '228.0000',
@@ -654,6 +779,49 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
       .expect('Content-Type', /application\/pdf/u);
     expect(pdf.headers['content-disposition']).toContain(`${created.number}.pdf`);
     expect(Number(pdf.headers['content-length'])).toBeGreaterThan(500);
+
+    const quotationRecipient = `quotation-${runId}@example.invalid`;
+    const quotationEmailKey = `sales-quotation-email-${runId}`;
+    const queuedQuotationEmail = await request(server)
+      .post(`/api/v1/sales/quotations/${created.id}/email`)
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', quotationEmailKey)
+      .send({ expectedVersion: revised.version, recipientEmail: quotationRecipient })
+      .expect(202);
+    expect(queuedQuotationEmail.body).toMatchObject({
+      recipientEmail: quotationRecipient,
+      status: 'queued',
+    });
+    await request(server)
+      .post(`/api/v1/sales/quotations/${created.id}/email`)
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', quotationEmailKey)
+      .send({ expectedVersion: revised.version, recipientEmail: quotationRecipient })
+      .expect(202);
+    const queuedQuotationMessage = await database.query<{
+      id: string;
+      payload: { attachment?: { contentBase64: string; fileName: string }; text: string };
+    }>(
+      `SELECT id, payload FROM notifications.messages
+       WHERE channel = 'email' AND payload->>'to' = $1`,
+      [quotationRecipient],
+    );
+    expect(queuedQuotationMessage.rows).toHaveLength(1);
+    expect(queuedQuotationMessage.rows[0]?.payload).toMatchObject({
+      attachment: { fileName: `${created.number}.pdf` },
+    });
+    expect(queuedQuotationMessage.rows[0]?.payload.text).toContain('Прикачена е Вашата оферта');
+    const quotationMessage = queuedQuotationMessage.rows[0];
+    if (!quotationMessage) throw new Error('Quotation email was not queued');
+    const emailCountBeforeQuotationDelivery = deliveredEmails.length;
+    await application.get(NotificationDispatcherService).dispatch(quotationMessage.id, true);
+    expect(deliveredEmails).toHaveLength(emailCountBeforeQuotationDelivery + 1);
+    expect(deliveredEmails.at(-1)).toMatchObject({
+      attachment: { fileName: `${created.number}.pdf`, mediaType: 'application/pdf' },
+      subject: `Quotation / Оферта ${created.number}`,
+      to: quotationRecipient,
+    });
+    expect(deliveredEmails.at(-1)?.attachment?.content.subarray(0, 4).toString()).toBe('%PDF');
 
     const historyBeforeCancel = await database.query<{
       versions: number[];
@@ -1510,7 +1678,7 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
           bucket: 'days_0_30',
           daysOverdue: 1,
           id: created.id,
-          outstandingBgnTotal: '133.6000',
+          outstandingEurTotal: '133.6000',
         }),
       ],
       kind: 'receivable',
@@ -1528,7 +1696,7 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
         expect.objectContaining({
           bucket: 'current',
           id: supplierPayable.id,
-          outstandingBgnTotal: '46.0000',
+          outstandingEurTotal: '46.0000',
         }),
       ],
       kind: 'payable',
@@ -1543,10 +1711,10 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
     expect(customerTurnoverResponse.body as FinanceTurnoverReport).toMatchObject({
       kind: 'customer',
       totals: {
-        allocatedBgnTotal: '140.0000',
+        allocatedEurTotal: '140.0000',
         documentCount: 1,
-        grossBgnTotal: '273.6000',
-        outstandingBgnTotal: '133.6000',
+        grossEurTotal: '273.6000',
+        outstandingEurTotal: '133.6000',
       },
     });
     const supplierTurnoverResponse = await request(application.getHttpServer())
@@ -1558,10 +1726,10 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
     expect(supplierTurnoverResponse.body as FinanceTurnoverReport).toMatchObject({
       kind: 'supplier',
       totals: {
-        allocatedBgnTotal: '50.0000',
+        allocatedEurTotal: '50.0000',
         documentCount: 1,
-        grossBgnTotal: '96.0000',
-        outstandingBgnTotal: '46.0000',
+        grossEurTotal: '96.0000',
+        outstandingEurTotal: '46.0000',
       },
     });
     const purchaseJournalResponse = await request(application.getHttpServer())
@@ -1574,10 +1742,10 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
       kind: 'purchase',
       totals: {
         documentCount: 1,
-        grossBgnTotal: '96.0000',
+        grossEurTotal: '96.0000',
         incompleteTaxDocuments: 0,
-        netBgnTotal: '80.0000',
-        vatBgnTotal: '16.0000',
+        netEurTotal: '80.0000',
+        vatEurTotal: '16.0000',
       },
     });
     const vatReviewResponse = await request(application.getHttpServer())
@@ -1587,9 +1755,9 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
     expect(vatReviewResponse.body as FinanceVatReviewReport).toMatchObject({
       incompletePurchaseDocumentNumbers: [],
       incompletePurchaseDocuments: 0,
-      recordedDifferenceBgn: '-16.0000',
-      recordedInputVatBgn: '16.0000',
-      recordedOutputVatBgn: '0.0000',
+      recordedDifferenceEur: '-16.0000',
+      recordedInputVatEur: '16.0000',
+      recordedOutputVatEur: '0.0000',
     });
     const remindersBeforeStatusJob = await database.query<{ count: string }>(
       `SELECT count(*)::text AS count FROM notifications.messages
@@ -1612,6 +1780,16 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
         expect.objectContaining({
           formats: ['csv', 'xlsx', 'pdf'],
           key: 'finance.vat-review',
+          requiresDateRange: true,
+        }),
+        expect.objectContaining({
+          formats: ['csv', 'xlsx', 'pdf'],
+          key: 'finance.income',
+          requiresDateRange: true,
+        }),
+        expect.objectContaining({
+          formats: ['csv', 'xlsx', 'pdf'],
+          key: 'finance.outcome',
           requiresDateRange: true,
         }),
       ]),
@@ -1733,12 +1911,50 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
       .expect(200);
     expect(downloadedVatReport.text).toContain('Recorded input VAT');
 
+    for (const format of ['csv', 'xlsx'] as const) {
+      for (const definitionKey of ['finance.income', 'finance.outcome'] as const) {
+        const jobKey = `${definitionKey.replaceAll('.', '-')}-${format}-${runId}`;
+        const exportResponse = await request(application.getHttpServer())
+          .post('/api/v1/finance/report-exports')
+          .set('authorization', `Bearer ${token}`)
+          .set('idempotency-key', jobKey)
+          .send({ dateFrom: turnoverDateFrom, dateTo: dueDate, definitionKey, format })
+          .expect(202);
+        const exportRecord = exportResponse.body as FinanceReportExport;
+        const reportResult = (await handlers.execute({
+          attemptNumber: 1,
+          correlationId: jobKey,
+          enqueuedAt: '2026-08-21T12:00:00.000Z',
+          idempotencyKey: `finance-report-export:${exportRecord.id}`,
+          jobId: jobKey,
+          maxAttempts: 5,
+          name: 'report.generate',
+          payload: { exportId: exportRecord.id },
+          retryAllowed: true,
+        })) as { rowCount?: number };
+        expect(typeof reportResult.rowCount).toBe('number');
+        const downloaded = await request(application.getHttpServer())
+          .get(`/api/v1/finance/report-exports/${exportRecord.id}/content`)
+          .set('authorization', `Bearer ${token}`)
+          .expect('content-type', format === 'csv' ? /csv/u : /spreadsheetml/u)
+          .expect(200);
+        if (format === 'csv') {
+          expect(downloaded.text).toContain(
+            'Transaction number,Invoice number,Invoice date,Partner,Account code,Net amount,VAT amount,VAT rate(s),Total amount,Currency,Payment date',
+          );
+        } else {
+          expect(Number(downloaded.headers['content-length'])).toBeGreaterThan(2_000);
+          expect(downloaded.headers['content-disposition']).toContain('.xlsx');
+        }
+      }
+    }
+
     const selectedInput = {
       dateFrom: turnoverDateFrom,
       dateTo: dueDate,
       definitionKey: 'finance.supplier-turnover',
       format: 'csv',
-      columns: ['partnerName', 'grossBgnTotal'],
+      columns: ['partnerName', 'grossEurTotal'],
     };
     const selectedResponse = await request(application.getHttpServer())
       .post('/api/v1/finance/report-exports')
@@ -1759,8 +1975,8 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
       .get(`/api/v1/finance/report-exports/${selected.id}/content`)
       .set('authorization', `Bearer ${token}`)
       .expect(200);
-    expect(selectedFile.text).toContain('Partner,Gross BGN');
-    expect(selectedFile.text).not.toContain('Outstanding BGN');
+    expect(selectedFile.text).toContain('Partner,Gross EUR');
+    expect(selectedFile.text).not.toContain('Outstanding EUR');
     await request(application.getHttpServer())
       .post('/api/v1/finance/report-exports')
       .set('authorization', `Bearer ${token}`)
@@ -1836,7 +2052,7 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
       accountIban: 'BG76DEMO00000000000000',
       bankName: 'Vista integration bank',
       closingBalance: '1087.6',
-      currencyCode: 'BGN',
+      currencyCode: 'EUR',
       lines: [
         {
           amount: '120',
@@ -2094,6 +2310,112 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
       })
       .expect(409);
 
+    const originalCashPayment = settled.payments.find(
+      (payment) => payment.paymentMethod === 'cash',
+    );
+    if (!originalCashPayment) throw new Error('Expected the recorded cash payment');
+    const deniedPaymentReversal = await request(application.getHttpServer())
+      .post(`/api/v1/finance/documents/${created.id}/payments/${originalCashPayment.id}/reverse`)
+      .set('authorization', `Bearer ${viewerToken}`)
+      .set('idempotency-key', `finance-reversal-denied-${runId}`)
+      .send({ expectedDocumentVersion: settled.version, reason: 'Correcting a duplicate entry.' })
+      .expect(403);
+    expect(deniedPaymentReversal.body.error.code).toBe('PERMISSION_DENIED');
+    const reversalRequest = {
+      expectedDocumentVersion: settled.version,
+      reason: 'Correcting a duplicate cash entry.',
+    };
+    const reversedDocumentResponse = await request(application.getHttpServer())
+      .post(`/api/v1/finance/documents/${created.id}/payments/${originalCashPayment.id}/reverse`)
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', `finance-reversal-${runId}`)
+      .send(reversalRequest)
+      .expect(200);
+    const reversedDocument = reversedDocumentResponse.body as FinanceCustomerDocument;
+    expect(reversedDocument).toMatchObject({
+      allocatedTotal: '253.6000',
+      outstandingTotal: '20.0000',
+      paymentStatus: 'overdue',
+    });
+    const reversedPayment = reversedDocument.payments.find(
+      (payment) => payment.id === originalCashPayment.id,
+    );
+    expect(reversedPayment?.reversal?.reason).toBe(reversalRequest.reason);
+    expect(reversedPayment?.reversal?.reversedOn).toMatch(/^\d{4}-\d{2}-\d{2}$/u);
+    const reversalReplay = await request(application.getHttpServer())
+      .post(`/api/v1/finance/documents/${created.id}/payments/${originalCashPayment.id}/reverse`)
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', `finance-reversal-${runId}`)
+      .send(reversalRequest)
+      .expect(200);
+    expect(
+      (reversalReplay.body as FinanceCustomerDocument).payments.find(
+        (payment) => payment.id === originalCashPayment.id,
+      )?.reversal?.number,
+    ).toBe(reversedPayment?.reversal?.number);
+    await request(application.getHttpServer())
+      .post(`/api/v1/finance/documents/${created.id}/payments/${originalCashPayment.id}/reverse`)
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', `finance-reversal-second-key-${runId}`)
+      .send({ ...reversalRequest, expectedDocumentVersion: reversedDocument.version })
+      .expect(409);
+
+    const repeatedOutgoingResponse = await request(application.getHttpServer())
+      .post('/api/v1/finance/bank-statements')
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', `finance-bank-repeat-${runId}`)
+      .send({
+        ...statementInput,
+        closingBalance: '954',
+        lines: [statementInput.lines[3]!],
+        openingBalance: '1000',
+        statementReference: `STATEMENT-REPEAT-${runId}`,
+      })
+      .expect(201);
+    const repeatedStatement = repeatedOutgoingResponse.body as FinanceBankStatement;
+    const repeatedOutgoing = repeatedStatement.transactions[0];
+    expect(repeatedOutgoing).toMatchObject({
+      matchStatus: 'unmatched',
+      possibleDuplicate: true,
+    });
+    if (!repeatedOutgoing) throw new Error('Expected a repeated outgoing bank line');
+    const duplicateMatchRejected = await request(application.getHttpServer())
+      .post(`/api/v1/finance/bank-transactions/${repeatedOutgoing.id}/supplier-match`)
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', `finance-bank-repeat-unreviewed-${runId}`)
+      .send({
+        expectedVersion: repeatedOutgoing.version,
+        mode: 'advance',
+        supplierPartnerId: supplierPayable.supplierPartnerId,
+      })
+      .expect(409);
+    expect(duplicateMatchRejected.body.error.code).toBe(
+      'FINANCE_BANK_POSSIBLE_DUPLICATE_REVIEW_REQUIRED',
+    );
+    const confirmedSeparateTransfer = await request(application.getHttpServer())
+      .post(`/api/v1/finance/bank-transactions/${repeatedOutgoing.id}/supplier-match`)
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', `finance-bank-repeat-reviewed-${runId}`)
+      .send({
+        expectedVersion: repeatedOutgoing.version,
+        mode: 'advance',
+        reviewPossibleDuplicate: true,
+        supplierPartnerId: supplierPayable.supplierPartnerId,
+      })
+      .expect(200);
+    expect(confirmedSeparateTransfer.body as FinanceSupplierPayment).toMatchObject({
+      amount: '46.0000',
+      kind: 'advance',
+      sourceBankTransactionId: repeatedOutgoing.id,
+    });
+    const reviewedStatement = await request(application.getHttpServer())
+      .get(`/api/v1/finance/bank-statements/${repeatedStatement.id}`)
+      .set('authorization', `Bearer ${token}`)
+      .expect(200);
+    expect((reviewedStatement.body as FinanceBankStatement).transactions[0]).toMatchObject({
+      matchStatus: 'matched',
+    });
+
     const evidence = await database.query<{
       allocation_count: string;
       audit_count: string;
@@ -2107,8 +2429,8 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
     );
     expect(evidence.rows[0]).toEqual({
       allocation_count: '8',
-      audit_count: '24',
-      outbox_count: '24',
+      audit_count: '27',
+      outbox_count: '27',
     });
   });
 
@@ -2135,9 +2457,26 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
     );
     const issueDate = businessDateResult.rows[0]?.date;
     if (!issueDate) throw new Error('Could not determine the financial document business date');
+    await database.query(
+      `INSERT INTO finance.currency_rates (currency_code, rate_date, eur_per_unit)
+       VALUES ('USD', $1, 0.92000000)`,
+      [issueDate],
+    );
+    const exchangeRateResponse = await request(application.getHttpServer())
+      .get(
+        `/api/v1/finance/financial-documents/exchange-rate?currencyCode=USD&rateDate=${issueDate}`,
+      )
+      .set('authorization', `Bearer ${token}`)
+      .expect(200);
+    expect(exchangeRateResponse.body).toEqual({
+      currencyCode: 'USD',
+      exchangeRate: '0.92000000',
+      rateDate: issueDate,
+      rateSource: 'BNB',
+    });
     const invoiceInput = {
       businessLocationId: scope.locationId,
-      currencyCode: 'BGN',
+      currencyCode: 'EUR',
       customerPartnerId: customerId,
       documentType: 'invoice',
       dueDate: issueDate,
@@ -2145,7 +2484,7 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
       issueDate,
       legalEntityId: scope.legalEntityId,
       rateDate: issueDate,
-      rateSource: 'internal_bgn',
+      rateSource: 'internal_eur',
       sourceSalesInvoiceId: salesInvoiceId,
       taxEventDate: issueDate,
     };
@@ -2158,7 +2497,7 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
       .expect(201);
     const invoice = createdResponse.body as FinancialDocument;
     expect(invoice).toMatchObject({
-      currencyCode: 'BGN',
+      currencyCode: 'EUR',
       documentType: 'invoice',
       exchangeRate: '1.00000000',
       grossTotal: '273.6000',
@@ -2170,7 +2509,7 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
       .get(`/api/v1/crm/analytics/overview?dateFrom=${issueDate}&dateTo=${issueDate}`)
       .set('authorization', `Bearer ${token}`)
       .expect(200);
-    expect(analyticsWithDraft.body.totalNetRevenueBgn).toBe('0.00');
+    expect(analyticsWithDraft.body.totalNetRevenueEur).toBe('0.00');
     expect(analyticsWithDraft.body.customerMetrics.activeCustomers).toBe(0);
     expect(invoice.number).toMatch(/^DINV-[A-Z0-9-]+-ALL-REG-ALL-OPS-[A-F0-9]{12}-\d{4}-\d{6}$/u);
     expect(invoice.vatSummary).toEqual(
@@ -2186,10 +2525,10 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
       kind: 'sales',
       totals: {
         documentCount: 0,
-        grossBgnTotal: '0',
+        grossEurTotal: '0',
         incompleteTaxDocuments: 0,
-        netBgnTotal: '0',
-        vatBgnTotal: '0',
+        netEurTotal: '0',
+        vatEurTotal: '0',
       },
     });
     const combinedVatResponse = await request(application.getHttpServer())
@@ -2199,9 +2538,9 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
     expect(combinedVatResponse.body as FinanceVatReviewReport).toMatchObject({
       incompletePurchaseDocumentNumbers: [],
       incompletePurchaseDocuments: 0,
-      recordedDifferenceBgn: '-16.0000',
-      recordedInputVatBgn: '16.0000',
-      recordedOutputVatBgn: '0.0000',
+      recordedDifferenceEur: '-16.0000',
+      recordedInputVatEur: '16.0000',
+      recordedOutputVatEur: '0.0000',
     });
 
     const replay = await request(application.getHttpServer())
@@ -2278,9 +2617,29 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
       .post('/api/v1/finance/financial-documents')
       .set('authorization', `Bearer ${token}`)
       .set('idempotency-key', `qa-foreign-rate-${runId}`)
-      .send({ ...manualInput, currencyCode: 'EUR', exchangeRate: '1', rateSource: 'internal_bgn' })
+      .send({ ...manualInput, currencyCode: 'USD', exchangeRate: '1', rateSource: 'internal_eur' })
       .expect(400);
     expect(invalidRate.body.error.code).toBe('FINANCE_RATE_SOURCE_INVALID');
+
+    const foreignDraftResponse = await request(application.getHttpServer())
+      .post('/api/v1/finance/financial-documents')
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', `financial-document-usd-${runId}`)
+      .send({
+        ...manualInput,
+        currencyCode: 'USD',
+        exchangeRate: '1',
+        rateSource: 'BNB',
+      })
+      .expect(201);
+    expect(foreignDraftResponse.body as FinancialDocument).toMatchObject({
+      currencyCode: 'USD',
+      eurGrossTotal: '11.0400',
+      exchangeRate: '0.92000000',
+      grossTotal: '12.0000',
+      rateDate: issueDate,
+      rateSource: 'BNB',
+    });
 
     const creditInput = {
       ...manualInput,
@@ -2312,7 +2671,7 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
         businessLocationId: scope.locationId,
         correctionOfDocumentId: invoice.id,
         correctionReason: 'One damaged unit was returned before legal issuance.',
-        currencyCode: 'BGN',
+        currencyCode: 'EUR',
         customerPartnerId: customerId,
         documentType: 'credit_note',
         exchangeRate: '1',
@@ -2330,7 +2689,7 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
           },
         ],
         rateDate: issueDate,
-        rateSource: 'internal_bgn',
+        rateSource: 'internal_eur',
         taxEventDate: issueDate,
       })
       .expect(201);
@@ -2393,7 +2752,7 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
       .get('/api/v1/finance/financial-documents?page=1&pageSize=10')
       .set('authorization', `Bearer ${token}`)
       .expect(200);
-    expect(register.body).toMatchObject({ page: 1, pageSize: 10, totalItems: 7 });
+    expect(register.body).toMatchObject({ page: 1, pageSize: 10, totalItems: 8 });
 
     const searchedDocuments = await request(application.getHttpServer())
       .get(`/api/v1/finance/financial-documents?search=${encodeURIComponent(proformaNumbers[0]!)}`)
@@ -2410,7 +2769,7 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
          (SELECT count(*)::text FROM integration.outbox_events
           WHERE event_type LIKE 'finance.financial-document.%') AS outbox_count`,
     );
-    expect(evidence.rows[0]).toEqual({ audit_count: '8', outbox_count: '8' });
+    expect(evidence.rows[0]).toEqual({ audit_count: '9', outbox_count: '9' });
 
     const concurrentCredits = await Promise.all(
       ['A', 'B'].map((suffix) =>
@@ -2440,6 +2799,316 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
       .set('idempotency-key', `qa-credit-cleanup-${runId}`)
       .send({ cancellationReason: 'QA concurrency verification completed.', expectedVersion: 1 })
       .expect(200);
+
+    await request(application.getHttpServer())
+      .post(`/api/v1/finance/financial-documents/${invoice.id}/issue`)
+      .set('authorization', `Bearer ${viewerToken}`)
+      .set('idempotency-key', `financial-document-issue-denied-${runId}`)
+      .send({ expectedVersion: 1 })
+      .expect(403);
+    const issueKey = `financial-document-issue-${runId}`;
+    const issuedResponse = await request(application.getHttpServer())
+      .post(`/api/v1/finance/financial-documents/${invoice.id}/issue`)
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', issueKey)
+      .send({ expectedVersion: 1 })
+      .expect(200);
+    const issuedInvoice = issuedResponse.body as FinancialDocument;
+    expect(issuedInvoice).toMatchObject({
+      officialNumber: '0000000001',
+      status: 'issued',
+      version: 2,
+    });
+    expect(issuedInvoice.issuedAt).toBeTruthy();
+
+    const officialPdf = await request(application.getHttpServer())
+      .get(`/api/v1/finance/financial-documents/${invoice.id}/pdf`)
+      .set('authorization', `Bearer ${token}`)
+      .expect('Content-Type', /application\/pdf/u)
+      .expect(200);
+    expect(Number(officialPdf.headers['content-length'])).toBeGreaterThan(500);
+    const officialPdfContent = Buffer.from(officialPdf.body as Buffer);
+    expect(officialPdfContent.subarray(0, 4).toString()).toBe('%PDF');
+
+    const documentRecipient = `document-${runId}@example.invalid`;
+    const documentEmailKey = `financial-document-email-${runId}`;
+    const queuedDocumentEmail = await request(application.getHttpServer())
+      .post(`/api/v1/finance/financial-documents/${invoice.id}/email`)
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', documentEmailKey)
+      .send({ expectedVersion: issuedInvoice.version, recipientEmail: documentRecipient })
+      .expect(202);
+    expect(queuedDocumentEmail.body).toMatchObject({
+      recipientEmail: documentRecipient,
+      status: 'queued',
+    });
+    await request(application.getHttpServer())
+      .post(`/api/v1/finance/financial-documents/${invoice.id}/email`)
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', documentEmailKey)
+      .send({ expectedVersion: issuedInvoice.version, recipientEmail: documentRecipient })
+      .expect(202);
+    const queuedDocumentMessages = await database.query<{
+      attempt_count: number;
+      id: string;
+      payload: { attachment?: { contentBase64: string; fileName: string }; text: string };
+      status: string;
+    }>(
+      `SELECT id, status, attempt_count, payload FROM notifications.messages
+       WHERE channel = 'email' AND payload->>'to' = $1`,
+      [documentRecipient],
+    );
+    expect(queuedDocumentMessages.rows).toHaveLength(1);
+    const queuedDocumentMessage = queuedDocumentMessages.rows[0];
+    if (!queuedDocumentMessage) throw new Error('Financial document email was not queued');
+    expect(queuedDocumentMessage).toMatchObject({ status: 'pending', attempt_count: 0 });
+    expect(queuedDocumentMessage.payload).toMatchObject({
+      attachment: { fileName: `${issuedInvoice.officialNumber}.pdf` },
+    });
+    expect(queuedDocumentMessage.payload.text).toContain('Прикачен е Вашият документ');
+
+    failNextEmailDelivery = true;
+    const notificationDispatcher = application.get(NotificationDispatcherService);
+    await expect(notificationDispatcher.dispatch(queuedDocumentMessage.id, true)).rejects.toThrow(
+      'Temporary SMTP outage',
+    );
+    const retryableEmail = await database.query<{ attempt_count: number; status: string }>(
+      'SELECT status, attempt_count FROM notifications.messages WHERE id = $1',
+      [queuedDocumentMessage.id],
+    );
+    expect(retryableEmail.rows[0]).toEqual({ status: 'pending', attempt_count: 1 });
+    const emailCountBeforeDocumentDelivery = deliveredEmails.length;
+    await notificationDispatcher.dispatch(queuedDocumentMessage.id, true);
+    expect(deliveredEmails).toHaveLength(emailCountBeforeDocumentDelivery + 1);
+    expect(deliveredEmails.at(-1)).toMatchObject({
+      attachment: { fileName: `${issuedInvoice.officialNumber}.pdf`, mediaType: 'application/pdf' },
+      to: documentRecipient,
+    });
+    expect(deliveredEmails.at(-1)?.attachment?.content.subarray(0, 4).toString()).toBe('%PDF');
+    const deliveredDocumentEmail = await database.query<{ attempt_count: number; status: string }>(
+      'SELECT status, attempt_count FROM notifications.messages WHERE id = $1',
+      [queuedDocumentMessage.id],
+    );
+    expect(deliveredDocumentEmail.rows[0]).toEqual({ status: 'delivered', attempt_count: 2 });
+
+    const issueReplay = await request(application.getHttpServer())
+      .post(`/api/v1/finance/financial-documents/${invoice.id}/issue`)
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', issueKey)
+      .send({ expectedVersion: 1 })
+      .expect(200);
+    expect((issueReplay.body as FinancialDocument).officialNumber).toBe('0000000001');
+    await request(application.getHttpServer())
+      .post(`/api/v1/finance/financial-documents/${invoice.id}/cancel`)
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', `financial-document-issued-cancel-${runId}`)
+      .send({ cancellationReason: 'This must not cancel a legal document.', expectedVersion: 2 })
+      .expect(409);
+
+    const issuedCorrectionResponse = await request(application.getHttpServer())
+      .post('/api/v1/finance/financial-documents')
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', `financial-document-issued-credit-${runId}`)
+      .send({
+        ...creditInput,
+        correctionOfDocumentId: invoice.id,
+        correctionReason: 'Correction against the issued invoice.',
+      });
+    expect(issuedCorrectionResponse.status, JSON.stringify(issuedCorrectionResponse.body)).toBe(
+      201,
+    );
+    const issuedCorrectionDraft = issuedCorrectionResponse.body as FinancialDocument;
+    const issuedCorrection = (
+      await request(application.getHttpServer())
+        .post(`/api/v1/finance/financial-documents/${issuedCorrectionDraft.id}/issue`)
+        .set('authorization', `Bearer ${token}`)
+        .set('idempotency-key', `financial-document-issued-credit-issue-${runId}`)
+        .send({ expectedVersion: 1 })
+        .expect(200)
+    ).body as FinancialDocument;
+    expect(issuedCorrection).toMatchObject({
+      correctionOf: { id: invoice.id },
+      officialNumber: '0000000002',
+      status: 'issued',
+    });
+
+    const concurrentIssueDrafts = await Promise.all(
+      ['A', 'B'].map(async (suffix) => {
+        const response = await request(application.getHttpServer())
+          .post('/api/v1/finance/financial-documents')
+          .set('authorization', `Bearer ${token}`)
+          .set('idempotency-key', `concurrent-issued-invoice-${suffix}-${runId}`)
+          .send(manualInput)
+          .expect(201);
+        return response.body as FinancialDocument;
+      }),
+    );
+    const concurrentlyIssued = await Promise.all(
+      concurrentIssueDrafts.map((draft, index) =>
+        request(application.getHttpServer())
+          .post(`/api/v1/finance/financial-documents/${draft.id}/issue`)
+          .set('authorization', `Bearer ${token}`)
+          .set('idempotency-key', `concurrent-issued-number-${index}-${runId}`)
+          .send({ expectedVersion: 1 })
+          .expect(200),
+      ),
+    );
+    const concurrentOfficialNumbers = concurrentlyIssued.map(
+      ({ body }) => (body as FinancialDocument).officialNumber,
+    );
+    expect(new Set(concurrentOfficialNumbers).size).toBe(2);
+    expect(concurrentOfficialNumbers.sort()).toEqual(['0000000003', '0000000004']);
+
+    const issuedIncomeExport = (
+      await request(application.getHttpServer())
+        .post('/api/v1/finance/report-exports')
+        .set('authorization', `Bearer ${token}`)
+        .set('idempotency-key', `issued-income-export-${runId}`)
+        .send({
+          dateFrom: issueDate,
+          dateTo: issueDate,
+          definitionKey: 'finance.income',
+          format: 'csv',
+        })
+        .expect(202)
+    ).body as FinanceReportExport;
+    const reportHandlers = application.get(JobHandlerRegistry);
+    await reportHandlers.execute({
+      attemptNumber: 1,
+      correlationId: `issued-income-export-job-${runId}`,
+      enqueuedAt: new Date().toISOString(),
+      idempotencyKey: `finance-report-export:${issuedIncomeExport.id}`,
+      jobId: `issued-income-export-job-${runId}`,
+      maxAttempts: 5,
+      name: 'report.generate',
+      payload: { exportId: issuedIncomeExport.id },
+      retryAllowed: true,
+    });
+    const issuedIncomeCsv = await request(application.getHttpServer())
+      .get(`/api/v1/finance/report-exports/${issuedIncomeExport.id}/content`)
+      .set('authorization', `Bearer ${token}`)
+      .expect(200);
+    expect(issuedIncomeCsv.text).toContain('0000000001,0000000001,');
+    const invoiceExportRow = issuedIncomeCsv.text
+      .split(/\r?\n/u)
+      .find((line: string) => line.startsWith('0000000001,0000000001,'));
+    expect(invoiceExportRow?.split(',')[4]).toBe('');
+    expect(issuedIncomeCsv.text).not.toContain(registerScopedInvoice.number);
+  });
+
+  it('applies dated BNB rates to foreign-currency Finance drafts and payables', async () => {
+    const rateDate = (
+      await database.query<{ date: string }>(
+        "SELECT (now() AT TIME ZONE 'Europe/Sofia')::date::text AS date",
+      )
+    ).rows[0]?.date;
+    if (!rateDate) throw new Error('Finance test date is unavailable');
+    await database.query(
+      `INSERT INTO finance.currency_rates (currency_code, rate_date, eur_per_unit)
+       VALUES ('GBP', $1, 1.10000000)`,
+      [rateDate],
+    );
+
+    const rateResponse = await request(application.getHttpServer())
+      .get(
+        `/api/v1/finance/financial-documents/exchange-rate?currencyCode=GBP&rateDate=${rateDate}`,
+      )
+      .set('authorization', `Bearer ${token}`)
+      .expect(200);
+    expect(rateResponse.body).toEqual({
+      currencyCode: 'GBP',
+      exchangeRate: '1.10000000',
+      rateDate,
+      rateSource: 'BNB',
+    });
+
+    const referenceData = (
+      await request(application.getHttpServer())
+        .get('/api/v1/finance/financial-documents/reference-data')
+        .set('authorization', `Bearer ${token}`)
+        .expect(200)
+    ).body as FinancialDocumentReferenceData;
+    const scope = referenceData.scopes[0];
+    const unitCode = referenceData.products.find((product) => product.id === productId)?.unitCode;
+    if (!scope || !unitCode)
+      throw new Error('Finance references are unavailable for the rate test');
+
+    const financialDraft = await request(application.getHttpServer())
+      .post('/api/v1/finance/financial-documents')
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', `financial-document-usd-snapshot-${runId}`)
+      .send({
+        businessLocationId: scope.locationId,
+        currencyCode: 'GBP',
+        customerPartnerId: customerId,
+        documentType: 'invoice',
+        dueDate: rateDate,
+        exchangeRate: '1',
+        issueDate: rateDate,
+        legalEntityId: scope.legalEntityId,
+        lines: [
+          {
+            description: 'Foreign-currency rate check',
+            discountPercent: '0',
+            productId,
+            quantity: '1',
+            unitCode,
+            unitPrice: '10',
+            vatTreatment: 'standard_20',
+          },
+        ],
+        rateDate,
+        rateSource: 'BNB',
+        taxEventDate: rateDate,
+      })
+      .expect(201);
+    expect(financialDraft.body as FinancialDocument).toMatchObject({
+      currencyCode: 'GBP',
+      eurGrossTotal: '13.2000',
+      exchangeRate: '1.10000000',
+      grossTotal: '12.0000',
+      rateDate,
+      rateSource: 'BNB',
+    });
+
+    const supplierInvoiceId = await seedSupplierInvoiceEvidence(
+      database,
+      creatorAccountId,
+      customerId,
+      warehouseId,
+      productId,
+      rateDate,
+      `usd-${runId}`,
+      'GBP',
+    );
+    const payableResponse = await request(application.getHttpServer())
+      .post('/api/v1/finance/supplier-payables')
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', `finance-supplier-payable-usd-${runId}`)
+      .send({ dueDate: rateDate, supplierInvoiceId })
+      .expect(201);
+    const payable = payableResponse.body as FinanceSupplierPayable;
+    expect(payable).toMatchObject({
+      currencyCode: 'GBP',
+      eurTotal: '105.6000',
+      exchangeRate: '1.10000000',
+      rateDate,
+      rateSource: 'BNB',
+      total: '96.0000',
+    });
+
+    const paymentResponse = await request(application.getHttpServer())
+      .post(`/api/v1/finance/supplier-payables/${payable.id}/payments`)
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', `finance-supplier-payment-usd-${runId}`)
+      .send({ amount: '10', paymentDate: rateDate, paymentMethod: 'bank_transfer' })
+      .expect(201);
+    expect(paymentResponse.body).toMatchObject({
+      allocatedTotal: '10.0000',
+      currencyCode: 'GBP',
+      outstandingTotal: '86.0000',
+      payments: [expect.objectContaining({ amount: '10.0000', currencyCode: 'GBP' })],
+    });
   });
 
   it('protects historical cash balances and rejects future advances', async () => {
@@ -2562,7 +3231,7 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
       .set('idempotency-key', `pricing-general-${runId}`)
       .send({
         code: `GENERAL-${runId.slice(0, 8)}`,
-        currencyCode: 'bgn',
+        currencyCode: 'eur',
         lines: [{ productId, unitPrice: '30' }],
         name: `General prices ${runId}`,
         priority: 10,
@@ -2576,7 +3245,7 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
     const groupPriceInput = {
       campaignId: campaign.id,
       code: `TRADE-PL-${runId.slice(0, 8)}`,
-      currencyCode: 'BGN',
+      currencyCode: 'EUR',
       customerGroupId: group.id,
       lines: [{ productId, unitPrice: '25' }],
       name: `Trade campaign prices ${runId}`,
@@ -2595,7 +3264,7 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
 
     const resolvedResponse = await request(application.getHttpServer())
       .get(
-        `/api/v1/sales/prices/resolve?asOf=2099-06-01&currencyCode=BGN&customerPartnerId=${customerId}&productId=${productId}`,
+        `/api/v1/sales/prices/resolve?asOf=2099-06-01&currencyCode=EUR&customerPartnerId=${customerId}&productId=${productId}`,
       )
       .set('authorization', `Bearer ${token}`)
       .expect(200);
@@ -2605,7 +3274,7 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
       priority: 20,
       unitPrice: '25.0000',
     });
-    const financePricePath = `/api/v1/finance/financial-documents/prices/resolve?asOf=2099-06-01&currencyCode=BGN&customerPartnerId=${customerId}&productId=${productId}`;
+    const financePricePath = `/api/v1/finance/financial-documents/prices/resolve?asOf=2099-06-01&currencyCode=EUR&customerPartnerId=${customerId}&productId=${productId}`;
     await request(application.getHttpServer()).get(financePricePath).expect(401);
     const financePrice = await request(application.getHttpServer())
       .get(financePricePath)
@@ -2613,19 +3282,19 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
       .expect(200);
     expect(financePrice.body).toEqual(resolvedResponse.body);
     const financeForeignPrice = await request(application.getHttpServer())
-      .get(financePricePath.replace('currencyCode=BGN', 'currencyCode=EUR'))
+      .get(financePricePath.replace('currencyCode=EUR', 'currencyCode=USD'))
       .set('authorization', `Bearer ${token}`)
       .expect(200);
-    expect(financeForeignPrice.body).toMatchObject({ currencyCode: 'EUR', matched: false });
+    expect(financeForeignPrice.body).toMatchObject({ currencyCode: 'USD', matched: false });
 
     const differentCurrencyResponse = await request(application.getHttpServer())
       .get(
-        `/api/v1/sales/prices/resolve?asOf=2099-06-01&currencyCode=EUR&customerPartnerId=${customerId}&productId=${productId}`,
+        `/api/v1/sales/prices/resolve?asOf=2099-06-01&currencyCode=USD&customerPartnerId=${customerId}&productId=${productId}`,
       )
       .set('authorization', `Bearer ${token}`)
       .expect(200);
     expect(differentCurrencyResponse.body as SalesResolvedPrice).toMatchObject({
-      currencyCode: 'EUR',
+      currencyCode: 'USD',
       matched: false,
       productId,
     });
@@ -2679,7 +3348,7 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
 
     const fallbackResponse = await request(application.getHttpServer())
       .get(
-        `/api/v1/sales/prices/resolve?asOf=2099-06-01&currencyCode=BGN&customerPartnerId=${customerId}&productId=${productId}`,
+        `/api/v1/sales/prices/resolve?asOf=2099-06-01&currencyCode=EUR&customerPartnerId=${customerId}&productId=${productId}`,
       )
       .set('authorization', `Bearer ${token}`)
       .expect(200);
@@ -2842,9 +3511,9 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
       legalEntityId: subscriptionScope.legalEntityId,
       customerPartnerId: customerId,
       documentType: 'invoice',
-      currencyCode: 'BGN',
+      currencyCode: 'EUR',
       exchangeRate: '1',
-      rateSource: 'internal_bgn',
+      rateSource: 'internal_eur',
       issueDate: '2026-08-12',
       dueDate: '2026-08-26',
       rateDate: '2026-08-12',
@@ -3179,7 +3848,7 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
       `INSERT INTO crm.sla_policies (
          id, name, priority, response_minutes, resolution_minutes,
          risk_threshold_percent, escalation_account_id
-       ) VALUES ($1,'Integration test SLA','normal',60,240,80,$2)`,
+       ) VALUES ($1,'Integration test SLA','normal',240,960,75,$2)`,
       [policyId, viewerAccountId],
     );
 
@@ -3297,9 +3966,9 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
     });
 
     await database.query(
-      `UPDATE crm.tickets SET created_at = now() - INTERVAL '5 hours',
-         response_due_at = now() - INTERVAL '4 hours',
-         resolution_due_at = now() - INTERVAL '1 hour'
+      `UPDATE crm.tickets SET created_at = '2026-08-26T08:00:00Z'::timestamptz,
+         response_due_at = '2026-08-26T12:00:00Z'::timestamptz,
+         resolution_due_at = '2026-08-28T08:00:00Z'::timestamptz
        WHERE id = $1`,
       [fromService.id],
     );
@@ -3307,16 +3976,28 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
     const slaJob = {
       attemptNumber: 1,
       correlationId: `crm-sla-${runId}`,
-      enqueuedAt: '2026-08-26T12:00:00.000Z',
+      enqueuedAt: '2026-08-26T11:01:00.000Z',
       idempotencyKey: `crm-sla-risk-${runId}`,
       jobId: `crm-sla-risk-${runId}`,
       maxAttempts: 5,
       name: 'crm.sla.evaluate',
-      payload: { asOf: new Date(Date.now() - 90 * 60_000).toISOString() },
+      payload: { asOf: '2026-08-26T11:01:00.000Z' },
       retryAllowed: true,
     } as const;
     const riskResult = await handlers.execute(slaJob);
-    expect(riskResult).toMatchObject({ notificationCount: 3 });
+    // Four business hours starts at 11:00 Sofia; 75% elapsed by 14:00.
+    // Both the ticket owner and CRM escalation contact receive the at-risk alert.
+    expect(riskResult).toMatchObject({ notificationCount: 2 });
+    const riskRecipients = await database.query<{ recipient_account_id: string }>(
+      `SELECT recipient_account_id
+       FROM crm.sla_events
+       WHERE ticket_id = $1 AND timer_type = 'response' AND event_type = 'at_risk'
+       ORDER BY recipient_account_id`,
+      [fromService.id],
+    );
+    expect(riskRecipients.rows.map((row) => row.recipient_account_id)).toEqual(
+      [creatorAccountId, viewerAccountId].sort(),
+    );
     await expect(handlers.execute({ ...slaJob, attemptNumber: 2 })).resolves.toMatchObject({
       deduplicated: true,
       notificationCount: 0,
@@ -3326,7 +4007,7 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
       ...slaJob,
       idempotencyKey: `crm-sla-breached-${runId}`,
       jobId: `crm-sla-breached-${runId}`,
-      payload: { asOf: new Date(Date.now() + 60_000).toISOString() },
+      payload: { asOf: '2026-08-26T12:01:00.000Z' },
     } as const;
     const breachResult = await handlers.execute(breachJob);
     expect(breachResult).toMatchObject({ notificationCount: 2 });
@@ -3335,10 +4016,48 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
       notificationCount: 0,
     });
 
+    const resolutionRiskJob = {
+      ...slaJob,
+      enqueuedAt: '2026-08-27T12:01:00.000Z',
+      idempotencyKey: `crm-sla-resolution-risk-${runId}`,
+      jobId: `crm-sla-resolution-risk-${runId}`,
+      payload: { asOf: '2026-08-27T12:01:00.000Z' },
+    } as const;
+    const resolutionRiskResult = await handlers.execute(resolutionRiskJob);
+    expect(resolutionRiskResult).toMatchObject({
+      notificationCount: 2,
+    });
+    await expect(
+      handlers.execute({ ...resolutionRiskJob, attemptNumber: 2 }),
+    ).resolves.toMatchObject({
+      deduplicated: true,
+      notificationCount: 0,
+    });
+
+    const resolutionBreachJob = {
+      ...slaJob,
+      enqueuedAt: '2026-08-28T08:01:00.000Z',
+      idempotencyKey: `crm-sla-resolution-breach-${runId}`,
+      jobId: `crm-sla-resolution-breach-${runId}`,
+      payload: { asOf: '2026-08-28T08:01:00.000Z' },
+    } as const;
+    const resolutionBreachResult = await handlers.execute(resolutionBreachJob);
+    expect(resolutionBreachResult).toMatchObject({
+      notificationCount: 2,
+    });
+    await expect(
+      handlers.execute({ ...resolutionBreachJob, attemptNumber: 2 }),
+    ).resolves.toMatchObject({
+      deduplicated: true,
+      notificationCount: 0,
+    });
+
     const dispatcher = application.get(NotificationDispatcherService);
     for (const notificationId of [
       ...(riskResult as { notificationIds: string[] }).notificationIds,
       ...(breachResult as { notificationIds: string[] }).notificationIds,
+      ...(resolutionRiskResult as { notificationIds: string[] }).notificationIds,
+      ...(resolutionBreachResult as { notificationIds: string[] }).notificationIds,
     ]) {
       await dispatcher.dispatch(notificationId);
     }
@@ -3371,7 +4090,7 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
       .set('authorization', `Bearer ${token}`)
       .expect(200);
     const ticketDetail = ticketDetailResponse.body as CrmTicket;
-    expect(ticketDetail.slaEvents).toHaveLength(5);
+    expect(ticketDetail.slaEvents).toHaveLength(8);
     expect(ticketDetail.slaEvents).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -3417,11 +4136,11 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
     );
     expect(evidence.rows[0]).toEqual({
       audit_count: '4',
-      delivered_count: '5',
+      delivered_count: '8',
       link_count: '2',
-      notification_count: '5',
+      notification_count: '8',
       outbox_count: '4',
-      sla_event_count: '5',
+      sla_event_count: '8',
       ticket_count: '2',
     });
   });
@@ -3957,18 +4676,25 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
     const ready = readyResponse.body as ServiceWorkOrder;
     const completionInput = {
       completionNotes: 'Repaired the display connection and verified normal operation.',
+      customerLaborChargeEur: '50',
+      customerTransportChargeEur: '0',
       expectedVersion: ready.version,
-      laborCostBgn: '40',
+      laborCostEur: '40',
       parts: [
-        { productId, quantity: '1' },
-        { batchNumber: batchPart.batchNumber, productId: batchPart.productId, quantity: '1' },
+        { customerUnitPriceEur: '15', productId, quantity: '1' },
+        {
+          batchNumber: batchPart.batchNumber,
+          customerUnitPriceEur: '20',
+          productId: batchPart.productId,
+          quantity: '1',
+        },
       ],
       signatureImageDataUrl: `data:image/png;base64,${tinyPng.toString('base64')}`,
       signerName: 'Elena Stoyanova',
       timeEntries: [
         { minutes: 30, note: 'On-site repair and verification.', workDate: '2026-08-14' },
       ],
-      transportCostBgn: '10',
+      transportCostEur: '10',
     };
     const unknownBatch = await request(application.getHttpServer())
       .post(`/api/v1/service/work-orders/${ready.id}/complete`)
@@ -3979,6 +4705,7 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
         parts: [
           {
             batchNumber: `UNKNOWN-${runId.slice(0, 8)}`,
+            customerUnitPriceEur: '20',
             productId: batchPart.productId,
             quantity: '1',
           },
@@ -4003,6 +4730,16 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
     );
     expect(unchangedBatchBalance.rows[0]?.quantity).toBe('5.0000');
 
+    const forbiddenWarrantyTransport = await request(application.getHttpServer())
+      .post(`/api/v1/service/work-orders/${ready.id}/complete`)
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', `service-warranty-transport-${runId}`)
+      .send({ ...completionInput, customerTransportChargeEur: '5' })
+      .expect(400);
+    expect(forbiddenWarrantyTransport.body.error.code).toBe(
+      'SERVICE_WARRANTY_TRANSPORT_CHARGE_NOT_ALLOWED',
+    );
+
     const completionKey = `service-complete-${runId}`.padEnd(200, 'x');
     const completedResponse = await request(application.getHttpServer())
       .post(`/api/v1/service/work-orders/${ready.id}/complete`)
@@ -4012,15 +4749,34 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
       .expect(200);
     const completed = completedResponse.body as ServiceWorkOrder;
     expect(completed).toMatchObject({
-      laborCostBgn: '40.0000',
+      laborCostEur: '40.0000',
       laborMinutes: 30,
-      partsCostBgn: '14.0000',
+      partsCostEur: '14.0000',
+      customerChargeRecorded: true,
+      customerLaborChargeEur: '50.0000',
+      customerPartsChargeEur: '35.0000',
+      customerTransportChargeEur: '0.0000',
       photos: [expect.objectContaining({ fileName: 'display-check.png' })],
       signature: { signerName: 'Elena Stoyanova' },
       status: 'completed',
-      totalCostBgn: '64.0000',
-      transportCostBgn: '10.0000',
+      totalCostEur: '64.0000',
+      totalCustomerChargeEur: '85.0000',
+      transportCostEur: '10.0000',
     });
+    expect(completed.totalCustomerChargeEur).not.toBe(completed.totalCostEur);
+    const completedServiceReport = await request(application.getHttpServer())
+      .get('/api/v1/service/reports/overview?dateFrom=2026-01-01&dateTo=2099-12-31')
+      .set('authorization', `Bearer ${token}`)
+      .expect(200);
+    expect(completedServiceReport.body.totals.completedRequests).toBeGreaterThanOrEqual(1);
+    expect(completedServiceReport.body.totals.laborMinutes).toBeGreaterThanOrEqual(30);
+    const technicianSummary = (
+      completedServiceReport.body as {
+        technicians: Array<{ completedCount: unknown; laborMinutes: unknown }>;
+      }
+    ).technicians[0];
+    expect(typeof technicianSummary?.completedCount).toBe('number');
+    expect(typeof technicianSummary?.laborMinutes).toBe('number');
     const afterServiceOverviewResponse = await request(application.getHttpServer())
       .get('/api/v1/crm/after-sales')
       .set('authorization', `Bearer ${token}`)
@@ -4329,28 +5085,24 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
     const serviceDraft = financeReferences.serviceDrafts.find((draft) => draft.id === completed.id);
     const financeScope = financeReferences.scopes[0];
     expect(serviceDraft).toMatchObject({
-      currencyCode: 'BGN',
+      currencyCode: 'EUR',
       customerPartnerId: customerId,
       linkedDocumentTypes: [],
       number: completed.number,
-      total: '64.0000',
+      total: '85.0000',
     });
-    expect(serviceDraft?.lines).toHaveLength(4);
+    expect(serviceDraft?.lines).toHaveLength(3);
     expect(serviceDraft?.lines).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           description: `Service labour · ${completed.number}`,
-          unitPrice: '40.0000',
+          unitPrice: '50.0000',
         }),
-        expect.objectContaining({ productId, quantity: '1.0000', unitPrice: '7.0000' }),
+        expect.objectContaining({ productId, quantity: '1.0000', unitPrice: '15.0000' }),
         expect.objectContaining({
           productId: batchPart.productId,
           quantity: '1.0000',
-          unitPrice: '7.0000',
-        }),
-        expect.objectContaining({
-          description: `Transport · ${completed.number}`,
-          unitPrice: '10.0000',
+          unitPrice: '20.0000',
         }),
       ]),
     );
@@ -4364,7 +5116,7 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
     if (!businessDate) throw new Error('Finance business date was not available');
     const serviceInvoiceInput = {
       businessLocationId: financeScope.locationId,
-      currencyCode: 'BGN',
+      currencyCode: 'EUR',
       customerPartnerId: customerId,
       documentType: 'invoice',
       dueDate: businessDate,
@@ -4373,7 +5125,7 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
       legalEntityId: financeScope.legalEntityId,
       lines: serviceDraft.lines,
       rateDate: businessDate,
-      rateSource: 'internal_bgn',
+      rateSource: 'internal_eur',
       sourceServiceWorkOrderId: completed.id,
       taxEventDate: businessDate,
     };
@@ -4399,9 +5151,9 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
       .expect(201);
     const financeDraft = financeDraftResponse.body as FinancialDocument;
     expect(financeDraft).toMatchObject({
-      bgnGrossTotal: '76.8000',
-      bgnNetTotal: '64.0000',
-      bgnVatTotal: '12.8000',
+      eurGrossTotal: '102.0000',
+      eurNetTotal: '85.0000',
+      eurVatTotal: '17.0000',
       sourceServiceWorkOrderId: completed.id,
       sourceServiceWorkOrderNumber: completed.number,
       status: 'draft',
@@ -4549,7 +5301,7 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
       warranties: number;
     }>(
       `SELECT
-        (SELECT coalesce(sum(CASE WHEN document_type='credit_note' THEN -bgn_net_total ELSE bgn_net_total END),0)::text
+        (SELECT coalesce(sum(CASE WHEN document_type='credit_note' THEN -eur_net_total ELSE eur_net_total END),0)::text
          FROM finance.financial_documents WHERE status NOT IN ('draft', 'cancelled')
          AND official_number IS NOT NULL AND document_type IN ('invoice','credit_note','debit_note')
          AND issue_date BETWEEN '2026-01-01' AND '2099-12-31') AS revenue,
@@ -4561,8 +5313,8 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
       [summary.asOf],
     );
     expect(summary).toMatchObject({
-      recordedRevenueBgn: expected.rows[0]?.revenue,
-      overdueReceivablesBgn: expected.rows[0]?.overdue,
+      recordedRevenueEur: expected.rows[0]?.revenue,
+      overdueReceivablesEur: expected.rows[0]?.overdue,
       activeServiceRequests: expected.rows[0]?.service,
       expiringWarranties: expected.rows[0]?.warranties,
     });
@@ -4572,7 +5324,7 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
       .expect(200);
     expect(restricted.body.activeServiceRequests).toBeUndefined();
     expect(restricted.body.expiringWarranties).toBeUndefined();
-    expect(restricted.body.recordedRevenueBgn).toBe(summary.recordedRevenueBgn);
+    expect(restricted.body.recordedRevenueEur).toBe(summary.recordedRevenueEur);
     const crmEmail = `dashboard-crm-${runId}@example.invalid`;
     const crmAccount = await createAccount(
       database,
@@ -4585,8 +5337,8 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
       .get(path)
       .set('authorization', `Bearer ${crmToken}`)
       .expect(200);
-    expect(crmOnly.body.recordedRevenueBgn).toBeUndefined();
-    expect(crmOnly.body.overdueReceivablesBgn).toBeUndefined();
+    expect(crmOnly.body.recordedRevenueEur).toBeUndefined();
+    expect(crmOnly.body.overdueReceivablesEur).toBeUndefined();
     expect(crmOnly.body.activeServiceRequests).toBeUndefined();
     expect(crmOnly.body.expiringWarranties).toBe(summary.expiringWarranties);
     await request(application.getHttpServer())
@@ -4597,7 +5349,7 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
       .get('/api/v1/operations/overview?dateFrom=2100-01-01&dateTo=2100-01-01')
       .set('authorization', `Bearer ${token}`)
       .expect(200);
-    expect(Number(empty.body.recordedRevenueBgn)).toBe(0);
+    expect(Number(empty.body.recordedRevenueEur)).toBe(0);
     for (const query of [
       'dateFrom=2026-02-30&dateTo=2026-03-01',
       'dateFrom=2026-09-30&dateTo=2026-09-01',
@@ -4613,7 +5365,7 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
   it('saves private dashboard preferences with concurrent retry safety and restores defaults', async () => {
     const path = '/api/v1/operations/overview/preferences';
     const overviewPath = '/api/v1/operations/overview?dateFrom=2026-01-01&dateTo=2026-12-31';
-    const input = { hiddenCards: ['recordedRevenueBgn'], version: 0 };
+    const input = { hiddenCards: ['recordedRevenueEur'], version: 0 };
     await request(application.getHttpServer()).put(path).send(input).expect(401);
     const noAccessEmail = `overview-no-access-${runId}@example.invalid`;
     await createAccount(
@@ -4650,7 +5402,7 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
     expect(other.body.preferences).toEqual({ hiddenCards: [], version: 0 });
     for (const invalid of [
       { hiddenCards: ['invented'], version: 1 },
-      { hiddenCards: ['recordedRevenueBgn', 'recordedRevenueBgn'], version: 1 },
+      { hiddenCards: ['recordedRevenueEur', 'recordedRevenueEur'], version: 1 },
       { hiddenCards: [], version: -1 },
       { ...input, ownerAccountId: randomUUID() },
     ]) {
@@ -4855,11 +5607,12 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
     expect(typeof overview.totals.completedRequests).toBe('number');
     expect(typeof overview.totals.laborMinutes).toBe('number');
     expect(typeof overview.totals.totalRequests).toBe('number');
-    expect(overview.totals.completedRequests).toBeGreaterThanOrEqual(1);
-    expect(overview.totals.laborMinutes).toBeGreaterThanOrEqual(30);
-    expect(overview.technicians.length).toBeGreaterThanOrEqual(1);
-    expect(typeof overview.technicians[0]?.completedCount).toBe('number');
-    expect(typeof overview.technicians[0]?.laborMinutes).toBe('number');
+    expect(
+      overview.technicians.every(
+        (technician) =>
+          Number.isFinite(technician.completedCount) && Number.isFinite(technician.laborMinutes),
+      ),
+    ).toBe(true);
 
     const definitionsResponse = await request(application.getHttpServer())
       .get('/api/v1/service/report-exports/definitions')
@@ -4946,7 +5699,7 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
     expect(downloaded.text).toContain('Service request register');
     expect(downloaded.text).toContain('Request');
     expect(downloaded.text).toContain('Customer');
-    expect(downloaded.text).not.toContain('Labour BGN');
+    expect(downloaded.text).not.toContain('Labour EUR');
     expect(downloaded.text).not.toContain('Device and serial');
     const stored = await database.query<{ filters: { columns: string[] } }>(
       'SELECT filters FROM reporting.export_jobs WHERE id = $1',
@@ -5563,9 +6316,177 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
     });
   });
 
+  it('converts a paid Sales proforma to one linked official invoice exactly once', async () => {
+    const businessDate = (
+      await database.query<{ date: string }>(
+        "SELECT (now() AT TIME ZONE 'Europe/Sofia')::date::text AS date",
+      )
+    ).rows[0]?.date;
+    if (!businessDate) throw new Error('Finance test date is unavailable');
+
+    const quotation = (
+      await request(application.getHttpServer())
+        .post('/api/v1/sales/quotations')
+        .set('authorization', `Bearer ${token}`)
+        .set('idempotency-key', `proforma-conversion-quotation-${runId}`)
+        .send({
+          currencyCode: 'EUR',
+          customerPartnerId: customerId,
+          lines: [
+            {
+              discountPercent: '0',
+              productId,
+              quantity: '1',
+              unitPrice: '20',
+              vatTreatment: 'standard_20',
+            },
+          ],
+          overallDiscountPercent: '0',
+          validUntil: '2099-12-31',
+          warehouseId,
+        })
+        .expect(201)
+    ).body as SalesWorkflow;
+    const confirmed = (
+      await request(application.getHttpServer())
+        .post(`/api/v1/sales/quotations/${quotation.id}/confirm`)
+        .set('authorization', `Bearer ${token}`)
+        .set('idempotency-key', `proforma-conversion-confirm-${runId}`)
+        .send({ lines: quotation.lines.map((line) => ({ quotationLineId: line.id })) })
+        .expect(201)
+    ).body as SalesWorkflow;
+    const shipped = (
+      await request(application.getHttpServer())
+        .post(`/api/v1/sales/orders/${confirmed.order?.id}/shipments`)
+        .set('authorization', `Bearer ${token}`)
+        .set('idempotency-key', `proforma-conversion-shipment-${runId}`)
+        .send({ lines: confirmed.order?.lines.map((line) => ({ orderLineId: line.id })) })
+        .expect(201)
+    ).body as SalesWorkflow;
+    if (!shipped.handover)
+      throw new Error('The shipped order did not produce a handover certificate');
+    const handedOver = await request(application.getHttpServer())
+      .post(`/api/v1/sales/handover-certificates/${shipped.handover.id}/accept`)
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', `proforma-conversion-handover-${runId}`)
+      .send({
+        acceptedByName: 'Finance Integration Tester',
+        customerLocationId,
+        expectedVersion: shipped.handover.version,
+      })
+      .expect(200);
+    expect((handedOver.body as SalesWorkflow).handover?.status).toBe('accepted');
+    const invoiced = (
+      await request(application.getHttpServer())
+        .post(`/api/v1/sales/orders/${shipped.order?.id}/invoice-draft`)
+        .set('authorization', `Bearer ${token}`)
+        .set('idempotency-key', `proforma-conversion-sales-invoice-${runId}`)
+        .expect(201)
+    ).body as SalesWorkflow;
+    const salesInvoiceId = invoiced.invoice?.id;
+    if (!salesInvoiceId) throw new Error('The handed-over order did not produce a Sales invoice');
+
+    const financeReferences = (
+      await request(application.getHttpServer())
+        .get('/api/v1/finance/financial-documents/reference-data')
+        .set('authorization', `Bearer ${token}`)
+        .expect(200)
+    ).body as FinancialDocumentReferenceData;
+    const scope = financeReferences.scopes[0];
+    if (!scope) throw new Error('A Finance issuing scope was not available');
+    const proformaDraft = (
+      await request(application.getHttpServer())
+        .post('/api/v1/finance/financial-documents')
+        .set('authorization', `Bearer ${token}`)
+        .set('idempotency-key', `proforma-conversion-document-${runId}`)
+        .send({
+          businessLocationId: scope.locationId,
+          currencyCode: 'EUR',
+          customerPartnerId: customerId,
+          documentType: 'proforma',
+          dueDate: businessDate,
+          exchangeRate: '1',
+          issueDate: businessDate,
+          legalEntityId: scope.legalEntityId,
+          rateDate: businessDate,
+          rateSource: 'internal_eur',
+          sourceSalesInvoiceId: salesInvoiceId,
+          taxEventDate: businessDate,
+        })
+        .expect(201)
+    ).body as FinancialDocument;
+    const proforma = (
+      await request(application.getHttpServer())
+        .post(`/api/v1/finance/financial-documents/${proformaDraft.id}/issue`)
+        .set('authorization', `Bearer ${token}`)
+        .set('idempotency-key', `proforma-conversion-issue-${runId}`)
+        .send({ expectedVersion: proformaDraft.version })
+        .expect(200)
+    ).body as FinancialDocument;
+    expect(proforma).toMatchObject({ documentType: 'proforma', status: 'issued' });
+    expect(proforma).not.toHaveProperty('officialNumber');
+
+    const collection = (
+      await request(application.getHttpServer())
+        .post('/api/v1/finance/documents')
+        .set('authorization', `Bearer ${token}`)
+        .set('idempotency-key', `proforma-conversion-collection-${runId}`)
+        .send({ dueDate: businessDate, salesInvoiceId })
+        .expect(201)
+    ).body as FinanceCustomerDocument;
+    const paymentKey = `proforma-conversion-payment-${runId}`;
+    const paymentInput = {
+      amount: collection.total,
+      paymentDate: businessDate,
+      paymentMethod: 'bank_transfer',
+      paymentReference: `PROFORMA-${runId}`,
+    };
+    const paid = (
+      await request(application.getHttpServer())
+        .post(`/api/v1/finance/documents/${collection.id}/payments`)
+        .set('authorization', `Bearer ${token}`)
+        .set('idempotency-key', paymentKey)
+        .send(paymentInput)
+        .expect(201)
+    ).body as FinanceCustomerDocument;
+    expect(paid).toMatchObject({
+      financialDocument: { status: 'issued', type: 'invoice' },
+      outstandingTotal: '0.0000',
+      paymentStatus: 'paid',
+    });
+
+    const replay = (
+      await request(application.getHttpServer())
+        .post(`/api/v1/finance/documents/${collection.id}/payments`)
+        .set('authorization', `Bearer ${token}`)
+        .set('idempotency-key', paymentKey)
+        .send(paymentInput)
+        .expect(201)
+    ).body as FinanceCustomerDocument;
+    expect(replay.financialDocument?.id).toBe(paid.financialDocument?.id);
+
+    const converted = await database.query<{
+      conversion_count: string;
+      official_number: string;
+      source_proforma_id: string;
+    }>(
+      `SELECT count(*)::text AS conversion_count,
+              max(invoice.official_number) AS official_number,
+              max(invoice.converted_from_document_id::text) AS source_proforma_id
+       FROM finance.financial_documents invoice
+       WHERE invoice.converted_from_document_id = $1`,
+      [proforma.id],
+    );
+    expect(converted.rows[0]).toEqual({
+      conversion_count: '1',
+      official_number: paid.financialDocument?.number,
+      source_proforma_id: proforma.id,
+    });
+  });
+
   function quotationInput() {
     return {
-      currencyCode: 'BGN',
+      currencyCode: 'EUR',
       customerPartnerId: customerId,
       lines: [
         {
@@ -5593,7 +6514,7 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
     return {
       billingAmount: '120',
       billingFrequencyMonths: 1,
-      currencyCode: 'BGN',
+      currencyCode: 'EUR',
       customerLocationId,
       customerPartnerId: customerId,
       equipmentIds: [equipmentId],
@@ -5619,7 +6540,7 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
       dateFrom: '2026-09-01',
       dateTo: '2026-09-30',
       format: 'csv',
-      columns: ['partnerName', 'grossBgnTotal'],
+      columns: ['partnerName', 'grossEurTotal'],
     };
     const auth = { authorization: `Bearer ${token}` };
     const server = application.getHttpServer() as Parameters<typeof request>[0];
@@ -5842,7 +6763,7 @@ async function createAccount(pool: Pool, email: string, passwordHash: string) {
 async function grantPermissions(
   pool: Pool,
   accountId: string,
-  actions: Array<'create' | 'edit' | 'view'>,
+  actions: Array<'approve' | 'create' | 'edit' | 'view'>,
 ) {
   const roleId = randomUUID();
   await pool.query('INSERT INTO iam.roles (id, code, name) VALUES ($1, $2, $3)', [
@@ -5870,7 +6791,7 @@ async function grantPermissions(
 async function grantFinancePermissions(
   pool: Pool,
   accountId: string,
-  actions: Array<'create' | 'edit' | 'view'>,
+  actions: Array<'approve' | 'create' | 'edit' | 'view'>,
 ) {
   const roleId = randomUUID();
   await pool.query('INSERT INTO iam.roles (id, code, name) VALUES ($1, $2, $3)', [
@@ -6002,6 +6923,34 @@ async function grantLogisticsPermissions(
   ]);
 }
 
+async function grantProcurementPermissions(
+  pool: Pool,
+  accountId: string,
+  actions: Array<'create' | 'edit' | 'view'>,
+) {
+  const roleId = randomUUID();
+  await pool.query('INSERT INTO iam.roles (id, code, name) VALUES ($1, $2, $3)', [
+    roleId,
+    `procurement-${randomUUID()}`,
+    'Procurement trace test role',
+  ]);
+  for (const action of actions) {
+    const permission = await pool.query<{ id: string }>(
+      `INSERT INTO iam.permissions (id, module, action) VALUES ($1, 'erp.procurement', $2)
+       ON CONFLICT (module, action) DO UPDATE SET module = EXCLUDED.module RETURNING id`,
+      [randomUUID(), action],
+    );
+    await pool.query('INSERT INTO iam.role_permissions (role_id, permission_id) VALUES ($1, $2)', [
+      roleId,
+      permission.rows[0]?.id,
+    ]);
+  }
+  await pool.query('INSERT INTO iam.account_roles (account_id, role_id) VALUES ($1, $2)', [
+    accountId,
+    roleId,
+  ]);
+}
+
 async function seedSupplierInvoiceEvidence(
   pool: Pool,
   actorId: string,
@@ -6010,6 +6959,7 @@ async function seedSupplierInvoiceEvidence(
   productId: string,
   invoiceDate: string,
   runId: string,
+  currencyCode = 'EUR',
 ) {
   const purchaseOrderId = randomUUID();
   const purchaseOrderLineId = randomUUID();
@@ -6024,8 +6974,8 @@ async function seedSupplierInvoiceEvidence(
   await pool.query(
     `INSERT INTO procurement.purchase_orders (
        id, supplier_partner_id, warehouse_id, currency_code, status, created_by, updated_by
-     ) VALUES ($1, $2, $3, 'BGN', 'received', $4, $4)`,
-    [purchaseOrderId, supplierPartnerId, warehouseId, actorId],
+     ) VALUES ($1, $2, $3, $4, 'received', $5, $5)`,
+    [purchaseOrderId, supplierPartnerId, warehouseId, currencyCode, actorId],
   );
   await pool.query(
     `INSERT INTO procurement.purchase_order_lines (
@@ -6038,8 +6988,16 @@ async function seedSupplierInvoiceEvidence(
     `INSERT INTO procurement.supplier_invoices (
        id, purchase_order_id, supplier_partner_id, supplier_invoice_number,
        invoice_date, currency_code, recorded_by
-     ) VALUES ($1, $2, $3, $4, $5, 'BGN', $6)`,
-    [supplierInvoiceId, purchaseOrderId, supplierPartnerId, `SUP-${runId}`, invoiceDate, actorId],
+     ) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+    [
+      supplierInvoiceId,
+      purchaseOrderId,
+      supplierPartnerId,
+      `SUP-${runId}`,
+      invoiceDate,
+      currencyCode,
+      actorId,
+    ],
   );
   await pool.query(
     `INSERT INTO procurement.supplier_invoice_lines (
@@ -6056,13 +7014,14 @@ async function seedSalesData(pool: Pool, actorId: string, runId: string) {
   const customerId = randomUUID();
   const customerLocationId = randomUUID();
   const equipmentId = randomUUID();
+  const supplierId = randomUUID();
   const warehouseId = randomUUID();
   const ordinaryCategoryId = randomUUID();
   const serialCategoryId = randomUUID();
   const unitId = randomUUID();
   const productId = randomUUID();
   const serialProductId = randomUUID();
-  const serialNumber = `VISTA-SALE-${runId}`;
+  const serialNumber = `VISTA-SALE-${runId}`.toUpperCase();
   await pool.query(
     `INSERT INTO master_data.partners (id, kind, display_name, created_by, updated_by)
      VALUES ($1, 'legal_entity', $2, $3, $3)`,
@@ -6071,6 +7030,15 @@ async function seedSalesData(pool: Pool, actorId: string, runId: string) {
   await pool.query(
     "INSERT INTO master_data.partner_roles (partner_id, role, assigned_by) VALUES ($1, 'customer', $2)",
     [customerId, actorId],
+  );
+  await pool.query(
+    `INSERT INTO master_data.partners (id, kind, display_name, created_by, updated_by)
+     VALUES ($1, 'legal_entity', $2, $3, $3)`,
+    [supplierId, `Trace Supplier ${runId}`, actorId],
+  );
+  await pool.query(
+    "INSERT INTO master_data.partner_roles (partner_id, role, assigned_by) VALUES ($1, 'supplier', $2)",
+    [supplierId, actorId],
   );
   await pool.query(
     `INSERT INTO master_data.partner_addresses (
@@ -6120,33 +7088,15 @@ async function seedSalesData(pool: Pool, actorId: string, runId: string) {
     ],
   );
   const ordinaryMovement = randomUUID();
-  const serialMovement = randomUUID();
   await pool.query(
-    `INSERT INTO inventory.stock_movements (id, warehouse_id, product_id, movement_type, quantity, reference_type, reference_id, actor_account_id, correlation_id, unit_cost_bgn)
-     VALUES ($1, $2, $3, 'receipt', 10, 'sales_test_seed', $4, $5, $6, 8),
-            ($7, $2, $8, 'receipt', 1, 'sales_test_seed', $9, $5, $10, 120)`,
-    [
-      ordinaryMovement,
-      warehouseId,
-      productId,
-      `ordinary-${runId}`,
-      actorId,
-      randomUUID(),
-      serialMovement,
-      serialProductId,
-      `serial-${runId}`,
-      randomUUID(),
-    ],
+    `INSERT INTO inventory.stock_movements (id, warehouse_id, product_id, movement_type, quantity, reference_type, reference_id, actor_account_id, correlation_id, unit_cost_eur)
+     VALUES ($1, $2, $3, 'receipt', 10, 'sales_test_seed', $4, $5, $6, 8)`,
+    [ordinaryMovement, warehouseId, productId, `ordinary-${runId}`, actorId, randomUUID()],
   );
   await pool.query(
-    `INSERT INTO inventory.stock_balances (warehouse_id, product_id, quantity, average_unit_cost_bgn)
-     VALUES ($1, $2, 10, 8), ($1, $3, 1, 120)`,
-    [warehouseId, productId, serialProductId],
-  );
-  await pool.query(
-    `INSERT INTO inventory.serialized_items (product_id, serial_number, warehouse_id, received_movement_id)
-     VALUES ($1, $2, $3, $4)`,
-    [serialProductId, serialNumber, warehouseId, serialMovement],
+    `INSERT INTO inventory.stock_balances (warehouse_id, product_id, quantity, average_unit_cost_eur)
+     VALUES ($1, $2, 10, 8)`,
+    [warehouseId, productId],
   );
   await pool.query(
     `INSERT INTO master_data.customer_locations (
@@ -6170,6 +7120,7 @@ async function seedSalesData(pool: Pool, actorId: string, runId: string) {
     productId,
     serialNumber,
     serialProductId,
+    supplierId,
     warehouseId,
   };
 }
@@ -6231,12 +7182,12 @@ async function seedServiceTechnicianWarehouse(
   await pool.query(
     `INSERT INTO inventory.stock_movements (
        id, warehouse_id, product_id, movement_type, quantity, reference_type, reference_id,
-       actor_account_id, correlation_id, unit_cost_bgn
+       actor_account_id, correlation_id, unit_cost_eur
      ) VALUES ($1, $2, $3, 'receipt', 5, 'service_test_seed', $4, $5, $6, 7)`,
     [movementId, warehouseId, productId, `technician-${runId}`, accountId, randomUUID()],
   );
   await pool.query(
-    `INSERT INTO inventory.stock_balances (warehouse_id, product_id, quantity, average_unit_cost_bgn)
+    `INSERT INTO inventory.stock_balances (warehouse_id, product_id, quantity, average_unit_cost_eur)
      VALUES ($1, $2, 5, 7)`,
     [warehouseId, productId],
   );
@@ -6290,12 +7241,12 @@ async function seedServiceBatchPart(
   await pool.query(
     `INSERT INTO inventory.stock_movements (
        id, warehouse_id, product_id, movement_type, quantity, reference_type, reference_id,
-       actor_account_id, correlation_id, unit_cost_bgn, batch_id
+       actor_account_id, correlation_id, unit_cost_eur, batch_id
      ) VALUES ($1, $2, $3, 'receipt', 5, 'service_batch_test_seed', $4, $5, $6, 7, $7)`,
     [movementId, warehouseId, productId, `batch-${runId}`, accountId, randomUUID(), batchId],
   );
   await pool.query(
-    `INSERT INTO inventory.stock_balances (warehouse_id, product_id, quantity, average_unit_cost_bgn)
+    `INSERT INTO inventory.stock_balances (warehouse_id, product_id, quantity, average_unit_cost_eur)
      VALUES ($1, $2, 5, 7)`,
     [warehouseId, productId],
   );

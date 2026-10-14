@@ -33,10 +33,11 @@ import { APP_ENVIRONMENT } from '../config/config.module.js';
 import { DatabaseService } from '../database/database.service.js';
 import type { FinanceSupplierListQueryDto } from './finance-payables.dto.js';
 import { FinanceService } from './finance.service.js';
+import { BnbCurrencyRatesService } from './bnb-currency-rates.service.js';
 
 interface PayableRow {
   allocated_total: string;
-  bgn_total: string;
+  eur_total: string;
   created_at: string | Date;
   currency_code: string;
   document_date: string;
@@ -60,6 +61,7 @@ interface SupplierPaymentRow {
   allocated_total: string;
   amount: string;
   available_total: string;
+  currency_code: string;
   id: string;
   notes: string | null;
   payment_date: string;
@@ -90,6 +92,7 @@ export class FinancePayablesService {
     @Inject(DatabaseService) private readonly database: DatabaseService,
     @Inject(APP_ENVIRONMENT) private readonly environment: AppEnvironment,
     @Inject(FinanceService) private readonly finance: FinanceService,
+    @Inject(BnbCurrencyRatesService) private readonly currencyRates: BnbCurrencyRatesService,
   ) {}
 
   async referenceData(): Promise<FinanceSupplierReferenceData> {
@@ -347,11 +350,10 @@ export class FinancePayablesService {
           ...sourceInvoice,
           total: required(totalResult.rows[0], 'Supplier invoice total query failed').total,
         };
-        if (invoice.currency_code !== 'BGN')
-          throw unprocessable(
-            'FINANCE_SUPPLIER_BNB_RATE_REQUIRED',
-            'Foreign-currency supplier invoices require the approved BNB rate workflow.',
-          );
+        const rate = await this.currencyRates.latestRate(
+          invoice.currency_code,
+          invoice.invoice_date,
+        );
         if (normalized.dueDate < invoice.invoice_date)
           throw badRequest(
             'FINANCE_SUPPLIER_DUE_DATE_INVALID',
@@ -370,8 +372,9 @@ export class FinancePayablesService {
           `INSERT INTO finance.supplier_payables (
            id, payable_number, source_supplier_invoice_id, supplier_partner_id,
            document_date, due_date, currency_code, exchange_rate, rate_date, rate_source,
-           total, allocated_total, outstanding_total, bgn_total, payment_status, created_by
-         ) VALUES ($1,$2,$3,$4,$5,$6,'BGN',1,$5,'internal_bgn_review',$7,0,$7,$7,$8,$9)`,
+           total, allocated_total, outstanding_total, eur_total, payment_status, created_by
+         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,0,$11,
+                   round($11::numeric * $8::numeric, 4),$12,$13)`,
           [
             id,
             number,
@@ -379,6 +382,10 @@ export class FinancePayablesService {
             invoice.supplier_partner_id,
             invoice.invoice_date,
             normalized.dueDate,
+            rate.currencyCode,
+            rate.exchangeRate,
+            rate.rateDate,
+            rate.rateSource,
             invoice.total,
             paymentStatus,
             auth.accountId,
@@ -437,6 +444,7 @@ export class FinancePayablesService {
           ...(normalized.notes ? { notes: normalized.notes } : {}),
           paymentDate: normalized.paymentDate,
           ...(normalized.paymentReference ? { paymentReference: normalized.paymentReference } : {}),
+          currencyCode: payable.currency_code,
           supplierPartnerId: payable.supplier_partner_id,
         });
         await this.insertAllocation(
@@ -550,6 +558,11 @@ export class FinancePayablesService {
             'FINANCE_SUPPLIER_ADVANCE_PARTNER_MISMATCH',
             'Advance and payable must belong to the same supplier.',
           );
+        if (payment.currency_code !== payable.currency_code)
+          throw conflict(
+            'FINANCE_SUPPLIER_ADVANCE_CURRENCY_MISMATCH',
+            'The advance and payable must use the same currency.',
+          );
         if (decimalUnits(normalized.amount) > decimalUnits(payment.available_total))
           throw conflict(
             'FINANCE_SUPPLIER_ADVANCE_EXCEEDED',
@@ -644,6 +657,11 @@ export class FinancePayablesService {
             'FINANCE_OFFSET_PARTNER_MISMATCH',
             'Both balances must belong to the same partner.',
           );
+        if (customerDocument.currency_code !== payable.currency_code)
+          throw conflict(
+            'FINANCE_OFFSET_CURRENCY_MISMATCH',
+            'Customer and supplier balances must use the same currency for an offset.',
+          );
         if (decimalUnits(normalized.amount) > decimalUnits(customerDocument.outstanding_total))
           throw conflict(
             'FINANCE_OFFSET_RECEIVABLE_EXCEEDED',
@@ -661,12 +679,13 @@ export class FinancePayablesService {
           `INSERT INTO finance.payments (
            id, payment_number, customer_partner_id, payment_date, payment_method,
            currency_code, amount, payment_reference, notes, recorded_by
-         ) VALUES ($1,$2,$3,$4,'offset','BGN',$5,$6,$7,$8)`,
+         ) VALUES ($1,$2,$3,$4,'offset',$5,$6,$7,$8,$9)`,
           [
             customerPaymentId,
             customerPaymentNumber,
             customerDocument.customer_partner_id,
             normalized.offsetDate,
+            customerDocument.currency_code,
             normalized.amount,
             null,
             normalized.reason,
@@ -686,6 +705,7 @@ export class FinancePayablesService {
           method: 'offset',
           notes: normalized.reason,
           paymentDate: normalized.offsetDate,
+          currencyCode: payable.currency_code,
           supplierPartnerId: payable.supplier_partner_id,
         });
         await this.insertAllocation(
@@ -808,7 +828,7 @@ export class FinancePayablesService {
        JOIN procurement.supplier_invoices invoice
          ON invoice.id = payable.source_supplier_invoice_id
        JOIN master_data.partners supplier ON supplier.id = payable.supplier_partner_id
-       WHERE payable.currency_code = 'BGN' AND payable.outstanding_total >= $2::numeric
+       WHERE payable.currency_code = 'EUR' AND payable.outstanding_total >= $2::numeric
        ORDER BY reference_matched DESC,
                 (lower(supplier.display_name) = lower($3)) DESC,
                 (payable.outstanding_total = $2::numeric) DESC,
@@ -846,6 +866,7 @@ export class FinancePayablesService {
     const normalized = {
       expectedVersion: input.expectedVersion,
       mode: input.mode,
+      reviewPossibleDuplicate: input.reviewPossibleDuplicate === true,
       ...(input.supplierPartnerId ? { supplierPartnerId: input.supplierPartnerId } : {}),
       ...(input.supplierPayableId ? { supplierPayableId: input.supplierPayableId } : {}),
     };
@@ -873,6 +894,11 @@ export class FinancePayablesService {
             );
           return this.loadPayment(client, transaction.matched_supplier_payment_id);
         }
+        if (transaction.possible_duplicate && !normalized.reviewPossibleDuplicate)
+          throw conflict(
+            'FINANCE_BANK_POSSIBLE_DUPLICATE_REVIEW_REQUIRED',
+            'Review the possible duplicate and confirm it is a separate transaction before matching.',
+          );
         if (transaction.direction !== 'outgoing')
           throw conflict(
             'FINANCE_BANK_TRANSACTION_DIRECTION_INVALID',
@@ -923,7 +949,8 @@ export class FinancePayablesService {
           `UPDATE finance.bank_transactions
          SET match_status = 'matched', match_method = 'manual',
              matched_supplier_payable_id = $2, matched_supplier_payment_id = $3,
-             matched_by = $4, matched_at = now(), version = version + 1, updated_at = now()
+             matched_by = $4, matched_at = now(), possible_duplicate = false,
+             version = version + 1, updated_at = now()
          WHERE id = $1`,
           [transaction.id, payable?.id ?? null, payment.id, auth.accountId],
         );
@@ -937,7 +964,7 @@ export class FinancePayablesService {
           'finance_bank_transaction',
           transaction.id,
           'finance.bank-transaction.supplier-matched',
-          result,
+          { payment: result, possibleDuplicateReviewed: transaction.possible_duplicate },
           auth,
           metadata,
           idempotencyKey,
@@ -1100,6 +1127,7 @@ export class FinancePayablesService {
   private async lockPayable(client: PoolClient, id: string) {
     const result = await client.query<{
       allocated_total: string;
+      currency_code: string;
       due_date: string;
       id: string;
       outstanding_total: string;
@@ -1108,7 +1136,7 @@ export class FinancePayablesService {
       total: string;
       version: number;
     }>(
-      `SELECT id, supplier_partner_id, total::text, allocated_total::text,
+      `SELECT id, supplier_partner_id, currency_code, total::text, allocated_total::text,
               outstanding_total::text, due_date::text, payment_status, version
        FROM finance.supplier_payables WHERE id = $1 FOR UPDATE`,
       [id],
@@ -1123,11 +1151,12 @@ export class FinancePayablesService {
   private async lockSupplierPayment(client: PoolClient, id: string) {
     const result = await client.query<{
       available_total: string;
+      currency_code: string;
       payment_kind: FinanceSupplierPayment['kind'];
       supplier_partner_id: string;
       version: number;
     }>(
-      `SELECT supplier_partner_id, payment_kind, available_total::text, version
+      `SELECT supplier_partner_id, currency_code, payment_kind, available_total::text, version
        FROM finance.supplier_payments WHERE id = $1 FOR UPDATE`,
       [id],
     );
@@ -1140,6 +1169,7 @@ export class FinancePayablesService {
     const result = await client.query<{
       allocated_total: string;
       customer_partner_id: string;
+      currency_code: string;
       due_date: string;
       id: string;
       outstanding_total: string;
@@ -1148,7 +1178,7 @@ export class FinancePayablesService {
       total: string;
       version: number;
     }>(
-      `SELECT id, customer_partner_id, total::text, allocated_total::text,
+      `SELECT id, customer_partner_id, currency_code, total::text, allocated_total::text,
               outstanding_total::text, due_date::text, payment_status, review_state, version
        FROM finance.customer_documents WHERE id = $1 FOR UPDATE`,
       [id],
@@ -1166,6 +1196,7 @@ export class FinancePayablesService {
       id: string;
       line_number: number;
       match_status: string;
+      possible_duplicate: boolean;
       matched_supplier_payment_id: string | null;
       payment_reference: string;
       statement_number: string;
@@ -1174,7 +1205,8 @@ export class FinancePayablesService {
     }>(
       `SELECT transaction.id, transaction.bank_statement_id, transaction.line_number,
               transaction.direction, transaction.amount::text, transaction.payment_reference,
-              transaction.value_date::text, transaction.match_status, transaction.version,
+              transaction.value_date::text, transaction.match_status, transaction.possible_duplicate,
+              transaction.version,
               transaction.matched_supplier_payment_id, statement.statement_number
        FROM finance.bank_transactions transaction
        JOIN finance.bank_statements statement ON statement.id = transaction.bank_statement_id
@@ -1202,6 +1234,7 @@ export class FinancePayablesService {
     input: {
       amount: string;
       auth: AuthenticationContext;
+      currencyCode?: string;
       kind: FinanceSupplierPayment['kind'];
       method: FinanceSupplierPayment['paymentMethod'];
       notes?: string;
@@ -1227,7 +1260,7 @@ export class FinancePayablesService {
          id, payment_number, supplier_partner_id, payment_date, payment_kind,
          payment_method, currency_code, amount, allocated_total, available_total,
          payment_reference, notes, source_bank_transaction_id, recorded_by
-       ) VALUES ($1,$2,$3,$4,$5,$6,'BGN',$7,$8,$9,$10,$11,$12,$13)`,
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
       [
         id,
         number,
@@ -1235,6 +1268,7 @@ export class FinancePayablesService {
         input.paymentDate,
         input.kind,
         input.method,
+        input.currencyCode ?? 'EUR',
         input.amount,
         allocatedTotal,
         availableTotal,
@@ -1414,7 +1448,7 @@ function payableQuery() {
                  payable.document_date::text, payable.due_date::text, payable.currency_code,
                  payable.exchange_rate::text, payable.rate_date::text, payable.rate_source,
                  payable.total::text, payable.allocated_total::text,
-                 payable.outstanding_total::text, payable.bgn_total::text,
+                 payable.outstanding_total::text, payable.eur_total::text,
                  payable.payment_status, payable.version, payable.created_at
           FROM finance.supplier_payables payable
           JOIN procurement.supplier_invoices invoice
@@ -1425,7 +1459,7 @@ function payableQuery() {
 function paymentQuery() {
   return `SELECT payment.id, payment.payment_number, payment.supplier_partner_id,
                  supplier.display_name AS supplier_name, payment.payment_date::text,
-                 payment.payment_kind, payment.payment_method, payment.amount::text,
+                 payment.payment_kind, payment.payment_method, payment.currency_code, payment.amount::text,
                  payment.allocated_total::text, payment.available_total::text,
                  payment.payment_reference, payment.notes, payment.source_bank_transaction_id,
                  payment.version, payment.recorded_at
@@ -1436,7 +1470,7 @@ function paymentQuery() {
 function mapPayable(row: PayableRow, payments: FinanceSupplierPayment[]): FinanceSupplierPayable {
   return {
     allocatedTotal: row.allocated_total,
-    bgnTotal: row.bgn_total,
+    eurTotal: row.eur_total,
     createdAt: asIso(row.created_at),
     currencyCode: row.currency_code,
     documentDate: row.document_date,
@@ -1467,6 +1501,7 @@ function mapPayment(
     allocations,
     amount: row.amount,
     availableTotal: row.available_total,
+    currencyCode: row.currency_code,
     id: row.id,
     kind: row.payment_kind,
     ...(row.notes ? { notes: row.notes } : {}),
@@ -1608,10 +1643,6 @@ async function claim(client: PoolClient, scope: string, key: string, hash: strin
 
 function badRequest(code: string, message: string) {
   return new ApiErrorException(code, message, HttpStatus.BAD_REQUEST);
-}
-
-function unprocessable(code: string, message: string) {
-  return new ApiErrorException(code, message, HttpStatus.UNPROCESSABLE_ENTITY);
 }
 
 function conflict(code: string, message: string) {

@@ -147,14 +147,14 @@ export class OpenPosShiftDto implements OpenPosShiftRequest {
   @ApiProperty({ example: '100.0000', type: String })
   @IsString()
   @Matches(decimalPattern)
-  openingCashBgn!: string;
+  openingCashEur!: string;
 }
 
 export class ClosePosShiftDto implements ClosePosShiftRequest {
   @ApiProperty({ example: '160.0000', type: String })
   @IsString()
   @Matches(decimalPattern)
-  closingCashBgn!: string;
+  closingCashEur!: string;
 
   @ApiProperty({ minimum: 1, type: Number })
   @IsInt()
@@ -383,11 +383,11 @@ export class PosShiftDto implements PosShift {
   @ApiProperty({ format: 'uuid', type: String }) cashRegisterId!: string;
   @ApiProperty({ type: String }) cashRegisterName!: string;
   @ApiPropertyOptional({ format: 'date-time', type: String }) closedAt?: string;
-  @ApiPropertyOptional({ type: String }) closingCashBgn?: string;
-  @ApiProperty({ type: String }) expectedCashBgn!: string;
+  @ApiPropertyOptional({ type: String }) closingCashEur?: string;
+  @ApiProperty({ type: String }) expectedCashEur!: string;
   @ApiProperty({ format: 'uuid', type: String }) id!: string;
   @ApiProperty({ format: 'date-time', type: String }) openedAt!: string;
-  @ApiProperty({ type: String }) openingCashBgn!: string;
+  @ApiProperty({ type: String }) openingCashEur!: string;
   @ApiProperty({ type: String }) operatorCode!: string;
   @ApiProperty({ format: 'uuid', type: String }) operatorId!: string;
   @ApiProperty({ type: String }) shiftNumber!: string;
@@ -414,7 +414,7 @@ export class PosCatalogItemDto implements PosCatalogItem {
   @ApiProperty({ type: String }) availableQuantity!: string;
   @ApiProperty({ isArray: true, type: String }) barcodes!: string[];
   @ApiProperty({ isArray: true, type: PosCatalogBatchDto }) batches!: PosCatalogItem['batches'];
-  @ApiProperty({ enum: ['BGN'] }) currencyCode!: 'BGN';
+  @ApiProperty({ enum: ['EUR'] }) currencyCode!: 'EUR';
   @ApiProperty({ format: 'uuid', type: String }) id!: string;
   @ApiProperty({ type: String }) name!: string;
   @ApiPropertyOptional({ format: 'uuid', type: String }) priceListId?: string;
@@ -488,7 +488,7 @@ export class PosLoyaltyAccountDto implements PosLoyaltyAccount {
   @ApiProperty({ type: String }) cardNumber!: string;
   @ApiProperty({ format: 'uuid', type: String }) id!: string;
   @ApiProperty({ type: String }) programName!: string;
-  @ApiProperty({ type: String }) redemptionValueBgn!: string;
+  @ApiProperty({ type: String }) redemptionValueEur!: string;
   @ApiProperty({ enum: ['active', 'suspended'] }) status!: PosLoyaltyAccount['status'];
 }
 
@@ -624,7 +624,7 @@ export class PosSaleDto implements PosSale {
   @ApiProperty({ type: String }) cashTendered!: string;
   @ApiProperty({ type: String }) changeAmount!: string;
   @ApiProperty({ format: 'date-time', type: String }) completedAt!: string;
-  @ApiProperty({ enum: ['BGN'] }) currencyCode!: 'BGN';
+  @ApiProperty({ enum: ['EUR'] }) currencyCode!: 'EUR';
   @ApiPropertyOptional({ type: String }) customerName?: string;
   @ApiPropertyOptional({ format: 'uuid', type: String }) customerPartnerId?: string;
   @ApiProperty({ type: String }) fiscalAdapter!: string;

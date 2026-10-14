@@ -25,9 +25,9 @@ export class CrmAnalyticsQueryDto {
 
 export class CrmAnalyticsCustomerMetricsDto implements CrmAnalyticsCustomerMetrics {
   @ApiProperty({ minimum: 0, type: Number }) activeCustomers!: number;
-  @ApiProperty({ example: '60.00', type: String }) averageTransactionValueBgn!: string;
+  @ApiProperty({ example: '60.00', type: String }) averageTransactionValueEur!: string;
   @ApiProperty({ example: '0.00', type: String }) churnPercent!: string;
-  @ApiProperty({ example: '60.00', type: String }) observedLifetimeValueBgn!: string;
+  @ApiProperty({ example: '60.00', type: String }) observedLifetimeValueEur!: string;
   @ApiProperty({ example: '1.00', type: String }) purchaseFrequency!: string;
   @ApiProperty({ example: '100.00', type: String }) retentionPercent!: string;
 }
@@ -43,9 +43,9 @@ export class CrmAnalyticsPipelineStageMetricDto implements CrmAnalyticsPipelineS
 
 export class CrmAnalyticsPipelineMetricsDto implements CrmAnalyticsPipelineMetrics {
   @ApiProperty({ minimum: 0, type: Number }) createdOpportunities!: number;
-  @ApiProperty({ example: '1250.00', type: String }) estimatedRevenueBgn!: string;
+  @ApiProperty({ example: '1250.00', type: String }) estimatedRevenueEur!: string;
   @ApiProperty({ minimum: 0, type: Number }) lostCount!: number;
-  @ApiProperty({ example: '1250.00', type: String }) openPipelineValueBgn!: string;
+  @ApiProperty({ example: '1250.00', type: String }) openPipelineValueEur!: string;
   @ApiProperty({ type: [CrmAnalyticsPipelineStageMetricDto] })
   stages!: CrmAnalyticsPipelineStageMetric[];
   @ApiProperty({ example: '50.00', type: String }) winRatePercent!: string;
@@ -64,7 +64,7 @@ export class CrmAnalyticsPreferenceDto implements CrmAnalyticsPreference {
   @ApiProperty({ minimum: 0, type: Number }) documentCount!: number;
   @ApiProperty({ enum: ['product', 'service'] }) kind!: CrmAnalyticsPreference['kind'];
   @ApiProperty({ type: String }) label!: string;
-  @ApiProperty({ example: '60.00', type: String }) netRevenueBgn!: string;
+  @ApiProperty({ example: '60.00', type: String }) netRevenueEur!: string;
   @ApiProperty({ example: '1.0000', type: String }) quantity!: string;
 }
 
@@ -74,7 +74,7 @@ export class CrmAnalyticsRevenueMetricDto implements CrmAnalyticsRevenueMetric {
   @ApiProperty({ minimum: 0, type: Number }) documentCount!: number;
   @ApiProperty({ type: String }) key!: string;
   @ApiProperty({ type: String }) label!: string;
-  @ApiProperty({ example: '60.00', type: String }) netRevenueBgn!: string;
+  @ApiProperty({ example: '60.00', type: String }) netRevenueEur!: string;
   @ApiProperty({ example: '100.00', type: String }) sharePercent!: string;
 }
 
@@ -102,6 +102,6 @@ export class CrmAnalyticsOverviewDto implements CrmAnalyticsOverview {
   @ApiProperty({ format: 'date', type: String }) previousDateFrom!: string;
   @ApiProperty({ format: 'date', type: String }) previousDateTo!: string;
   @ApiProperty({ type: [CrmAnalyticsRevenueMetricDto] }) revenue!: CrmAnalyticsRevenueMetric[];
-  @ApiProperty({ example: '60.00', type: String }) totalNetRevenueBgn!: string;
+  @ApiProperty({ example: '60.00', type: String }) totalNetRevenueEur!: string;
   @ApiProperty({ example: 'Europe/Sofia', type: String }) timezone!: string;
 }

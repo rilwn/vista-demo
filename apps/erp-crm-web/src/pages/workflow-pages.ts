@@ -106,7 +106,7 @@ export const workflowPages: WorkflowPageDefinition[] = [
         title: 'Review detail',
         items: [
           'VAT 20%, 9%, 0%, exempt, and intra-community treatment',
-          'Fixed currency-rate and converted BGN snapshot',
+          'Fixed currency-rate and converted EUR snapshot',
           'Issuer and customer snapshot',
         ],
       },
@@ -211,13 +211,13 @@ export const workflowPages: WorkflowPageDefinition[] = [
   finance(
     'cash-bank',
     'Bank reconciliation',
-    'Enter balanced BGN bank statements and reconcile incoming transfers with customer collections.',
+    'Enter balanced EUR bank statements and reconcile incoming transfers with customer collections.',
     'New statement',
     [
       {
         title: 'Statement control',
         items: [
-          'Manual BGN statement entry',
+          'Manual EUR statement entry',
           'Opening and closing balance validation',
           'Immutable bank transaction lines',
         ],
@@ -251,7 +251,7 @@ export const workflowPages: WorkflowPageDefinition[] = [
         items: [
           'Customer turnover by selected period',
           'Supplier turnover by selected period',
-          'Gross, allocated, and outstanding BGN values',
+          'Gross, allocated, and outstanding EUR values',
         ],
       },
     ],

@@ -19,13 +19,13 @@ describe('POS request validation', () => {
   it('accepts a complete cashier shift request', async () => {
     const input = plainToInstance(OpenPosShiftDto, {
       cashRegisterId: uuid,
-      openingCashBgn: '100.0000',
+      openingCashEur: '100.0000',
     });
     expect(await validate(input)).toHaveLength(0);
     expect(
       await validate(
         plainToInstance(ClosePosShiftDto, {
-          closingCashBgn: '100.0000',
+          closingCashEur: '100.0000',
           version: 1,
         }),
       ),
@@ -35,7 +35,7 @@ describe('POS request validation', () => {
   it('rejects negative opening cash and malformed catalog context', async () => {
     const shift = plainToInstance(OpenPosShiftDto, {
       cashRegisterId: uuid,
-      openingCashBgn: '-1',
+      openingCashEur: '-1',
     });
     const catalog = plainToInstance(PosCatalogQueryDto, {
       page: 0,

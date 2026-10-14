@@ -89,6 +89,10 @@ interface WorkOrderRow {
   assigned_technician_account_id: string | null;
   completed_at: string | Date | null;
   completion_notes: string | null;
+  customer_charge_recorded: boolean;
+  customer_labor_charge_eur: string;
+  customer_parts_charge_eur: string;
+  customer_transport_charge_eur: string;
   created_at: string | Date;
   customer_equipment_id: string;
   customer_location_id: string;
@@ -100,9 +104,9 @@ interface WorkOrderRow {
   financial_document_number: string | null;
   id: string;
   is_overdue: boolean;
-  labor_cost_bgn: string;
+  labor_cost_eur: string;
   labor_minutes: number;
-  parts_cost_bgn: string;
+  parts_cost_eur: string;
   priority: ServiceWorkOrder['priority'];
   problem_description: string;
   request_id: string;
@@ -121,8 +125,9 @@ interface WorkOrderRow {
   technician_email: string | null;
   technician_warehouse_id: string | null;
   technician_warehouse_name: string | null;
-  total_cost_bgn: string;
-  transport_cost_bgn: string;
+  total_cost_eur: string;
+  total_customer_charge_eur: string;
+  transport_cost_eur: string;
   updated_at: string | Date;
   version: number;
   work_order_number: string;
@@ -145,6 +150,7 @@ interface LockedWorkOrderRow {
   customer_partner_id: string;
   id: string;
   service_request_id: string;
+  service_type: ServiceWorkOrder['serviceType'];
   status: ServiceWorkOrderStatus;
   technician_warehouse_id: string | null;
   version: number;
@@ -169,14 +175,16 @@ interface WorkOrderTimeRow {
 
 interface WorkOrderPartRow {
   batch_number: string | null;
+  customer_total_charge_eur: string;
+  customer_unit_price_eur: string;
   id: string;
   product_id: string;
   product_name: string;
   quantity: string;
   serial_numbers: string[];
   stock_issue_movement_id: string;
-  total_cost_bgn: string;
-  unit_cost_bgn: string;
+  total_cost_eur: string;
+  unit_cost_eur: string;
   warehouse_id: string;
   warehouse_name: string;
 }
@@ -238,9 +246,12 @@ interface ScheduleAppointmentRow {
 
 interface NormalizedCompletion {
   completionNotes: string;
-  laborCostBgn: string;
+  customerLaborChargeEur: string;
+  customerTransportChargeEur: string;
+  laborCostEur: string;
   parts: Array<{
     batchNumber?: string;
+    customerUnitPriceEur: string;
     productId: string;
     quantity: string;
     serialNumbers: string[];
@@ -251,7 +262,7 @@ interface NormalizedCompletion {
   };
   signerName: string;
   timeEntries: Array<{ minutes: number; note?: string; workDate: string }>;
-  transportCostBgn: string;
+  transportCostEur: string;
 }
 
 interface ServiceRequestListQuery {
@@ -1341,13 +1352,15 @@ export class ServiceOperationsService {
     const normalized = normalizeCompletion(input);
     const idempotencyPayload = {
       completionNotes: normalized.completionNotes,
+      customerLaborChargeEur: normalized.customerLaborChargeEur,
+      customerTransportChargeEur: normalized.customerTransportChargeEur,
       expectedVersion: positiveVersion(input.expectedVersion),
-      laborCostBgn: normalized.laborCostBgn,
+      laborCostEur: normalized.laborCostEur,
       parts: normalized.parts,
       signatureSha256: normalized.signature.sha256,
       signerName: normalized.signerName,
       timeEntries: normalized.timeEntries,
-      transportCostBgn: normalized.transportCostBgn,
+      transportCostEur: normalized.transportCostEur,
     };
     return this.command(
       `service.work-order.complete:${id}`,
@@ -1371,8 +1384,24 @@ export class ServiceOperationsService {
             'A technician and technician warehouse are required before completion.',
             HttpStatus.CONFLICT,
           );
+        if (
+          workOrder.service_type === 'warranty' &&
+          decimalUnits(normalized.customerTransportChargeEur) > 0n
+        )
+          throw new ApiErrorException(
+            'SERVICE_WARRANTY_TRANSPORT_CHARGE_NOT_ALLOWED',
+            'Warranty customers may be charged for labour and parts only.',
+            HttpStatus.BAD_REQUEST,
+            [
+              {
+                field: 'customerTransportChargeEur',
+                message: 'Set the customer transport charge to zero for warranty work.',
+              },
+            ],
+          );
 
         let partsCost = 0n;
+        let customerPartsCharge = 0n;
         for (const part of normalized.parts) {
           const issue = await this.inventory.issueServicePart(
             client,
@@ -1394,8 +1423,8 @@ export class ServiceOperationsService {
           await client.query(
             `INSERT INTO service.work_order_part_usages (
                id, work_order_id, stock_issue_movement_id, warehouse_id, product_id, batch_id,
-               quantity, unit_cost_bgn, total_cost_bgn, recorded_by
-             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+               quantity, unit_cost_eur, total_cost_eur, customer_unit_price_eur, recorded_by
+             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
             [
               partUsageId,
               id,
@@ -1404,8 +1433,9 @@ export class ServiceOperationsService {
               issue.productId,
               issue.batchId ?? null,
               issue.quantity,
-              issue.unitCostBgn,
-              issue.totalCostBgn,
+              issue.unitCostEur,
+              issue.totalCostEur,
+              part.customerUnitPriceEur,
               auth.accountId,
             ],
           );
@@ -1415,7 +1445,8 @@ export class ServiceOperationsService {
                SELECT $1, unnest($2::uuid[])`,
               [partUsageId, issue.serialItemIds],
             );
-          partsCost += decimalUnits(issue.totalCostBgn);
+          partsCost += decimalUnits(issue.totalCostEur);
+          customerPartsCharge += multiplyMoney(issue.quantity, part.customerUnitPriceEur);
         }
 
         for (const entry of normalized.timeEntries)
@@ -1429,29 +1460,34 @@ export class ServiceOperationsService {
           (total, entry) => total + entry.minutes,
           0,
         );
-        const partsCostBgn = decimalString(partsCost);
-        const totalCostBgn = decimalString(
-          decimalUnits(normalized.laborCostBgn) +
+        const partsCostEur = decimalString(partsCost);
+        const totalCostEur = decimalString(
+          decimalUnits(normalized.laborCostEur) +
             partsCost +
-            decimalUnits(normalized.transportCostBgn),
+            decimalUnits(normalized.transportCostEur),
         );
         await client.query(
           `UPDATE service.work_orders
            SET status = 'completed', completed_at = now(), completion_notes = $2,
-               labor_minutes = $3, labor_cost_bgn = $4, parts_cost_bgn = $5,
-               transport_cost_bgn = $6, total_cost_bgn = $7, signer_name = $8,
-               signature_media_type = 'image/png', signature_data = $9,
-               signature_sha256 = $10, signed_at = now(), updated_by = $11,
+               labor_minutes = $3, labor_cost_eur = $4, parts_cost_eur = $5,
+               transport_cost_eur = $6, total_cost_eur = $7,
+               customer_labor_charge_eur = $8, customer_parts_charge_eur = $9,
+               customer_transport_charge_eur = $10, customer_charge_recorded = true,
+               signer_name = $11, signature_media_type = 'image/png', signature_data = $12,
+               signature_sha256 = $13, signed_at = now(), updated_by = $14,
                version = version + 1, updated_at = now()
            WHERE id = $1`,
           [
             id,
             normalized.completionNotes,
             laborMinutes,
-            normalized.laborCostBgn,
-            partsCostBgn,
-            normalized.transportCostBgn,
-            totalCostBgn,
+            normalized.laborCostEur,
+            partsCostEur,
+            normalized.transportCostEur,
+            totalCostEur,
+            normalized.customerLaborChargeEur,
+            decimalString(customerPartsCharge),
+            normalized.customerTransportChargeEur,
             normalized.signerName,
             normalized.signature.data,
             normalized.signature.sha256,
@@ -1605,8 +1641,9 @@ export class ServiceOperationsService {
     const parts = await client.query<WorkOrderPartRow>(
       `SELECT usage.id, usage.stock_issue_movement_id, usage.warehouse_id, warehouse.name AS warehouse_name,
               usage.product_id, product.name AS product_name, usage.batch_id,
-              batch.batch_number, usage.quantity::text, usage.unit_cost_bgn::text,
-              usage.total_cost_bgn::text,
+              batch.batch_number, usage.quantity::text, usage.unit_cost_eur::text,
+              usage.total_cost_eur::text, usage.customer_unit_price_eur::text,
+              usage.customer_total_charge_eur::text,
               COALESCE(array_agg(serial.serial_number ORDER BY serial.serial_number)
                 FILTER (WHERE serial.id IS NOT NULL), '{}'::text[]) AS serial_numbers
        FROM service.work_order_part_usages usage
@@ -1666,7 +1703,8 @@ export class ServiceOperationsService {
     const result = await client.query<LockedWorkOrderRow>(
       `SELECT work_order.id, work_order.service_request_id, work_order.assigned_technician_account_id,
               work_order.technician_warehouse_id, work_order.status, work_order.version,
-              request.customer_partner_id, request.customer_location_id, request.customer_equipment_id
+              request.customer_partner_id, request.customer_location_id, request.customer_equipment_id,
+              request.service_type
        FROM service.work_orders work_order
        JOIN service.requests request ON request.id = work_order.service_request_id
        WHERE work_order.id = $1 FOR UPDATE OF work_order, request`,
@@ -2263,8 +2301,13 @@ function workOrderQuery(): string {
                  work_order.assigned_technician_account_id, work_order.technician_warehouse_id,
                  work_order.scheduled_start, work_order.scheduled_end, work_order.started_at,
                  work_order.completed_at, work_order.status, work_order.completion_notes,
-                 work_order.labor_minutes, work_order.labor_cost_bgn::text, work_order.parts_cost_bgn::text,
-                 work_order.transport_cost_bgn::text, work_order.total_cost_bgn::text,
+                 work_order.customer_charge_recorded,
+                 work_order.customer_labor_charge_eur::text,
+                 work_order.customer_parts_charge_eur::text,
+                 work_order.customer_transport_charge_eur::text,
+                 work_order.total_customer_charge_eur::text,
+                 work_order.labor_minutes, work_order.labor_cost_eur::text, work_order.parts_cost_eur::text,
+                 work_order.transport_cost_eur::text, work_order.total_cost_eur::text,
                  work_order.signer_name, work_order.signature_media_type, work_order.signed_at,
                  work_order.created_at, work_order.updated_at, work_order.version,
                  COALESCE(work_order.status IN ('scheduled', 'in_progress')
@@ -2421,6 +2464,10 @@ function mapWorkOrder(
     ...(assignedTechnician ? { assignedTechnician } : {}),
     ...(row.completed_at ? { completedAt: asIso(row.completed_at) } : {}),
     ...(row.completion_notes ? { completionNotes: row.completion_notes } : {}),
+    customerChargeRecorded: row.customer_charge_recorded,
+    customerLaborChargeEur: row.customer_labor_charge_eur,
+    customerPartsChargeEur: row.customer_parts_charge_eur,
+    customerTransportChargeEur: row.customer_transport_charge_eur,
     createdAt: asIso(row.created_at),
     customerEquipmentId: row.customer_equipment_id,
     customerLocationId: row.customer_location_id,
@@ -2435,11 +2482,11 @@ function mapWorkOrder(
     history: history.map(mapHistory),
     id: row.id,
     isOverdue: row.is_overdue,
-    laborCostBgn: row.labor_cost_bgn,
+    laborCostEur: row.labor_cost_eur,
     laborMinutes: row.labor_minutes,
     number: row.work_order_number,
     parts: parts.map(mapPart),
-    partsCostBgn: row.parts_cost_bgn,
+    partsCostEur: row.parts_cost_eur,
     photos: photos.map(mapPhoto),
     priority: row.priority,
     problemDescription: row.problem_description,
@@ -2464,8 +2511,9 @@ function mapWorkOrder(
       recordedAt: asIso(entry.recorded_at),
       workDate: entry.work_date,
     })),
-    totalCostBgn: row.total_cost_bgn,
-    transportCostBgn: row.transport_cost_bgn,
+    totalCostEur: row.total_cost_eur,
+    totalCustomerChargeEur: row.total_customer_charge_eur,
+    transportCostEur: row.transport_cost_eur,
     updatedAt: asIso(row.updated_at),
     version: row.version,
   };
@@ -2492,14 +2540,16 @@ function technicianFromWorkOrder(row: WorkOrderRow): ServiceTechnicianReference 
 function mapPart(row: WorkOrderPartRow): ServiceWorkOrder['parts'][number] {
   return {
     ...(row.batch_number ? { batchNumber: row.batch_number } : {}),
+    customerTotalChargeEur: row.customer_total_charge_eur,
+    customerUnitPriceEur: row.customer_unit_price_eur,
     id: row.id,
     productId: row.product_id,
     productName: row.product_name,
     quantity: row.quantity,
     serialNumbers: row.serial_numbers,
     stockIssueId: row.stock_issue_movement_id,
-    totalCostBgn: row.total_cost_bgn,
-    unitCostBgn: row.unit_cost_bgn,
+    totalCostEur: row.total_cost_eur,
+    unitCostEur: row.unit_cost_eur,
     warehouseId: row.warehouse_id,
     warehouseName: row.warehouse_name,
   };
@@ -2672,12 +2722,20 @@ function normalizeCompletion(input: CompleteServiceWorkOrderRequest): Normalized
       );
   return {
     completionNotes: text(input.completionNotes, 'SERVICE_COMPLETION_NOTES_REQUIRED', 4000),
-    laborCostBgn: nonNegativeMoney(input.laborCostBgn, 'SERVICE_LABOR_COST_INVALID'),
+    customerLaborChargeEur: nonNegativeMoney(
+      input.customerLaborChargeEur,
+      'SERVICE_CUSTOMER_LABOR_CHARGE_INVALID',
+    ),
+    customerTransportChargeEur: nonNegativeMoney(
+      input.customerTransportChargeEur,
+      'SERVICE_CUSTOMER_TRANSPORT_CHARGE_INVALID',
+    ),
+    laborCostEur: nonNegativeMoney(input.laborCostEur, 'SERVICE_LABOR_COST_INVALID'),
     parts,
     signature: signature(input.signatureImageDataUrl),
     signerName: text(input.signerName, 'SERVICE_SIGNER_NAME_REQUIRED', 255),
     timeEntries,
-    transportCostBgn: nonNegativeMoney(input.transportCostBgn, 'SERVICE_TRANSPORT_COST_INVALID'),
+    transportCostEur: nonNegativeMoney(input.transportCostEur, 'SERVICE_TRANSPORT_COST_INVALID'),
   };
 }
 
@@ -2696,6 +2754,10 @@ function normalizeParts(input: ServicePartUsageInput[]) {
       ...(part.batchNumber
         ? { batchNumber: text(part.batchNumber, 'SERVICE_BATCH_NUMBER_INVALID', 100) }
         : {}),
+      customerUnitPriceEur: nonNegativeMoney(
+        part.customerUnitPriceEur,
+        'SERVICE_CUSTOMER_PART_CHARGE_INVALID',
+      ),
       productId: part.productId,
       quantity: positiveQuantity(part.quantity, 'SERVICE_PART_QUANTITY_INVALID'),
       serialNumbers,
@@ -2820,6 +2882,12 @@ function decimalString(units: bigint): string {
   const whole = absolute / 10_000n;
   const fraction = (absolute % 10_000n).toString().padStart(4, '0');
   return `${negative ? '-' : ''}${whole}.${fraction}`;
+}
+
+function multiplyMoney(quantity: string, unitPrice: string): bigint {
+  const product = decimalUnits(quantity) * decimalUnits(unitPrice);
+  const scale = 10_000n;
+  return (product + scale / 2n) / scale;
 }
 
 function text(value: string, code: string, maxLength: number): string {

@@ -15,6 +15,8 @@ import type {
   SalesReferenceData,
   SalesShipment,
   SalesWorkflow,
+  QueuedEmailReceipt,
+  SendDocumentEmailRequest,
   UpdateSalesQuotationRequest,
   VatTreatment,
 } from '@vista/contracts';
@@ -29,6 +31,7 @@ import { ApiErrorException } from '../common/api-error.exception.js';
 import { APP_ENVIRONMENT } from '../config/config.module.js';
 import { DatabaseService } from '../database/database.service.js';
 import { renderSalesQuotation } from './sales-quotation-renderer.js';
+import { queueEmailMessage } from '../notifications/notification-email.js';
 
 type QuotationRow = {
   cancelled_at: string | null;
@@ -222,6 +225,81 @@ export class SalesService {
       fileName: `${workflow.number}.pdf`,
       mediaType: 'application/pdf',
     };
+  }
+
+  async emailQuotation(
+    id: string,
+    input: SendDocumentEmailRequest,
+    key: string | undefined,
+    auth: AuthenticationContext,
+    metadata: RequestSecurityMetadata,
+  ): Promise<QueuedEmailReceipt> {
+    const recipientEmail = normalizeEmail(input.recipientEmail);
+    return this.command(
+      `sales.quotation.email:${id}`,
+      key,
+      { expectedVersion: input.expectedVersion, recipientEmail },
+      async (client, commandKey) => {
+        const locked = await client.query<{ id: string }>(
+          'SELECT id FROM sales.quotations WHERE id = $1 FOR UPDATE',
+          [id],
+        );
+        if (!locked.rowCount)
+          throw new ApiErrorException(
+            'SALES_QUOTATION_NOT_FOUND',
+            'The quotation was not found.',
+            HttpStatus.NOT_FOUND,
+          );
+        const workflow = await this.loadWorkflow(client, id);
+        if (workflow.version !== input.expectedVersion)
+          throw new ApiErrorException(
+            'SALES_QUOTATION_VERSION_CONFLICT',
+            'This quotation changed after it was opened. Refresh and try again.',
+            HttpStatus.CONFLICT,
+          );
+        if (workflow.status !== 'draft')
+          throw new ApiErrorException(
+            'SALES_QUOTATION_NOT_SENDABLE',
+            'Only an active quotation can be sent.',
+            HttpStatus.CONFLICT,
+          );
+        const pdf = await renderSalesQuotation(workflow);
+        await queueEmailMessage(client, {
+          attachment: {
+            content: pdf,
+            fileName: `${workflow.number}.pdf`,
+            mediaType: 'application/pdf',
+          },
+          idempotencyKey: `sales-quotation:${id}:${commandKey}`,
+          recipient: recipientEmail,
+          subject: `Quotation / Оферта ${workflow.number}`,
+          text: [
+            `Hello ${workflow.customerName},`,
+            '',
+            `Your quotation ${workflow.number} is attached. It is valid until ${workflow.validUntil}.`,
+            '',
+            `Здравейте, ${workflow.customerName},`,
+            '',
+            `Прикачена е Вашата оферта ${workflow.number}. Валидна е до ${workflow.validUntil}.`,
+            '',
+            'Vista Service Ltd.',
+          ].join('\n'),
+        });
+        await this.sideEffects(
+          client,
+          'sales_quotation',
+          id,
+          'sales.quotation.email-queued',
+          { number: workflow.number, recipientEmail, version: workflow.version },
+          auth,
+          metadata,
+          commandKey,
+          workflow,
+        );
+        return { recipientEmail, status: 'queued' };
+      },
+      HttpStatus.ACCEPTED,
+    );
   }
 
   async createQuotation(
@@ -792,11 +870,11 @@ export class SalesService {
               'Reserved stock no longer matches the sales order',
               HttpStatus.CONFLICT,
             );
-          const balance = await client.query<{ average_unit_cost_bgn: string }>(
+          const balance = await client.query<{ average_unit_cost_eur: string }>(
             `UPDATE inventory.stock_balances
              SET quantity = quantity - $3, updated_at = now()
              WHERE warehouse_id = $1 AND product_id = $2 AND quantity >= $3
-             RETURNING average_unit_cost_bgn::text`,
+             RETURNING average_unit_cost_eur::text`,
             [order.warehouse_id, line.product_id, line.quantity],
           );
           if (!balance.rowCount)
@@ -837,7 +915,7 @@ export class SalesService {
           await client.query(
             `INSERT INTO inventory.stock_movements (
                id, warehouse_id, product_id, movement_type, quantity, reference_type,
-               reference_id, actor_account_id, correlation_id, unit_cost_bgn,
+               reference_id, actor_account_id, correlation_id, unit_cost_eur,
                customer_partner_id, batch_id
              ) VALUES ($1, $2, $3, 'issue', $4, 'sales_shipment', $5, $6, $7, $8, $9, $10)`,
             [
@@ -848,7 +926,7 @@ export class SalesService {
               shipmentLineId,
               auth.accountId,
               metadata.correlationId,
-              required(balance.rows[0], 'Stock valuation is missing').average_unit_cost_bgn,
+              required(balance.rows[0], 'Stock valuation is missing').average_unit_cost_eur,
               order.customer_partner_id,
               batchId,
             ],
@@ -2084,6 +2162,17 @@ function validKey(key: string | undefined) {
       HttpStatus.BAD_REQUEST,
     );
   return normalized;
+}
+
+function normalizeEmail(value: string): string {
+  const email = value.trim().toLowerCase();
+  if (email.length > 254 || !/^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/u.test(email))
+    throw new ApiErrorException(
+      'SALES_EMAIL_INVALID',
+      'Enter a valid customer email address.',
+      HttpStatus.BAD_REQUEST,
+    );
+  return email;
 }
 
 async function claim(client: PoolClient, scope: string, key: string, hash: string) {

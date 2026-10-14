@@ -5,6 +5,7 @@ import {
   ArrayMinSize,
   IsArray,
   IsDateString,
+  IsEmail,
   IsIn,
   IsInt,
   IsOptional,
@@ -26,8 +27,12 @@ import {
   type FinancialDocument,
   type FinancialDocumentPage,
   type FinancialDocumentReferenceData,
+  type FinanceExchangeRate,
   type FinancialDocumentStatus,
   type FinancialDocumentType,
+  type IssueFinancialDocumentRequest,
+  type QueuedEmailReceipt,
+  type SendDocumentEmailRequest,
   type VatTreatment,
 } from '@vista/contracts';
 
@@ -37,6 +42,24 @@ const currency = /^[A-Za-z]{3}$/u;
 // PostgreSQL accepts the complete 8-4-4-4-12 UUID representation. References
 // can therefore include stable deterministic identifiers as well as UUID v4s.
 const postgresUuid = 'loose' as const;
+
+export class FinanceExchangeRateQueryDto {
+  @ApiProperty({ example: 'USD', type: String })
+  @IsString()
+  @Matches(currency)
+  currencyCode!: string;
+
+  @ApiProperty({ format: 'date', example: '2026-10-13', type: String })
+  @IsDateString()
+  rateDate!: string;
+}
+
+export class FinanceExchangeRateDto implements FinanceExchangeRate {
+  @ApiProperty({ example: 'USD', type: String }) currencyCode!: string;
+  @ApiProperty({ example: '0.89380000', type: String }) exchangeRate!: string;
+  @ApiProperty({ format: 'date', example: '2026-10-13', type: String }) rateDate!: string;
+  @ApiProperty({ enum: ['BNB', 'internal_eur'] }) rateSource!: FinanceExchangeRate['rateSource'];
+}
 
 export class CreateFinancialDocumentLineDto implements CreateFinancialDocumentLineRequest {
   @ApiProperty({ maxLength: 500, type: String })
@@ -101,7 +124,7 @@ export class CreateFinancialDocumentDto implements CreateFinancialDocumentReques
   @MaxLength(1000)
   correctionReason?: string;
 
-  @ApiProperty({ example: 'BGN', type: String })
+  @ApiProperty({ example: 'EUR', type: String })
   @IsString()
   @Matches(currency)
   currencyCode!: string;
@@ -194,6 +217,35 @@ export class CancelFinancialDocumentDto implements CancelFinancialDocumentReques
   expectedVersion!: number;
 }
 
+export class IssueFinancialDocumentDto implements IssueFinancialDocumentRequest {
+  @ApiProperty({ minimum: 1, type: Number })
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  expectedVersion!: number;
+}
+
+export class SendDocumentEmailDto implements SendDocumentEmailRequest {
+  @ApiProperty({ example: 'accounting@example.com', type: String })
+  @IsEmail()
+  @MaxLength(254)
+  recipientEmail!: string;
+
+  @ApiProperty({ minimum: 1, type: Number })
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  expectedVersion!: number;
+}
+
+export class QueuedEmailReceiptDto implements QueuedEmailReceipt {
+  @ApiProperty({ example: 'accounting@example.com', type: String })
+  recipientEmail!: string;
+
+  @ApiProperty({ enum: ['queued'] })
+  status!: 'queued';
+}
+
 export class FinancialDocumentListQueryDto {
   @ApiPropertyOptional({ maxLength: 120, type: String })
   @IsOptional()
@@ -280,9 +332,9 @@ class FinancialDocumentVatSummaryDto {
 }
 
 export class FinancialDocumentDto implements FinancialDocument {
-  @ApiProperty({ type: String }) bgnGrossTotal!: string;
-  @ApiProperty({ type: String }) bgnNetTotal!: string;
-  @ApiProperty({ type: String }) bgnVatTotal!: string;
+  @ApiProperty({ type: String }) eurGrossTotal!: string;
+  @ApiProperty({ type: String }) eurNetTotal!: string;
+  @ApiProperty({ type: String }) eurVatTotal!: string;
   @ApiProperty({ type: String }) branchName!: string;
   @ApiProperty({ format: 'uuid', type: String }) businessLocationId!: string;
   @ApiProperty({ type: String }) businessLocationName!: string;
@@ -292,6 +344,10 @@ export class FinancialDocumentDto implements FinancialDocument {
   correctionOf?: NonNullable<FinancialDocument['correctionOf']>;
   @ApiPropertyOptional({ type: String }) correctionReason?: string;
   @ApiProperty({ format: 'date-time', type: String }) createdAt!: string;
+  @ApiPropertyOptional({ format: 'date-time', type: String }) issuedAt?: string;
+  @ApiPropertyOptional({ type: String }) issuedByName?: string;
+  @ApiPropertyOptional({ format: 'uuid', type: String }) convertedFromDocumentId?: string;
+  @ApiPropertyOptional({ type: String }) convertedFromDocumentNumber?: string;
   @ApiProperty({ type: String }) currencyCode!: string;
   @ApiProperty({ format: 'uuid', type: String }) customerPartnerId!: string;
   @ApiProperty({ type: FinancialDocumentPartySnapshotDto })
@@ -406,7 +462,7 @@ class FinancialDocumentServiceDraftLineReferenceDto {
 }
 
 class FinancialDocumentServiceDraftReferenceDto {
-  @ApiProperty({ enum: ['BGN'] }) currencyCode!: 'BGN';
+  @ApiProperty({ enum: ['EUR'] }) currencyCode!: 'EUR';
   @ApiProperty({ type: String }) customerName!: string;
   @ApiProperty({ format: 'uuid', type: String }) customerPartnerId!: string;
   @ApiProperty({ format: 'uuid', type: String }) id!: string;

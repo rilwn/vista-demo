@@ -213,7 +213,7 @@ describe('POS application', () => {
     expect(
       screen.getByText('Preview from the test register. No certified H-18 report was issued.'),
     ).toBeTruthy();
-    expect(screen.getByText('Expected cash').nextElementSibling?.textContent).toBe('160.00 BGN');
+    expect(screen.getByText('Expected cash').nextElementSibling?.textContent).toBe('160.00 EUR');
   });
 
   it('opens a shift, sells a live catalog item for cash, and shows change and receipt', async () => {
@@ -231,13 +231,13 @@ describe('POS application', () => {
     fireEvent.change(screen.getByLabelText('Cash received'), { target: { value: '100' } });
     await waitFor(() =>
       expect(
-        screen.getByRole('button', { name: /Complete sale · 60.00 BGN/u }).hasAttribute('disabled'),
+        screen.getByRole('button', { name: /Complete sale · 60.00 EUR/u }).hasAttribute('disabled'),
       ).toBe(false),
     );
-    fireEvent.click(screen.getByRole('button', { name: /Complete sale · 60.00 BGN/u }));
+    fireEvent.click(screen.getByRole('button', { name: /Complete sale · 60.00 EUR/u }));
 
     expect(await screen.findByRole('heading', { name: sale.fiscalReceiptNumber })).toBeTruthy();
-    expect(screen.getByText('40.00 BGN')).toBeTruthy();
+    expect(screen.getByText('40.00 EUR')).toBeTruthy();
     expect(screen.getByText('No certified fiscal receipt was issued.')).toBeTruthy();
   });
 
@@ -260,7 +260,7 @@ describe('POS application', () => {
       (await screen.findAllByRole('button', { name: /Demo 12 V Power Adapter/u }))[0]!,
     );
     fireEvent.change(screen.getByLabelText('Cash received'), { target: { value: '100' } });
-    const complete = screen.getByRole('button', { name: /Complete sale · 60.00 BGN/u });
+    const complete = screen.getByRole('button', { name: /Complete sale · 60.00 EUR/u });
     expect(complete.hasAttribute('disabled')).toBe(true);
     expect(screen.getByText('Checking offers…')).toBeTruthy();
     release();
@@ -279,14 +279,14 @@ describe('POS application', () => {
     fireEvent.change(screen.getByLabelText('Cash portion'), { target: { value: '20' } });
     fireEvent.change(screen.getByLabelText('Cash received'), { target: { value: '30' } });
 
-    expect(screen.getByText('Card portion').nextElementSibling?.textContent).toBe('40.00 BGN');
-    expect(screen.getAllByText('10.00 BGN').length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByText('Card portion').nextElementSibling?.textContent).toBe('40.00 EUR');
+    expect(screen.getAllByText('10.00 EUR').length).toBeGreaterThanOrEqual(2);
     await waitFor(() =>
       expect(
-        screen.getByRole('button', { name: /Complete sale · 60.00 BGN/u }).hasAttribute('disabled'),
+        screen.getByRole('button', { name: /Complete sale · 60.00 EUR/u }).hasAttribute('disabled'),
       ).toBe(false),
     );
-    fireEvent.click(screen.getByRole('button', { name: /Complete sale · 60.00 BGN/u }));
+    fireEvent.click(screen.getByRole('button', { name: /Complete sale · 60.00 EUR/u }));
     expect(await screen.findByRole('heading', { name: sale.fiscalReceiptNumber })).toBeTruthy();
   });
 
@@ -306,10 +306,10 @@ describe('POS application', () => {
     );
     fireEvent.click(screen.getByRole('button', { name: 'Advance / account' }));
 
-    expect(await screen.findByText('80.00 BGN')).toBeTruthy();
-    expect(screen.getByText('2,000.00 BGN')).toBeTruthy();
+    expect(await screen.findByText('80.00 EUR')).toBeTruthy();
+    expect(screen.getByText('2,000.00 EUR')).toBeTruthy();
     const advanceInput = screen.getByLabelText('Use from advance');
-    const complete = screen.getByRole('button', { name: /Complete sale · 60.00 BGN/u });
+    const complete = screen.getByRole('button', { name: /Complete sale · 60.00 EUR/u });
     for (const [value, message] of [
       ['81', 'The amount is higher than the available advance.'],
       ['61', 'The advance amount cannot exceed the sale total.'],
@@ -326,10 +326,10 @@ describe('POS application', () => {
     expect(screen.getByText(/Due in 14 days/u)).toBeTruthy();
     await waitFor(() =>
       expect(
-        screen.getByRole('button', { name: /Complete sale · 60.00 BGN/u }).hasAttribute('disabled'),
+        screen.getByRole('button', { name: /Complete sale · 60.00 EUR/u }).hasAttribute('disabled'),
       ).toBe(false),
     );
-    fireEvent.click(screen.getByRole('button', { name: /Complete sale · 60.00 BGN/u }));
+    fireEvent.click(screen.getByRole('button', { name: /Complete sale · 60.00 EUR/u }));
 
     await screen.findByRole('heading', { name: sale.fiscalReceiptNumber });
     const saleCall = fetchMock.mock.calls.find(([input, init]) => {
@@ -359,7 +359,7 @@ describe('POS application', () => {
     );
 
     expect(await screen.findByText('Two adapters save 10%')).toBeTruthy();
-    expect(screen.getAllByText('−10.00 BGN').length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByText('−10.00 EUR').length).toBeGreaterThanOrEqual(2);
 
     fireEvent.click(screen.getByRole('button', { name: 'Add customer' }));
     fireEvent.click(await screen.findByRole('button', { name: /Alfa Market Demo Ltd\./u }));
@@ -374,7 +374,7 @@ describe('POS application', () => {
     expect(screen.getAllByText(/Vista Demo Manager/u).length).toBeGreaterThanOrEqual(2);
 
     fireEvent.change(screen.getByLabelText('Points to use'), { target: { value: '100' } });
-    expect(await screen.findByText('−1.00 BGN')).toBeTruthy();
+    expect(await screen.findByText('−1.00 EUR')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: /300 reward points/u }));
     expect(await screen.findByRole('heading', { name: 'Alfa Market Demo Ltd.' })).toBeTruthy();
     expect(screen.getByText('Opening reward balance')).toBeTruthy();
@@ -399,15 +399,15 @@ describe('POS application', () => {
     fireEvent.click(await screen.findByRole('link', { name: 'Returns' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Start return' }));
     fireEvent.click(screen.getByRole('checkbox', { name: /Demo 12 V Power Adapter/u }));
-    fireEvent.click(screen.getByRole('button', { name: /Complete return · 60.00 BGN/u }));
+    fireEvent.click(screen.getByRole('button', { name: /Complete return · 60.00 EUR/u }));
 
     expect(await screen.findByRole('heading', { name: posReturn.returnNumber })).toBeTruthy();
     expect(screen.getByText(posReturn.fiscalReversalNumber)).toBeTruthy();
-    expect(screen.getAllByText('60.00 BGN').length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByText('60.00 EUR').length).toBeGreaterThanOrEqual(2);
     fireEvent.click(screen.getByRole('button', { name: 'Done' }));
     fireEvent.click(screen.getByRole('link', { name: 'Shifts' }));
     await waitFor(() =>
-      expect(screen.getByText('Expected cash').nextElementSibling?.textContent).toBe('100.00 BGN'),
+      expect(screen.getByText('Expected cash').nextElementSibling?.textContent).toBe('100.00 EUR'),
     );
   });
 
@@ -500,7 +500,7 @@ function installApiMock({ lookupSale = false, savedReport = false } = {}) {
     if (url.pathname.endsWith('/pos/terminal-context'))
       return jsonResponse({
         ...(shiftOpen
-          ? { currentShift: returned ? { ...shift, expectedCashBgn: '100.0000' } : shift }
+          ? { currentShift: returned ? { ...shift, expectedCashEur: '100.0000' } : shift }
           : {}),
         registers: [register],
       });
@@ -513,7 +513,7 @@ function installApiMock({ lookupSale = false, savedReport = false } = {}) {
       return jsonResponse({
         ...shift,
         closedAt: '2026-09-02T13:00:00.000Z',
-        closingCashBgn: shift.expectedCashBgn,
+        closingCashEur: shift.expectedCashEur,
         status: 'closed',
         version: 2,
       });
@@ -684,10 +684,10 @@ const register = {
 const shift = {
   cashRegisterId: register.id,
   cashRegisterName: register.name,
-  expectedCashBgn: '100.0000',
+  expectedCashEur: '100.0000',
   id: '55555555-5555-4555-8555-555555555555',
   openedAt: '2026-09-02T12:00:00.000Z',
-  openingCashBgn: '100.0000',
+  openingCashEur: '100.0000',
   operatorCode: register.operatorCode,
   operatorId: register.operatorId,
   shiftNumber: 'SHIFT-POS-01-POS-01-2026-000001',
@@ -700,7 +700,7 @@ const catalogItem = {
   availableQuantity: '12.0000',
   barcodes: ['3801234567898'],
   batches: [],
-  currencyCode: 'BGN',
+  currencyCode: 'EUR',
   id: '66666666-6666-4666-8666-666666666666',
   name: 'Demo 12 V Power Adapter',
   priceListId: '77777777-7777-4777-8777-777777777777',
@@ -719,7 +719,7 @@ const customer = {
     cardNumber: 'VISTA-DEMO-ALFA',
     id: '89898989-8989-4989-8989-898989898989',
     programName: 'Vista Rewards',
-    redemptionValueBgn: '0.0100',
+    redemptionValueEur: '0.0100',
     status: 'active',
   },
   locations: [
@@ -734,7 +734,7 @@ const sale = {
   cashTendered: '100.0000',
   changeAmount: '40.0000',
   completedAt: '2026-09-02T12:10:00.000Z',
-  currencyCode: 'BGN',
+  currencyCode: 'EUR',
   customerName: customer.name,
   customerPartnerId: customer.id,
   fiscalAdapter: 'development-simulator',
@@ -790,15 +790,15 @@ const sale = {
 };
 
 const posInvoice = {
-  bgnGrossTotal: '60.0000',
-  bgnNetTotal: '50.0000',
-  bgnVatTotal: '10.0000',
+  eurGrossTotal: '60.0000',
+  eurNetTotal: '50.0000',
+  eurVatTotal: '10.0000',
   branchName: 'Vratsa',
   businessLocationId: register.businessLocationId,
   businessLocationName: register.businessLocationName,
   cashRegisterName: register.name,
   createdAt: '2026-09-05T10:00:00.000Z',
-  currencyCode: 'BGN',
+  currencyCode: 'EUR',
   customerPartnerId: customer.id,
   customerSnapshot: { address: 'Central Store, Vratsa, BG', name: customer.name },
   documentType: 'invoice',
@@ -814,7 +814,7 @@ const posInvoice = {
   number: 'DINV-POS-01-2026-000001',
   operatorName: 'Mila POS',
   rateDate: '2026-09-05',
-  rateSource: 'internal_bgn',
+  rateSource: 'internal_eur',
   sourceFiscalReceiptNumber: sale.fiscalReceiptNumber,
   sourcePosSaleId: sale.id,
   sourcePosSaleNumber: sale.saleNumber,
@@ -939,17 +939,17 @@ const reportShift = {
   cashRegisterCode: register.code,
   cashRegisterId: register.id,
   cashRegisterName: register.name,
-  cashRefundsBgn: '0.0000',
-  cashSalesBgn: '60.0000',
-  expectedCashBgn: '160.0000',
+  cashRefundsEur: '0.0000',
+  cashSalesEur: '60.0000',
+  expectedCashEur: '160.0000',
   fiscalMode: 'simulator',
-  grossReturnsBgn: '0.0000',
-  grossSalesBgn: '60.0000',
+  grossReturnsEur: '0.0000',
+  grossSalesEur: '60.0000',
   id: shift.id,
   locationName: register.businessLocationName,
-  netRevenueBgn: '60.0000',
+  netRevenueEur: '60.0000',
   openedAt: shift.openedAt,
-  openingCashBgn: '100.0000',
+  openingCashEur: '100.0000',
   operatorCode: register.operatorCode,
   operatorId: register.operatorId,
   operatorName: 'Mila POS',
@@ -972,16 +972,16 @@ const reportOverview = {
   shifts: [reportShift],
   timezone: 'Europe/Sofia',
   totals: {
-    averageSaleBgn: '60.0000',
-    grossReturnsBgn: '0.0000',
-    grossSalesBgn: '60.0000',
+    averageSaleEur: '60.0000',
+    grossReturnsEur: '0.0000',
+    grossSalesEur: '60.0000',
     itemQuantityReturned: '0.0000',
     itemQuantitySold: '1.0000',
-    netRevenueBgn: '60.0000',
-    netSalesBgn: '50.0000',
+    netRevenueEur: '60.0000',
+    netSalesEur: '50.0000',
     returnCount: 0,
     saleCount: 1,
-    vatSalesBgn: '10.0000',
+    vatSalesEur: '10.0000',
   },
 };
 

@@ -18,13 +18,13 @@ interface OverviewCountRow {
   financial_documents: string;
   last_purchase_at: Date | string | null;
   open_receivables: string;
-  outstanding_bgn: string;
+  outstanding_eur: string;
   payments: string;
   purchases: string;
 }
 
 interface FinancialDocumentRow {
-  bgn_gross_total: string;
+  eur_gross_total: string;
   currency_code: string;
   document_type: CustomerFinancialDocumentSummary['documentType'];
   draft_number: string;
@@ -39,7 +39,7 @@ interface FinancialDocumentRow {
 
 interface ReceivableRow {
   allocated_total: string;
-  bgn_total: string;
+  eur_total: string;
   currency_code: string;
   document_date: string;
   due_date: string;
@@ -138,7 +138,7 @@ export class CustomerOverviewService {
         financialDocuments: Number(count.financial_documents),
         ...(count.last_purchase_at ? { lastPurchaseAt: asIso(count.last_purchase_at) } : {}),
         openReceivables: Number(count.open_receivables),
-        outstandingBgn: count.outstanding_bgn,
+        outstandingEur: count.outstanding_eur,
         payments: Number(count.payments),
         purchases: Number(count.purchases),
       },
@@ -171,7 +171,7 @@ const overviewCountsSql = `
     (SELECT coalesce(sum(document.outstanding_total), 0)::text
        FROM finance.customer_documents document
       WHERE document.customer_partner_id = $1
-        AND document.review_state = 'pending_finance_review') AS outstanding_bgn,
+        AND document.review_state = 'pending_finance_review') AS outstanding_eur,
     (SELECT count(*)::text
        FROM finance.payments payment
       WHERE payment.customer_partner_id = $1) AS payments`;
@@ -180,7 +180,7 @@ const financialDocumentsSql = `
   SELECT document.id, document.draft_number, document.official_number,
     document.document_type, document.status, document.issue_date::text,
     document.due_date::text, document.currency_code, document.gross_total::text,
-    document.bgn_gross_total::text, document.source_sales_invoice_id
+    document.eur_gross_total::text, document.source_sales_invoice_id
   FROM finance.financial_documents document
   WHERE document.customer_partner_id = $1
   ORDER BY document.issue_date DESC, document.created_at DESC, document.id DESC
@@ -190,7 +190,7 @@ const receivablesSql = `
   SELECT document.id, document.document_number, document.source_sales_invoice_id,
     document.document_date::text, document.due_date::text, document.currency_code,
     document.total::text, document.allocated_total::text, document.outstanding_total::text,
-    document.bgn_total::text, document.payment_status
+    document.eur_total::text, document.payment_status
   FROM finance.customer_documents document
   WHERE document.customer_partner_id = $1
   ORDER BY document.due_date DESC, document.created_at DESC, document.id DESC
@@ -246,7 +246,7 @@ const purchaseLinesSql = `
 
 function mapFinancialDocument(row: FinancialDocumentRow): CustomerFinancialDocumentSummary {
   return {
-    bgnGrossTotal: row.bgn_gross_total,
+    eurGrossTotal: row.eur_gross_total,
     currencyCode: row.currency_code,
     documentType: row.document_type,
     draftNumber: row.draft_number,
@@ -263,7 +263,7 @@ function mapFinancialDocument(row: FinancialDocumentRow): CustomerFinancialDocum
 function mapReceivable(row: ReceivableRow): CustomerReceivableSummary {
   return {
     allocatedTotal: row.allocated_total,
-    bgnTotal: row.bgn_total,
+    eurTotal: row.eur_total,
     currencyCode: row.currency_code,
     documentDate: row.document_date,
     dueDate: row.due_date,

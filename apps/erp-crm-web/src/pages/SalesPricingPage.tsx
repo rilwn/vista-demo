@@ -397,7 +397,7 @@ function PosOffersRegister({
                 <strong>
                   {rule.discountType === 'percentage'
                     ? `${formatOperationsNumber(Number(rule.discountValue), { minimumFractionDigits: 2, maximumFractionDigits: 2 })}% off`
-                    : `${formatMoney(rule.discountValue, 'BGN')} off`}
+                    : `${formatMoney(rule.discountValue, 'EUR')} off`}
                 </strong>
                 <span>
                   {rule.items
@@ -436,7 +436,7 @@ function PriceResolver({
   const [customerPartnerId, setCustomerPartnerId] = useState(references.customers[0]?.id ?? '');
   const [productId, setProductId] = useState(references.products[0]?.id ?? '');
   const [asOf, setAsOf] = useState(dateValue(new Date()));
-  const [currencyCode, setCurrencyCode] = useState('BGN');
+  const [currencyCode, setCurrencyCode] = useState('EUR');
   const [result, setResult] = useState<SalesResolvedPrice | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -539,7 +539,7 @@ function PriceListForm({
   const [customerGroupId, setCustomerGroupId] = useState(record?.customerGroup?.id ?? '');
   const [customerPartnerId, setCustomerPartnerId] = useState(record?.customer?.id ?? '');
   const [campaignId, setCampaignId] = useState(record?.campaign?.id ?? '');
-  const [currencyCode, setCurrencyCode] = useState(record?.currencyCode ?? 'BGN');
+  const [currencyCode, setCurrencyCode] = useState(record?.currencyCode ?? 'EUR');
   const [validFrom, setValidFrom] = useState(record?.validFrom ?? dateValue(new Date()));
   const [validTo, setValidTo] = useState(record?.validTo ?? futureDate(365));
   const [priority, setPriority] = useState(String(record?.priority ?? 0));
@@ -868,7 +868,7 @@ function PosCommercialRuleForm({
             value={discountType}
           >
             <option value="percentage">Percentage</option>
-            <option value="fixed_amount">Fixed amount (BGN)</option>
+            <option value="fixed_amount">Fixed amount (EUR)</option>
           </select>
         </PricingField>
         <PricingField label={discountType === 'percentage' ? 'Discount %' : 'Discount amount'}>

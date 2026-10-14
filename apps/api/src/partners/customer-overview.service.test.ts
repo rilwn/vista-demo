@@ -74,7 +74,7 @@ describe('CustomerOverviewService', () => {
               financial_documents: '1',
               last_purchase_at: '2026-08-25T12:00:00.000Z',
               open_receivables: '1',
-              outstanding_bgn: '40.0000',
+              outstanding_eur: '40.0000',
               payments: '1',
               purchases: '1',
             },
@@ -86,8 +86,8 @@ describe('CustomerOverviewService', () => {
         return Promise.resolve({
           rows: [
             {
-              bgn_gross_total: '60.0000',
-              currency_code: 'BGN',
+              eur_gross_total: '60.0000',
+              currency_code: 'EUR',
               document_type: 'invoice',
               draft_number: 'DINV-2026-000001',
               due_date: '2026-09-08',
@@ -106,8 +106,8 @@ describe('CustomerOverviewService', () => {
           rows: [
             {
               allocated_total: '20.0000',
-              bgn_total: '60.0000',
-              currency_code: 'BGN',
+              eur_total: '60.0000',
+              currency_code: 'EUR',
               document_date: '2026-08-25',
               document_number: 'FIN-REV-2026-000001',
               due_date: '2026-09-08',
@@ -125,7 +125,7 @@ describe('CustomerOverviewService', () => {
           rows: [
             {
               amount: '20.0000',
-              currency_code: 'BGN',
+              currency_code: 'EUR',
               id: 'c3603397-2627-47a4-a104-fb8a14ca2b2d',
               payment_date: '2026-08-26',
               payment_method: 'bank_transfer',
@@ -140,7 +140,7 @@ describe('CustomerOverviewService', () => {
         return Promise.resolve({
           rows: [
             {
-              currency_code: 'BGN',
+              currency_code: 'EUR',
               id: invoiceId,
               number: 'DEV-INV-DRAFT-0001',
               recorded_at: '2026-08-25T12:00:00.000Z',
@@ -169,7 +169,7 @@ describe('CustomerOverviewService', () => {
       financialDocuments: 1,
       lastPurchaseAt: '2026-08-25T12:00:00.000Z',
       openReceivables: 1,
-      outstandingBgn: '40.0000',
+      outstandingEur: '40.0000',
       payments: 1,
       purchases: 1,
     });
@@ -198,7 +198,7 @@ describe('CustomerOverviewService', () => {
               financial_documents: '0',
               last_purchase_at: null,
               open_receivables: '0',
-              outstanding_bgn: '0',
+              outstanding_eur: '0',
               payments: '0',
               purchases: '0',
             },

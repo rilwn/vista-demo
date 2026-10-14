@@ -28,7 +28,7 @@ describe('CRM pipeline DTOs', () => {
         uic: '207654321',
       },
       opportunity: {
-        estimatedRevenueBgn: '1800.00',
+        estimatedRevenueEur: '1800.00',
         expectedCloseOn: '2026-10-15',
         ownerAccountId: fixtureId('account:crm'),
         probabilityPercent: 40,
@@ -58,7 +58,7 @@ describe('CRM pipeline DTOs', () => {
       expectedVersion: 0,
       newCustomer: { displayName: '', kind: 'company' },
       opportunity: {
-        estimatedRevenueBgn: '18.999',
+        estimatedRevenueEur: '18.999',
         ownerAccountId: 'not-an-account',
         probabilityPercent: 101,
         title: '',

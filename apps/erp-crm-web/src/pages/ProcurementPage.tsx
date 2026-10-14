@@ -25,6 +25,7 @@ import {
   useLocalization,
 } from '../i18n/LocalizationProvider';
 import { messages } from '../i18n/legacyMessages';
+import { isMaterialCostVariance } from './procurement-cost-variance';
 import { ProcurementWorkspace } from './SupplierProcurementPage';
 
 export type ProcurementView = 'goods-receipts' | 'purchase-orders';
@@ -303,7 +304,7 @@ function PurchaseOrderDrawer({
 }) {
   const [supplierPartnerId, setSupplierPartnerId] = useState(referenceData.suppliers[0]?.id ?? '');
   const [warehouseId, setWarehouseId] = useState(referenceData.warehouses[0]?.id ?? '');
-  const [currencyCode, setCurrencyCode] = useState('BGN');
+  const [currencyCode, setCurrencyCode] = useState('EUR');
   const [lines, setLines] = useState<OrderLineDraft[]>([emptyOrderLine(referenceData)]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -515,7 +516,7 @@ interface ReceiptLineDraft {
   orderLineId: string;
   quantity: string;
   serialNumbers: string;
-  unitCostBgn: string;
+  unitCostEur: string;
 }
 
 function GoodsReceiptDrawer({
@@ -542,7 +543,7 @@ function GoodsReceiptDrawer({
       orderLineId: line.id,
       quantity: subtractDecimal(line.orderedQuantity, line.deliveredQuantity),
       serialNumbers: '',
-      unitCostBgn: order.currencyCode === 'BGN' ? line.unitPrice : '',
+      unitCostEur: order.currencyCode === 'EUR' ? line.unitPrice : '',
     })),
   );
   const [supplierDeliveryReference, setSupplierDeliveryReference] = useState('');
@@ -566,7 +567,7 @@ function GoodsReceiptDrawer({
         ...(line.serialNumbers.trim()
           ? { serialNumbers: splitSerialNumbers(line.serialNumbers) }
           : {}),
-        ...(line.unitCostBgn ? { unitCostBgn: line.unitCostBgn } : {}),
+        ...(line.unitCostEur ? { unitCostEur: line.unitCostEur } : {}),
       })),
       ...(supplierDeliveryReference.trim()
         ? { supplierDeliveryReference: supplierDeliveryReference.trim() }
@@ -648,9 +649,10 @@ function GoodsReceiptDrawer({
             const remainingId = `receipt-line-${line.id}-remaining`;
             const hasUnitCostVariance =
               draft.include &&
-              order.currencyCode === 'BGN' &&
-              isReceiptCost(draft.unitCostBgn) &&
-              decimalUnits(draft.unitCostBgn) !== decimalUnits(line.unitPrice);
+              order.currencyCode === 'EUR' &&
+              Boolean(line.costBaselineEur) &&
+              isReceiptCost(draft.unitCostEur) &&
+              isMaterialCostVariance(line.costBaselineEur, draft.unitCostEur);
             return (
               <article
                 className={`procurement-receive-line${draft.include ? '' : ' is-excluded'}`}
@@ -692,16 +694,16 @@ function GoodsReceiptDrawer({
                     />
                   </label>
                   <label>
-                    <span>{messages.procurement.unitCostBgn}</span>
+                    <span>{messages.procurement.unitCostEur}</span>
                     <input
                       disabled={!draft.include}
                       inputMode="decimal"
                       onChange={(event) =>
-                        updateReceiptLine(setLines, line.id, { unitCostBgn: event.target.value })
+                        updateReceiptLine(setLines, line.id, { unitCostEur: event.target.value })
                       }
                       pattern="\d+(\.\d{1,4})?"
-                      required={draft.include && order.currencyCode !== 'BGN'}
-                      value={draft.unitCostBgn}
+                      required={draft.include && order.currencyCode !== 'EUR'}
+                      value={draft.unitCostEur}
                     />
                   </label>
                 </div>
@@ -709,8 +711,14 @@ function GoodsReceiptDrawer({
                   <div className="procurement-price-variance">
                     <InlineAlert tone="warning">
                       {messages.procurement.priceVariance(
-                        formatMoney(line.unitPrice, 'BGN'),
-                        formatMoney(draft.unitCostBgn, 'BGN'),
+                        formatMoney(line.costBaselineEur!, 'EUR'),
+                        formatMoney(draft.unitCostEur, 'EUR'),
+                        line.costBaselineSource === 'supplier_invoice'
+                          ? messages.procurement.latestSupplierInvoice
+                          : messages.procurement.latestProductCost,
+                        Math.abs(
+                          (Number(draft.unitCostEur) / Number(line.costBaselineEur!) - 1) * 100,
+                        ).toFixed(1),
                       )}
                     </InlineAlert>
                   </div>

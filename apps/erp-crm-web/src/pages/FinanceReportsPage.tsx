@@ -774,14 +774,14 @@ function AgingRegister({ report }: { report: FinanceAgingReport }) {
           </div>
           <div className="finance-report-partner">
             <strong>{item.partnerName}</strong>
-            <small>Original {formatMoney(item.originalBgnTotal)}</small>
+            <small>Original {formatMoney(item.originalEurTotal)}</small>
           </div>
           <div className="finance-report-due">
             <strong>{formatDate(item.dueDate)}</strong>
             <small>{item.daysOverdue ? `${item.daysOverdue} days overdue` : 'Not overdue'}</small>
           </div>
           <AgingBadge item={item} />
-          <strong className="finance-report-amount">{formatMoney(item.outstandingBgnTotal)}</strong>
+          <strong className="finance-report-amount">{formatMoney(item.outstandingEurTotal)}</strong>
         </article>
       ))}
     </div>
@@ -881,15 +881,15 @@ function TurnoverView({
             <ReportMetric label="Documents" value={String(data.report.totals.documentCount)} />
             <ReportMetric
               label="Gross turnover"
-              value={formatMoney(data.report.totals.grossBgnTotal)}
+              value={formatMoney(data.report.totals.grossEurTotal)}
             />
             <ReportMetric
               label="Currently allocated"
-              value={formatMoney(data.report.totals.allocatedBgnTotal)}
+              value={formatMoney(data.report.totals.allocatedEurTotal)}
             />
             <ReportMetric
               label="Current balance"
-              value={formatMoney(data.report.totals.outstandingBgnTotal)}
+              value={formatMoney(data.report.totals.outstandingEurTotal)}
             />
           </div>
           <TurnoverRegister report={data.report} />
@@ -922,9 +922,9 @@ function TurnoverRegister({ report }: { report: FinanceTurnoverReport }) {
             <small>{report.kind === 'customer' ? 'Customer account' : 'Supplier account'}</small>
           </div>
           <strong>{item.documentCount}</strong>
-          <strong>{formatMoney(item.grossBgnTotal)}</strong>
-          <span>{formatMoney(item.allocatedBgnTotal)}</span>
-          <strong className="finance-report-amount">{formatMoney(item.outstandingBgnTotal)}</strong>
+          <strong>{formatMoney(item.grossEurTotal)}</strong>
+          <span>{formatMoney(item.allocatedEurTotal)}</span>
+          <strong className="finance-report-amount">{formatMoney(item.outstandingEurTotal)}</strong>
         </article>
       ))}
     </div>
@@ -997,7 +997,7 @@ function JournalView({
           <p className="finance-report-caption">
             {kind === 'sales' ? 'Customer' : 'Supplier'} documents dated{' '}
             {formatDate(data.report.dateFrom)}–{formatDate(data.report.dateTo)}. Values are shown in
-            BGN from the rate recorded on each document.
+            EUR from the rate recorded on each document.
           </p>
           {data.report.totals.incompleteTaxDocuments ? (
             <InlineAlert title="Earlier invoice excluded from VAT totals" tone="warning">
@@ -1021,14 +1021,14 @@ function JournalView({
           ) : null}
           <div aria-label="Journal totals" className="finance-turnover-summary">
             <ReportMetric label="Documents" value={String(data.report.totals.documentCount)} />
-            <ReportMetric label="Net value" value={formatMoney(data.report.totals.netBgnTotal)} />
+            <ReportMetric label="Net value" value={formatMoney(data.report.totals.netEurTotal)} />
             <ReportMetric
               label="Recorded VAT"
-              value={formatMoney(data.report.totals.vatBgnTotal)}
+              value={formatMoney(data.report.totals.vatEurTotal)}
             />
             <ReportMetric
               label="Gross value"
-              value={formatMoney(data.report.totals.grossBgnTotal)}
+              value={formatMoney(data.report.totals.grossEurTotal)}
             />
           </div>
           <JournalRegister report={data.report} />
@@ -1079,11 +1079,11 @@ function JournalRegister({ report }: { report: FinanceJournalReport }) {
               {item.exchangeRate ? ` · rate ${item.exchangeRate}` : ''}
             </small>
           </div>
-          <strong>{formatMoney(item.netBgnTotal)}</strong>
+          <strong>{formatMoney(item.netEurTotal)}</strong>
           <span className={!item.taxBreakdownComplete ? 'finance-tax-missing' : undefined}>
-            {item.taxBreakdownComplete ? formatMoney(item.vatBgnTotal) : 'Needs review'}
+            {item.taxBreakdownComplete ? formatMoney(item.vatEurTotal) : 'Needs review'}
           </span>
-          <strong className="finance-report-amount">{formatMoney(item.grossBgnTotal)}</strong>
+          <strong className="finance-report-amount">{formatMoney(item.grossEurTotal)}</strong>
         </article>
       ))}
     </div>
@@ -1157,11 +1157,11 @@ function VatReviewContent({ report }: { report: FinanceVatReviewReport }) {
         </InlineAlert>
       ) : null}
       <div aria-label="VAT totals" className="finance-turnover-summary finance-vat-summary">
-        <ReportMetric label="Output VAT" value={formatMoney(report.recordedOutputVatBgn)} />
-        <ReportMetric label="Recorded input VAT" value={formatMoney(report.recordedInputVatBgn)} />
+        <ReportMetric label="Output VAT" value={formatMoney(report.recordedOutputVatEur)} />
+        <ReportMetric label="Recorded input VAT" value={formatMoney(report.recordedInputVatEur)} />
         <ReportMetric
           label="Recorded difference"
-          value={formatMoney(report.recordedDifferenceBgn)}
+          value={formatMoney(report.recordedDifferenceEur)}
         />
         <ReportMetric
           label="Purchases to review"
@@ -1202,8 +1202,8 @@ function VatGroup({ items, title }: { items: FinanceVatReviewReport['items']; ti
               <strong>{vatTreatmentLabel(item.vatTreatment)}</strong>
               <span>{formatRate(item.vatRate)}</span>
               <span>{item.documentCount}</span>
-              <span>{formatMoney(item.netBgnTotal)}</span>
-              <strong>{formatMoney(item.vatBgnTotal)}</strong>
+              <span>{formatMoney(item.netEurTotal)}</span>
+              <strong>{formatMoney(item.vatEurTotal)}</strong>
             </div>
           ))}
         </div>
@@ -1457,5 +1457,5 @@ function formatDate(value: string): string {
 }
 
 function formatMoney(value: string): string {
-  return formatOperationsCurrency(/^-?\d+(?:\.\d+)?$/u.test(value) ? value : '0', 'BGN');
+  return formatOperationsCurrency(/^-?\d+(?:\.\d+)?$/u.test(value) ? value : '0', 'EUR');
 }

@@ -17,7 +17,7 @@ interface OverviewTotalRow {
   completed_requests: string;
   labor_minutes: string;
   open_requests: string;
-  total_cost_bgn: string;
+  total_cost_eur: string;
   total_requests: string;
 }
 
@@ -30,7 +30,7 @@ interface TypeRow {
   completed_count: string;
   request_count: string;
   service_type: ServiceType;
-  total_cost_bgn: string;
+  total_cost_eur: string;
 }
 
 interface TechnicianRow {
@@ -38,7 +38,7 @@ interface TechnicianRow {
   completed_count: string;
   display_name: string;
   labor_minutes: string;
-  total_cost_bgn: string;
+  total_cost_eur: string;
 }
 
 @Injectable()
@@ -61,7 +61,7 @@ export class ServiceReportsService {
            count(*) FILTER (WHERE request.status IN ('new','scheduled','in_progress'))::text
              AS open_requests,
            coalesce(sum(work_order.labor_minutes), 0)::text AS labor_minutes,
-           coalesce(sum(work_order.total_cost_bgn), 0)::text AS total_cost_bgn
+           coalesce(sum(work_order.total_cost_eur), 0)::text AS total_cost_eur
          FROM service.requests request
          LEFT JOIN service.work_orders work_order ON work_order.service_request_id = request.id
          WHERE ${period}`,
@@ -81,7 +81,7 @@ export class ServiceReportsService {
         `SELECT request.service_type,
                 count(*)::text AS request_count,
                 count(*) FILTER (WHERE request.status = 'completed')::text AS completed_count,
-                coalesce(sum(work_order.total_cost_bgn), 0)::text AS total_cost_bgn
+                coalesce(sum(work_order.total_cost_eur), 0)::text AS total_cost_eur
          FROM service.requests request
          LEFT JOIN service.work_orders work_order ON work_order.service_request_id = request.id
          WHERE ${period}
@@ -103,14 +103,14 @@ export class ServiceReportsService {
         completedRequests: Number(total?.completed_requests ?? '0'),
         laborMinutes: Number(total?.labor_minutes ?? '0'),
         openRequests: Number(total?.open_requests ?? '0'),
-        totalCostBgn: total?.total_cost_bgn ?? '0.0000',
+        totalCostEur: total?.total_cost_eur ?? '0.0000',
         totalRequests: Number(total?.total_requests ?? '0'),
       },
       typeTotals: types.rows.map((row) => ({
         completedCount: Number(row.completed_count),
         requestCount: Number(row.request_count),
         serviceType: row.service_type,
-        totalCostBgn: row.total_cost_bgn,
+        totalCostEur: row.total_cost_eur,
       })),
     };
   }
@@ -128,8 +128,8 @@ export class ServiceReportsService {
         created_on: string;
         customer_name: string;
         device_name: string;
-        labor_cost_bgn: string;
-        parts_cost_bgn: string;
+        labor_cost_eur: string;
+        parts_cost_eur: string;
         priority: string;
         request_number: string;
         serial_number: string;
@@ -137,8 +137,8 @@ export class ServiceReportsService {
         source_channel: string;
         status: ServiceRequestStatus;
         technician_name: string;
-        total_cost_bgn: string;
-        transport_cost_bgn: string;
+        total_cost_eur: string;
+        transport_cost_eur: string;
       }>(
         `SELECT request.request_number,
                 (request.created_at AT TIME ZONE $3)::date::text AS created_on,
@@ -146,10 +146,10 @@ export class ServiceReportsService {
                 equipment.device_name, equipment.serial_number,
                 request.source_channel, request.service_type, request.priority, request.status,
                 coalesce(employee.display_name, 'Unassigned') AS technician_name,
-                coalesce(work_order.labor_cost_bgn, 0)::text AS labor_cost_bgn,
-                coalesce(work_order.parts_cost_bgn, 0)::text AS parts_cost_bgn,
-                coalesce(work_order.transport_cost_bgn, 0)::text AS transport_cost_bgn,
-                coalesce(work_order.total_cost_bgn, 0)::text AS total_cost_bgn
+                coalesce(work_order.labor_cost_eur, 0)::text AS labor_cost_eur,
+                coalesce(work_order.parts_cost_eur, 0)::text AS parts_cost_eur,
+                coalesce(work_order.transport_cost_eur, 0)::text AS transport_cost_eur,
+                coalesce(work_order.total_cost_eur, 0)::text AS total_cost_eur
          FROM service.requests request
          JOIN master_data.partners partner ON partner.id = request.customer_partner_id
          JOIN master_data.customer_equipment equipment ON equipment.id = request.customer_equipment_id
@@ -169,16 +169,16 @@ export class ServiceReportsService {
           createdOn: row.created_on,
           customerName: row.customer_name,
           device: `${row.device_name} · ${row.serial_number}`,
-          laborCostBgn: row.labor_cost_bgn,
-          partsCostBgn: row.parts_cost_bgn,
+          laborCostEur: row.labor_cost_eur,
+          partsCostEur: row.parts_cost_eur,
           priority: label(row.priority),
           requestNumber: row.request_number,
           serviceType: serviceTypeLabel(row.service_type),
           source: label(row.source_channel),
           status: label(row.status),
           technicianName: row.technician_name,
-          totalCostBgn: row.total_cost_bgn,
-          transportCostBgn: row.transport_cost_bgn,
+          totalCostEur: row.total_cost_eur,
+          transportCostEur: row.transport_cost_eur,
         })),
         title: 'Service request register',
       };
@@ -197,7 +197,7 @@ export class ServiceReportsService {
           completedCount: Number(row.completed_count),
           displayName: row.display_name,
           laborMinutes: Number(row.labor_minutes),
-          totalCostBgn: row.total_cost_bgn,
+          totalCostEur: row.total_cost_eur,
         })),
         title: 'Technician performance',
       };
@@ -205,20 +205,20 @@ export class ServiceReportsService {
 
     const result = await this.database.getPool().query<{
       completed_count: string;
-      labor_cost_bgn: string;
-      parts_cost_bgn: string;
+      labor_cost_eur: string;
+      parts_cost_eur: string;
       request_count: string;
       service_type: ServiceType;
-      total_cost_bgn: string;
-      transport_cost_bgn: string;
+      total_cost_eur: string;
+      transport_cost_eur: string;
     }>(
       `SELECT request.service_type,
               count(*)::text AS request_count,
               count(*) FILTER (WHERE request.status = 'completed')::text AS completed_count,
-              coalesce(sum(work_order.labor_cost_bgn), 0)::text AS labor_cost_bgn,
-              coalesce(sum(work_order.parts_cost_bgn), 0)::text AS parts_cost_bgn,
-              coalesce(sum(work_order.transport_cost_bgn), 0)::text AS transport_cost_bgn,
-              coalesce(sum(work_order.total_cost_bgn), 0)::text AS total_cost_bgn
+              coalesce(sum(work_order.labor_cost_eur), 0)::text AS labor_cost_eur,
+              coalesce(sum(work_order.parts_cost_eur), 0)::text AS parts_cost_eur,
+              coalesce(sum(work_order.transport_cost_eur), 0)::text AS transport_cost_eur,
+              coalesce(sum(work_order.total_cost_eur), 0)::text AS total_cost_eur
        FROM service.requests request
        LEFT JOIN service.work_orders work_order ON work_order.service_request_id = request.id
        WHERE ${servicePeriod('request')}
@@ -228,16 +228,16 @@ export class ServiceReportsService {
     );
     return {
       columns: [...costColumns],
-      criteria: [...periodCriteria(dateFrom, dateTo), 'Currency: BGN'],
+      criteria: [...periodCriteria(dateFrom, dateTo), 'Currency: EUR'],
       generatedAt,
       rows: result.rows.map((row) => ({
         completedCount: Number(row.completed_count),
-        laborCostBgn: row.labor_cost_bgn,
-        partsCostBgn: row.parts_cost_bgn,
+        laborCostEur: row.labor_cost_eur,
+        partsCostEur: row.parts_cost_eur,
         requestCount: Number(row.request_count),
         serviceType: serviceTypeLabel(row.service_type),
-        totalCostBgn: row.total_cost_bgn,
-        transportCostBgn: row.transport_cost_bgn,
+        totalCostEur: row.total_cost_eur,
+        transportCostEur: row.transport_cost_eur,
       })),
       title: 'Service cost summary',
     };
@@ -268,7 +268,7 @@ function technicianReportQuery(): string {
                  count(*)::text AS assigned_count,
                  count(*) FILTER (WHERE request.status = 'completed')::text AS completed_count,
                  coalesce(sum(work_order.labor_minutes), 0)::text AS labor_minutes,
-                 coalesce(sum(work_order.total_cost_bgn), 0)::text AS total_cost_bgn
+                 coalesce(sum(work_order.total_cost_eur), 0)::text AS total_cost_eur
           FROM service.work_orders work_order
           JOIN service.requests request ON request.id = work_order.service_request_id
           JOIN identity.user_accounts account
@@ -286,7 +286,7 @@ function mapTechnician(row: TechnicianRow) {
     completedCount: Number(row.completed_count),
     displayName: row.display_name,
     laborMinutes: Number(row.labor_minutes),
-    totalCostBgn: row.total_cost_bgn,
+    totalCostEur: row.total_cost_eur,
   };
 }
 
@@ -341,10 +341,10 @@ const requestColumns = [
   { key: 'priority', label: 'Priority', type: 'text' },
   { key: 'status', label: 'Status', type: 'text' },
   { key: 'technicianName', label: 'Technician', type: 'text' },
-  { key: 'laborCostBgn', label: 'Labour BGN', type: 'money' },
-  { key: 'partsCostBgn', label: 'Parts BGN', type: 'money' },
-  { key: 'transportCostBgn', label: 'Transport BGN', type: 'money' },
-  { key: 'totalCostBgn', label: 'Total BGN', type: 'money' },
+  { key: 'laborCostEur', label: 'Labour EUR', type: 'money' },
+  { key: 'partsCostEur', label: 'Parts EUR', type: 'money' },
+  { key: 'transportCostEur', label: 'Transport EUR', type: 'money' },
+  { key: 'totalCostEur', label: 'Total EUR', type: 'money' },
 ] as const;
 
 const technicianColumns = [
@@ -352,15 +352,15 @@ const technicianColumns = [
   { key: 'assignedCount', label: 'Assigned visits', type: 'number' },
   { key: 'completedCount', label: 'Completed visits', type: 'number' },
   { key: 'laborMinutes', label: 'Recorded minutes', type: 'number' },
-  { key: 'totalCostBgn', label: 'Service value BGN', type: 'money' },
+  { key: 'totalCostEur', label: 'Service value EUR', type: 'money' },
 ] as const;
 
 const costColumns = [
   { key: 'serviceType', label: 'Service type', type: 'text' },
   { key: 'requestCount', label: 'Requests', type: 'number' },
   { key: 'completedCount', label: 'Completed', type: 'number' },
-  { key: 'laborCostBgn', label: 'Labour BGN', type: 'money' },
-  { key: 'partsCostBgn', label: 'Parts BGN', type: 'money' },
-  { key: 'transportCostBgn', label: 'Transport BGN', type: 'money' },
-  { key: 'totalCostBgn', label: 'Total BGN', type: 'money' },
+  { key: 'laborCostEur', label: 'Labour EUR', type: 'money' },
+  { key: 'partsCostEur', label: 'Parts EUR', type: 'money' },
+  { key: 'transportCostEur', label: 'Transport EUR', type: 'money' },
+  { key: 'totalCostEur', label: 'Total EUR', type: 'money' },
 ] as const;

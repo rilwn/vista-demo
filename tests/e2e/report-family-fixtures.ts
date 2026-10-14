@@ -45,7 +45,7 @@ export async function prepareReportFamilyFixtures() {
         INSERT INTO procurement.supplier_invoices (id, purchase_order_id, supplier_partner_id,
           supplier_invoice_number, invoice_date, currency_code, recorded_by)
         SELECT gen_random_uuid(), s.purchase_order_id, s.supplier_partner_id,
-          'FAMILY-FIN-' || lpad(n::text,4,'0'), '2026-01-15', 'BGN', s.recorded_by
+          'FAMILY-FIN-' || lpad(n::text,4,'0'), '2026-01-15', 'EUR', s.recorded_by
         FROM (SELECT * FROM procurement.supplier_invoices ORDER BY supplier_invoice_number LIMIT 1) s
         CROSS JOIN generate_series(1,1001) n RETURNING id, purchase_order_id
       ) INSERT INTO procurement.supplier_invoice_lines (id, supplier_invoice_id, purchase_order_id,
@@ -55,7 +55,7 @@ export async function prepareReportFamilyFixtures() {
         WHERE purchase_order_id=i.purchase_order_id ORDER BY id LIMIT 1) l`);
       if (invoices.rowCount !== 1001) throw Error('Finance reporting fixture source is missing.');
       const shifts = await client.query(`INSERT INTO pos.shifts (id, shift_number, cash_register_id,
-        operator_id, warehouse_id, status, opening_cash_bgn, closing_cash_bgn, opened_by, opened_at,
+        operator_id, warehouse_id, status, opening_cash_eur, closing_cash_eur, opened_by, opened_at,
         closed_by, closed_at)
         SELECT gen_random_uuid(), 'FAMILY-POS-' || lpad(n::text,4,'0'), s.cash_register_id,
           s.operator_id, s.warehouse_id, 'closed', 0, 0, s.opened_by, '2026-01-15T10:00:00Z',

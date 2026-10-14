@@ -3,6 +3,7 @@ import type {
   CreateFinanceCustomerDocumentRequest,
   CreateFinancePaymentRequest,
   FinanceCustomerDocument,
+  FinancePayment,
   FinancePaymentMethod,
   FinanceReferenceData,
   FinanceSummary,
@@ -17,6 +18,7 @@ import {
   getFinanceSummary,
   listFinanceDocuments,
   recordFinancePayment,
+  reverseFinancePayment,
 } from '../api/finance';
 import { useAuth } from '../auth/AuthProvider';
 import { Icon } from '../components/Icon';
@@ -54,6 +56,7 @@ function FinanceCollectionsPage({ view }: { view: FinanceView }) {
   const [notice, setNotice] = useState<string | null>(null);
   const canCreate = hasPermission('erp.finance', 'create');
   const canEdit = hasPermission('erp.finance', 'edit');
+  const canApprove = hasPermission('erp.finance', 'approve');
   const canPrepareSales = hasPermission('erp.sales', 'create');
   const canViewSales = hasPermission('erp.sales');
   const routeState =
@@ -126,7 +129,7 @@ function FinanceCollectionsPage({ view }: { view: FinanceView }) {
       <FinanceTabs />
 
       <InlineAlert tone="info">
-        Collection records are in BGN. Legal invoice issue, tax posting, automatic BNB rates, and
+        Collection records are in EUR. Legal invoice issue, tax posting, automatic BNB rates, and
         bank-specific file imports require the approved finance configuration.
       </InlineAlert>
 
@@ -154,6 +157,7 @@ function FinanceCollectionsPage({ view }: { view: FinanceView }) {
       ) : null}
       {selected ? (
         <FinancePreviewDrawer
+          canApprove={canApprove}
           canCreate={canCreate}
           canEdit={canEdit}
           document={selected}
@@ -393,6 +397,7 @@ function FinanceDocumentDrawer({
 }
 
 function FinancePreviewDrawer({
+  canApprove,
   canCreate,
   canEdit,
   document,
@@ -401,6 +406,7 @@ function FinancePreviewDrawer({
   onSaved,
   token,
 }: {
+  canApprove: boolean;
   canCreate: boolean;
   canEdit: boolean;
   document: FinanceCustomerDocument;
@@ -409,7 +415,8 @@ function FinancePreviewDrawer({
   onSaved: (document: FinanceCustomerDocument, message: string) => void;
   token: string;
 }) {
-  const [mode, setMode] = useState<'details' | 'payment' | 'cancel'>('details');
+  const [mode, setMode] = useState<'details' | 'payment' | 'cancel' | 'reverse'>('details');
+  const [paymentToReverse, setPaymentToReverse] = useState<FinancePayment | null>(null);
   const [busy, setBusy] = useState(false);
   const [cancellationReason, setCancellationReason] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -419,6 +426,28 @@ function FinancePreviewDrawer({
     document.paymentStatus !== 'paid';
   const canCancel =
     canEdit && document.reviewState === 'pending_finance_review' && document.payments.length === 0;
+
+  if (mode === 'reverse' && paymentToReverse)
+    return (
+      <FinancePaymentReversalDrawer
+        document={document}
+        onBack={() => {
+          setError(null);
+          setPaymentToReverse(null);
+          setMode('details');
+        }}
+        onSaved={(updated, payment) => {
+          setPaymentToReverse(null);
+          setMode('details');
+          onSaved(
+            updated,
+            `${payment.number} was reversed. Reversal ${payment.reversal?.number ?? ''}.`.trim(),
+          );
+        }}
+        payment={paymentToReverse}
+        token={token}
+      />
+    );
 
   if (mode === 'payment')
     return (
@@ -486,7 +515,7 @@ function FinancePreviewDrawer({
           <header>
             <div>
               <h3>Balance</h3>
-              <p>Amounts remain in BGN for this collection record.</p>
+              <p>Amounts remain in EUR for this collection record.</p>
             </div>
           </header>
           <dl className="finance-balance-grid">
@@ -551,8 +580,26 @@ function FinancePreviewDrawer({
                     {payment.sourceCustomerAdvanceNumber ? (
                       <small>Advance from {payment.sourceCustomerAdvanceNumber}</small>
                     ) : null}
+                    {payment.reversal ? (
+                      <small>
+                        Reversed by {payment.reversal.number} on{' '}
+                        {formatDate(payment.reversal.reversedOn)}
+                      </small>
+                    ) : null}
+                    {payment.reversal ? <small>{payment.reversal.reason}</small> : null}
                   </div>
                   <strong>{formatMoney(payment.amount)}</strong>
+                  {canApprove && !payment.reversal ? (
+                    <Button
+                      onClick={() => {
+                        setPaymentToReverse(payment);
+                        setMode('reverse');
+                      }}
+                      variant="quiet"
+                    >
+                      Reverse payment
+                    </Button>
+                  ) : null}
                 </div>
               ))}
             </div>
@@ -680,7 +727,7 @@ function FinancePaymentDrawer({
             </div>
           </header>
           <div className="finance-form-grid">
-            <FinanceField label="Amount (BGN)">
+            <FinanceField label="Amount (EUR)">
               <input
                 max={document.outstandingTotal}
                 min="0.0001"
@@ -740,6 +787,98 @@ function FinancePaymentDrawer({
         <div className="finance-drawer-actions">
           <Button busy={busy} type="submit">
             Record payment
+          </Button>
+          <Button disabled={busy} onClick={onBack} type="button" variant="secondary">
+            Back
+          </Button>
+        </div>
+      </form>
+    </FinanceDrawer>
+  );
+}
+
+function FinancePaymentReversalDrawer({
+  document,
+  onBack,
+  onSaved,
+  payment,
+  token,
+}: {
+  document: FinanceCustomerDocument;
+  onBack: () => void;
+  onSaved: (document: FinanceCustomerDocument, payment: FinancePayment) => void;
+  payment: FinancePayment;
+  token: string;
+}) {
+  const [reason, setReason] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const normalizedReason = reason.trim();
+    if (normalizedReason.length < 10) {
+      setError('Enter a clear reason with at least 10 characters.');
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const updated = await reverseFinancePayment(
+        token,
+        document.id,
+        payment.id,
+        crypto.randomUUID(),
+        { expectedDocumentVersion: document.version, reason: normalizedReason },
+      );
+      const reversed = updated.payments.find((item) => item.id === payment.id);
+      if (!reversed?.reversal) throw new Error('The payment reversal was not returned.');
+      onSaved(updated, reversed);
+    } catch (caught) {
+      setError(errorText(caught, 'The payment could not be reversed.'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <FinanceDrawer
+      busy={busy}
+      onBack={onBack}
+      subtitle={`${payment.number} · ${formatMoney(payment.amount)}`}
+      title="Reverse payment"
+    >
+      <form className="finance-form" onSubmit={(event) => void submit(event)}>
+        {error ? <InlineAlert tone="error">{error}</InlineAlert> : null}
+        <InlineAlert tone="warning">
+          This records a linked correction. The original payment and its allocation remain in the
+          history. The outstanding balance will increase by the payment amount.
+        </InlineAlert>
+        <section className="finance-form-section">
+          <header>
+            <span>1</span>
+            <div>
+              <h3>Confirm the correction</h3>
+              <p>
+                {document.number} · {payment.number} · {formatMoney(payment.amount)}
+              </p>
+            </div>
+          </header>
+          <FinanceField label="Reason for reversal">
+            <textarea
+              autoFocus
+              maxLength={1000}
+              minLength={10}
+              onChange={(event) => setReason(event.target.value)}
+              required
+              rows={4}
+              value={reason}
+            />
+          </FinanceField>
+        </section>
+        <div className="finance-drawer-actions">
+          <Button busy={busy} type="submit" variant="danger">
+            Reverse payment
           </Button>
           <Button disabled={busy} onClick={onBack} type="button" variant="secondary">
             Back
@@ -930,7 +1069,7 @@ function formatDateTime(value: string) {
 }
 
 function formatMoney(value: string) {
-  return formatOperationsCurrency(value, 'BGN');
+  return formatOperationsCurrency(value, 'EUR');
 }
 
 function errorText(error: unknown, fallback: string) {

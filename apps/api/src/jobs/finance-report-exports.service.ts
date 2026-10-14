@@ -1068,6 +1068,8 @@ const dateRangeReportKeys = new Set<ReportDefinitionKey>([
   'finance.sales-journal',
   'finance.purchase-journal',
   'finance.vat-review',
+  'finance.income',
+  'finance.outcome',
   'service.request-register',
   'service.technician-performance',
   'service.cost-summary',

@@ -95,7 +95,7 @@ const emptyOpportunities: CrmOpportunityPage = {
   items: [],
   page: 1,
   pageSize: 100,
-  summary: { openCount: 0, openRevenueBgn: '0', weightedRevenueBgn: '0', wonRevenueBgn: '0' },
+  summary: { openCount: 0, openRevenueEur: '0', weightedRevenueEur: '0', wonRevenueEur: '0' },
   total: 0,
   totalPages: 0,
 };
@@ -614,17 +614,17 @@ function PipelineBoard({
         />
         <PipelineMetric
           label="Open pipeline"
-          value={formatBgn(opportunities.summary.openRevenueBgn)}
+          value={formatEur(opportunities.summary.openRevenueEur)}
         />
         <PipelineMetric
           label="Weighted value"
           tone="accent"
-          value={formatBgn(opportunities.summary.weightedRevenueBgn)}
+          value={formatEur(opportunities.summary.weightedRevenueEur)}
         />
         <PipelineMetric
           label="Won value"
           tone="success"
-          value={formatBgn(opportunities.summary.wonRevenueBgn)}
+          value={formatEur(opportunities.summary.wonRevenueEur)}
         />
       </section>
       <section className="crm-pipeline-board-card">
@@ -659,7 +659,7 @@ function PipelineBoard({
           <div className="crm-kanban" aria-label="Opportunity pipeline">
             {stages.map((stage) => {
               const items = byStage[stage];
-              const total = sumMoney(items.map((item) => item.estimatedRevenueBgn));
+              const total = sumMoney(items.map((item) => item.estimatedRevenueEur));
               return (
                 <section
                   className={`crm-kanban-column is-${stage}`}
@@ -675,7 +675,7 @@ function PipelineBoard({
                       <h3>{crmOpportunityStageLabel(stage, locale)}</h3>
                     </div>
                     <strong>{items.length}</strong>
-                    <p>{formatBgn(total)}</p>
+                    <p>{formatEur(total)}</p>
                   </header>
                   <div className="crm-kanban-stack">
                     {!items.length ? <p className="crm-kanban-empty">No opportunities</p> : null}
@@ -695,7 +695,7 @@ function PipelineBoard({
                           <strong>{opportunity.title}</strong>
                           <small>{opportunity.customer.name}</small>
                           <span className="crm-opportunity-value">
-                            {formatBgn(opportunity.estimatedRevenueBgn)}
+                            {formatEur(opportunity.estimatedRevenueEur)}
                           </span>
                           <span className="crm-opportunity-progress">
                             <span style={{ width: `${opportunity.probabilityPercent}%` }} />
@@ -1071,7 +1071,7 @@ function ConvertLeadDrawer({
   const [createOpportunityFlag, setCreateOpportunityFlag] = useState(true);
   const [title, setTitle] = useState(`${lead.organizationName} sales opportunity`);
   const [description, setDescription] = useState(lead.notes ?? '');
-  const [estimatedRevenueBgn, setEstimatedRevenueBgn] = useState('');
+  const [estimatedRevenueEur, setEstimatedRevenueEur] = useState('');
   const [probabilityPercent, setProbabilityPercent] = useState(40);
   const [expectedCloseOn, setExpectedCloseOn] = useState(dateAfterDays(30));
   const [ownerAccountId, setOwnerAccountId] = useState(lead.owner.id);
@@ -1094,7 +1094,7 @@ function ConvertLeadDrawer({
       const opportunity = createOpportunityFlag
         ? {
             ...(description.trim() ? { description } : {}),
-            estimatedRevenueBgn,
+            estimatedRevenueEur,
             ...(expectedCloseOn ? { expectedCloseOn } : {}),
             ownerAccountId,
             probabilityPercent,
@@ -1127,7 +1127,7 @@ function ConvertLeadDrawer({
   }
   const validCustomer = customerMode === 'new' ? displayName.trim() : existingCustomerId;
   const validOpportunity =
-    !createOpportunityFlag || (title.trim() && estimatedRevenueBgn && ownerAccountId);
+    !createOpportunityFlag || (title.trim() && estimatedRevenueEur && ownerAccountId);
   return (
     <PipelineDrawer
       busy={busy}
@@ -1244,10 +1244,10 @@ function ConvertLeadDrawer({
             {createOpportunityFlag ? (
               <OpportunityFields
                 description={description}
-                estimatedRevenueBgn={estimatedRevenueBgn}
+                estimatedRevenueEur={estimatedRevenueEur}
                 expectedCloseOn={expectedCloseOn}
                 onDescription={setDescription}
-                onEstimatedRevenue={setEstimatedRevenueBgn}
+                onEstimatedRevenue={setEstimatedRevenueEur}
                 onExpectedClose={setExpectedCloseOn}
                 onOwner={setOwnerAccountId}
                 onProbability={setProbabilityPercent}
@@ -1299,7 +1299,7 @@ function NewOpportunityDrawer({
   const [customerPartnerId, setCustomerPartnerId] = useState(references.customers[0]?.id ?? '');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [estimatedRevenueBgn, setEstimatedRevenueBgn] = useState('');
+  const [estimatedRevenueEur, setEstimatedRevenueEur] = useState('');
   const [probabilityPercent, setProbabilityPercent] = useState(20);
   const [expectedCloseOn, setExpectedCloseOn] = useState(dateAfterDays(30));
   const [ownerAccountId, setOwnerAccountId] = useState(references.assignees[0]?.id ?? '');
@@ -1313,7 +1313,7 @@ function NewOpportunityDrawer({
       const input: CreateCrmOpportunityRequest = {
         customerPartnerId,
         ...(description.trim() ? { description } : {}),
-        estimatedRevenueBgn,
+        estimatedRevenueEur,
         ...(expectedCloseOn ? { expectedCloseOn } : {}),
         ownerAccountId,
         probabilityPercent,
@@ -1362,10 +1362,10 @@ function NewOpportunityDrawer({
           >
             <OpportunityFields
               description={description}
-              estimatedRevenueBgn={estimatedRevenueBgn}
+              estimatedRevenueEur={estimatedRevenueEur}
               expectedCloseOn={expectedCloseOn}
               onDescription={setDescription}
-              onEstimatedRevenue={setEstimatedRevenueBgn}
+              onEstimatedRevenue={setEstimatedRevenueEur}
               onExpectedClose={setExpectedCloseOn}
               onOwner={setOwnerAccountId}
               onProbability={setProbabilityPercent}
@@ -1379,7 +1379,7 @@ function NewOpportunityDrawer({
         </div>
         <DrawerActions
           busy={busy}
-          disabled={!customerPartnerId || !title.trim() || !estimatedRevenueBgn || !ownerAccountId}
+          disabled={!customerPartnerId || !title.trim() || !estimatedRevenueEur || !ownerAccountId}
           onBack={onBack}
           submitLabel="Create opportunity"
         />
@@ -1390,7 +1390,7 @@ function NewOpportunityDrawer({
 
 function OpportunityFields({
   description,
-  estimatedRevenueBgn,
+  estimatedRevenueEur,
   expectedCloseOn,
   onDescription,
   onEstimatedRevenue,
@@ -1404,7 +1404,7 @@ function OpportunityFields({
   title,
 }: {
   description: string;
-  estimatedRevenueBgn: string;
+  estimatedRevenueEur: string;
   expectedCloseOn: string;
   onDescription: (value: string) => void;
   onEstimatedRevenue: (value: string) => void;
@@ -1436,14 +1436,14 @@ function OpportunityFields({
         />
       </Field>
       <div className="crm-timeline-form-grid">
-        <Field label="Estimated value (BGN)">
+        <Field label="Estimated value (EUR)">
           <input
             min="0.01"
             onChange={(event) => onEstimatedRevenue(event.target.value)}
             required
             step="0.01"
             type="number"
-            value={estimatedRevenueBgn}
+            value={estimatedRevenueEur}
           />
         </Field>
         <Field label="Probability">
@@ -1569,10 +1569,10 @@ function OpportunityDrawer({
         <section className={`crm-opportunity-preview-hero is-${opportunity.stage}`}>
           <div>
             <span>{crmOpportunityStageLabel(opportunity.stage, locale)}</span>
-            <h3>{formatBgn(opportunity.estimatedRevenueBgn)}</h3>
+            <h3>{formatEur(opportunity.estimatedRevenueEur)}</h3>
             <p>
               {opportunity.probabilityPercent}% probability ·{' '}
-              {formatBgn(opportunity.weightedRevenueBgn)} weighted
+              {formatEur(opportunity.weightedRevenueEur)} weighted
             </p>
           </div>
           <span>{initials(opportunity.owner.displayName)}</span>
@@ -1611,8 +1611,8 @@ function OpportunityDrawer({
                     </small>
                   </span>
                   <strong>
-                    {quotation.currencyCode === 'BGN'
-                      ? formatBgn(quotation.total)
+                    {quotation.currencyCode === 'EUR'
+                      ? formatEur(quotation.total)
                       : `${quotation.currencyCode} ${quotation.total}`}
                   </strong>
                 </article>
@@ -1963,8 +1963,8 @@ function formatDate(value: string): string {
 function formatDateTime(value: string): string {
   return formatCrmPipelineDateTime(value, getOperationsLocale());
 }
-function formatBgn(value: string): string {
-  return formatOperationsCurrency(value, 'BGN');
+function formatEur(value: string): string {
+  return formatOperationsCurrency(value, 'EUR');
 }
 function sumMoney(values: string[]): string {
   const cents = values.reduce((total, value) => {

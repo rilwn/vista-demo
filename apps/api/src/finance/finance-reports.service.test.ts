@@ -14,20 +14,39 @@ describe('Finance report aging buckets', () => {
       expect(columns.length).toBeGreaterThan(0);
       expect(new Set(columns.map((column) => column.key)).size).toBe(columns.length);
     }
+    const requiredIncomeOutcomeFields = [
+      'transactionNumber',
+      'invoiceNumber',
+      'invoiceDate',
+      'partnerName',
+      'accountCode',
+      'netTotal',
+      'vatTotal',
+      'vatRates',
+      'total',
+      'currencyCode',
+      'paymentDate',
+    ];
+    expect(financeReportColumns('finance.income').map((column) => column.key)).toEqual(
+      requiredIncomeOutcomeFields,
+    );
+    expect(financeReportColumns('finance.outcome').map((column) => column.key)).toEqual(
+      requiredIncomeOutcomeFields,
+    );
   });
 
   it('projects only selected fields while preserving their order and report criteria', () => {
     const data = {
       columns: financeReportColumns('finance.supplier-turnover'),
-      rows: [{ partnerName: 'Supplier', grossBgnTotal: '33.0000', documentCount: 1 }],
+      rows: [{ partnerName: 'Supplier', grossEurTotal: '33.0000', documentCount: 1 }],
       criteria: ['Includes prepared documents'],
       generatedAt: '2026-09-07',
       title: 'Supplier turnover',
     };
-    expect(selectReportColumns(data, ['grossBgnTotal', 'partnerName'])).toEqual({
+    expect(selectReportColumns(data, ['grossEurTotal', 'partnerName'])).toEqual({
       ...data,
       columns: [data.columns[2], data.columns[0]],
-      rows: [{ grossBgnTotal: '33.0000', partnerName: 'Supplier' }],
+      rows: [{ grossEurTotal: '33.0000', partnerName: 'Supplier' }],
     });
     for (const keys of [[], ['partnerName', 'partnerName'], ['password_hash'], ['__proto__']]) {
       expect(() => selectReportColumns(data, keys)).toThrow();

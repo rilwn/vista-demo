@@ -1,289 +1,109 @@
-# Vista Integrated Information System — Remaining Implementation Plan
+# Vista implementation plan: remaining work
 
-Status date: 2026-10-12
+Status date: 2026-10-14
 Project: `BG16RFPR001-1.012-1324-C01`
 
-[`AGENTS.md`](AGENTS.md) is authoritative. This file contains only unfinished
-mandatory work, its dependencies, acceptance criteria, and unresolved decisions.
-Implementation evidence belongs in the requirement traceability, tests, and
-relevant technical documentation—not here.
-
-## Delivery controls
-
-- Keep the system runnable after every milestone.
-- For each remaining feature, deliver the data model, protected API,
-  authorization, audit trail, retry/idempotency and concurrency behavior,
-  OpenAPI/contracts, responsive user interface, tests, documentation, and
-  traceability together.
-- User-facing workflows must have clear loading, empty, validation, failure,
-  success, and return-navigation states on desktop, tablet, and phone viewports.
-- Do not enable fiscal, hardware, provider, retention, destructive, or other
-  decision-controlled behavior until its recorded decision is approved.
-- Optional FIFO, customer portal, kiosk, backup router, electronic shelf labels,
-  and e-commerce fiscalization remain disabled unless selected.
-
-## Delivery order
-
-Continue with the original client-dependent phases while awaiting A3's hosted security
-evidence. That release gate is not waived. These are portions of the original
-phases, not new scope. Check existing evidence before implementing, and remove
-completed items from this file.
-
-Section B retains the client-dependent work in original dependency order.
-Do not declare an original phase complete merely because its independent work is
-done. Use plain UI text and a short, navigation-based `TESTME.md` with sample
-values; verify each complete UI/API flow before asking the user to test.
-
-## A. Work that can proceed without Vista's team
-
-### A1. Operations QA remediation
-
-- Follow the QA finding register in report order; CRM-06 warranty-register
-  reconciliation, CRM-07 survey follow-up, CRM-08 practical telephone
-  validation, CRM-09 quotation-stage guidance, POS-01 cross-app management
-  reports, UI-01 bilingual workflow statuses/actions, and UI-02 locale-consistent
-  dates, quantities, currency and VAT, plus UI-03 technical-identifier display,
-  UI-04 tablet-width report/table/pipeline layout and drawer overflow, and UI-05
-  content, dismissal, inline validation and partner/document/serial record search
-  are locally verified. CRM-10 requires Vista's approved business-hours and
-  holiday rules. Hosted retests remain open. The POS image rehearsal must be
-  retried after the npm registry read timeout.
-- SYS-01 is locally verified, including detection of unhandled events and safe
-  replay refusal. Review the deployed activity backlog after release. Complete
-  SYS-02 hosted notification retest, Finance provider readiness, authentic
-  serial source for WH-01, and approved quotation email delivery. Hosted retests
-  remain open for locally verified findings.
-- Keep client decisions in Section B and never fabricate serial or financial
-  history to make a test pass.
-- Verify each fix with regression tests and an end-to-end flow. Recheck hosted
-  failures after deployment; local passing tests do not close hosted findings.
-
-**Depends on:** the QA report and existing requirement/decision register. Client
-decisions stay in Section B; preserve existing business records and audit trails.
-
-**Accept when:** every finding has verified evidence or an explicit unresolved
-dependency, with no claimed completion for untested or approval-dependent work.
-
-### A3. Hosted security verification
-
-- Confirm the first hosted container scan and resolve its findings through tested
-  image upgrades or explicitly reviewed exceptions; do not bypass failed scans.
-
-**Scope/dependencies:** AGENTS §10; original Phase 9. Hosted CI execution and
-retained scan evidence. Application-image coverage is configured in CI.
-
-**Accept when:** the hosted scan succeeds and findings are resolved or explicitly
-reviewed. Local inventory tests are not vulnerability-scan acceptance.
-
-## B. Discuss with Vista, then implement
-
-The following work remains dependent on recorded business decisions, approved
-providers, client data, infrastructure or hardware. Approvals must name the
-decision-maker and scope in the decision register. Continue in original phase
-order as dependencies become available; never invent legal or conflict rules.
-
-## Phase 0 — Decisions, backup plan, and traceability
-
-**Remaining**
-
-- Obtain approved answers, or an owner and target date, for every open business,
-  provider, hardware, security, backup, and deployment decision.
-- Complete the inventory of approved backup sources; classify them as Critical,
-  Important, or Standard; define RPO/RTO; and obtain management approval for the
-  Information Backup Plan.
-- Maintain architecture decisions and full requirement traceability through
-  handover.
-
-**Depends on:** business owners, management, finance, operations, vendors, and
-infrastructure/security owners.
-
-**Accept when:** controlling decisions are approved or explicitly owned; the
-backup plan is management-approved before retention or destructive behavior is
-enabled; every requirement remains traceable.
-
-## Phase 1 — Complete platform foundations
-
-**Remaining**
-
-- Apply approved role assignments, password-policy values, and
-  non-administrator 2FA policy.
-- Deliver approved AD, LDAP, Entra ID, SAML, and OAuth/OIDC adapters and group
-  mapping.
-- Complete the approved production storage, encryption, retention, malware-scan,
-  and quarantine policy; confirm any further managed-attachment record types
-  beyond the existing Finance attachment support.
-- Deliver approved email and backup-SMS adapters, notification preferences,
-  retry/reconciliation behavior, monitoring, alert hooks, and operational
-  runbooks.
-
-**Depends on:** IAM-001, IAM-002, IAM-003, FILE-001, INT-001, and DEP-001.
-
-**Accept when:** shared controls are backend-enforced and audited; adapter
-failure/retry/idempotency tests pass; production configuration contains no
-development-only credentials or behavior.
-
-## Phase 2 — Close ERP master-data and warehouse gaps
-
-**Remaining**
-
-- Deliver the approved controlled partner duplicate-resolution process, including
-  authority, evidence, field precedence, linked-record migration, and source
-  record retention. Never silently merge records.
-- Apply approved production organization, location, warehouse, operator, cash
-  register, category, unit, product-code, barcode, and tracking-policy data
-  without inventing client rules.
-- Enable FIFO only if selected, with separate valuation, migration, concurrency,
-  and reporting acceptance.
-
-**Depends on:** BUS-001, BUS-002, CAT-001, CRM-002, OPT-001, WH-001, and the
-approved costing policy.
-
-**Accept when:** ERP remains the authoritative shared master-data source;
-duplicate, stock, reservation, and valuation invariants are proven under
-concurrency; no production topology or tracking rule is inferred.
-
-## Phase 3 — Complete finance, documents, logistics, and ERP reporting
-
-**Remaining**
-
-- Complete approved legal financial-document issuance: official invoices,
-  proforma conversion, official credit/debit notes, scoped numbering, legally
-  required states and fields, approved VAT/accounting treatment, automatic BNB
-  rates, fiscal/POS links, PDF with approved logo/signature, and email delivery.
-- Complete approved bank statement format adapters, payment reversal,
-  period-close cash controls, accounting posting, and provider-backed email
-  delivery for payment reminders.
-- Approve and complete official sales/purchase journal and VAT filing outputs
-  from the operational review foundation; deliver structured accounting exports
-  and posted-accounting revenue once official issuance is approved. Enable
-  approved production email delivery for scheduled reports.
-- Connect the approved Econt and Speedy booking, label, tracking, return,
-  retry, and reconciliation adapters. Keep both providers unavailable until
-  INT-002 supplies the selected products, credentials, environments, and
-  operating rules.
-
-**Depends on:** FIN-001 through FIN-005, DOC-001, INT-001, INT-002, BUS-002,
-and the approved business timezone.
-
-**Accept when:** posted documents are immutable and linked; sequences,
-allocations, taxes, rates, exports, and integration recovery are tested; the
-procurement-to-accounting and quotation-to-payment scenarios pass end to end.
-
-## Phases 4–5 — Confirm Service/CRM policies and complete CRM
-
-**Remaining**
-
-- Confirm or adjust configurable SLA, warranty, inspection, labor/transport,
-  subscription, signature and KPI rules against client decisions. Existing
-  workflows are not a new backlog; development settings are not client approval.
-- Deliver the customer portal only if selected.
-- Deliver the approved external enterprise CRM APIs and reconciliation adapters.
-
-**Depends on:** SLA-001, CRM-001, CRM-002, KPI-001, SVC-001, and the established
-Service correlation rules.
-
-**Accept when:** CRM does not create conflicting ERP-owned records; selected
-optional and approved enterprise API paths pass.
-
-## Phase 6 — Complete online POS
-
-**Remaining**
-
-- Connect approved fiscal, PIN-pad, and scanner hardware; issue certified H-18
-  receipts and reversals, and complete approved physical receipt and
-  warranty-card printing. Vista has reported DATECS FP-2000, Zebra DS2208 USB,
-  and Dell Pro 24 QC24250 with Windows 11 Pro as candidate equipment; confirm
-  exact H-18 registration, protocol/setup, test-device access, browser/version,
-  PIN-pad decision, and register/location mapping before acceptance.
-- Replace the development card simulator with the approved PIN-pad adapter and
-  complete recoverable coordination between fiscal operation, payment, official
-  invoice issuance, and stock posting.
-- Deliver the approved return-exception workflow.
-- Keep unselected optional hardware and features disabled behind configuration.
-
-**Depends on:** POS-001, POS-003, BUS-001, BUS-002, Phase 3 finance/documents,
-and the established canonical ERP/CRM customer identity.
-
-**Accept when:** no sale, fiscal effect, serial movement, payment, or integration
-event can double-post; returns and discounts are authorized/audited; simulator
-and target-hardware acceptance pass.
-
-## Phase 7 — Complete POS offline operation
-
-**Remaining**
-
-- Extend interrupted-checkout recovery into an offline sale queue: cached
-  catalog/customer access, offline application loading, automatic outbound
-  synchronization, and server-backed reconciliation across devices.
-- Deliver approved conflict behavior for price, stock, customers, serials,
-  promotions, numbering, and fiscal operation, with retry and reconciliation
-  audit trails beyond the browser-local recovery history.
-
-**Depends on:** stable online POS behavior, POS-002, and target fiscal hardware.
-
-**Accept when:** reconnect, interruption, duplicate replay, stale price,
-unavailable serial, server rejection, and reconciliation tests pass; no offline
-readiness claim is made before certified target-hardware fiscal testing.
-
-## Phase 8 — Complete Backup and disaster recovery
-
-**Remaining**
-
-- Build the custom centralized backup system for every approved source:
-  databases, files, configurations, servers, workstations, mobile devices,
-  email, file shares, cloud services, and other approved sources.
-- Deliver policies, schedules, full/incremental/differential/image backups,
-  snapshots, copies, retention, compression/deduplication, verification,
-  notifications, journaling, restore-point state, and missed-backup detection.
-- Deliver encryption, ransomware and air-gap protection, separate backup
-  identity, MFA, role separation, critical-action four-eyes approval,
-  centralized identity integration, and protected emergency access where
-  approved.
-- Deliver granular and bare-metal restore workflows, DR procedures, annual
-  reminders, physical storage/tape integration, and a signed implementation-time
-  DR test.
-
-**Depends on:** BAK-001, BAK-002, BAK-003, BAK-004, BAK-005, IAM-002, IAM-003,
-INT-001, DEP-001, and selected storage/tape hardware.
-
-**Accept when:** backup/restore audit and critical-action controls are immutable;
-all restore classes are documented and tested; the signed DR protocol proves RPO,
-RTO, evidence, corrective actions, and actual hardware compatibility.
-
-## Phase 9 — Hardening, deployment, and handover
-
-**Remaining**
-
-- Complete externally dependent official-document, hardware, offline and Backup
-  scenarios plus production-scale performance, security and client-data migration
-  acceptance beyond the independent tests in A3.
-- Apply approved hosting, network, domains, TLS/HSTS, monitoring and alerting,
-  production deployment/rollback and client-owned infrastructure handover beyond
-  the portable preparation in A4.
-- Finalize architecture, API, database, environment, integration, hardware,
-  Backup/DR, operations and user documentation against actual client decisions;
-  complete training and signed handover beyond the help prepared in A4.
-- Perform the final requirement-traceability review and explicitly record each
-  optional feature as implemented or not selected.
-
-**Depends on:** all mandatory phases, approved deployment target, and business
-and hardware acceptance.
-
-**Accept when:** all mandatory requirements and ten required end-to-end scenarios
-are accepted; hardware/recovery evidence is complete; documentation, training,
-and ownership handover are complete.
-
-## Unresolved decisions
-
-Full decision detail is maintained in
-[`docs/architecture/decisions/README.md`](docs/architecture/decisions/README.md).
-
-- Organization and master data: BUS-001, BUS-002, CAT-001, CRM-002, OPT-001.
-- Finance, documents, and logistics: FIN-001, FIN-002, FIN-003, FIN-004, FIN-005, DOC-001,
-  INT-002.
-- Identity, files, providers, deployment, and external systems: IAM-001, IAM-002,
-  IAM-003, FILE-001, INT-001, INT-003, DEP-001.
-- Service and CRM: SLA-001, CRM-001, KPI-001, SVC-001.
-- POS: POS-001, POS-002, POS-003, OPT-001.
-- Backup/DR: BAK-001, BAK-002, BAK-003, BAK-004, BAK-005.
-- Formalize or supersede ADR-0001.
+[`AGENTS.md`](AGENTS.md) is authoritative. This plan lists only work that is
+not yet accepted. The 12 October QA items named below are implemented and
+verified locally; the QA register holds their evidence. Practical defaults are
+in [the consolidated decision record](docs/architecture/decisions/README.md).
+No client decision blocks the remaining software work. The 12 QA items listed
+in the QA register are locally verified; hosted and hardware acceptance remain.
+
+## 1. Release and hosted verification
+
+**Work:** Deploy the current tested build; complete hosted retests for locally
+verified QA findings; finish the hosted image vulnerability scan and resolve
+findings; verify production mail, storage, notification and backup settings.
+
+**Depends on:** Coolify deployment access, production secrets and provider
+credentials.
+
+**Accept when:** deployment and rollback are repeatable, the security scan has
+no unreviewed findings, and hosted workflows pass without exposing secrets.
+
+## 2. Finish ERP finance and operational integrations
+
+**Work:** Complete statutory sales/purchase journal and VAT-report acceptance,
+structured accounting export formats, accounting-period posting controls,
+provider-backed reminders, and any remaining production email/SMS setup. Add
+Econt and Speedy booking/tracking only behind the existing adapter interface;
+keep unavailable providers clearly disabled. Populate production master data
+and resolve detected partner duplicates through controlled review, never an
+automatic merge.
+
+**Depends on:** release environment, real operating data and any required
+provider credentials. Use the adopted defaults where specific values are not
+needed.
+
+**Accept when:** finance totals reconcile to source documents, exports match
+their defined fields, retries cannot duplicate postings or notifications, and
+logistics failures remain visible and recoverable.
+
+## 3. Accept the POS hardware path
+
+**Work:** Use the reported DATECS FP-2000, Zebra DS2208 USB scanner and Dell
+Pro 24 QC24250 / Windows 11 Pro as the target setup. Complete the local USB
+connector, device configuration and physical tests for fiscal receipts,
+reversals, barcode scans, serial capture and warranty-card printing. Keep the
+development simulator available; do not claim H-18 certification before the
+exact unit and registration are checked. PIN-pad connection remains disabled
+until a terminal is selected.
+
+**Depends on:** target equipment, DATECS protocol/driver and test access.
+
+**Accept when:** the real terminal completes sale, receipt, reversal, restart
+recovery and duplicate-retry checks, with matching ERP stock, payment and
+customer records.
+
+## 4. Complete POS offline selling
+
+**Work:** Extend interrupted-checkout recovery into durable offline sales,
+cached catalog/customer use, automatic resynchronization and server-side
+reconciliation. Apply the documented conflict defaults for prices, stock,
+customers, serials, promotions and transaction identifiers.
+
+**Depends on:** stable online flows and accepted DATECS behavior on the target
+terminal.
+
+**Accept when:** offline sales, reconnect, interrupted sync, replay, stale
+prices, unavailable serials and server rejection are tested without duplicate
+sales or unsupported fiscal-readiness claims.
+
+## 5. Complete custom Backup and disaster recovery
+
+**Work:** Implement the adopted ADR-0004 baseline for the deployed Vista
+database, object storage, Recovery configuration and backup catalog. Add real
+company sources only when identified. Configure encrypted independent copies,
+retention, monitoring, role separation and four-eyes approval; document restore
+responsibilities; run and sign the implementation restore test. Keep destructive
+production actions gated until verified.
+
+**Depends on:** actual infrastructure/storage access and a witnessed restore
+window. Tape integration is added when Vista selects and provides tape hardware.
+
+**Accept when:** file, database and system restore procedures are demonstrated;
+the signed evidence records achieved RPO/RTO, results and corrective actions;
+critical actions are audited and require separate approvers.
+
+## 6. Final hardening and handover
+
+**Work:** Complete the end-to-end security, accessibility, performance and
+data-migration checks; finish API, deployment, operations and concise
+role-based user guides; train staff and transfer ownership of source, hosting,
+credentials, backups and runbooks. Record any optional feature as enabled or
+not selected.
+
+**Depends on:** phases 1–5 and client-owned production environment.
+
+**Accept when:** mandatory requirements are traceable to working evidence,
+external hardware/restore acceptance is recorded, and Vista staff can operate
+and support all four deliverables.
+
+## External acceptance still open
+
+- DATECS exact-unit H-18/protocol verification and witnessed terminal tests.
+- Real company backup-source and storage inventory plus witnessed restore.
+- Hosted deployment/security/provider retests.
+
+These are infrastructure or evidence gates, not unresolved product decisions.

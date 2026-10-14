@@ -142,7 +142,7 @@ class CrmOpportunityInputDto {
 
   @ApiProperty({ example: '1500.00', pattern: decimalPattern.source, type: String })
   @Matches(decimalPattern)
-  estimatedRevenueBgn!: string;
+  estimatedRevenueEur!: string;
 
   @ApiPropertyOptional({ example: '2026-10-31', pattern: datePattern.source, type: String })
   @IsOptional()
@@ -384,7 +384,7 @@ export class CrmOpportunityDto implements CrmOpportunity {
   @ApiProperty({ format: 'date-time', type: String }) createdAt!: string;
   @ApiProperty({ type: () => CrmCustomerReferenceDto }) customer!: CrmOpportunity['customer'];
   @ApiPropertyOptional({ type: String }) description?: string;
-  @ApiProperty({ type: String }) estimatedRevenueBgn!: string;
+  @ApiProperty({ type: String }) estimatedRevenueEur!: string;
   @ApiPropertyOptional({ format: 'date', type: String }) expectedCloseOn?: string;
   @ApiProperty({ isArray: true, type: () => CrmOpportunityHistoryEntryDto })
   history!: CrmOpportunity['history'];
@@ -399,7 +399,7 @@ export class CrmOpportunityDto implements CrmOpportunity {
   @ApiProperty({ type: String }) title!: string;
   @ApiProperty({ format: 'date-time', type: String }) updatedAt!: string;
   @ApiProperty({ type: Number }) version!: number;
-  @ApiProperty({ type: String }) weightedRevenueBgn!: string;
+  @ApiProperty({ type: String }) weightedRevenueEur!: string;
 }
 
 export class CrmOpportunityPageDto implements CrmOpportunityPage {

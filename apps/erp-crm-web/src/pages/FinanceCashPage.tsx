@@ -533,7 +533,7 @@ function CreateCashVoucherDrawer({
             </label>
             <label>
               <span>Currency</span>
-              <input disabled value="BGN" />
+              <input disabled value="EUR" />
             </label>
           </div>
         </section>
@@ -959,7 +959,7 @@ function message(error: unknown, fallback: string) {
 }
 
 function formatMoney(value: string) {
-  return formatOperationsCurrency(value, 'BGN');
+  return formatOperationsCurrency(value, 'EUR');
 }
 
 function formatDate(value: string) {

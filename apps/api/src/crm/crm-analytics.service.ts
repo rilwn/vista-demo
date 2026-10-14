@@ -20,16 +20,16 @@ import type { FinanceReportExportData } from '../finance/finance-reports.service
 
 interface CustomerMetricRow {
   current_active_customers: string;
-  current_average_transaction_value_bgn: string;
+  current_average_transaction_value_eur: string;
   current_churn_percent: string;
-  current_net_revenue_bgn: string;
-  current_observed_lifetime_value_bgn: string;
+  current_net_revenue_eur: string;
+  current_observed_lifetime_value_eur: string;
   current_purchase_frequency: string;
   current_retention_percent: string;
   previous_active_customers: string;
-  previous_average_transaction_value_bgn: string;
+  previous_average_transaction_value_eur: string;
   previous_churn_percent: string;
-  previous_observed_lifetime_value_bgn: string;
+  previous_observed_lifetime_value_eur: string;
   previous_purchase_frequency: string;
   previous_retention_percent: string;
 }
@@ -37,9 +37,9 @@ interface CustomerMetricRow {
 interface PipelineRow {
   current_count: string;
   entered_count: string;
-  estimated_revenue_bgn: string;
+  estimated_revenue_eur: string;
   lost_count: string;
-  open_pipeline_value_bgn: string;
+  open_pipeline_value_eur: string;
   stage: CrmAnalyticsPipelineStage;
   total_opportunities: string;
   won_count: string;
@@ -56,7 +56,7 @@ interface PreferenceRow {
   document_count: string;
   kind: CrmAnalyticsPreference['kind'];
   label: string;
-  net_revenue_bgn: string;
+  net_revenue_eur: string;
   quantity: string;
 }
 
@@ -65,7 +65,7 @@ interface RevenueRow {
   document_count: string;
   key: string;
   label: string;
-  net_revenue_bgn: string;
+  net_revenue_eur: string;
 }
 
 interface AnalyticsPeriod {
@@ -109,7 +109,7 @@ export class CrmAnalyticsService {
       previousDateFrom: period.previousDateFrom,
       previousDateTo: period.previousDateTo,
       revenue: topRevenueByDimension(revenue, 8),
-      totalNetRevenueBgn: customer.current_net_revenue_bgn,
+      totalNetRevenueEur: customer.current_net_revenue_eur,
       timezone: this.environment.BUSINESS_TIMEZONE,
     };
   }
@@ -123,7 +123,7 @@ export class CrmAnalyticsService {
     const criteria = [
       `Period: ${period.dateFrom} to ${period.dateTo}`,
       `Dates use ${this.environment.BUSINESS_TIMEZONE}`,
-      'Currency: BGN',
+      'Currency: EUR',
     ];
 
     if (definitionKey === 'crm.customer-value') {
@@ -199,7 +199,7 @@ export class CrmAnalyticsService {
         dimension: dimensionLabel(row.dimension),
         documentCount: row.documentCount,
         label: row.label,
-        netRevenueBgn: row.netRevenueBgn,
+        netRevenueEur: row.netRevenueEur,
         sharePercent: row.sharePercent,
       })),
       title: 'CRM revenue breakdown',
@@ -263,9 +263,9 @@ function mapCustomerMetrics(
 ): CrmAnalyticsCustomerMetrics {
   return {
     activeCustomers: Number(row[`${period}_active_customers`]),
-    averageTransactionValueBgn: row[`${period}_average_transaction_value_bgn`],
+    averageTransactionValueEur: row[`${period}_average_transaction_value_eur`],
     churnPercent: row[`${period}_churn_percent`],
-    observedLifetimeValueBgn: row[`${period}_observed_lifetime_value_bgn`],
+    observedLifetimeValueEur: row[`${period}_observed_lifetime_value_eur`],
     purchaseFrequency: row[`${period}_purchase_frequency`],
     retentionPercent: row[`${period}_retention_percent`],
   };
@@ -291,9 +291,9 @@ function mapPipeline(rows: PipelineRow[]): CrmAnalyticsOverview['pipeline'] {
   const lostCount = Number(first?.lost_count ?? 0);
   return {
     createdOpportunities: Number(first?.total_opportunities ?? 0),
-    estimatedRevenueBgn: first?.estimated_revenue_bgn ?? '0.00',
+    estimatedRevenueEur: first?.estimated_revenue_eur ?? '0.00',
     lostCount,
-    openPipelineValueBgn: first?.open_pipeline_value_bgn ?? '0.00',
+    openPipelineValueEur: first?.open_pipeline_value_eur ?? '0.00',
     stages,
     winRatePercent: percent(wonCount, wonCount + lostCount),
     wonCount,
@@ -318,7 +318,7 @@ function mapPreference(row: PreferenceRow): CrmAnalyticsPreference {
     documentCount: Number(row.document_count),
     kind: row.kind,
     label: row.label,
-    netRevenueBgn: row.net_revenue_bgn,
+    netRevenueEur: row.net_revenue_eur,
     quantity: row.quantity,
   };
 }
@@ -326,15 +326,15 @@ function mapPreference(row: PreferenceRow): CrmAnalyticsPreference {
 function mapRevenue(rows: RevenueRow[]): CrmAnalyticsRevenueMetric[] {
   const totals = new Map<CrmAnalyticsRevenueDimension, number>();
   for (const row of rows) {
-    totals.set(row.dimension, (totals.get(row.dimension) ?? 0) + Number(row.net_revenue_bgn));
+    totals.set(row.dimension, (totals.get(row.dimension) ?? 0) + Number(row.net_revenue_eur));
   }
   return rows.map((row) => ({
     dimension: row.dimension,
     documentCount: Number(row.document_count),
     key: row.key,
     label: row.label,
-    netRevenueBgn: row.net_revenue_bgn,
-    sharePercent: percent(Number(row.net_revenue_bgn), totals.get(row.dimension) ?? 0),
+    netRevenueEur: row.net_revenue_eur,
+    sharePercent: percent(Number(row.net_revenue_eur), totals.get(row.dimension) ?? 0),
   }));
 }
 
@@ -357,9 +357,9 @@ function customerMetricsExportRow(
 ): Record<string, number | string> {
   return {
     activeCustomers: metrics.activeCustomers,
-    averageTransactionValueBgn: metrics.averageTransactionValueBgn,
+    averageTransactionValueEur: metrics.averageTransactionValueEur,
     churnPercent: metrics.churnPercent,
-    observedLifetimeValueBgn: metrics.observedLifetimeValueBgn,
+    observedLifetimeValueEur: metrics.observedLifetimeValueEur,
     period,
     purchaseFrequency: metrics.purchaseFrequency,
     retentionPercent: metrics.retentionPercent,
@@ -453,16 +453,16 @@ const dayMs = 86_400_000;
 
 const emptyCustomerMetricRow: CustomerMetricRow = {
   current_active_customers: '0',
-  current_average_transaction_value_bgn: '0.00',
+  current_average_transaction_value_eur: '0.00',
   current_churn_percent: '0.00',
-  current_net_revenue_bgn: '0.00',
-  current_observed_lifetime_value_bgn: '0.00',
+  current_net_revenue_eur: '0.00',
+  current_observed_lifetime_value_eur: '0.00',
   current_purchase_frequency: '0.00',
   current_retention_percent: '0.00',
   previous_active_customers: '0',
-  previous_average_transaction_value_bgn: '0.00',
+  previous_average_transaction_value_eur: '0.00',
   previous_churn_percent: '0.00',
-  previous_observed_lifetime_value_bgn: '0.00',
+  previous_observed_lifetime_value_eur: '0.00',
   previous_purchase_frequency: '0.00',
   previous_retention_percent: '0.00',
 };
@@ -472,7 +472,7 @@ const analyticsDefinitions: CrmAnalyticsDefinition[] = [
     dataSources: ['finance.financial_documents'],
     dateWindow: 'Invoice issue dates in the selected period.',
     formula:
-      'Active customers are distinct invoiced customers. Purchase frequency is invoice count divided by active customers. Average transaction value is the average stored BGN gross invoice total.',
+      'Active customers are distinct invoiced customers. Purchase frequency is invoice count divided by active customers. Average transaction value is the average stored EUR gross invoice total.',
     key: 'customer-activity',
     label: 'Customer activity',
     statusFilters: ['Issued invoices only; drafts and cancelled documents excluded.'],
@@ -492,7 +492,7 @@ const analyticsDefinitions: CrmAnalyticsDefinition[] = [
     dataSources: ['finance.financial_documents'],
     dateWindow: 'All issued financial documents up to the selected end date.',
     formula:
-      'Net recorded BGN value excluding VAT per customer averaged across customers; credit notes reduce value.',
+      'Net recorded EUR value excluding VAT per customer averaged across customers; credit notes reduce value.',
     key: 'observed-clv',
     label: 'Observed customer lifetime value',
     statusFilters: [
@@ -508,7 +508,7 @@ const analyticsDefinitions: CrmAnalyticsDefinition[] = [
     ],
     dateWindow: 'Financial-document issue dates in the selected period.',
     formula:
-      'Products and Service types are ranked by document count, quantity, and stored net BGN value excluding VAT.',
+      'Products and Service types are ranked by document count, quantity, and stored net EUR value excluding VAT.',
     key: 'customer-preferences',
     label: 'Preferred products and services',
     statusFilters: [
@@ -533,7 +533,7 @@ const analyticsDefinitions: CrmAnalyticsDefinition[] = [
     ],
     dateWindow: 'Financial-document issue dates in the selected period.',
     formula:
-      'Stored net BGN value excluding VAT for invoices and debit notes less credit notes, grouped by each dimension.',
+      'Stored net EUR value excluding VAT for invoices and debit notes less credit notes, grouped by each dimension.',
     key: 'recorded-revenue',
     label: 'Recorded revenue',
     statusFilters: ['Issued documents only; drafts, cancelled documents and proformas excluded.'],
@@ -551,13 +551,13 @@ const analyticsDefinitions: CrmAnalyticsDefinition[] = [
 
 const customerMetricsQuery = `
 WITH invoice_activity AS (
-  SELECT customer_partner_id, issue_date, bgn_gross_total
+  SELECT customer_partner_id, issue_date, eur_gross_total
   FROM finance.financial_documents
   WHERE status NOT IN ('draft', 'cancelled') AND official_number IS NOT NULL
     AND document_type = 'invoice'
 ), document_value AS (
   SELECT customer_partner_id, issue_date,
-         CASE WHEN document_type = 'credit_note' THEN -bgn_net_total ELSE bgn_net_total END AS value_bgn
+         CASE WHEN document_type = 'credit_note' THEN -eur_net_total ELSE eur_net_total END AS value_eur
   FROM finance.financial_documents
   WHERE status NOT IN ('draft', 'cancelled') AND official_number IS NOT NULL
     AND document_type IN ('invoice', 'credit_note', 'debit_note')
@@ -569,35 +569,35 @@ WITH invoice_activity AS (
   SELECT DISTINCT customer_partner_id FROM invoice_activity WHERE issue_date BETWEEN $5::date AND $6::date
 ), current_invoice_metrics AS (
   SELECT count(*)::numeric AS invoice_count, count(DISTINCT customer_partner_id)::numeric AS customers,
-         coalesce(avg(bgn_gross_total), 0) AS average_value
+         coalesce(avg(eur_gross_total), 0) AS average_value
   FROM invoice_activity WHERE issue_date BETWEEN $1::date AND $2::date
 ), previous_invoice_metrics AS (
   SELECT count(*)::numeric AS invoice_count, count(DISTINCT customer_partner_id)::numeric AS customers,
-         coalesce(avg(bgn_gross_total), 0) AS average_value
+         coalesce(avg(eur_gross_total), 0) AS average_value
   FROM invoice_activity WHERE issue_date BETWEEN $3::date AND $4::date
 ), current_lifetime AS (
   SELECT coalesce(avg(customer_value), 0) AS average_value FROM (
-    SELECT customer_partner_id, sum(value_bgn) AS customer_value
+    SELECT customer_partner_id, sum(value_eur) AS customer_value
     FROM document_value WHERE issue_date <= $2::date GROUP BY customer_partner_id
   ) value
 ), previous_lifetime AS (
   SELECT coalesce(avg(customer_value), 0) AS average_value FROM (
-    SELECT customer_partner_id, sum(value_bgn) AS customer_value
+    SELECT customer_partner_id, sum(value_eur) AS customer_value
     FROM document_value WHERE issue_date <= $4::date GROUP BY customer_partner_id
   ) value
 ), current_revenue AS (
-  SELECT coalesce(sum(value_bgn), 0) AS value FROM document_value WHERE issue_date BETWEEN $1::date AND $2::date
+  SELECT coalesce(sum(value_eur), 0) AS value FROM document_value WHERE issue_date BETWEEN $1::date AND $2::date
 )
 SELECT
   current_invoice_metrics.customers::text AS current_active_customers,
-  round(current_invoice_metrics.average_value, 2)::text AS current_average_transaction_value_bgn,
+  round(current_invoice_metrics.average_value, 2)::text AS current_average_transaction_value_eur,
   round(CASE WHEN (SELECT count(*) FROM previous_customers) = 0 THEN 0 ELSE
     ((SELECT count(*) FROM previous_customers previous_customer WHERE NOT EXISTS (
       SELECT 1 FROM current_customers current_customer
       WHERE current_customer.customer_partner_id = previous_customer.customer_partner_id
     ))::numeric / (SELECT count(*) FROM previous_customers)::numeric) * 100 END, 2)::text AS current_churn_percent,
-  round(current_revenue.value, 2)::text AS current_net_revenue_bgn,
-  round(current_lifetime.average_value, 2)::text AS current_observed_lifetime_value_bgn,
+  round(current_revenue.value, 2)::text AS current_net_revenue_eur,
+  round(current_lifetime.average_value, 2)::text AS current_observed_lifetime_value_eur,
   round(CASE WHEN current_invoice_metrics.customers = 0 THEN 0 ELSE
     current_invoice_metrics.invoice_count / current_invoice_metrics.customers END, 2)::text AS current_purchase_frequency,
   round(CASE WHEN (SELECT count(*) FROM previous_customers) = 0 THEN 0 ELSE
@@ -606,13 +606,13 @@ SELECT
       WHERE current_customer.customer_partner_id = previous_customer.customer_partner_id
     ))::numeric / (SELECT count(*) FROM previous_customers)::numeric) * 100 END, 2)::text AS current_retention_percent,
   previous_invoice_metrics.customers::text AS previous_active_customers,
-  round(previous_invoice_metrics.average_value, 2)::text AS previous_average_transaction_value_bgn,
+  round(previous_invoice_metrics.average_value, 2)::text AS previous_average_transaction_value_eur,
   round(CASE WHEN (SELECT count(*) FROM pre_previous_customers) = 0 THEN 0 ELSE
     ((SELECT count(*) FROM pre_previous_customers prior_customer WHERE NOT EXISTS (
       SELECT 1 FROM previous_customers previous_customer
       WHERE previous_customer.customer_partner_id = prior_customer.customer_partner_id
     ))::numeric / (SELECT count(*) FROM pre_previous_customers)::numeric) * 100 END, 2)::text AS previous_churn_percent,
-  round(previous_lifetime.average_value, 2)::text AS previous_observed_lifetime_value_bgn,
+  round(previous_lifetime.average_value, 2)::text AS previous_observed_lifetime_value_eur,
   round(CASE WHEN previous_invoice_metrics.customers = 0 THEN 0 ELSE
     previous_invoice_metrics.invoice_count / previous_invoice_metrics.customers END, 2)::text AS previous_purchase_frequency,
   round(CASE WHEN (SELECT count(*) FROM pre_previous_customers) = 0 THEN 0 ELSE
@@ -640,10 +640,10 @@ WITH stages(stage, ordinal) AS (
   FROM history ORDER BY opportunity_id, changed_at DESC
 ), totals AS (
   SELECT count(*)::text AS total_opportunities,
-         coalesce(sum(estimated_revenue_bgn), 0)::text AS estimated_revenue_bgn,
-         coalesce(sum(estimated_revenue_bgn) FILTER (
+         coalesce(sum(estimated_revenue_eur), 0)::text AS estimated_revenue_eur,
+         coalesce(sum(estimated_revenue_eur) FILTER (
            WHERE coalesce(latest.next_stage, cohort.stage) NOT IN ('won', 'lost')
-         ), 0)::text AS open_pipeline_value_bgn,
+         ), 0)::text AS open_pipeline_value_eur,
          count(*) FILTER (WHERE coalesce(latest.next_stage, cohort.stage) = 'won')::text AS won_count,
          count(*) FILTER (WHERE coalesce(latest.next_stage, cohort.stage) = 'lost')::text AS lost_count
   FROM cohort LEFT JOIN latest ON latest.opportunity_id = cohort.id
@@ -654,8 +654,8 @@ SELECT stages.stage,
                WHERE history.next_stage = stages.stage)::text END AS entered_count,
        (SELECT count(*) FROM cohort LEFT JOIN latest ON latest.opportunity_id = cohort.id
         WHERE coalesce(latest.next_stage, cohort.stage) = stages.stage)::text AS current_count,
-       totals.total_opportunities, totals.estimated_revenue_bgn,
-       totals.open_pipeline_value_bgn, totals.won_count, totals.lost_count
+       totals.total_opportunities, totals.estimated_revenue_eur,
+       totals.open_pipeline_value_eur, totals.won_count, totals.lost_count
 FROM stages CROSS JOIN totals ORDER BY stages.ordinal`;
 
 const employeeQuery = `
@@ -697,7 +697,7 @@ WITH document AS (
          count(DISTINCT document.id)::text AS document_count,
          sum(CASE WHEN document.document_type = 'credit_note' THEN -line.quantity ELSE line.quantity END)::text AS quantity,
          round(sum(CASE WHEN document.document_type = 'credit_note' THEN -1 ELSE 1 END
-           * line.net_total * document.exchange_rate), 2)::text AS net_revenue_bgn
+           * line.net_total * document.exchange_rate), 2)::text AS net_revenue_eur
   FROM document
   JOIN finance.financial_document_lines line ON line.financial_document_id = document.id
   JOIN master_data.products product ON product.id = line.product_id
@@ -709,8 +709,8 @@ WITH document AS (
            ELSE 'Service subscription' END AS label,
          count(DISTINCT document.id)::text AS document_count,
          count(DISTINCT document.id)::text AS quantity,
-         round(sum(CASE WHEN document.document_type = 'credit_note' THEN -financial.bgn_net_total
-           ELSE financial.bgn_net_total END), 2)::text AS net_revenue_bgn
+         round(sum(CASE WHEN document.document_type = 'credit_note' THEN -financial.eur_net_total
+           ELSE financial.eur_net_total END), 2)::text AS net_revenue_eur
   FROM document
   JOIN finance.financial_documents financial ON financial.id = document.id
   JOIN service.work_orders work_order ON work_order.id = document.source_service_work_order_id
@@ -722,7 +722,7 @@ SELECT * FROM (
   UNION ALL
   SELECT * FROM service_preference
 ) preference
-ORDER BY preference.document_count::numeric DESC, preference.net_revenue_bgn::numeric DESC,
+ORDER BY preference.document_count::numeric DESC, preference.net_revenue_eur::numeric DESC,
          preference.label
 LIMIT 10`;
 
@@ -749,7 +749,7 @@ WITH document AS (
 ), dimension_rows AS (
   SELECT 'product'::text AS dimension, product.id::text AS key, product.name AS label,
          count(DISTINCT document.id)::text AS document_count,
-         round(sum(document.direction * line.net_total * document.exchange_rate), 2)::text AS net_revenue_bgn
+         round(sum(document.direction * line.net_total * document.exchange_rate), 2)::text AS net_revenue_eur
   FROM document
   JOIN finance.financial_document_lines line ON line.financial_document_id = document.id
   JOIN master_data.products product ON product.id = line.product_id
@@ -760,30 +760,30 @@ WITH document AS (
            WHEN 'out_of_warranty' THEN 'Out-of-warranty Service'
            ELSE 'Service subscription' END,
          count(DISTINCT document.id)::text,
-         round(sum(document.direction * document.bgn_net_total), 2)::text
+         round(sum(document.direction * document.eur_net_total), 2)::text
   FROM document
   JOIN service.work_orders work_order ON work_order.id = document.source_service_work_order_id
   JOIN service.requests request ON request.id = work_order.service_request_id
   GROUP BY request.service_type
   UNION ALL
   SELECT 'customer', document.customer_partner_id::text, document.customer_name,
-         count(*)::text, round(sum(document.direction * document.bgn_net_total), 2)::text
+         count(*)::text, round(sum(document.direction * document.eur_net_total), 2)::text
   FROM document GROUP BY document.customer_partner_id, document.customer_name
   UNION ALL
   SELECT 'region', lower(document.region_name), document.region_name,
-         count(*)::text, round(sum(document.direction * document.bgn_net_total), 2)::text
+         count(*)::text, round(sum(document.direction * document.eur_net_total), 2)::text
   FROM document GROUP BY document.region_name
   UNION ALL
   SELECT 'employee', account.id::text, employee.display_name,
-         count(*)::text, round(sum(document.direction * document.bgn_net_total), 2)::text
+         count(*)::text, round(sum(document.direction * document.eur_net_total), 2)::text
   FROM document
   JOIN identity.user_accounts account ON account.id = document.responsible_account_id
   JOIN identity.employees employee ON employee.id = account.employee_id
   GROUP BY account.id, employee.display_name
 )
-SELECT dimension, key, label, document_count, net_revenue_bgn
+SELECT dimension, key, label, document_count, net_revenue_eur
 FROM dimension_rows
-ORDER BY dimension, net_revenue_bgn::numeric DESC, label`;
+ORDER BY dimension, net_revenue_eur::numeric DESC, label`;
 
 export function crmReportColumns(key: CrmReportDefinitionKey): FinanceReportExportData['columns'] {
   switch (key) {
@@ -804,10 +804,10 @@ const customerValueColumns = [
   { key: 'period', label: 'Window', type: 'text' },
   { key: 'activeCustomers', label: 'Active customers', type: 'number' },
   { key: 'purchaseFrequency', label: 'Purchase frequency', type: 'text' },
-  { key: 'averageTransactionValueBgn', label: 'Average transaction BGN', type: 'money' },
+  { key: 'averageTransactionValueEur', label: 'Average transaction EUR', type: 'money' },
   { key: 'retentionPercent', label: 'Retention %', type: 'text' },
   { key: 'churnPercent', label: 'Churn %', type: 'text' },
-  { key: 'observedLifetimeValueBgn', label: 'Observed customer value BGN', type: 'money' },
+  { key: 'observedLifetimeValueEur', label: 'Observed customer value EUR', type: 'money' },
 ] as const;
 
 const pipelineColumns = [
@@ -829,6 +829,6 @@ const revenueColumns = [
   { key: 'dimension', label: 'Dimension', type: 'text' },
   { key: 'label', label: 'Name', type: 'text' },
   { key: 'documentCount', label: 'Documents', type: 'number' },
-  { key: 'netRevenueBgn', label: 'Net recorded value BGN', type: 'money' },
+  { key: 'netRevenueEur', label: 'Net recorded value EUR', type: 'money' },
   { key: 'sharePercent', label: 'Share %', type: 'text' },
 ] as const;

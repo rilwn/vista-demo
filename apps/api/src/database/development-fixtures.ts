@@ -2,6 +2,8 @@ import { createHash } from 'node:crypto';
 
 import type { PoolClient } from 'pg';
 
+import { addBusinessMinutes } from '../crm/crm-sla-clock.js';
+
 type PermissionAction = 'approve' | 'create' | 'delete' | 'edit' | 'view';
 
 interface PermissionGrant {
@@ -1583,22 +1585,22 @@ async function ensureInitialStock(
       organization.centralWarehouse,
       catalog.fiscal,
       '2.0000',
-      '390.0000',
+      '199.4038',
     ),
     stockReceipt(
       'central-scale',
       organization.centralWarehouse,
       catalog.scale,
       '2.0000',
-      '285.0000',
+      '145.7182',
     ),
-    stockReceipt('central-fuel', organization.centralWarehouse, catalog.fuel, '2.0000', '720.0000'),
+    stockReceipt('central-fuel', organization.centralWarehouse, catalog.fuel, '2.0000', '368.1302'),
     stockReceipt(
       'central-rolls',
       organization.centralWarehouse,
       catalog.receiptRoll,
       '100.0000',
-      '1.0500',
+      '0.5369',
       catalog.receiptRollBatch,
     ),
     stockReceipt(
@@ -1606,7 +1608,7 @@ async function ensureInitialStock(
       organization.centralWarehouse,
       catalog.printHead,
       '20.0000',
-      '46.0000',
+      '23.5194',
       catalog.printHeadBatch,
     ),
     stockReceipt(
@@ -1614,14 +1616,14 @@ async function ensureInitialStock(
       organization.centralWarehouse,
       catalog.adapter,
       '20.0000',
-      '12.5000',
+      '6.3911',
     ),
     stockReceipt(
       'service-print-heads',
       organization.serviceWarehouse,
       catalog.printHead,
       '10.0000',
-      '46.0000',
+      '23.5194',
       catalog.printHeadBatch,
     ),
     stockReceipt(
@@ -1629,14 +1631,14 @@ async function ensureInitialStock(
       organization.serviceWarehouse,
       catalog.adapter,
       '10.0000',
-      '12.5000',
+      '6.3911',
     ),
     stockReceipt(
       'technician-print-heads',
       organization.technicianWarehouse,
       catalog.printHead,
       '5.0000',
-      '46.0000',
+      '23.5194',
       catalog.printHeadBatch,
     ),
     stockReceipt(
@@ -1644,7 +1646,7 @@ async function ensureInitialStock(
       organization.technicianWarehouse,
       catalog.receiptRoll,
       '5.0000',
-      '1.0500',
+      '0.5369',
       catalog.receiptRollBatch,
     ),
     stockReceipt(
@@ -1652,7 +1654,7 @@ async function ensureInitialStock(
       organization.technicianWarehouse,
       catalog.adapter,
       '5.0000',
-      '12.5000',
+      '6.3911',
     ),
   ];
 
@@ -1663,7 +1665,7 @@ async function ensureInitialStock(
       row.movementId,
       `INSERT INTO inventory.stock_movements (
          id, warehouse_id, product_id, movement_type, quantity, reference_type, reference_id,
-         actor_account_id, correlation_id, unit_cost_bgn, supplier_partner_id, batch_id
+         actor_account_id, correlation_id, unit_cost_eur, supplier_partner_id, batch_id
        ) VALUES (
          $1, $2, $3, 'receipt', $4, 'development_fixture', $5, $6, $7, $8, $9, $10
        ) ON CONFLICT (id) DO NOTHING`,
@@ -1675,7 +1677,7 @@ async function ensureInitialStock(
         row.key,
         managerId,
         fixtureId(`stock-correlation:${row.key}`),
-        row.unitCostBgn,
+        row.unitCostEur,
         supplierPartnerId,
         row.batchId,
       ],
@@ -1683,26 +1685,26 @@ async function ensureInitialStock(
   }
 
   const balances: ReadonlyArray<StockBalanceFixture> = [
-    stockBalance(organization.centralWarehouse, catalog.fiscal, '2.0000', '390.0000'),
-    stockBalance(organization.centralWarehouse, catalog.scale, '2.0000', '285.0000'),
-    stockBalance(organization.centralWarehouse, catalog.fuel, '2.0000', '720.0000'),
+    stockBalance(organization.centralWarehouse, catalog.fiscal, '2.0000', '199.4038'),
+    stockBalance(organization.centralWarehouse, catalog.scale, '2.0000', '145.7182'),
+    stockBalance(organization.centralWarehouse, catalog.fuel, '2.0000', '368.1302'),
     // Includes a separate received purchase order created below.
-    stockBalance(organization.centralWarehouse, catalog.receiptRoll, '130.0000', '1.0615'),
-    stockBalance(organization.centralWarehouse, catalog.printHead, '20.0000', '46.0000'),
+    stockBalance(organization.centralWarehouse, catalog.receiptRoll, '130.0000', '0.5427'),
+    stockBalance(organization.centralWarehouse, catalog.printHead, '20.0000', '23.5194'),
     // One adapter is consumed by the completed Sales workflow created below.
-    stockBalance(organization.centralWarehouse, catalog.adapter, '19.0000', '12.5000'),
-    stockBalance(organization.serviceWarehouse, catalog.printHead, '10.0000', '46.0000'),
-    stockBalance(organization.serviceWarehouse, catalog.adapter, '10.0000', '12.5000'),
-    stockBalance(organization.technicianWarehouse, catalog.printHead, '5.0000', '46.0000'),
-    stockBalance(organization.technicianWarehouse, catalog.receiptRoll, '5.0000', '1.0500'),
-    stockBalance(organization.technicianWarehouse, catalog.adapter, '5.0000', '12.5000'),
+    stockBalance(organization.centralWarehouse, catalog.adapter, '19.0000', '6.3911'),
+    stockBalance(organization.serviceWarehouse, catalog.printHead, '10.0000', '23.5194'),
+    stockBalance(organization.serviceWarehouse, catalog.adapter, '10.0000', '6.3911'),
+    stockBalance(organization.technicianWarehouse, catalog.printHead, '5.0000', '23.5194'),
+    stockBalance(organization.technicianWarehouse, catalog.receiptRoll, '5.0000', '0.5369'),
+    stockBalance(organization.technicianWarehouse, catalog.adapter, '5.0000', '6.3911'),
   ];
   for (const balance of balances) {
     await client.query(
       `INSERT INTO inventory.stock_balances (
-         warehouse_id, product_id, quantity, average_unit_cost_bgn
+         warehouse_id, product_id, quantity, average_unit_cost_eur
        ) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING`,
-      [balance.warehouseId, balance.productId, balance.quantity, balance.averageUnitCostBgn],
+      [balance.warehouseId, balance.productId, balance.quantity, balance.averageUnitCostEur],
     );
   }
   for (const balance of [
@@ -1834,7 +1836,7 @@ async function ensurePricingFixtures(
        id, code, name, scope, customer_group_id, campaign_id, currency_code,
        valid_from, valid_to, priority, created_by, updated_by
      ) VALUES (
-       $1, 'DEMO-RETAIL-BGN', 'Demo retail BGN prices', 'customer_group', $2, $3, 'BGN',
+       $1, 'DEMO-RETAIL-EUR', 'Demo retail EUR prices', 'customer_group', $2, $3, 'EUR',
        CURRENT_DATE - INTERVAL '30 days', CURRENT_DATE + INTERVAL '10 years', 10, $4, $4
      ) ON CONFLICT (id) DO NOTHING`,
     [priceListId, customerGroupId, campaignId, managerId],
@@ -1845,7 +1847,7 @@ async function ensurePricingFixtures(
     'sales.price_list_lines',
     lineId,
     `INSERT INTO sales.price_list_lines (id, price_list_id, product_id, unit_price)
-     VALUES ($1, $2, $3, 45.0000) ON CONFLICT (id) DO NOTHING`,
+     VALUES ($1, $2, $3, 23.0081) ON CONFLICT (id) DO NOTHING`,
     [lineId, priceListId, catalog.adapter],
   );
 
@@ -1858,18 +1860,18 @@ async function ensurePricingFixtures(
        id, code, name, scope, currency_code, valid_from, valid_to, priority,
        created_by, updated_by
      ) VALUES (
-       $1, 'DEMO-POS-BGN', 'Demo counter prices', 'all_customers', 'BGN',
+       $1, 'DEMO-POS-EUR', 'Demo counter prices', 'all_customers', 'EUR',
        CURRENT_DATE - INTERVAL '30 days', CURRENT_DATE + INTERVAL '10 years', 0, $2, $2
      ) ON CONFLICT (id) DO NOTHING`,
     [posPriceListId, managerId],
   );
   const posPrices: Array<[keyof CatalogFixtureIds, string]> = [
-    ['fiscal', '600.0000'],
-    ['scale', '420.0000'],
-    ['fuel', '1000.0000'],
-    ['receiptRoll', '2.5000'],
-    ['printHead', '75.0000'],
-    ['adapter', '50.0000'],
+    ['fiscal', '306.7751'],
+    ['scale', '214.7426'],
+    ['fuel', '511.2919'],
+    ['receiptRoll', '1.2782'],
+    ['printHead', '38.3469'],
+    ['adapter', '25.5646'],
   ];
   for (const [productKey, unitPrice] of posPrices) {
     const posLineId = fixtureId(`sales-price-list-line:pos:${productKey}`);
@@ -1904,7 +1906,7 @@ async function ensurePosCommercialFixtures(
     {
       code: 'DEMO-BUNDLE-CARE',
       discountType: 'fixed_amount',
-      discountValue: '5.0000',
+      discountValue: '2.5565',
       id: fixtureId('pos-commercial-rule:care-bundle'),
       items: [
         { productId: catalog.receiptRoll, quantity: '1.0000' },
@@ -1953,9 +1955,9 @@ async function ensurePosCommercialFixtures(
     'pos.loyalty_programs',
     programId,
     `INSERT INTO pos.loyalty_programs (
-       id, code, name, earn_points_per_bgn, redemption_value_bgn,
+       id, code, name, earn_points_per_eur, redemption_value_eur,
        valid_from, created_by, updated_by
-     ) VALUES ($1,'VISTA-REWARDS','Vista Rewards',1,0.0100,
+     ) VALUES ($1,'VISTA-REWARDS','Vista Rewards',2,0.0051,
        CURRENT_DATE - INTERVAL '30 days',$2,$2)
      ON CONFLICT (id) DO NOTHING`,
     [programId, managerId],
@@ -1988,9 +1990,9 @@ async function ensurePosCommercialFixtures(
     'sales.customer_payment_terms',
     fixtureId('customer-payment-terms:alfa'),
     `INSERT INTO sales.customer_payment_terms (
-       id, customer_partner_id, on_account_enabled, credit_limit_bgn,
+       id, customer_partner_id, on_account_enabled, credit_limit_eur,
        payment_terms_days, valid_from, valid_to, created_by, updated_by
-     ) VALUES ($1,$2,true,2000.0000,14,CURRENT_DATE - INTERVAL '30 days',
+     ) VALUES ($1,$2,true,1022.5838,14,CURRENT_DATE - INTERVAL '30 days',
        CURRENT_DATE + INTERVAL '10 years',$3,$3)
      ON CONFLICT (id) DO NOTHING`,
     [fixtureId('customer-payment-terms:alfa'), alfaPartnerId, managerId],
@@ -2003,7 +2005,7 @@ async function ensurePosCommercialFixtures(
     `INSERT INTO finance.customer_advances (
        id, advance_number, customer_partner_id, amount, received_on,
        payment_method, payment_reference, recorded_by
-     ) VALUES ($1,'DEV-ADV-ALFA-001',$2,80.0000,CURRENT_DATE - INTERVAL '1 day',
+     ) VALUES ($1,'DEV-ADV-ALFA-001',$2,40.9034,CURRENT_DATE - INTERVAL '1 day',
        'bank_transfer','DEMO-ALFA-ADVANCE',$3)
      ON CONFLICT (id) DO NOTHING`,
     [customerAdvanceId, alfaPartnerId, managerId],
@@ -2014,7 +2016,7 @@ async function ensurePosCommercialFixtures(
     fixtureId('customer-advance-entry:alfa-opening'),
     `INSERT INTO finance.customer_advance_entries (
        id, advance_id, entry_type, amount, actor_account_id, correlation_id
-     ) VALUES ($1,$2,'received',80.0000,$3,'development-fixture')
+     ) VALUES ($1,$2,'received',40.9034,$3,'development-fixture')
      ON CONFLICT (id) DO NOTHING`,
     [fixtureId('customer-advance-entry:alfa-opening'), customerAdvanceId, managerId],
   );
@@ -2039,7 +2041,7 @@ async function ensureSubscriptionFixture(
      ) VALUES (
        $1, 'DEV-SVC-001', $2, $3, CURRENT_DATE - INTERVAL '30 days',
        CURRENT_DATE + INTERVAL '700 days', 3, 1, CURRENT_DATE + INTERVAL '20 days',
-       'BGN', 120.0000, $4, $4
+       'EUR', 61.3550, $4, $4
      ) ON CONFLICT (id) DO NOTHING`,
     [contractId, alfaPartnerId, alfaFuelLocationId, managerId],
   );
@@ -2067,12 +2069,12 @@ interface StockReceiptFixture {
   movementId: string;
   productId: string;
   quantity: string;
-  unitCostBgn: string;
+  unitCostEur: string;
   warehouseId: string;
 }
 
 interface StockBalanceFixture {
-  averageUnitCostBgn: string;
+  averageUnitCostEur: string;
   productId: string;
   quantity: string;
   warehouseId: string;
@@ -2089,7 +2091,7 @@ function stockReceipt(
   warehouseId: string,
   productId: string,
   quantity: string,
-  unitCostBgn: string,
+  unitCostEur: string,
   batchId: string | null = null,
 ): StockReceiptFixture {
   return {
@@ -2098,7 +2100,7 @@ function stockReceipt(
     movementId: fixtureId(`stock-movement:${key}`),
     productId,
     quantity,
-    unitCostBgn,
+    unitCostEur,
     warehouseId,
   };
 }
@@ -2107,9 +2109,9 @@ function stockBalance(
   warehouseId: string,
   productId: string,
   quantity: string,
-  averageUnitCostBgn: string,
+  averageUnitCostEur: string,
 ): StockBalanceFixture {
-  return { averageUnitCostBgn, productId, quantity, warehouseId };
+  return { averageUnitCostEur, productId, quantity, warehouseId };
 }
 
 function batchBalance(warehouseId: string, batchId: string, quantity: string): BatchBalanceFixture {
@@ -2144,7 +2146,7 @@ async function ensureProcurementFixtures(
     openOrderId,
     `INSERT INTO procurement.purchase_orders (
        id, supplier_partner_id, warehouse_id, currency_code, status, created_by, updated_by
-     ) VALUES ($1, $2, $3, 'BGN', 'open', $4, $4) ON CONFLICT (id) DO NOTHING`,
+     ) VALUES ($1, $2, $3, 'EUR', 'open', $4, $4) ON CONFLICT (id) DO NOTHING`,
     [openOrderId, supplierPartnerId, centralWarehouseId, managerId],
   );
   await insertFixtureRow(
@@ -2153,7 +2155,7 @@ async function ensureProcurementFixtures(
     openLineId,
     `INSERT INTO procurement.purchase_order_lines (
        id, purchase_order_id, product_id, ordered_quantity, unit_price, expected_delivery_date
-     ) VALUES ($1, $2, $3, 10.0000, 12.5000, CURRENT_DATE + INTERVAL '14 days')
+     ) VALUES ($1, $2, $3, 10.0000, 6.3911, CURRENT_DATE + INTERVAL '14 days')
      ON CONFLICT (id) DO NOTHING`,
     [openLineId, openOrderId, adapterProductId],
   );
@@ -2163,7 +2165,7 @@ async function ensureProcurementFixtures(
     receivedOrderId,
     `INSERT INTO procurement.purchase_orders (
        id, supplier_partner_id, warehouse_id, currency_code, status, created_by, updated_by
-     ) VALUES ($1, $2, $3, 'BGN', 'received', $4, $4) ON CONFLICT (id) DO NOTHING`,
+     ) VALUES ($1, $2, $3, 'EUR', 'received', $4, $4) ON CONFLICT (id) DO NOTHING`,
     [receivedOrderId, supplierPartnerId, centralWarehouseId, managerId],
   );
   await insertFixtureRow(
@@ -2173,7 +2175,7 @@ async function ensureProcurementFixtures(
     `INSERT INTO procurement.purchase_order_lines (
        id, purchase_order_id, product_id, ordered_quantity, delivered_quantity, invoiced_quantity,
        unit_price, expected_delivery_date
-     ) VALUES ($1, $2, $3, 30.0000, 30.0000, 30.0000, 1.1000, CURRENT_DATE - INTERVAL '5 days')
+     ) VALUES ($1, $2, $3, 30.0000, 30.0000, 30.0000, 0.5624, CURRENT_DATE - INTERVAL '5 days')
      ON CONFLICT (id) DO NOTHING`,
     [receivedLineId, receivedOrderId, receiptRollProductId],
   );
@@ -2200,8 +2202,8 @@ async function ensureProcurementFixtures(
     receiptMovementId,
     `INSERT INTO inventory.stock_movements (
        id, warehouse_id, product_id, movement_type, quantity, reference_type, reference_id,
-       actor_account_id, correlation_id, unit_cost_bgn, supplier_partner_id, batch_id
-     ) VALUES ($1, $2, $3, 'receipt', 30.0000, 'goods_receipt', $4, $5, $6, 1.1000, $7, $8)
+       actor_account_id, correlation_id, unit_cost_eur, supplier_partner_id, batch_id
+     ) VALUES ($1, $2, $3, 'receipt', 30.0000, 'goods_receipt', $4, $5, $6, 0.5624, $7, $8)
      ON CONFLICT (id) DO NOTHING`,
     [
       receiptMovementId,
@@ -2219,8 +2221,8 @@ async function ensureProcurementFixtures(
     'procurement.goods_receipt_lines',
     receiptLineId,
     `INSERT INTO procurement.goods_receipt_lines (
-       id, goods_receipt_id, purchase_order_line_id, stock_movement_id, quantity, unit_cost_bgn
-     ) VALUES ($1, $2, $3, $4, 30.0000, 1.1000) ON CONFLICT (id) DO NOTHING`,
+       id, goods_receipt_id, purchase_order_line_id, stock_movement_id, quantity, unit_cost_eur
+     ) VALUES ($1, $2, $3, $4, 30.0000, 0.5624) ON CONFLICT (id) DO NOTHING`,
     [receiptLineId, goodsReceiptId, receivedLineId, receiptMovementId],
   );
   await insertFixtureRow(
@@ -2231,7 +2233,7 @@ async function ensureProcurementFixtures(
        id, purchase_order_id, supplier_partner_id, supplier_invoice_number, invoice_date,
        currency_code, recorded_by
      ) VALUES (
-       $1, $2, $3, 'DEV-SUP-INV-001', CURRENT_DATE - INTERVAL '4 days', 'BGN', $4
+       $1, $2, $3, 'DEV-SUP-INV-001', CURRENT_DATE - INTERVAL '4 days', 'EUR', $4
      ) ON CONFLICT (id) DO NOTHING`,
     [supplierInvoiceId, receivedOrderId, supplierPartnerId, managerId],
   );
@@ -2241,7 +2243,7 @@ async function ensureProcurementFixtures(
     supplierInvoiceLineId,
     `INSERT INTO procurement.supplier_invoice_lines (
        id, supplier_invoice_id, purchase_order_id, purchase_order_line_id, quantity, unit_price
-     ) VALUES ($1, $2, $3, $4, 30.0000, 1.1000) ON CONFLICT (id) DO NOTHING`,
+     ) VALUES ($1, $2, $3, $4, 30.0000, 0.5624) ON CONFLICT (id) DO NOTHING`,
     [supplierInvoiceLineId, supplierInvoiceId, receivedOrderId, receivedLineId],
   );
   await insertFixtureRow(
@@ -2252,7 +2254,7 @@ async function ensureProcurementFixtures(
        id, purchase_order_id, supplier_partner_id, supplier_invoice_number, invoice_date,
        currency_code, recorded_by
      ) VALUES (
-       $1, $2, $3, 'DEV-SUP-VAT-001', CURRENT_DATE - INTERVAL '2 days', 'BGN', $4
+       $1, $2, $3, 'DEV-SUP-VAT-001', CURRENT_DATE - INTERVAL '2 days', 'EUR', $4
      ) ON CONFLICT (id) DO NOTHING`,
     [vatSupplierInvoiceId, openOrderId, supplierPartnerId, managerId],
   );
@@ -2263,7 +2265,7 @@ async function ensureProcurementFixtures(
     `INSERT INTO procurement.supplier_invoice_lines (
        id, supplier_invoice_id, purchase_order_id, purchase_order_line_id, quantity, unit_price,
        vat_treatment, vat_rate
-     ) VALUES ($1, $2, $3, $4, 4.0000, 12.5000, 'standard_20', 20.0000)
+     ) VALUES ($1, $2, $3, $4, 4.0000, 6.3911, 'standard_20', 20.0000)
      ON CONFLICT (id) DO NOTHING`,
     [vatSupplierInvoiceLineId, vatSupplierInvoiceId, openOrderId, openLineId],
   );
@@ -2330,8 +2332,8 @@ async function ensureSalesAndFinanceFixtures(
        id, quotation_number, customer_partner_id, warehouse_id, valid_until, currency_code,
        subtotal, vat_total, total, status, created_by
      ) VALUES (
-       $1, 'DEV-Q-0001', $2, $3, CURRENT_DATE + INTERVAL '30 days', 'BGN',
-       50.0000, 10.0000, 60.0000, 'invoiced', $4
+       $1, 'DEV-Q-0001', $2, $3, CURRENT_DATE + INTERVAL '30 days', 'EUR',
+       25.5646, 5.1129, 30.6775, 'invoiced', $4
      ) ON CONFLICT (id) DO NOTHING`,
     [quotationId, alfaPartnerId, centralWarehouseId, managerId],
   );
@@ -2341,7 +2343,7 @@ async function ensureSalesAndFinanceFixtures(
     quotationLineId,
     `INSERT INTO sales.quotation_lines (
        id, quotation_id, product_id, quantity, unit_price, vat_treatment, line_total
-     ) VALUES ($1, $2, $3, 1.0000, 50.0000, 'standard_20', 50.0000)
+     ) VALUES ($1, $2, $3, 1.0000, 25.5646, 'standard_20', 25.5646)
      ON CONFLICT (id) DO NOTHING`,
     [quotationLineId, quotationId, adapterProductId],
   );
@@ -2388,8 +2390,8 @@ async function ensureSalesAndFinanceFixtures(
     issueMovementId,
     `INSERT INTO inventory.stock_movements (
        id, warehouse_id, product_id, movement_type, quantity, reference_type, reference_id,
-       actor_account_id, correlation_id, unit_cost_bgn, customer_partner_id
-     ) VALUES ($1, $2, $3, 'issue', 1.0000, 'sales_shipment', $4, $5, $6, 12.5000, $7)
+       actor_account_id, correlation_id, unit_cost_eur, customer_partner_id
+     ) VALUES ($1, $2, $3, 'issue', 1.0000, 'sales_shipment', $4, $5, $6, 6.3911, $7)
      ON CONFLICT (id) DO NOTHING`,
     [
       issueMovementId,
@@ -2442,7 +2444,7 @@ async function ensureSalesAndFinanceFixtures(
        id, invoice_number, order_id, shipment_id, customer_partner_id, currency_code,
        subtotal, vat_total, total, recorded_by
      ) VALUES (
-       $1, 'DEV-INV-DRAFT-0001', $2, $3, $4, 'BGN', 50.0000, 10.0000, 60.0000, $5
+       $1, 'DEV-INV-DRAFT-0001', $2, $3, $4, 'EUR', 25.5646, 5.1129, 30.6775, $5
      ) ON CONFLICT (id) DO NOTHING`,
     [invoiceId, orderId, shipmentId, alfaPartnerId, managerId],
   );
@@ -2454,7 +2456,7 @@ async function ensureSalesAndFinanceFixtures(
     `INSERT INTO sales.invoice_lines (
        id, invoice_id, quotation_line_id, product_id, quantity, unit_price, vat_treatment,
        line_total
-     ) VALUES ($1, $2, $3, $4, 1.0000, 50.0000, 'standard_20', 50.0000)
+     ) VALUES ($1, $2, $3, $4, 1.0000, 25.5646, 'standard_20', 25.5646)
      ON CONFLICT (id) DO NOTHING`,
     [invoiceLineId, invoiceId, quotationLineId, adapterProductId],
   );
@@ -2483,11 +2485,11 @@ async function ensureFinanceFixture(
     `INSERT INTO finance.customer_documents (
        id, document_number, source_sales_invoice_id, customer_partner_id, document_date, due_date,
        currency_code, exchange_rate, rate_date, rate_source, total, allocated_total,
-       outstanding_total, bgn_total, payment_status, created_by
+       outstanding_total, eur_total, payment_status, created_by
      ) VALUES (
        $1, 'DEV-FIN-REV-0001', $2, $3, CURRENT_DATE - INTERVAL '7 days',
-       CURRENT_DATE + INTERVAL '23 days', 'BGN', 1, CURRENT_DATE - INTERVAL '7 days',
-       'internal_bgn_review', 60.0000, 20.0000, 40.0000, 60.0000, 'partially_paid', $4
+       CURRENT_DATE + INTERVAL '23 days', 'EUR', 1, CURRENT_DATE - INTERVAL '7 days',
+       'internal_eur_review', 30.6775, 10.2258, 20.4517, 30.6775, 'partially_paid', $4
      ) ON CONFLICT (id) DO NOTHING`,
     [financeDocumentId, invoiceId, alfaPartnerId, managerId],
   );
@@ -2510,8 +2512,8 @@ async function ensureFinanceFixture(
        id, payment_number, customer_partner_id, payment_date, payment_method, currency_code,
        amount, payment_reference, notes, recorded_by
      ) VALUES (
-       $1, 'DEV-PAY-0001', $2, CURRENT_DATE - INTERVAL '2 days', 'bank_transfer', 'BGN',
-       20.0000, 'DEV-PAYMENT-REFERENCE', 'Initial partial fixture payment.', $3
+       $1, 'DEV-PAY-0001', $2, CURRENT_DATE - INTERVAL '2 days', 'bank_transfer', 'EUR',
+       10.2258, 'DEV-PAYMENT-REFERENCE', 'Initial partial fixture payment.', $3
      ) ON CONFLICT (id) DO NOTHING`,
     [paymentId, alfaPartnerId, managerId],
   );
@@ -2522,7 +2524,7 @@ async function ensureFinanceFixture(
     allocationId,
     `INSERT INTO finance.payment_allocations (
        id, payment_id, customer_document_id, amount, allocated_by
-     ) VALUES ($1, $2, $3, 20.0000, $4) ON CONFLICT (id) DO NOTHING`,
+     ) VALUES ($1, $2, $3, 10.2258, $4) ON CONFLICT (id) DO NOTHING`,
     [allocationId, paymentId, financeDocumentId, managerId],
   );
   const partialHistoryId = fixtureId('finance-status-history:partial');
@@ -2641,16 +2643,23 @@ async function ensureScheduledServiceFixture(
     `INSERT INTO service.work_orders (
        id, work_order_number, service_request_id, assigned_technician_account_id,
        technician_warehouse_id, scheduled_start, scheduled_end, started_at, completed_at,
-       status, completion_notes, labor_minutes, labor_cost_bgn, parts_cost_bgn,
-       transport_cost_bgn, total_cost_bgn, signer_name, signature_media_type,
+       status, completion_notes, labor_minutes, labor_cost_eur, parts_cost_eur,
+       transport_cost_eur, total_cost_eur, customer_labor_charge_eur,
+       customer_parts_charge_eur, customer_transport_charge_eur, customer_charge_recorded,
+       signer_name, signature_media_type,
        signature_data, signature_sha256, signed_at, created_by, updated_by
      ) VALUES (
        $1, 'DEV-WO-FIN-0001', $2, $3, $4, now() - INTERVAL '1 day 2 hours',
        now() - INTERVAL '1 day', now() - INTERVAL '1 day 2 hours', now() - INTERVAL '1 day',
        'completed', 'Printer feed was adjusted and the device passed its final test.',
-       90, 75.0000, 0.0000, 15.0000, 90.0000, 'Alfa Market Representative',
+       90, 38.3469, 0.0000, 7.6709, 46.0178, 75.0000, 0.0000, 15.0000, true,
+       'Alfa Market Representative',
        'image/png', $5, $6, now() - INTERVAL '1 day', $7, $7
-     ) ON CONFLICT (id) DO NOTHING`,
+     ) ON CONFLICT (id) DO UPDATE SET
+       customer_labor_charge_eur = EXCLUDED.customer_labor_charge_eur,
+       customer_parts_charge_eur = EXCLUDED.customer_parts_charge_eur,
+       customer_transport_charge_eur = EXCLUDED.customer_transport_charge_eur,
+       customer_charge_recorded = EXCLUDED.customer_charge_recorded`,
     [
       completedWorkOrderId,
       completedRequestId,
@@ -2756,10 +2765,10 @@ async function ensureCrmTicketFixtures(
   }
 
   const policies = [
-    ['low', 'Standard care · low priority', 480, 4320],
-    ['normal', 'Standard care · normal priority', 240, 1440],
-    ['high', 'Priority care · high priority', 60, 480],
-    ['urgent', 'Critical care · urgent', 15, 240],
+    ['low', 'Standard care · low priority', 240, 960],
+    ['normal', 'Standard care · normal priority', 240, 960],
+    ['high', 'Priority care · high priority', 240, 960],
+    ['urgent', 'Critical care · urgent', 240, 960],
   ] as const;
   for (const [priority, name, responseMinutes, resolutionMinutes] of policies) {
     const id = fixtureId(`crm-sla-policy:${priority}`);
@@ -2770,12 +2779,22 @@ async function ensureCrmTicketFixtures(
       `INSERT INTO crm.sla_policies (
          id, name, priority, response_minutes, resolution_minutes,
          risk_threshold_percent, escalation_account_id
-       ) VALUES ($1,$2,$3,$4,$5,80,$6) ON CONFLICT (id) DO NOTHING`,
+       ) VALUES ($1,$2,$3,$4,$5,75,$6)
+       ON CONFLICT (id) DO UPDATE SET
+         response_minutes = EXCLUDED.response_minutes,
+         resolution_minutes = EXCLUDED.resolution_minutes,
+         risk_threshold_percent = EXCLUDED.risk_threshold_percent,
+         escalation_account_id = EXCLUDED.escalation_account_id`,
       [id, name, priority, responseMinutes, resolutionMinutes, managerId],
     );
   }
 
   const ticketId = fixtureId('crm-ticket:printer-support');
+  const ticketClock = await client.query<{ now: string }>('SELECT now()::text AS now');
+  const ticketCreatedAt = ticketClock.rows[0]?.now;
+  if (!ticketCreatedAt) throw new Error('Could not determine the CRM fixture clock.');
+  const responseDueAt = addBusinessMinutes(ticketCreatedAt, 240, 'Europe/Sofia');
+  const resolutionDueAt = addBusinessMinutes(ticketCreatedAt, 960, 'Europe/Sofia');
   await insertFixtureRow(
     client,
     'crm.tickets',
@@ -2790,9 +2809,14 @@ async function ensureCrmTicketFixtures(
        $1, 'DEV-TKT-0001', $2, $3, $4, $5, 'telephone', 'normal',
        'Receipt printer stops during busy periods',
        'The customer reports intermittent paper-feed stops and needs a service visit.',
-       $6, $7, 'Standard care · normal priority', 240, 1440, 80,
-       now() + INTERVAL '4 hours', now() + INTERVAL '24 hours', $8, $8
-     ) ON CONFLICT (id) DO NOTHING`,
+       $6, $7, 'Standard care · normal priority', 240, 960, 75,
+       $8, $9, $10, $10
+     ) ON CONFLICT (id) DO UPDATE SET
+       sla_response_minutes = EXCLUDED.sla_response_minutes,
+       sla_resolution_minutes = EXCLUDED.sla_resolution_minutes,
+       sla_risk_threshold_percent = EXCLUDED.sla_risk_threshold_percent,
+       response_due_at = EXCLUDED.response_due_at,
+       resolution_due_at = EXCLUDED.resolution_due_at`,
     [
       ticketId,
       customerPartnerId,
@@ -2801,6 +2825,8 @@ async function ensureCrmTicketFixtures(
       fixtureId('crm-ticket-category:technical_support'),
       crmAccountId,
       fixtureId('crm-sla-policy:normal'),
+      responseDueAt,
+      resolutionDueAt,
       managerId,
     ],
   );

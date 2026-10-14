@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
+  IsBoolean,
   IsDateString,
   IsIn,
   IsInt,
@@ -149,6 +150,11 @@ export class MatchFinanceSupplierBankTransactionDto implements MatchFinanceSuppl
   @Min(1)
   expectedVersion!: number;
 
+  @ApiPropertyOptional({ type: Boolean })
+  @IsOptional()
+  @IsBoolean()
+  reviewPossibleDuplicate?: boolean;
+
   @ApiProperty({ enum: ['advance', 'payable'] })
   @IsIn(['advance', 'payable'])
   mode!: MatchFinanceSupplierBankTransactionRequest['mode'];
@@ -241,6 +247,7 @@ export class FinanceSupplierPaymentDto implements FinanceSupplierPayment {
   allocations!: FinanceSupplierPaymentAllocation[];
   @ApiProperty({ type: String }) amount!: string;
   @ApiProperty({ type: String }) availableTotal!: string;
+  @ApiProperty({ type: String }) currencyCode!: string;
   @ApiProperty({ format: 'uuid', type: String }) id!: string;
   @ApiProperty({ enum: ['payment', 'advance', 'offset'] }) kind!: FinanceSupplierPayment['kind'];
   @ApiPropertyOptional({ type: String }) notes?: string;
@@ -258,7 +265,7 @@ export class FinanceSupplierPaymentDto implements FinanceSupplierPayment {
 
 export class FinanceSupplierPayableDto implements FinanceSupplierPayable {
   @ApiProperty({ type: String }) allocatedTotal!: string;
-  @ApiProperty({ type: String }) bgnTotal!: string;
+  @ApiProperty({ type: String }) eurTotal!: string;
   @ApiProperty({ format: 'date-time', type: String }) createdAt!: string;
   @ApiProperty({ type: String }) currencyCode!: string;
   @ApiProperty({ format: 'date', type: String }) documentDate!: string;

@@ -27,10 +27,14 @@ import { ApiClientError } from '../api/client';
 import {
   cancelFinancialDocument,
   createFinancialDocument,
+  downloadFinancialDocumentPdf,
   getFinancialDocument,
+  getFinancialDocumentExchangeRate,
   getFinancialDocumentReferenceData,
+  issueFinancialDocument,
   listFinancialDocuments,
   resolveFinancialDocumentPrice,
+  sendFinancialDocumentEmail,
 } from '../api/finance';
 import { useAuth } from '../auth/AuthProvider';
 import { Icon } from '../components/Icon';
@@ -273,6 +277,7 @@ export function FinancialDocumentsPage() {
               >
                 <option value="all">{copy.allStatuses}</option>
                 <option value="draft">{copy.draft}</option>
+                <option value="issued">{copy.issued}</option>
                 <option value="cancelled">{copy.cancelled}</option>
               </select>
             </label>
@@ -307,7 +312,7 @@ export function FinancialDocumentsPage() {
                 </div>
                 <div>
                   <strong>{formatMoney(document.grossTotal, document.currencyCode)}</strong>
-                  <small>{formatMoney(document.bgnGrossTotal, 'BGN')}</small>
+                  <small>{formatMoney(document.eurGrossTotal, 'EUR')}</small>
                 </div>
                 <DocumentStatus status={document.status} />
                 <Button onClick={() => setSelected(document)} variant="quiet">
@@ -402,10 +407,12 @@ function CreateDocumentDrawer({
   const [issueDate, setIssueDate] = useState(businessDate);
   const [taxEventDate, setTaxEventDate] = useState(businessDate);
   const [dueDate, setDueDate] = useState(daysFromDate(businessDate, 14));
-  const [currencyCode, setCurrencyCode] = useState('BGN');
+  const [currencyCode, setCurrencyCode] = useState('EUR');
   const [exchangeRate, setExchangeRate] = useState('1');
   const [rateDate, setRateDate] = useState(businessDate);
-  const [rateSource, setRateSource] = useState('internal_bgn');
+  const [rateSource, setRateSource] = useState('internal_eur');
+  const [loadingRate, setLoadingRate] = useState(false);
+  const [rateError, setRateError] = useState<string | null>(null);
   const [notes, setNotes] = useState('');
   const [lines, setLines] = useState<DraftLine[]>([emptyLine()]);
   const [serviceLines, setServiceLines] = useState<DraftLine[]>(
@@ -442,7 +449,7 @@ function CreateDocumentDrawer({
       : sourceMode === 'service' || sourceMode === 'subscription'
         ? serviceLines
         : lines;
-  const totals = calculatePreview(effectiveLines, currencyCode === 'BGN' ? '1' : exchangeRate);
+  const totals = calculatePreview(effectiveLines, currencyCode === 'EUR' ? '1' : exchangeRate);
   const priceLookupKey = JSON.stringify(
     sourceMode === 'manual' && !isCorrection
       ? lines
@@ -494,10 +501,36 @@ function CreateDocumentDrawer({
   }, [documentType, sourceMode]);
 
   useEffect(() => {
-    // A base-currency default is not a captured foreign-currency exchange rate.
-    setExchangeRate(currencyCode === 'BGN' ? '1' : '');
-    setRateSource(currencyCode === 'BGN' ? 'internal_bgn' : '');
-  }, [currencyCode]);
+    let active = true;
+    if (currencyCode === 'EUR') {
+      setExchangeRate('1');
+      setRateDate(issueDate);
+      setRateSource('internal_eur');
+      setLoadingRate(false);
+      setRateError(null);
+      return;
+    }
+    setLoadingRate(true);
+    setRateError(null);
+    setExchangeRate('');
+    setRateSource('');
+    void getFinancialDocumentExchangeRate(token, { currencyCode, rateDate: issueDate })
+      .then((rate) => {
+        if (!active) return;
+        setExchangeRate(rate.exchangeRate);
+        setRateDate(rate.rateDate);
+        setRateSource(rate.rateSource);
+      })
+      .catch((caught: unknown) => {
+        if (active) setRateError(errorText(caught, 'No BNB rate is available for this date.'));
+      })
+      .finally(() => {
+        if (active) setLoadingRate(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [currencyCode, issueDate, token]);
 
   useEffect(() => {
     if (!isCorrection || !correctionId) {
@@ -550,7 +583,7 @@ function CreateDocumentDrawer({
       setCurrencyCode(selectedSalesDraft.currencyCode);
     } else if (sourceMode === 'service' && selectedServiceDraft) {
       setCustomerId(selectedServiceDraft.customerPartnerId);
-      setCurrencyCode('BGN');
+      setCurrencyCode('EUR');
     }
   }, [correction, isCorrection, selectedSalesDraft, selectedServiceDraft, sourceMode]);
 
@@ -648,6 +681,10 @@ function CreateDocumentDrawer({
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (loadingCorrection || Object.values(prices).some((price) => price.loading)) return;
+    if (currencyCode !== 'EUR' && (loadingRate || !exchangeRate || rateSource !== 'BNB')) {
+      setError('A BNB exchange rate is not ready for the selected currency and date.');
+      return;
+    }
     if (!selectedScope) return setError('Select an issuing location.');
     if (sourceMode === 'sales' && !selectedSalesDraft)
       return setError(
@@ -819,7 +856,7 @@ function CreateDocumentDrawer({
                 >
                   {eligibleServiceDrafts.map((draft) => (
                     <option key={draft.id} value={draft.id}>
-                      {draft.number} · {draft.customerName} · {formatMoney(draft.total, 'BGN')}
+                      {draft.number} · {draft.customerName} · {formatMoney(draft.total, 'EUR')}
                     </option>
                   ))}
                 </select>
@@ -922,34 +959,27 @@ function CreateDocumentDrawer({
                 onChange={(event) => setCurrencyCode(event.target.value.toUpperCase())}
               />
             </Field>
-            {currencyCode !== 'BGN' ? (
+            {currencyCode !== 'EUR' ? (
               <>
                 <Field label={copy.exchangeRate}>
                   <input
-                    min="0.00000001"
-                    required
-                    step="0.00000001"
+                    aria-describedby="financial-document-rate-help"
+                    readOnly
                     type="number"
                     value={exchangeRate}
-                    onChange={(event) => setExchangeRate(event.target.value)}
                   />
                 </Field>
                 <Field label={copy.rateDate}>
-                  <input
-                    required
-                    type="date"
-                    value={rateDate}
-                    onChange={(event) => setRateDate(event.target.value)}
-                  />
+                  <input readOnly type="date" value={rateDate} />
                 </Field>
                 <Field label={copy.rateSource} wide>
-                  <input
-                    maxLength={120}
-                    required
-                    value={rateSource}
-                    onChange={(event) => setRateSource(event.target.value)}
-                  />
-                  <small>{copy.foreignRateHint}</small>
+                  <input readOnly value={rateSource} />
+                  <small id="financial-document-rate-help">
+                    {loadingRate
+                      ? 'Loading the Bulgarian National Bank rate…'
+                      : (rateError ??
+                        'Daily BNB rate. The saved document keeps this exact rate and date.')}
+                  </small>
                 </Field>
               </>
             ) : null}
@@ -1260,6 +1290,23 @@ function DocumentPreviewDrawer({
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [issueConfirmed, setIssueConfirmed] = useState(false);
+  const [recipientEmail, setRecipientEmail] = useState('');
+  const [emailNotice, setEmailNotice] = useState<string | null>(null);
+  async function issue() {
+    setBusy(true);
+    setError(null);
+    try {
+      const issued = await issueFinancialDocument(token, document.id, crypto.randomUUID(), {
+        expectedVersion: document.version,
+      });
+      onSaved(issued);
+    } catch (caught) {
+      setError(errorText(caught, copy.issueError));
+    } finally {
+      setBusy(false);
+    }
+  }
   async function cancel() {
     if (!reason.trim()) return setError('Enter a reason before cancelling the draft.');
     setBusy(true);
@@ -1273,6 +1320,40 @@ function DocumentPreviewDrawer({
       );
     } catch (caught) {
       setError(errorText(caught, 'The draft could not be cancelled.'));
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function downloadPdf() {
+    setBusy(true);
+    setError(null);
+    try {
+      const blob = await downloadFinancialDocumentPdf(token, document.id);
+      const url = URL.createObjectURL(blob);
+      const link = window.document.createElement('a');
+      link.href = url;
+      link.download = `${document.officialNumber ?? document.number}.pdf`;
+      link.click();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (caught) {
+      setError(errorText(caught, copy.pdfDownloadError));
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function emailDocument() {
+    if (!recipientEmail.trim()) return;
+    setBusy(true);
+    setError(null);
+    setEmailNotice(null);
+    try {
+      const receipt = await sendFinancialDocumentEmail(token, document.id, crypto.randomUUID(), {
+        expectedVersion: document.version,
+        recipientEmail,
+      });
+      setEmailNotice(copy.emailQueued(receipt.recipientEmail));
+    } catch (caught) {
+      setError(errorText(caught, copy.emailQueueError));
     } finally {
       setBusy(false);
     }
@@ -1295,8 +1376,46 @@ function DocumentPreviewDrawer({
             </p>
           </div>
           <div>
-            <span>Draft reference</span>
-            <strong>No official number allocated</strong>
+            <span>{document.officialNumber ? copy.officialNumber : 'Draft reference'}</span>
+            <strong>
+              {document.officialNumber ??
+                (document.status === 'issued' && document.documentType === 'proforma'
+                  ? 'Proforma issued without an invoice number'
+                  : copy.draftNumberPending)}
+            </strong>
+          </div>
+        </section>
+        <section className="financial-document-preview-section financial-document-delivery">
+          <header>
+            <h3>{copy.emailDocument}</h3>
+            {document.status === 'draft' ? <span>{copy.draft}</span> : null}
+          </header>
+          {emailNotice ? <InlineAlert tone="success">{emailNotice}</InlineAlert> : null}
+          {document.status === 'issued' && canEdit ? (
+            <Field label={copy.emailRecipient}>
+              <input
+                autoComplete="email"
+                onChange={(event) => setRecipientEmail(event.target.value)}
+                placeholder={copy.emailPlaceholder}
+                required
+                type="email"
+                value={recipientEmail}
+              />
+            </Field>
+          ) : null}
+          <div className="financial-document-delivery-actions">
+            <Button disabled={busy} onClick={() => void downloadPdf()} variant="secondary">
+              {copy.downloadPdf}
+            </Button>
+            {document.status === 'issued' && canEdit ? (
+              <Button
+                busy={busy}
+                disabled={!recipientEmail.trim()}
+                onClick={() => void emailDocument()}
+              >
+                {copy.sendEmail}
+              </Button>
+            ) : null}
           </div>
         </section>
         <section className="financial-document-preview-section">
@@ -1323,7 +1442,7 @@ function DocumentPreviewDrawer({
             />
             <Info
               label="Currency snapshot"
-              value={`${document.currencyCode} · ${document.exchangeRate} BGN · ${formatDate(document.rateDate)}`}
+              value={`${document.currencyCode} · ${document.exchangeRate} EUR · ${formatDate(document.rateDate)}`}
             />
           </dl>
         </section>
@@ -1384,12 +1503,12 @@ function DocumentPreviewDrawer({
         </section>
         <section className="financial-document-preview-section">
           <header>
-            <h3>{copy.bgnEquivalent}</h3>
+            <h3>{copy.eurEquivalent}</h3>
           </header>
           <dl className="financial-document-context">
-            <Info label="Net in BGN" value={formatMoney(document.bgnNetTotal, 'BGN')} />
-            <Info label="VAT in BGN" value={formatMoney(document.bgnVatTotal, 'BGN')} />
-            <Info label="Total in BGN" value={formatMoney(document.bgnGrossTotal, 'BGN')} />
+            <Info label="Net in EUR" value={formatMoney(document.eurNetTotal, 'EUR')} />
+            <Info label="VAT in EUR" value={formatMoney(document.eurVatTotal, 'EUR')} />
+            <Info label="Total in EUR" value={formatMoney(document.eurGrossTotal, 'EUR')} />
             <Info label="Rate source" value={document.rateSource} />
           </dl>
         </section>
@@ -1464,6 +1583,22 @@ function DocumentPreviewDrawer({
         />
         {document.cancellationReason ? (
           <InlineAlert tone="warning">Cancelled: {document.cancellationReason}</InlineAlert>
+        ) : null}
+        {canEdit && document.status === 'draft' ? (
+          <section className="financial-document-cancel">
+            <InlineAlert tone="warning">{copy.issueWarning}</InlineAlert>
+            <label className="financial-document-issue-confirm">
+              <input
+                checked={issueConfirmed}
+                onChange={(event) => setIssueConfirmed(event.target.checked)}
+                type="checkbox"
+              />
+              <span>{copy.issueConfirm}</span>
+            </label>
+            <Button busy={busy} disabled={!issueConfirmed} onClick={() => void issue()}>
+              {copy.issueDocument}
+            </Button>
+          </section>
         ) : null}
         {canEdit && document.status === 'draft' ? (
           <section className="financial-document-cancel">
@@ -1610,7 +1745,7 @@ function SummaryMetric({ label, value }: { label: string; value: number }) {
 function DocumentStatus({ status }: { status: FinancialDocument['status'] }) {
   return (
     <span className={`financial-document-status is-${status}`}>
-      {status === 'draft' ? copy.draft : copy.cancelled}
+      {status === 'draft' ? copy.draft : status === 'issued' ? copy.issued : copy.cancelled}
     </span>
   );
 }

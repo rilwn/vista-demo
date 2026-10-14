@@ -349,10 +349,10 @@ export function PosReports({
             labels={['Net revenue', 'Completed sales', 'Returns', 'Average sale']}
             className="pos-report-kpis"
           >
-            <ReportKpi label="Net revenue" value={money(overview.totals.netRevenueBgn)} />
+            <ReportKpi label="Net revenue" value={money(overview.totals.netRevenueEur)} />
             <ReportKpi label="Completed sales" value={String(overview.totals.saleCount)} />
-            <ReportKpi label="Returns" value={money(overview.totals.grossReturnsBgn)} />
-            <ReportKpi label="Average sale" value={money(overview.totals.averageSaleBgn)} />
+            <ReportKpi label="Returns" value={money(overview.totals.grossReturnsEur)} />
+            <ReportKpi label="Average sale" value={money(overview.totals.averageSaleEur)} />
           </DashboardCards>
 
           <section className="pos-report-card">
@@ -450,7 +450,7 @@ function ReportTable({
           <span key="cashier">{row.operatorName}</span>,
           <span key="sales">{row.saleCount}</span>,
           <span key="returns">{row.returnCount}</span>,
-          <strong key="revenue">{money(row.netRevenueBgn)}</strong>,
+          <strong key="revenue">{money(row.netRevenueEur)}</strong>,
           <span className={`pos-report-status is-${row.status}`} key="status">
             {row.status === 'open' ? 'Open' : 'Closed'}
           </span>,
@@ -477,9 +477,9 @@ function ReportTable({
           </div>,
           <span key="sales">{row.saleCount}</span>,
           <span key="returns">{row.returnCount}</span>,
-          <span key="gross">{money(row.grossSalesBgn)}</span>,
-          <span key="returned">{money(row.grossReturnsBgn)}</span>,
-          <strong key="net">{money(row.netRevenueBgn)}</strong>,
+          <span key="gross">{money(row.grossSalesEur)}</span>,
+          <span key="returned">{money(row.grossReturnsEur)}</span>,
+          <strong key="net">{money(row.netRevenueEur)}</strong>,
         ])}
       />
     );
@@ -496,7 +496,7 @@ function ReportTable({
           <span key="category">{row.categoryName}</span>,
           <span key="sold">{quantity(row.quantitySold)}</span>,
           <span key="returned">{quantity(row.quantityReturned)}</span>,
-          <strong key="net">{money(row.netRevenueBgn)}</strong>,
+          <strong key="net">{money(row.netRevenueEur)}</strong>,
         ])}
       />
     );
@@ -509,9 +509,9 @@ function ReportTable({
           <strong key="category">{row.categoryName}</strong>,
           <span key="sold">{quantity(row.quantitySold)}</span>,
           <span key="quantity-returned">{quantity(row.quantityReturned)}</span>,
-          <span key="gross">{money(row.grossSalesBgn)}</span>,
-          <span key="returned">{money(row.grossReturnsBgn)}</span>,
-          <strong key="net">{money(row.netRevenueBgn)}</strong>,
+          <span key="gross">{money(row.grossSalesEur)}</span>,
+          <span key="returned">{money(row.grossReturnsEur)}</span>,
+          <strong key="net">{money(row.netRevenueEur)}</strong>,
         ])}
       />
     );
@@ -522,9 +522,9 @@ function ReportTable({
         empty="No payments recorded in this period."
         rows={overview.payments.map((row) => [
           <strong key="method">{paymentMethodLabel(row.method)}</strong>,
-          <span key="collected">{money(row.collectedBgn)}</span>,
-          <span key="refunded">{money(row.refundedBgn)}</span>,
-          <strong key="net">{money(row.netBgn)}</strong>,
+          <span key="collected">{money(row.collectedEur)}</span>,
+          <span key="refunded">{money(row.refundedEur)}</span>,
+          <strong key="net">{money(row.netEur)}</strong>,
         ])}
       />
     );
@@ -537,9 +537,9 @@ function ReportTable({
           <strong key="location">{row.locationName}</strong>,
           <span key="sales">{row.saleCount}</span>,
           <span key="returns">{row.returnCount}</span>,
-          <span key="gross">{money(row.grossSalesBgn)}</span>,
-          <span key="returned">{money(row.grossReturnsBgn)}</span>,
-          <strong key="net">{money(row.netRevenueBgn)}</strong>,
+          <span key="gross">{money(row.grossSalesEur)}</span>,
+          <span key="returned">{money(row.grossReturnsEur)}</span>,
+          <strong key="net">{money(row.netRevenueEur)}</strong>,
         ])}
       />
     );
@@ -550,8 +550,8 @@ function ReportTable({
       rows={overview.locations.map((row) => [
         <strong key="location">{row.locationName}</strong>,
         <span key="transactions">{row.saleCount + row.returnCount}</span>,
-        <span key="average">{money(row.averageSaleBgn)}</span>,
-        <strong key="net">{money(row.netRevenueBgn)}</strong>,
+        <span key="average">{money(row.averageSaleEur)}</span>,
+        <strong key="net">{money(row.netRevenueEur)}</strong>,
         <span key="share">{row.revenueSharePercent.toFixed(2)}%</span>,
       ])}
     />
@@ -646,42 +646,42 @@ function ShiftReportDialog({
             ) : null}
             <ReportValue
               label="Sales"
-              value={`${shift.saleCount} · ${money(shift.grossSalesBgn)}`}
+              value={`${shift.saleCount} · ${money(shift.grossSalesEur)}`}
             />
             <ReportValue
               label="Returns"
-              value={`${shift.returnCount} · ${money(shift.grossReturnsBgn)}`}
+              value={`${shift.returnCount} · ${money(shift.grossReturnsEur)}`}
             />
-            <ReportValue label="Net revenue" value={money(shift.netRevenueBgn)} />
+            <ReportValue label="Net revenue" value={money(shift.netRevenueEur)} />
           </dl>
           <section className="pos-cash-reconciliation">
             <h3>Cash reconciliation</h3>
             <div>
               <span>Opening cash</span>
-              <strong>{money(shift.openingCashBgn)}</strong>
+              <strong>{money(shift.openingCashEur)}</strong>
             </div>
             <div>
               <span>Cash sales</span>
-              <strong>{money(shift.cashSalesBgn)}</strong>
+              <strong>{money(shift.cashSalesEur)}</strong>
             </div>
             <div>
               <span>Cash refunds</span>
-              <strong>− {money(shift.cashRefundsBgn)}</strong>
+              <strong>− {money(shift.cashRefundsEur)}</strong>
             </div>
             <div className="is-total">
               <span>Expected cash</span>
-              <strong>{money(shift.expectedCashBgn)}</strong>
+              <strong>{money(shift.expectedCashEur)}</strong>
             </div>
-            {shift.closingCashBgn ? (
+            {shift.closingCashEur ? (
               <div>
                 <span>Counted cash</span>
-                <strong>{money(shift.closingCashBgn)}</strong>
+                <strong>{money(shift.closingCashEur)}</strong>
               </div>
             ) : null}
-            {shift.differenceBgn ? (
+            {shift.differenceEur ? (
               <div>
                 <span>Difference</span>
-                <strong>{money(shift.differenceBgn)}</strong>
+                <strong>{money(shift.differenceEur)}</strong>
               </div>
             ) : null}
           </section>
@@ -871,7 +871,7 @@ function localDate(date: Date): string {
 }
 
 function money(value: string | number): string {
-  return `${Number(value).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} BGN`;
+  return `${Number(value).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} EUR`;
 }
 
 function quantity(value: string): string {

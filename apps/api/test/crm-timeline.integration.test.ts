@@ -404,14 +404,14 @@ describe.skipIf(!runInfrastructureTests)('CRM customer timeline', () => {
       `INSERT INTO sales.quotations (
          id, quotation_number, customer_partner_id, warehouse_id, valid_until,
          currency_code, created_by
-       ) VALUES ($1,$2,$3,$4,current_date + 14,'BGN',$5)`,
+       ) VALUES ($1,$2,$3,$4,current_date + 14,'EUR',$5)`,
       [quotationId, `Q-TL-${runId.slice(0, 10)}`, customerId, warehouseId, editorAccountId],
     );
     await database.query(
       `INSERT INTO finance.payments (
          id, payment_number, customer_partner_id, payment_date, payment_method,
          currency_code, amount, recorded_by
-       ) VALUES ($1,$2,$3,current_date,'bank_transfer','BGN',25,$4)`,
+       ) VALUES ($1,$2,$3,current_date,'bank_transfer','EUR',25,$4)`,
       [paymentId, `PAY-TL-${runId.slice(0, 10)}`, customerId, editorAccountId],
     );
 

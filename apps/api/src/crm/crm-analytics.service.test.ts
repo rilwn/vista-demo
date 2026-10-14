@@ -21,16 +21,16 @@ describe('CRM analytics service', () => {
           rows: [
             {
               current_active_customers: '2',
-              current_average_transaction_value_bgn: '72.00',
+              current_average_transaction_value_eur: '72.00',
               current_churn_percent: '50.00',
-              current_net_revenue_bgn: '120.00',
-              current_observed_lifetime_value_bgn: '100.00',
+              current_net_revenue_eur: '120.00',
+              current_observed_lifetime_value_eur: '100.00',
               current_purchase_frequency: '1.50',
               current_retention_percent: '50.00',
               previous_active_customers: '2',
-              previous_average_transaction_value_bgn: '60.00',
+              previous_average_transaction_value_eur: '60.00',
               previous_churn_percent: '0.00',
-              previous_observed_lifetime_value_bgn: '80.00',
+              previous_observed_lifetime_value_eur: '80.00',
               previous_purchase_frequency: '1.00',
               previous_retention_percent: '100.00',
             },
@@ -68,7 +68,7 @@ describe('CRM analytics service', () => {
               document_count: '2',
               kind: 'product',
               label: 'Demo Fiscal Register X1',
-              net_revenue_bgn: '100.00',
+              net_revenue_eur: '100.00',
               quantity: '2.0000',
             },
           ],
@@ -81,7 +81,7 @@ describe('CRM analytics service', () => {
             document_count: '2',
             key: 'customer-1',
             label: 'Alfa Market Demo Ltd.',
-            net_revenue_bgn: '120.00',
+            net_revenue_eur: '120.00',
           },
         ],
       };
@@ -95,7 +95,7 @@ describe('CRM analytics service', () => {
     expect(result).toMatchObject({
       customerMetrics: {
         activeCustomers: 2,
-        averageTransactionValueBgn: '72.00',
+        averageTransactionValueEur: '72.00',
         purchaseFrequency: '1.50',
         retentionPercent: '50.00',
       },
@@ -118,12 +118,12 @@ describe('CRM analytics service', () => {
       revenue: [
         expect.objectContaining({
           dimension: 'customer',
-          netRevenueBgn: '120.00',
+          netRevenueEur: '120.00',
           sharePercent: '100.00',
         }),
       ],
       timezone: 'Europe/Sofia',
-      totalNetRevenueBgn: '120.00',
+      totalNetRevenueEur: '120.00',
     });
     expect(result.pipeline.stages.find((stage) => stage.stage === 'new')).toMatchObject({
       enteredCount: 2,
@@ -168,9 +168,9 @@ function pipelineRow(stage: string, enteredCount: string, currentCount: string) 
   return {
     current_count: currentCount,
     entered_count: enteredCount,
-    estimated_revenue_bgn: '1800.00',
+    estimated_revenue_eur: '1800.00',
     lost_count: '0',
-    open_pipeline_value_bgn: '800.00',
+    open_pipeline_value_eur: '800.00',
     stage,
     total_opportunities: '2',
     won_count: '1',

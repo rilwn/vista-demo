@@ -10,7 +10,7 @@ describe('CreateFinancialDocumentDto', () => {
     const input = plainToInstance(CreateFinancialDocumentDto, {
       businessLocationId: fixtureId('organization:location'),
       cashRegisterId: fixtureId('organization:cash-register'),
-      currencyCode: 'BGN',
+      currencyCode: 'EUR',
       customerPartnerId: fixtureId('partner:alfa'),
       documentType: 'invoice',
       dueDate: '2026-09-02',
@@ -20,7 +20,7 @@ describe('CreateFinancialDocumentDto', () => {
       notes: 'Prepared from the completed Sales flow.',
       operatorId: fixtureId('organization:operator:manager'),
       rateDate: '2026-08-19',
-      rateSource: 'BGN base currency',
+      rateSource: 'EUR base currency',
       sourceSalesInvoiceId: fixtureId('sales-invoice:completed'),
       taxEventDate: '2026-08-19',
     });
@@ -31,14 +31,14 @@ describe('CreateFinancialDocumentDto', () => {
   it('still rejects malformed document references', async () => {
     const input = plainToInstance(CreateFinancialDocumentDto, {
       businessLocationId: 'not-a-uuid',
-      currencyCode: 'BGN',
+      currencyCode: 'EUR',
       customerPartnerId: fixtureId('partner:alfa'),
       documentType: 'invoice',
       exchangeRate: '1.00000000',
       issueDate: '2026-08-19',
       legalEntityId: fixtureId('organization:entity'),
       rateDate: '2026-08-19',
-      rateSource: 'BGN base currency',
+      rateSource: 'EUR base currency',
       taxEventDate: '2026-08-19',
     });
 

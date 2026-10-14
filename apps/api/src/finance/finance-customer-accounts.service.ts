@@ -24,7 +24,7 @@ import { DatabaseService } from '../database/database.service.js';
 interface AccountRow {
   customer_name: string;
   customer_partner_id: string;
-  terms_credit_limit_bgn: string | null;
+  terms_credit_limit_eur: string | null;
   terms_id: string | null;
   terms_on_account_enabled: boolean | null;
   terms_payment_terms_days: number | null;
@@ -143,7 +143,7 @@ export class FinanceCustomerAccountsService {
         if (before)
           await client.query(
             `UPDATE sales.customer_payment_terms
-             SET on_account_enabled = $2, credit_limit_bgn = $3,
+             SET on_account_enabled = $2, credit_limit_eur = $3,
                  payment_terms_days = $4, valid_from = $5, valid_to = $6,
                  status = $7, version = version + 1, updated_by = $8,
                  updated_at = now()
@@ -151,7 +151,7 @@ export class FinanceCustomerAccountsService {
             [
               id,
               normalized.onAccountEnabled,
-              normalized.creditLimitBgn,
+              normalized.creditLimitEur,
               normalized.paymentTermsDays,
               normalized.validFrom,
               normalized.validTo ?? null,
@@ -162,14 +162,14 @@ export class FinanceCustomerAccountsService {
         else
           await client.query(
             `INSERT INTO sales.customer_payment_terms (
-               id, customer_partner_id, on_account_enabled, credit_limit_bgn,
+               id, customer_partner_id, on_account_enabled, credit_limit_eur,
                payment_terms_days, valid_from, valid_to, status, created_by, updated_by
              ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$9)`,
             [
               id,
               customerPartnerId,
               normalized.onAccountEnabled,
-              normalized.creditLimitBgn,
+              normalized.creditLimitEur,
               normalized.paymentTermsDays,
               normalized.validFrom,
               normalized.validTo ?? null,
@@ -263,7 +263,7 @@ export class FinanceCustomerAccountsService {
       `SELECT partner.id AS customer_partner_id, partner.display_name AS customer_name,
          partner.uic, terms.id AS terms_id,
          terms.on_account_enabled AS terms_on_account_enabled,
-         terms.credit_limit_bgn::text AS terms_credit_limit_bgn,
+         terms.credit_limit_eur::text AS terms_credit_limit_eur,
          terms.payment_terms_days AS terms_payment_terms_days,
          terms.valid_from::text AS terms_valid_from,
          terms.valid_to::text AS terms_valid_to, terms.status AS terms_status,
@@ -348,7 +348,7 @@ export class FinanceCustomerAccountsService {
       ? decimalString(
           maximum(
             0n,
-            units(required(row.terms_credit_limit_bgn, 'Credit limit is missing')) -
+            units(required(row.terms_credit_limit_eur, 'Credit limit is missing')) -
               units(outstandingBalance),
           ),
         )
@@ -382,7 +382,7 @@ export class FinanceCustomerAccountsService {
       ...(row.terms_id
         ? {
             terms: {
-              creditLimitBgn: required(row.terms_credit_limit_bgn, 'Credit limit is missing'),
+              creditLimitEur: required(row.terms_credit_limit_eur, 'Credit limit is missing'),
               id: row.terms_id,
               onAccountEnabled: Boolean(row.terms_on_account_enabled),
               paymentTermsDays: required(
@@ -555,8 +555,8 @@ function mapAdvance(row: AdvanceRow): CustomerAdvance {
 }
 
 function normalizeTerms(input: UpsertCustomerPaymentTermsRequest) {
-  const creditLimitBgn = decimal(input.creditLimitBgn, false);
-  if (input.onAccountEnabled && units(creditLimitBgn) <= 0n)
+  const creditLimitEur = decimal(input.creditLimitEur, false);
+  if (input.onAccountEnabled && units(creditLimitEur) <= 0n)
     throw new ApiErrorException(
       'CUSTOMER_CREDIT_LIMIT_REQUIRED',
       'Enter a credit limit greater than zero when on-account payment is enabled.',
@@ -569,7 +569,7 @@ function normalizeTerms(input: UpsertCustomerPaymentTermsRequest) {
       HttpStatus.BAD_REQUEST,
     );
   return {
-    creditLimitBgn,
+    creditLimitEur,
     ...(input.expectedVersion ? { expectedVersion: input.expectedVersion } : {}),
     onAccountEnabled: input.onAccountEnabled,
     paymentTermsDays: input.paymentTermsDays,

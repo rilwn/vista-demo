@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { DatabaseService } from '../database/database.service.js';
 import type { CrmTicketsService } from '../crm/crm-tickets.service.js';
 import type { FinanceService } from '../finance/finance.service.js';
+import type { BnbCurrencyRatesService } from '../finance/bnb-currency-rates.service.js';
 import type { StructuredLogger } from '../logging/structured-logger.service.js';
 import type { SalesSubscriptionsService } from '../sales/sales-subscriptions.service.js';
 import type { ServiceCareService } from '../service/service-care.service.js';
@@ -190,6 +191,26 @@ describe('NamedJobTriggerHandlersService', () => {
 
     expect(crmTickets.evaluateSla).toHaveBeenCalledWith(context);
   });
+
+  it('refreshes BNB rates before recording successful execution evidence', async () => {
+    const { currencyRates, registry, service } = createSubject();
+    service.onModuleInit();
+    const context = {
+      attemptNumber: 1,
+      correlationId: 'bnb-rate-correlation',
+      enqueuedAt: '2026-10-13T15:00:00.000Z',
+      idempotencyKey: 'bnb-rates-2026-10-13',
+      jobId: 'bnb-rate-job',
+      maxAttempts: 5,
+      name: 'finance.currency-rates.refresh',
+      payload: { rateSource: 'BNB' },
+      retryAllowed: true,
+    } as const;
+
+    await registry.execute(context);
+
+    expect(currencyRates.refresh).toHaveBeenCalledWith();
+  });
 });
 
 function createSubject(
@@ -212,6 +233,9 @@ function createSubject(
     }),
   } as unknown as SalesSubscriptionsService;
   const finance = { detectPaymentStatuses } as unknown as FinanceService;
+  const currencyRates = {
+    refresh: vi.fn().mockResolvedValue({ currencyCount: 2, rateDate: '2026-10-13' }),
+  };
   const reportExports = { generate: generateReport } as unknown as FinanceReportExportsService;
   const serviceCareSpies = {
     generateServicePlanVisits: vi.fn(),
@@ -223,6 +247,7 @@ function createSubject(
   const crmTickets = crmTicketSpies as unknown as CrmTicketsService;
   return {
     crmTickets: crmTicketSpies,
+    currencyRates,
     registry,
     serviceCare: serviceCareSpies,
     service: new NamedJobTriggerHandlersService(
@@ -231,6 +256,7 @@ function createSubject(
       logger,
       subscriptions,
       finance,
+      currencyRates as unknown as BnbCurrencyRatesService,
       reportExports,
       serviceCare,
       crmTickets,

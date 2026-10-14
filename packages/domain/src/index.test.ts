@@ -65,7 +65,7 @@ describe('international telephone format', () => {
 });
 
 describe('calculateFinancialDocument', () => {
-  it('calculates discounts, required VAT treatments, summaries, and BGN snapshots', () => {
+  it('calculates discounts, required VAT treatments, summaries, and EUR snapshots', () => {
     expect(
       calculateFinancialDocument(
         [
@@ -85,7 +85,7 @@ describe('calculateFinancialDocument', () => {
         '1.95583000',
       ),
     ).toMatchObject({
-      bgnGrossTotal: '232.5482',
+      eurGrossTotal: '232.5482',
       grossTotal: '118.9000',
       netTotal: '100.0000',
       vatTotal: '18.9000',

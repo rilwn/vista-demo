@@ -7,6 +7,7 @@ import { JobQueueService } from './job-queue.service.js';
 
 export const recurringBillingScheduleId = 'sales.subscription-invoice.daily';
 export const financePaymentStatusScheduleId = 'finance.payment-status.daily';
+export const financeCurrencyRatesScheduleId = 'finance.currency-rates.weekdays';
 export const serviceInspectionReminderScheduleId = 'service.inspection-reminder.daily';
 export const serviceWarrantyReminderScheduleId = 'service.warranty-reminder.daily';
 export const servicePlanVisitScheduleId = 'service.plan-visit.daily';
@@ -43,6 +44,17 @@ export class RecurringBillingScheduleService implements OnApplicationBootstrap {
     this.logger.event('info', 'finance.payment-status.schedule.ready', {
       nextRunAt: paymentStatusSchedule.nextRunAt,
       scheduleId: paymentStatusSchedule.id,
+    });
+    const currencyRatesSchedule = await this.jobs.upsertSchedule({
+      id: financeCurrencyRatesScheduleId,
+      name: 'finance.currency-rates.refresh',
+      pattern: '0 18 * * 1-5',
+      payload: { responsibility: 'daily-bnb-currency-rates' },
+      timezone: this.environment.BUSINESS_TIMEZONE,
+    });
+    this.logger.event('info', 'finance.currency-rates.schedule.ready', {
+      nextRunAt: currencyRatesSchedule.nextRunAt,
+      scheduleId: currencyRatesSchedule.id,
     });
     const serviceSchedules = [
       {

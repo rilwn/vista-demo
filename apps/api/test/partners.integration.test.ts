@@ -37,7 +37,7 @@ import type {
 } from '@vista/contracts';
 import { Pool } from 'pg';
 import request from 'supertest';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { AppModule } from '../src/app.module.js';
 import { PasswordService } from '../src/auth/password.service.js';
@@ -317,21 +317,30 @@ describe.skipIf(!runInfrastructureTests)('partner master-data vertical slice', (
     expect(handlers.registeredNames()).toEqual(
       [...expectedNames, 'integration.event.consume', 'notification.dispatch'].sort(),
     );
+    const bnbFixture =
+      '<RATES><ROW><CODE>USD</CODE><REVERSERATE>0.92000000</REVERSERATE><CURR_DATE>10.08.2026</CURR_DATE></ROW></RATES>';
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockImplementation(() => Promise.resolve(new Response(bnbFixture, { status: 200 })));
 
-    for (const name of expectedNames) {
-      const context = {
-        attemptNumber: 1,
-        correlationId: `scheduled${runId}`,
-        enqueuedAt: '2026-08-10T08:00:00.000Z',
-        idempotencyKey: `${name}-${runId}`,
-        jobId: `job-${name}-${runId}`,
-        maxAttempts: 5,
-        name,
-        payload: { scheduledFor: '2026-08-10T08:00:00.000Z' },
-        retryAllowed: true,
-      };
-      await expect(handlers.execute(context)).resolves.toMatchObject({ deduplicated: false });
-      await expect(handlers.execute(context)).resolves.toMatchObject({ deduplicated: true });
+    try {
+      for (const name of expectedNames) {
+        const context = {
+          attemptNumber: 1,
+          correlationId: `scheduled${runId}`,
+          enqueuedAt: '2026-08-10T08:00:00.000Z',
+          idempotencyKey: `${name}-${runId}`,
+          jobId: `job-${name}-${runId}`,
+          maxAttempts: 5,
+          name,
+          payload: { scheduledFor: '2026-08-10T08:00:00.000Z' },
+          retryAllowed: true,
+        };
+        await expect(handlers.execute(context)).resolves.toMatchObject({ deduplicated: false });
+        await expect(handlers.execute(context)).resolves.toMatchObject({ deduplicated: true });
+      }
+    } finally {
+      fetchMock.mockRestore();
     }
 
     const evidence = await database.query<{ count: string }>(
@@ -362,7 +371,13 @@ describe.skipIf(!runInfrastructureTests)('partner master-data vertical slice', (
     expect(
       states.rows.find((row) => row.event_type === 'scheduler.backup.verify.requested')?.status,
     ).toBe('pending');
-  });
+    const importedRate = await database.query<{ eur_per_unit: string; rate_date: string }>(
+      `SELECT eur_per_unit::text, rate_date::text
+       FROM finance.currency_rates
+       WHERE currency_code = 'USD' AND rate_source = 'BNB'`,
+    );
+    expect(importedRate.rows).toEqual([{ eur_per_unit: '0.92000000', rate_date: '2026-08-10' }]);
+  }, 30_000);
 
   it('publishes ordered events, deduplicates consumption, recovers claims, and retains poison messages', async () => {
     const publisher = application.get(OutboxPublisherService);
@@ -776,7 +791,7 @@ describe.skipIf(!runInfrastructureTests)('partner master-data vertical slice', (
     const bankAccount: CreatePartnerBankAccountRequest = {
       bankName: '  Example Bank ',
       bic: ' westgb22 ',
-      currencyCode: 'bgn',
+      currencyCode: 'eur',
       iban: 'GB82 WEST 1234 5698 7654 32',
     };
 
@@ -836,7 +851,7 @@ describe.skipIf(!runInfrastructureTests)('partner master-data vertical slice', (
     expect(bankResponse.body).toMatchObject({
       bankName: 'Example Bank',
       bic: 'WESTGB22',
-      currencyCode: 'BGN',
+      currencyCode: 'EUR',
       iban: 'GB82WEST12345698765432',
     });
     const createdBankAccount = bankResponse.body as PartnerBankAccount;
@@ -2124,7 +2139,7 @@ describe.skipIf(!runInfrastructureTests)('partner master-data vertical slice', (
       .set('authorization', `Bearer ${categoryCreatorToken}`)
       .set('idempotency-key', `reservation-source-quotation-${runId}`)
       .send({
-        currencyCode: 'BGN',
+        currencyCode: 'EUR',
         customerPartnerId: primaryPartner.id,
         lines: [
           {
@@ -2462,13 +2477,13 @@ describe.skipIf(!runInfrastructureTests)('partner master-data vertical slice', (
         productId: untrackedProduct.id,
         quantity: '2',
         referenceId: `valued-receipt-${runId}`,
-        unitCostBgn: '10',
+        unitCostEur: '10',
         warehouseId: warehouse.id,
       })
       .expect(201);
     expect(valuedReceipt.body).toMatchObject({
-      totalCostBgn: '20.0000',
-      unitCostBgn: '10.0000',
+      totalCostEur: '20.0000',
+      unitCostEur: '10.0000',
     });
     const valuedIssue = await request(application.getHttpServer())
       .post('/api/v1/warehouse/stock-issues')
@@ -2483,8 +2498,8 @@ describe.skipIf(!runInfrastructureTests)('partner master-data vertical slice', (
       })
       .expect(201);
     expect(valuedIssue.body).toMatchObject({
-      totalCostBgn: '5.0000',
-      unitCostBgn: '5.0000',
+      totalCostEur: '5.0000',
+      unitCostEur: '5.0000',
     });
     const stockSettings = await request(application.getHttpServer())
       .post('/api/v1/warehouse/stock-settings')
@@ -2575,7 +2590,7 @@ describe.skipIf(!runInfrastructureTests)('partner master-data vertical slice', (
         productId: untrackedProduct.id,
         quantity: '2',
         referenceId: `low-stock-recovery-${runId}`,
-        unitCostBgn: '5',
+        unitCostEur: '5',
         warehouseId: warehouse.id,
       })
       .expect(201);
@@ -2610,8 +2625,8 @@ describe.skipIf(!runInfrastructureTests)('partner master-data vertical slice', (
     expect(valuedBalances.body).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          averageUnitCostBgn: '5.0000',
-          inventoryValueBgn: '15.0000',
+          averageUnitCostEur: '5.0000',
+          inventoryValueEur: '15.0000',
           productId: untrackedProduct.id,
           quantity: '3.0000',
         }),

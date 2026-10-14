@@ -13,8 +13,8 @@ const overview = {
   dateFrom: '2026-09-01',
   dateTo: '2026-09-07',
   warrantyDays: 30,
-  recordedRevenueBgn: '108.0000',
-  overdueReceivablesBgn: '33.0000',
+  recordedRevenueEur: '108.0000',
+  overdueReceivablesEur: '33.0000',
   activeServiceRequests: 2,
   expiringWarranties: 1,
 };
@@ -43,26 +43,26 @@ describe('Operational dashboard', () => {
       }),
     );
     mount();
-    await screen.findByText('108.00 BGN');
+    await screen.findByText('108.00 EUR');
     fireEvent.click(screen.getByText('Customize overview'));
     fireEvent.click(screen.getByRole('checkbox', { name: 'Recorded revenue' }));
     fireEvent.click(screen.getByRole('button', { name: 'Save layout' }));
     await screen.findByText('Your overview layout is saved.');
-    expect(screen.queryByText('108.00 BGN')).toBeNull();
+    expect(screen.queryByText('108.00 EUR')).toBeNull();
     expect(
       screen.queryByText('Revenue includes issued documents before VAT. Drafts are excluded.'),
     ).toBeNull();
     cleanup();
     mount();
     await screen.findByRole('heading', { name: 'Active Service requests' });
-    expect(screen.queryByText('108.00 BGN')).toBeNull();
+    expect(screen.queryByText('108.00 EUR')).toBeNull();
     fireEvent.click(screen.getByText('Customize overview'));
     expect(
       screen.getByRole<HTMLInputElement>('checkbox', { name: 'Recorded revenue' }).checked,
     ).toBe(false);
     fireEvent.click(screen.getByRole('button', { name: 'Show all cards' }));
     fireEvent.click(screen.getByRole('button', { name: 'Save layout' }));
-    await screen.findByText('108.00 BGN');
+    await screen.findByText('108.00 EUR');
   });
 
   it('keeps choices after a failed save and explains conflicting changes', async () => {
@@ -77,7 +77,7 @@ describe('Operational dashboard', () => {
       }),
     );
     mount();
-    await screen.findByText('108.00 BGN');
+    await screen.findByText('108.00 EUR');
     fireEvent.click(screen.getByText('Customize overview'));
     fireEvent.click(screen.getByRole('checkbox', { name: 'Recorded revenue' }));
     fireEvent.click(screen.getByRole('button', { name: 'Save layout' }));
@@ -87,7 +87,7 @@ describe('Operational dashboard', () => {
     expect(
       screen.getByRole<HTMLInputElement>('checkbox', { name: 'Recorded revenue' }).checked,
     ).toBe(false);
-    expect(screen.getByText('108.00 BGN')).toBeTruthy();
+    expect(screen.getByText('108.00 EUR')).toBeTruthy();
   });
 
   it('keeps customization available when all permitted cards are hidden', async () => {
@@ -100,7 +100,7 @@ describe('Operational dashboard', () => {
             activeServiceRequests: undefined,
             expiringWarranties: undefined,
             preferences: {
-              hiddenCards: ['recordedRevenueBgn', 'overdueReceivablesBgn'],
+              hiddenCards: ['recordedRevenueEur', 'overdueReceivablesEur'],
               version: 1,
             },
           }),
@@ -123,7 +123,7 @@ describe('Operational dashboard', () => {
       );
     vi.stubGlobal('fetch', fetchMock);
     mount();
-    expect(await screen.findByText('108.00 BGN')).toBeTruthy();
+    expect(await screen.findByText('108.00 EUR')).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Active Service requests' })).toBeTruthy();
     expect(
       screen.getByText('Revenue includes issued documents before VAT. Drafts are excluded.'),
@@ -158,8 +158,8 @@ describe('Operational dashboard', () => {
           new Response(
             JSON.stringify({
               ...overview,
-              recordedRevenueBgn: undefined,
-              overdueReceivablesBgn: undefined,
+              recordedRevenueEur: undefined,
+              overdueReceivablesEur: undefined,
             }),
             { status: 200 },
           ),

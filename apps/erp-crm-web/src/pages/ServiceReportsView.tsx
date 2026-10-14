@@ -147,7 +147,7 @@ function ServiceReportContent({ report, token }: { report: ServiceReportOverview
           value={formatOperationsNumber(report.totals.completedRequests)}
         />
         <ReportMetric label="Recorded time" value={durationLabel(report.totals.laborMinutes)} />
-        <ReportMetric label="Service value" value={money(report.totals.totalCostBgn)} />
+        <ReportMetric label="Service value" value={money(report.totals.totalCostEur)} />
       </DashboardCards>
 
       <div className="service-report-grid">
@@ -193,7 +193,7 @@ function ServiceReportContent({ report, token }: { report: ServiceReportOverview
                   </div>
                   <div>
                     <strong>{item.requestCount}</strong>
-                    <span>{money(item.totalCostBgn)}</span>
+                    <span>{money(item.totalCostEur)}</span>
                   </div>
                 </article>
               ))
@@ -239,7 +239,7 @@ function ServiceReportContent({ report, token }: { report: ServiceReportOverview
                   {durationLabel(item.laborMinutes)}
                 </span>
                 <span data-label="Value" role="cell">
-                  {money(item.totalCostBgn)}
+                  {money(item.totalCostEur)}
                 </span>
               </div>
             ))}
@@ -821,7 +821,7 @@ function durationLabel(minutes: number) {
   return remainder ? `${hours}h ${remainder}m` : `${hours}h`;
 }
 function money(value: string) {
-  return formatOperationsCurrency(value, 'BGN');
+  return formatOperationsCurrency(value, 'EUR');
 }
 function percentage(value: number, total: number) {
   return `${total ? Math.max(4, Math.round((value / total) * 100)) : 0}%`;

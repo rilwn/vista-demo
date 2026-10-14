@@ -11,6 +11,9 @@ import type {
   FinancialDocumentReferenceData,
   FinancialDocumentStatus,
   FinancialDocumentType,
+  IssueFinancialDocumentRequest,
+  QueuedEmailReceipt,
+  SendDocumentEmailRequest,
   VatTreatment,
 } from '@vista/contracts';
 import type { AppEnvironment } from '@vista/config';
@@ -25,12 +28,15 @@ import type {
 import { ApiErrorException } from '../common/api-error.exception.js';
 import { APP_ENVIRONMENT } from '../config/config.module.js';
 import { DatabaseService } from '../database/database.service.js';
+import { BnbCurrencyRatesService } from './bnb-currency-rates.service.js';
+import { renderFinancialDocument } from './financial-document-renderer.js';
+import { queueEmailMessage } from '../notifications/notification-email.js';
 import type { FinancialDocumentListQueryDto } from './financial-documents.dto.js';
 
 interface HeaderRow {
-  bgn_gross_total: string;
-  bgn_net_total: string;
-  bgn_vat_total: string;
+  eur_gross_total: string;
+  eur_net_total: string;
+  eur_vat_total: string;
   branch_name: string;
   business_location_id: string;
   business_location_name: string;
@@ -39,6 +45,10 @@ interface HeaderRow {
   correction_of_document_id: string | null;
   correction_reason: string | null;
   created_at: string | Date;
+  issued_at: string | Date | null;
+  issued_by_name: string | null;
+  converted_from_document_id: string | null;
+  converted_from_draft_number: string | null;
   currency_code: string;
   customer_address: string;
   customer_name: string;
@@ -100,7 +110,12 @@ export class FinancialDocumentsService {
     @Inject(AuditService) private readonly audit: AuditService,
     @Inject(DatabaseService) private readonly database: DatabaseService,
     @Inject(APP_ENVIRONMENT) private readonly environment: AppEnvironment,
+    @Inject(BnbCurrencyRatesService) private readonly currencyRates: BnbCurrencyRatesService,
   ) {}
+
+  exchangeRate(currencyCode: string, rateDate: string) {
+    return this.currencyRates.latestRate(currencyCode, rateDate);
+  }
 
   async referenceData(): Promise<FinancialDocumentReferenceData> {
     const pool = this.database.getPool();
@@ -228,7 +243,7 @@ export class FinancialDocumentsService {
       }>(
         `SELECT work_order.id, work_order.work_order_number,
                 request.customer_partner_id, customer.display_name AS customer_name,
-                work_order.total_cost_bgn::text AS total,
+                work_order.total_customer_charge_eur::text AS total,
                 coalesce(array_agg(document.document_type ORDER BY document.document_type)
                   FILTER (WHERE document.id IS NOT NULL), '{}'::varchar[]) AS linked_document_types
          FROM service.work_orders work_order
@@ -236,7 +251,9 @@ export class FinancialDocumentsService {
          JOIN master_data.partners customer ON customer.id = request.customer_partner_id
          LEFT JOIN finance.financial_documents document
            ON document.source_service_work_order_id = work_order.id AND document.status = 'draft'
-         WHERE work_order.status = 'completed' AND work_order.total_cost_bgn > 0
+         WHERE work_order.status = 'completed'
+           AND work_order.customer_charge_recorded
+           AND work_order.total_customer_charge_eur > 0
          GROUP BY work_order.id, request.customer_partner_id, customer.display_name
          ORDER BY work_order.completed_at DESC, work_order.id DESC`,
       ),
@@ -258,30 +275,33 @@ export class FinancialDocumentsService {
            SELECT work_order.id AS work_order_id, NULL::uuid AS product_id,
                   concat('Service labour · ', work_order.work_order_number) AS description,
                   1.0000::numeric AS quantity, 'SERVICE'::varchar AS unit_code,
-                  work_order.labor_cost_bgn AS unit_price, 1 AS sort_order,
+                  work_order.customer_labor_charge_eur AS unit_price, 1 AS sort_order,
                   work_order.created_at AS sort_at,
                   work_order.id::text AS sort_id
            FROM service.work_orders work_order
-           WHERE work_order.status = 'completed' AND work_order.labor_cost_bgn > 0
+           WHERE work_order.status = 'completed' AND work_order.customer_charge_recorded
+             AND work_order.customer_labor_charge_eur > 0
            UNION ALL
            SELECT usage.work_order_id, usage.product_id, product.name AS description,
-                  usage.quantity, unit.code AS unit_code, usage.unit_cost_bgn AS unit_price,
+                  usage.quantity, unit.code AS unit_code, usage.customer_unit_price_eur AS unit_price,
                   2 AS sort_order, usage.recorded_at AS sort_at,
                   usage.id::text AS sort_id
            FROM service.work_order_part_usages usage
            JOIN service.work_orders work_order ON work_order.id = usage.work_order_id
            JOIN master_data.products product ON product.id = usage.product_id
            JOIN master_data.units unit ON unit.id = product.unit_id
-           WHERE work_order.status = 'completed'
+           WHERE work_order.status = 'completed' AND work_order.customer_charge_recorded
+             AND usage.customer_unit_price_eur > 0
            UNION ALL
            SELECT work_order.id AS work_order_id, NULL::uuid AS product_id,
                   concat('Transport · ', work_order.work_order_number) AS description,
                   1.0000::numeric AS quantity, 'SERVICE'::varchar AS unit_code,
-                  work_order.transport_cost_bgn AS unit_price, 3 AS sort_order,
+                  work_order.customer_transport_charge_eur AS unit_price, 3 AS sort_order,
                   work_order.created_at AS sort_at,
                   work_order.id::text AS sort_id
            FROM service.work_orders work_order
-           WHERE work_order.status = 'completed' AND work_order.transport_cost_bgn > 0
+           WHERE work_order.status = 'completed' AND work_order.customer_charge_recorded
+             AND work_order.customer_transport_charge_eur > 0
          ) source
          ORDER BY source.work_order_id, source.sort_order, source.sort_at, source.sort_id`,
       ),
@@ -377,7 +397,7 @@ export class FinancialDocumentsService {
         total: row.total,
       })),
       serviceDrafts: serviceHeaders.rows.map((row) => ({
-        currencyCode: 'BGN',
+        currencyCode: 'EUR',
         customerName: row.customer_name,
         customerPartnerId: row.customer_partner_id,
         id: row.id,
@@ -470,6 +490,78 @@ export class FinancialDocumentsService {
     }
   }
 
+  async pdf(id: string): Promise<{ buffer: Buffer; fileName: string }> {
+    const document = await this.document(id);
+    return {
+      buffer: await renderFinancialDocument(document),
+      fileName: `${document.officialNumber ?? document.number}.pdf`,
+    };
+  }
+
+  async email(
+    id: string,
+    input: SendDocumentEmailRequest,
+    key: string | undefined,
+    auth: AuthenticationContext,
+    metadata: RequestSecurityMetadata,
+  ): Promise<QueuedEmailReceipt> {
+    const recipientEmail = normalizeEmail(input.recipientEmail);
+    return this.command(
+      `finance.financial-document.email:${id}`,
+      key,
+      { expectedVersion: input.expectedVersion, recipientEmail },
+      HttpStatus.ACCEPTED,
+      async (client, commandKey) => {
+        const document = await this.loadDocument(client, id, true);
+        if (document.version !== input.expectedVersion)
+          throw new ApiErrorException(
+            'FINANCE_DOCUMENT_VERSION_CONFLICT',
+            'This document changed after it was opened. Refresh and try again.',
+            HttpStatus.CONFLICT,
+          );
+        if (document.status !== 'issued')
+          throw new ApiErrorException(
+            'FINANCE_DOCUMENT_NOT_ISSUED',
+            'Only an issued document can be sent to a customer.',
+            HttpStatus.CONFLICT,
+          );
+        const pdf = await renderFinancialDocument(document);
+        await queueEmailMessage(client, {
+          attachment: {
+            content: pdf,
+            fileName: `${document.officialNumber ?? document.number}.pdf`,
+            mediaType: 'application/pdf',
+          },
+          idempotencyKey: `finance-document:${id}:${commandKey}`,
+          recipient: recipientEmail,
+          subject: `${documentLabelEnglish(document.documentType)} ${document.officialNumber ?? document.number}`,
+          text: [
+            `Hello ${document.customerSnapshot.name},`,
+            '',
+            `Your ${documentLabelEnglish(document.documentType).toLowerCase()} is attached.`,
+            `Amount: ${document.grossTotal} ${document.currencyCode}.`,
+            '',
+            `Здравейте, ${document.customerSnapshot.name},`,
+            '',
+            `Прикачен е Вашият документ. Сума: ${document.grossTotal} ${document.currencyCode}.`,
+            '',
+            'Vista Service Ltd.',
+          ].join('\n'),
+        });
+        await this.sideEffects(
+          client,
+          id,
+          'finance.financial-document.email-queued',
+          document,
+          auth,
+          metadata,
+          commandKey,
+        );
+        return { recipientEmail, status: 'queued' };
+      },
+    );
+  }
+
   async createFromPosReceipt(
     saleId: string,
     key: string | undefined,
@@ -521,7 +613,7 @@ export class FinancialDocumentsService {
       {
         businessLocationId: row.business_location_id,
         cashRegisterId: row.cash_register_id,
-        currencyCode: 'BGN',
+        currencyCode: 'EUR',
         customerPartnerId: row.customer_partner_id,
         documentType: 'invoice',
         dueDate: row.due_date,
@@ -530,7 +622,7 @@ export class FinancialDocumentsService {
         legalEntityId: row.legal_entity_id,
         operatorId: row.operator_id,
         rateDate: issueDate,
-        rateSource: 'internal_bgn',
+        rateSource: 'internal_eur',
         sourcePosSaleId: saleId,
         taxEventDate: row.sale_date,
       },
@@ -547,6 +639,10 @@ export class FinancialDocumentsService {
     metadata: RequestSecurityMetadata,
   ): Promise<FinancialDocument> {
     const normalized = normalizeInput(input);
+    const rate = await this.currencyRates.latestRate(normalized.currencyCode, normalized.rateDate);
+    normalized.exchangeRate = rate.exchangeRate;
+    normalized.rateDate = rate.rateDate;
+    normalized.rateSource = rate.rateSource;
     return this.command(
       'finance.financial-document.create',
       key,
@@ -603,7 +699,7 @@ export class FinancialDocumentsService {
            currency_code, exchange_rate, rate_date, rate_source,
            issuer_name, issuer_uic, issuer_vat_number, issuer_address,
            customer_name, customer_uic, customer_vat_number, customer_address,
-           net_total, vat_total, gross_total, bgn_net_total, bgn_vat_total, bgn_gross_total,
+           net_total, vat_total, gross_total, eur_net_total, eur_vat_total, eur_gross_total,
            notes, created_by, source_subscription_draft_id
          ) VALUES (
            $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,
@@ -643,9 +739,9 @@ export class FinancialDocumentsService {
             calculation.netTotal,
             calculation.vatTotal,
             calculation.grossTotal,
-            calculation.bgnNetTotal,
-            calculation.bgnVatTotal,
-            calculation.bgnGrossTotal,
+            calculation.eurNetTotal,
+            calculation.eurVatTotal,
+            calculation.eurGrossTotal,
             normalized.notes ?? null,
             auth.accountId,
             normalized.sourceSubscriptionDraftId ?? null,
@@ -708,6 +804,395 @@ export class FinancialDocumentsService {
     );
   }
 
+  async issue(
+    id: string,
+    input: IssueFinancialDocumentRequest,
+    key: string | undefined,
+    auth: AuthenticationContext,
+    metadata: RequestSecurityMetadata,
+  ): Promise<FinancialDocument> {
+    return this.command(
+      `finance.financial-document.issue:${id}`,
+      key,
+      input,
+      200,
+      async (client, commandKey) => {
+        const before = await this.loadDocument(client, id, true);
+        if (before.version !== input.expectedVersion)
+          throw new ApiErrorException(
+            'FINANCE_DOCUMENT_VERSION_CONFLICT',
+            'This document changed after it was opened. Refresh and try again.',
+            HttpStatus.CONFLICT,
+          );
+        if (before.status === 'issued') return before;
+        if (before.status === 'cancelled')
+          throw new ApiErrorException(
+            'FINANCE_DOCUMENT_CANCELLED',
+            'A cancelled document cannot be issued.',
+            HttpStatus.CONFLICT,
+          );
+
+        const completeness = await client.query<{
+          line_count: string;
+          vat_summary_count: string;
+          issuer_name: string;
+          issuer_address: string;
+          issuer_uic: string | null;
+          customer_name: string;
+          customer_address: string;
+          customer_uic: string | null;
+          customer_vat_number: string | null;
+          correction_of_document_id: string | null;
+          correction_reason: string | null;
+          source_pos_sale_id: string | null;
+          source_fiscal_receipt_number: string | null;
+          source_sales_invoice_id: string | null;
+        }>(
+          `SELECT document.issuer_name, document.issuer_address, document.issuer_uic,
+                  document.customer_name, document.customer_address, document.customer_uic,
+                  document.customer_vat_number, document.correction_of_document_id,
+                  document.correction_reason, document.source_pos_sale_id,
+                  document.source_fiscal_receipt_number,
+                  document.source_sales_invoice_id,
+                  (SELECT count(*)::text FROM finance.financial_document_lines line
+                    WHERE line.financial_document_id = document.id) AS line_count,
+                  (SELECT count(*)::text FROM finance.financial_document_vat_summary summary
+                    WHERE summary.financial_document_id = document.id) AS vat_summary_count
+           FROM finance.financial_documents document WHERE document.id = $1`,
+          [id],
+        );
+        const fields = completeness.rows[0];
+        if (
+          !fields ||
+          Number(fields.line_count) < 1 ||
+          Number(fields.vat_summary_count) < 1 ||
+          !fields.issuer_name.trim() ||
+          !fields.issuer_address.trim() ||
+          !fields.customer_name.trim() ||
+          !fields.customer_address.trim()
+        )
+          throw new ApiErrorException(
+            'FINANCE_DOCUMENT_INCOMPLETE',
+            'Add complete supplier, customer, line, and VAT details before issuing this document.',
+            HttpStatus.CONFLICT,
+          );
+
+        if (before.documentType === 'credit_note' || before.documentType === 'debit_note') {
+          const original = await client.query<{
+            customer_partner_id: string;
+            document_type: string;
+            official_number: string | null;
+            status: string;
+          }>(
+            `SELECT customer_partner_id, document_type, official_number, status
+             FROM finance.financial_documents WHERE id = $1 FOR UPDATE`,
+            [fields.correction_of_document_id],
+          );
+          const originalRow = original.rows[0];
+          if (
+            !originalRow ||
+            originalRow.status !== 'issued' ||
+            originalRow.document_type !== 'invoice' ||
+            !originalRow.official_number ||
+            originalRow.customer_partner_id !== before.customerPartnerId
+          )
+            throw new ApiErrorException(
+              'FINANCE_CORRECTION_ORIGINAL_NOT_ISSUED',
+              'Issue the original invoice first. A correction must refer to that issued invoice and customer.',
+              HttpStatus.CONFLICT,
+            );
+        }
+
+        if (before.documentType === 'invoice' && fields.source_sales_invoice_id) {
+          const proforma = await client.query<{ id: string }>(
+            `SELECT id FROM finance.financial_documents
+             WHERE source_sales_invoice_id = $1 AND document_type = 'proforma'
+               AND status = 'issued' AND converted_from_document_id IS NULL
+             FOR UPDATE`,
+            [fields.source_sales_invoice_id],
+          );
+          if (proforma.rowCount)
+            throw new ApiErrorException(
+              'FINANCE_PROFORMA_PAYMENT_REQUIRED',
+              'A proforma invoice is already issued for this Sales document. The official invoice is created automatically when it is fully paid.',
+              HttpStatus.CONFLICT,
+            );
+        }
+
+        if (fields.source_pos_sale_id) {
+          const sale = await client.query<{
+            customer_partner_id: string | null;
+            fiscal_receipt_number: string;
+            fiscal_status: string;
+            status: string;
+          }>(
+            `SELECT customer_partner_id, fiscal_receipt_number, fiscal_status, status
+             FROM pos.sales WHERE id = $1 FOR UPDATE`,
+            [fields.source_pos_sale_id],
+          );
+          const source = sale.rows[0];
+          if (
+            !source ||
+            source.status !== 'completed' ||
+            source.fiscal_status === 'reversed' ||
+            source.fiscal_receipt_number !== fields.source_fiscal_receipt_number ||
+            source.customer_partner_id !== before.customerPartnerId
+          )
+            throw new ApiErrorException(
+              'FINANCE_POS_RECEIPT_LINK_INVALID',
+              'The POS sale, customer, and fiscal receipt must match before an invoice can be issued.',
+              HttpStatus.CONFLICT,
+            );
+        }
+
+        let officialNumber: string | null = null;
+        if (before.documentType !== 'proforma') {
+          const allocated = await client.query<{ official_number: string }>(
+            `INSERT INTO finance.official_document_sequences (legal_entity_id, next_value)
+             VALUES ($1, 2)
+             ON CONFLICT (legal_entity_id) DO UPDATE
+               SET next_value = finance.official_document_sequences.next_value + 1
+               WHERE finance.official_document_sequences.next_value < 10000000000
+             RETURNING lpad((next_value - 1)::text, 10, '0') AS official_number`,
+            [before.legalEntityId],
+          );
+          officialNumber = allocated.rows[0]?.official_number ?? null;
+          if (!officialNumber)
+            throw new ApiErrorException(
+              'FINANCE_OFFICIAL_SEQUENCE_EXHAUSTED',
+              'The legal document sequence is exhausted. Contact the system administrator.',
+              HttpStatus.CONFLICT,
+            );
+        }
+
+        await client.query(
+          `UPDATE finance.financial_documents
+           SET status = 'issued', official_number = $2, issued_at = now(), issued_by = $3,
+               version = version + 1, updated_at = now()
+           WHERE id = $1`,
+          [id, officialNumber, auth.accountId],
+        );
+        if (fields.source_pos_sale_id)
+          await client.query(
+            `UPDATE pos.sales SET invoice_financial_document_id = $2
+             WHERE id = $1 AND invoice_financial_document_id IS NULL`,
+            [fields.source_pos_sale_id, id],
+          );
+        if (fields.source_sales_invoice_id)
+          await client.query(
+            `UPDATE finance.customer_documents
+             SET financial_document_id = $2
+             WHERE source_sales_invoice_id = $1 AND financial_document_id IS NULL`,
+            [fields.source_sales_invoice_id, id],
+          );
+
+        const document = await this.loadDocument(client, id);
+        await this.sideEffects(
+          client,
+          id,
+          'finance.financial-document.issued',
+          document,
+          auth,
+          metadata,
+          commandKey,
+          before,
+        );
+        return document;
+      },
+    );
+  }
+
+  async convertPaidProforma(
+    client: PoolClient,
+    sourceSalesInvoiceId: string,
+    settlementDate: string,
+    collectionId: string,
+    auth: AuthenticationContext,
+    metadata: RequestSecurityMetadata,
+    commandKey: string,
+  ): Promise<FinancialDocument | undefined> {
+    const proformaResult = await client.query<{ id: string }>(
+      `SELECT id FROM finance.financial_documents
+       WHERE source_sales_invoice_id = $1 AND document_type = 'proforma' AND status = 'issued'
+       ORDER BY issued_at DESC, id DESC LIMIT 1 FOR UPDATE`,
+      [sourceSalesInvoiceId],
+    );
+    const proformaId = proformaResult.rows[0]?.id;
+    if (!proformaId) return undefined;
+
+    const existingResult = await client.query<{ id: string }>(
+      `SELECT id FROM finance.financial_documents
+       WHERE converted_from_document_id = $1 AND status = 'issued' FOR KEY SHARE`,
+      [proformaId],
+    );
+    const existingId = existingResult.rows[0]?.id;
+    if (existingId) {
+      await client.query(
+        `UPDATE finance.customer_documents SET financial_document_id = $2
+         WHERE id = $1 AND financial_document_id IS DISTINCT FROM $2`,
+        [collectionId, existingId],
+      );
+      return this.loadDocument(client, existingId);
+    }
+
+    const proforma = await this.loadDocument(client, proformaId);
+    const rate = await this.currencyRates.latestRate(proforma.currencyCode, settlementDate);
+    const lines = proforma.lines.map((line) => ({
+      description: line.description,
+      discountPercent: line.discountPercent,
+      ...(line.productId ? { productId: line.productId } : {}),
+      quantity: line.quantity,
+      unitCode: line.unitCode,
+      unitPrice: line.unitPrice,
+      vatRate: line.vatRate,
+      vatTreatment: line.vatTreatment,
+    }));
+    const calculation = calculateFinancialDocument(lines, rate.exchangeRate);
+    const source = await client.query<{
+      branch_id: string;
+      business_location_id: string;
+      cash_register_id: string | null;
+      operator_id: string | null;
+    }>(
+      `SELECT branch_id, business_location_id, cash_register_id, operator_id
+       FROM finance.financial_documents WHERE id = $1`,
+      [proformaId],
+    );
+    const sourceScope = source.rows[0];
+    if (!sourceScope) throw new Error('The issued proforma scope could not be loaded.');
+
+    const officialSequence = await client.query<{ official_number: string }>(
+      `INSERT INTO finance.official_document_sequences (legal_entity_id, next_value)
+       VALUES ($1, 2)
+       ON CONFLICT (legal_entity_id) DO UPDATE
+         SET next_value = finance.official_document_sequences.next_value + 1
+         WHERE finance.official_document_sequences.next_value < 10000000000
+       RETURNING lpad((next_value - 1)::text, 10, '0') AS official_number`,
+      [proforma.legalEntityId],
+    );
+    const officialNumber = officialSequence.rows[0]?.official_number;
+    if (!officialNumber)
+      throw new ApiErrorException(
+        'FINANCE_OFFICIAL_SEQUENCE_EXHAUSTED',
+        'The legal document sequence is exhausted. Contact the system administrator.',
+        HttpStatus.CONFLICT,
+      );
+
+    const id = randomUUID();
+    const draftNumber = `DINV-AUTO-${settlementDate.replace(/-/gu, '')}-${randomUUID()
+      .slice(0, 8)
+      .toUpperCase()}`;
+    await client.query(
+      `INSERT INTO finance.financial_documents (
+         id, draft_number, official_number, document_type, status,
+         legal_entity_id, branch_id, business_location_id, cash_register_id, operator_id,
+         customer_partner_id, source_sales_invoice_id, issue_date, tax_event_date, due_date,
+         currency_code, exchange_rate, rate_date, rate_source,
+         issuer_name, issuer_uic, issuer_vat_number, issuer_address,
+         customer_name, customer_uic, customer_vat_number, customer_address,
+         net_total, vat_total, gross_total, eur_net_total, eur_vat_total, eur_gross_total,
+         notes, issued_at, issued_by, converted_from_document_id, version, created_by
+       ) VALUES (
+         $1,$2,$3,'invoice','issued',$4,$5,$6,$7,$8,$9,$10,$11,$11,$11,
+         $12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,
+         $24,$25,$26,$27,$28,$29,$30,now(),$31,$32,1,$31
+       )`,
+      [
+        id,
+        draftNumber,
+        officialNumber,
+        proforma.legalEntityId,
+        sourceScope.branch_id,
+        sourceScope.business_location_id,
+        sourceScope.cash_register_id,
+        sourceScope.operator_id,
+        proforma.customerPartnerId,
+        sourceSalesInvoiceId,
+        settlementDate,
+        rate.currencyCode,
+        rate.exchangeRate,
+        rate.rateDate,
+        rate.rateSource,
+        proforma.issuerSnapshot.name,
+        proforma.issuerSnapshot.uic ?? null,
+        proforma.issuerSnapshot.vatNumber ?? null,
+        proforma.issuerSnapshot.address,
+        proforma.customerSnapshot.name,
+        proforma.customerSnapshot.uic ?? null,
+        proforma.customerSnapshot.vatNumber ?? null,
+        proforma.customerSnapshot.address,
+        calculation.netTotal,
+        calculation.vatTotal,
+        calculation.grossTotal,
+        calculation.eurNetTotal,
+        calculation.eurVatTotal,
+        calculation.eurGrossTotal,
+        proforma.notes ?? null,
+        auth.accountId,
+        proformaId,
+      ],
+    );
+    for (const [index, line] of calculation.lines.entries()) {
+      const sourceLine = lines[index];
+      if (!sourceLine) throw new Error('Proforma conversion line calculation mismatch.');
+      await client.query(
+        `INSERT INTO finance.financial_document_lines (
+           id, financial_document_id, line_number, product_id, description, unit_code,
+           quantity, unit_price, discount_percent, vat_treatment, vat_rate,
+           net_total, vat_amount, gross_total
+         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
+        [
+          randomUUID(),
+          id,
+          index + 1,
+          sourceLine.productId ?? null,
+          sourceLine.description,
+          sourceLine.unitCode,
+          line.quantity,
+          line.unitPrice,
+          line.discountPercent,
+          line.vatTreatment,
+          line.vatRate,
+          line.netTotal,
+          line.vatAmount,
+          line.grossTotal,
+        ],
+      );
+    }
+    for (const summary of calculation.vatSummary) {
+      await client.query(
+        `INSERT INTO finance.financial_document_vat_summary (
+           id, financial_document_id, vat_treatment, vat_rate, net_total, vat_amount
+         ) VALUES ($1,$2,$3,$4,$5,$6)`,
+        [
+          randomUUID(),
+          id,
+          summary.vatTreatment,
+          summary.vatRate,
+          summary.netTotal,
+          summary.vatAmount,
+        ],
+      );
+    }
+    await client.query(
+      `UPDATE finance.customer_documents SET financial_document_id = $2
+       WHERE id = $1`,
+      [collectionId, id],
+    );
+    const document = await this.loadDocument(client, id);
+    await this.sideEffects(
+      client,
+      id,
+      'finance.proforma.converted-to-invoice',
+      document,
+      auth,
+      metadata,
+      `automatic-proforma-conversion:${proformaId}:${commandKey}`,
+      proforma,
+    );
+    return document;
+  }
+
   async cancel(
     id: string,
     input: CancelFinancialDocumentRequest,
@@ -735,6 +1220,12 @@ export class FinancialDocumentsService {
             HttpStatus.CONFLICT,
           );
         if (before.status === 'cancelled') return before;
+        if (before.status === 'issued')
+          throw new ApiErrorException(
+            'FINANCE_ISSUED_DOCUMENT_IMMUTABLE',
+            'Issued documents cannot be cancelled or changed. Correct the invoice with a linked credit or debit note.',
+            HttpStatus.CONFLICT,
+          );
         await client.query(
           `UPDATE finance.financial_documents
          SET status = 'cancelled', cancellation_reason = $2, cancelled_at = now(),
@@ -809,9 +1300,9 @@ export class FinancialDocumentsService {
       : { rows: [] };
     const correctionRow = correction.rows[0];
     return {
-      bgnGrossTotal: row.bgn_gross_total,
-      bgnNetTotal: row.bgn_net_total,
-      bgnVatTotal: row.bgn_vat_total,
+      eurGrossTotal: row.eur_gross_total,
+      eurNetTotal: row.eur_net_total,
+      eurVatTotal: row.eur_vat_total,
       branchName: row.branch_name,
       businessLocationId: row.business_location_id,
       businessLocationName: row.business_location_name,
@@ -831,6 +1322,14 @@ export class FinancialDocumentsService {
         : {}),
       ...(row.correction_reason ? { correctionReason: row.correction_reason } : {}),
       createdAt: asIso(row.created_at),
+      ...(row.issued_at ? { issuedAt: asIso(row.issued_at) } : {}),
+      ...(row.issued_by_name ? { issuedByName: row.issued_by_name } : {}),
+      ...(row.converted_from_document_id
+        ? { convertedFromDocumentId: row.converted_from_document_id }
+        : {}),
+      ...(row.converted_from_draft_number
+        ? { convertedFromDocumentNumber: row.converted_from_draft_number }
+        : {}),
       currencyCode: row.currency_code,
       customerPartnerId: row.customer_partner_id,
       customerSnapshot: {
@@ -981,9 +1480,9 @@ function normalizeInput(input: CreateFinancialDocumentRequest) {
   const currencyCode = input.currencyCode.trim().toUpperCase();
   const correctionReason = input.correctionReason?.trim();
   const notes = input.notes?.trim();
-  const rateSource = currencyCode === 'BGN' ? 'internal_bgn' : input.rateSource.trim();
+  const rateSource = currencyCode === 'EUR' ? 'internal_eur' : input.rateSource.trim();
   const exchangeRate =
-    currencyCode === 'BGN' ? '1.00000000' : normalizeDecimal(input.exchangeRate, 8);
+    currencyCode === 'EUR' ? '1.00000000' : normalizeDecimal(input.exchangeRate, 8);
   if (!/^[A-Z]{3}$/u.test(currencyCode))
     throw inputError('FINANCE_CURRENCY_INVALID', 'Currency code must contain three letters.');
   if (decimalUnits(exchangeRate, 8) <= 0n)
@@ -993,7 +1492,7 @@ function normalizeInput(input: CreateFinancialDocumentRequest) {
       'FINANCE_RATE_SOURCE_REQUIRED',
       'Enter the source of the captured currency rate.',
     );
-  if (currencyCode !== 'BGN' && rateSource.toLowerCase() === 'internal_bgn')
+  if (currencyCode !== 'EUR' && rateSource.toLowerCase() === 'internal_eur')
     throw inputError(
       'FINANCE_RATE_SOURCE_INVALID',
       'Enter the exchange rate and its source for the selected currency.',
@@ -1260,15 +1759,12 @@ async function requireCorrection(client: PoolClient, input: ReturnType<typeof no
     id: string;
   }>(
     `SELECT id, customer_partner_id, currency_code FROM finance.financial_documents
-     WHERE id = $1 AND document_type = 'invoice' AND status = 'draft' FOR UPDATE`,
+     WHERE id = $1 AND document_type = 'invoice' AND status IN ('draft', 'issued') FOR UPDATE`,
     [input.correctionOfDocumentId],
   );
   const row = result.rows[0];
   if (!row)
-    throw inputError(
-      'FINANCE_CORRECTION_SOURCE_INVALID',
-      'Select an available original invoice draft.',
-    );
+    throw inputError('FINANCE_CORRECTION_SOURCE_INVALID', 'Select an active original invoice.');
   if (
     row.customer_partner_id !== input.customerPartnerId ||
     row.currency_code !== input.currencyCode
@@ -1499,9 +1995,9 @@ async function posReceiptSource(
   });
   return {
     calculation: {
-      bgnGrossTotal: normalizeDecimal(sale.gross_total, 4),
-      bgnNetTotal: normalizeDecimal(sale.net_total, 4),
-      bgnVatTotal: normalizeDecimal(sale.vat_total, 4),
+      eurGrossTotal: normalizeDecimal(sale.gross_total, 4),
+      eurNetTotal: normalizeDecimal(sale.net_total, 4),
+      eurVatTotal: normalizeDecimal(sale.vat_total, 4),
       grossTotal: normalizeDecimal(sale.gross_total, 4),
       lines: calculatedLines,
       netTotal: normalizeDecimal(sale.net_total, 4),
@@ -1533,29 +2029,36 @@ async function serviceDraftLines(
     );
   const header = await client.query<{
     customer_partner_id: string;
+    customer_charge_recorded: boolean;
     status: string;
-    total_cost_bgn: string;
+    total_customer_charge_eur: string;
     work_order_number: string;
   }>(
     `SELECT request.customer_partner_id, work_order.status,
-            work_order.total_cost_bgn::text, work_order.work_order_number
+            work_order.customer_charge_recorded, work_order.total_customer_charge_eur::text,
+            work_order.work_order_number
      FROM service.work_orders work_order
      JOIN service.requests request ON request.id = work_order.service_request_id
      WHERE work_order.id = $1 FOR KEY SHARE OF work_order, request`,
     [workOrderId],
   );
   const source = header.rows[0];
-  if (!source || source.status !== 'completed' || decimalUnits(source.total_cost_bgn, 4) <= 0n)
+  if (
+    !source ||
+    source.status !== 'completed' ||
+    !source.customer_charge_recorded ||
+    decimalUnits(source.total_customer_charge_eur, 4) <= 0n
+  )
     throw inputError(
       'FINANCE_SERVICE_WORK_INVALID',
-      'Select completed Service work with a charge greater than zero.',
+      'Select completed Service work with customer charges recorded.',
     );
-  if (source.customer_partner_id !== customerId || input.currencyCode !== 'BGN')
+  if (source.customer_partner_id !== customerId || input.currencyCode !== 'EUR')
     throw inputError(
       'FINANCE_SERVICE_CONTEXT_MISMATCH',
-      'The customer and BGN currency must match the completed Service work.',
+      'The customer and EUR currency must match the completed Service work.',
     );
-  const expected = await serviceCostBasis(client, workOrderId, source);
+  const expected = await serviceChargeBasis(client, workOrderId, source);
   const provided = await manualLines(client, input.lines ?? []);
   const matches =
     expected.length === provided.length &&
@@ -1578,29 +2081,29 @@ async function serviceDraftLines(
   return provided;
 }
 
-async function serviceCostBasis(
+async function serviceChargeBasis(
   client: PoolClient,
   workOrderId: string,
-  workOrder: { total_cost_bgn: string; work_order_number: string },
+  workOrder: { total_customer_charge_eur: string; work_order_number: string },
 ) {
-  const costs = await client.query<{
-    labor_cost_bgn: string;
-    transport_cost_bgn: string;
+  const charges = await client.query<{
+    customer_labor_charge_eur: string;
+    customer_transport_charge_eur: string;
   }>(
-    `SELECT labor_cost_bgn::text, transport_cost_bgn::text
+    `SELECT customer_labor_charge_eur::text, customer_transport_charge_eur::text
      FROM service.work_orders WHERE id = $1`,
     [workOrderId],
   );
-  const cost = costs.rows[0];
-  if (!cost) throw new Error('Completed Service work disappeared during document preparation');
+  const charge = charges.rows[0];
+  if (!charge) throw new Error('Completed Service work disappeared during document preparation');
   const lines: Array<ReturnType<typeof normalizeLine>> = [];
-  if (decimalUnits(cost.labor_cost_bgn, 4) > 0n)
+  if (decimalUnits(charge.customer_labor_charge_eur, 4) > 0n)
     lines.push({
       description: `Service labour · ${workOrder.work_order_number}`,
       discountPercent: '0.0000',
       quantity: '1.0000',
       unitCode: 'SERVICE',
-      unitPrice: normalizeDecimal(cost.labor_cost_bgn, 4),
+      unitPrice: normalizeDecimal(charge.customer_labor_charge_eur, 4),
       vatTreatment: 'standard_20',
     });
   const parts = await client.query<{
@@ -1608,14 +2111,15 @@ async function serviceCostBasis(
     product_name: string;
     quantity: string;
     unit_code: string;
-    unit_cost_bgn: string;
+    customer_unit_price_eur: string;
   }>(
     `SELECT usage.product_id, product.name AS product_name, usage.quantity::text,
-            usage.unit_cost_bgn::text, unit.code AS unit_code
+            usage.customer_unit_price_eur::text, unit.code AS unit_code
      FROM service.work_order_part_usages usage
      JOIN master_data.products product ON product.id = usage.product_id
      JOIN master_data.units unit ON unit.id = product.unit_id
-     WHERE usage.work_order_id = $1 ORDER BY usage.recorded_at, usage.id`,
+     WHERE usage.work_order_id = $1 AND usage.customer_unit_price_eur > 0
+     ORDER BY usage.recorded_at, usage.id`,
     [workOrderId],
   );
   lines.push(
@@ -1625,17 +2129,17 @@ async function serviceCostBasis(
       productId: part.product_id,
       quantity: normalizeDecimal(part.quantity, 4),
       unitCode: part.unit_code,
-      unitPrice: normalizeDecimal(part.unit_cost_bgn, 4),
+      unitPrice: normalizeDecimal(part.customer_unit_price_eur, 4),
       vatTreatment: 'standard_20' as const,
     })),
   );
-  if (decimalUnits(cost.transport_cost_bgn, 4) > 0n)
+  if (decimalUnits(charge.customer_transport_charge_eur, 4) > 0n)
     lines.push({
       description: `Transport · ${workOrder.work_order_number}`,
       discountPercent: '0.0000',
       quantity: '1.0000',
       unitCode: 'SERVICE',
-      unitPrice: normalizeDecimal(cost.transport_cost_bgn, 4),
+      unitPrice: normalizeDecimal(charge.customer_transport_charge_eur, 4),
       vatTreatment: 'standard_20',
     });
   const basisTotal = lines.reduce(
@@ -1643,10 +2147,10 @@ async function serviceCostBasis(
       sum + (decimalUnits(line.quantity, 4) * decimalUnits(line.unitPrice, 4)) / 10_000n,
     0n,
   );
-  if (basisTotal !== decimalUnits(workOrder.total_cost_bgn, 4))
+  if (basisTotal !== decimalUnits(workOrder.total_customer_charge_eur, 4))
     throw new ApiErrorException(
-      'FINANCE_SERVICE_COST_MISMATCH',
-      'The completed Service charges do not reconcile. Review the work order before preparing a Finance draft.',
+      'FINANCE_SERVICE_CHARGE_MISMATCH',
+      'The recorded Service customer charges do not reconcile. Review the work order before preparing a Finance draft.',
       HttpStatus.CONFLICT,
     );
   return lines;
@@ -1793,9 +2297,12 @@ function headerQuery() {
                  document.issuer_vat_number, document.issuer_address, document.customer_name,
                  document.customer_uic, document.customer_vat_number, document.customer_address,
                  document.net_total::text, document.vat_total::text, document.gross_total::text,
-                 document.bgn_net_total::text, document.bgn_vat_total::text,
-                 document.bgn_gross_total::text, document.notes, document.cancellation_reason,
-                 document.version, document.created_at
+                 document.eur_net_total::text, document.eur_vat_total::text,
+                 document.eur_gross_total::text, document.notes, document.cancellation_reason,
+                 document.version, document.created_at, document.issued_at,
+                 document.converted_from_document_id,
+                 converted_source.draft_number AS converted_from_draft_number,
+                 issued_employee.display_name AS issued_by_name
           FROM finance.financial_documents document
           JOIN organization.business_locations location ON location.id = document.business_location_id
           JOIN organization.branches branch ON branch.id = document.branch_id
@@ -1803,10 +2310,14 @@ function headerQuery() {
           LEFT JOIN organization.operators operator ON operator.id = document.operator_id
           LEFT JOIN identity.user_accounts account ON account.id = operator.account_id
           LEFT JOIN identity.employees employee ON employee.id = account.employee_id
+          LEFT JOIN identity.user_accounts issued_account ON issued_account.id = document.issued_by
+          LEFT JOIN identity.employees issued_employee ON issued_employee.id = issued_account.employee_id
           LEFT JOIN sales.invoices source ON source.id = document.source_sales_invoice_id
           LEFT JOIN sales.subscription_invoice_drafts subscription_source
             ON subscription_source.id = document.source_subscription_draft_id
           LEFT JOIN pos.sales pos_source ON pos_source.id = document.source_pos_sale_id
+          LEFT JOIN finance.financial_documents converted_source
+            ON converted_source.id = document.converted_from_document_id
           LEFT JOIN service.work_orders service_source
             ON service_source.id = document.source_service_work_order_id`;
 }
@@ -1815,6 +2326,22 @@ function normalizeDate(value: string) {
   if (!/^\d{4}-\d{2}-\d{2}$/u.test(value) || Number.isNaN(Date.parse(`${value}T00:00:00Z`)))
     throw inputError('FINANCE_DATE_INVALID', 'Enter a valid calendar date.');
   return value;
+}
+
+function normalizeEmail(value: string): string {
+  const email = value.trim().toLowerCase();
+  if (email.length > 254 || !/^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/u.test(email))
+    throw inputError('FINANCE_EMAIL_INVALID', 'Enter a valid customer email address.');
+  return email;
+}
+
+function documentLabelEnglish(type: FinancialDocumentType): string {
+  return {
+    invoice: 'Invoice',
+    proforma: 'Proforma invoice',
+    credit_note: 'Credit note',
+    debit_note: 'Debit note',
+  }[type];
 }
 
 function normalizeDecimal(value: string, scale: number) {

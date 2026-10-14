@@ -115,7 +115,7 @@ export class ReceiveStockDto implements ReceiveStockRequest {
   @IsOptional()
   @IsString()
   @Matches(/^\d+(\.\d{1,4})?$/u)
-  unitCostBgn?: string;
+  unitCostEur?: string;
   @ApiProperty({ type: String, format: 'uuid' }) @IsUUID('loose') warehouseId!: string;
 }
 
@@ -176,8 +176,8 @@ export class WarehouseDto implements Warehouse {
 
 export class StockBalanceDto implements StockBalance {
   @ApiProperty({ type: String }) availableQuantity!: string;
-  @ApiProperty({ type: String }) averageUnitCostBgn!: string;
-  @ApiProperty({ type: String }) inventoryValueBgn!: string;
+  @ApiProperty({ type: String }) averageUnitCostEur!: string;
+  @ApiProperty({ type: String }) inventoryValueEur!: string;
   @ApiProperty({ type: String, format: 'uuid' }) productId!: string;
   @ApiProperty({ type: String }) quantity!: string;
   @ApiProperty({ type: String }) reservedQuantity!: string;
@@ -240,8 +240,8 @@ export class StockMovementJournalItemDto implements StockMovementJournalItem {
   @ApiProperty({ type: String }) referenceLabel!: string;
   @ApiProperty({ type: String }) referenceType!: string;
   @ApiPropertyOptional({ type: String }) sourceHref?: string;
-  @ApiProperty({ type: String }) totalCostBgn!: string;
-  @ApiProperty({ type: String }) unitCostBgn!: string;
+  @ApiProperty({ type: String }) totalCostEur!: string;
+  @ApiProperty({ type: String }) unitCostEur!: string;
   @ApiProperty({ type: String, format: 'uuid' }) warehouseId!: string;
   @ApiProperty({ type: String }) warehouseName!: string;
 }
@@ -261,8 +261,8 @@ export class StockReceiptDto implements StockReceipt {
   @ApiProperty({ type: String, format: 'uuid' }) productId!: string;
   @ApiProperty({ type: String }) quantity!: string;
   @ApiProperty({ type: [String], format: 'uuid' }) serialItemIds!: string[];
-  @ApiProperty({ type: String }) totalCostBgn!: string;
-  @ApiProperty({ type: String }) unitCostBgn!: string;
+  @ApiProperty({ type: String }) totalCostEur!: string;
+  @ApiProperty({ type: String }) unitCostEur!: string;
   @ApiProperty({ type: String, format: 'uuid' }) warehouseId!: string;
 }
 
@@ -274,8 +274,8 @@ export class StockIssueDto implements StockIssue {
   @ApiProperty({ enum: stockIssueReasons }) reason!: StockIssue['reason'];
   @ApiPropertyOptional({ type: String, format: 'uuid' }) reservationId?: string;
   @ApiProperty({ type: [String], format: 'uuid' }) serialItemIds!: string[];
-  @ApiProperty({ type: String }) totalCostBgn!: string;
-  @ApiProperty({ type: String }) unitCostBgn!: string;
+  @ApiProperty({ type: String }) totalCostEur!: string;
+  @ApiProperty({ type: String }) unitCostEur!: string;
   @ApiProperty({ type: String, format: 'uuid' }) warehouseId!: string;
 }
 
@@ -320,8 +320,8 @@ export class StockReturnDto implements StockReturn {
   @ApiProperty({ type: String, format: 'uuid' }) productId!: string;
   @ApiProperty({ type: String }) quantity!: string;
   @ApiProperty({ isArray: true, type: String }) serialItemIds!: string[];
-  @ApiProperty({ type: String }) totalCostBgn!: string;
-  @ApiProperty({ type: String }) unitCostBgn!: string;
+  @ApiProperty({ type: String }) totalCostEur!: string;
+  @ApiProperty({ type: String }) unitCostEur!: string;
 }
 
 export class TransferStockDto implements TransferStockRequest {
@@ -360,8 +360,8 @@ export class StockTransferDto implements StockTransfer {
   @ApiProperty({ type: [String], format: 'uuid' }) serialItemIds!: string[];
   @ApiProperty({ type: String, format: 'uuid' }) toMovementId!: string;
   @ApiProperty({ type: String, format: 'uuid' }) toWarehouseId!: string;
-  @ApiProperty({ type: String }) totalCostBgn!: string;
-  @ApiProperty({ type: String }) unitCostBgn!: string;
+  @ApiProperty({ type: String }) totalCostEur!: string;
+  @ApiProperty({ type: String }) unitCostEur!: string;
 }
 
 export class OpenStocktakeDto implements OpenStocktakeRequest {
@@ -562,7 +562,7 @@ export class SerialTraceEventDto implements SerialTraceEvent {
   @ApiPropertyOptional({ type: SerialTracePartyDto }) supplier?: SerialTraceParty;
   @ApiPropertyOptional({ type: SerialTracePartyDto }) technician?: SerialTraceParty;
   @ApiPropertyOptional({ type: SerialTracePartyDto }) toWarehouse?: SerialTraceParty;
-  @ApiPropertyOptional({ type: String }) unitCostBgn?: string;
+  @ApiPropertyOptional({ type: String }) unitCostEur?: string;
   @ApiPropertyOptional({ type: SerialTracePartyDto }) warehouse?: SerialTraceParty;
 }
 class SerialTraceCustomerEquipmentDto {

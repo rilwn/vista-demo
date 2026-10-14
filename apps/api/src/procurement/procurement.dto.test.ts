@@ -8,7 +8,7 @@ import { CreatePurchaseOrderDto, CreateSupplierInvoiceDto } from './procurement.
 describe('CreatePurchaseOrderDto', () => {
   it('accepts deterministic fixture UUIDs selected by the Procurement screen', async () => {
     const input = plainToInstance(CreatePurchaseOrderDto, {
-      currencyCode: 'BGN',
+      currencyCode: 'EUR',
       lines: [
         {
           expectedDeliveryDate: '2026-09-01',
@@ -26,7 +26,7 @@ describe('CreatePurchaseOrderDto', () => {
 
   it('rejects malformed purchase-order entity references', async () => {
     const input = plainToInstance(CreatePurchaseOrderDto, {
-      currencyCode: 'BGN',
+      currencyCode: 'EUR',
       lines: [
         {
           expectedDeliveryDate: '2026-09-01',

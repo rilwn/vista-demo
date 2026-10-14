@@ -9,6 +9,7 @@ import type {
   FinanceSupplierBankMatchCandidate,
   FinanceSupplierReferenceData,
 } from '@vista/contracts';
+import { mapBankImportRows, parseCsv, type BankImportMapping } from './bank-import';
 import { type FormEvent, type ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
 
 import { ApiClientError } from '../api/client';
@@ -37,7 +38,8 @@ interface DraftLine extends CreateFinanceBankStatementLineRequest {
 
 export function FinanceBankPage() {
   const { hasPermission, session } = useAuth();
-  useLocalization();
+  const { locale } = useLocalization();
+  const bg = locale === 'bg';
   const token = session?.sessionToken ?? '';
   const data = useBankStatements(token);
   const [creating, setCreating] = useState(false);
@@ -79,7 +81,7 @@ export function FinanceBankPage() {
         <div>
           <p className="page-eyebrow">ERP · Finance</p>
           <h1>Bank reconciliation</h1>
-          <p>Enter BGN statements, review incoming transfers, and connect them to collections.</p>
+          <p>Enter EUR statements, review incoming transfers, and connect them to collections.</p>
         </div>
         {hasPermission('erp.finance', 'create') ? (
           <Button onClick={() => setCreating(true)}>
@@ -91,8 +93,9 @@ export function FinanceBankPage() {
       <FinanceTabs />
 
       <InlineAlert tone="info">
-        Manual BGN statement entry is available. Bank-specific file import remains disabled until
-        the client selects the required statement formats.
+        {bg
+          ? 'Импортирайте CSV или Excel извлечение и свържете колоните. Непотвърдените редове остават за преглед.'
+          : 'Import a CSV or Excel statement and map its columns. Unmatched rows stay available for review.'}
       </InlineAlert>
 
       <section aria-label="Bank reconciliation summary" className="bank-summary">
@@ -265,8 +268,17 @@ function CreateBankStatementDrawer({
   const [openingBalance, setOpeningBalance] = useState('0');
   const [closingBalance, setClosingBalance] = useState('0');
   const [lines, setLines] = useState<DraftLine[]>([newLine()]);
+  const [importHeaders, setImportHeaders] = useState<string[]>([]);
+  const [importRows, setImportRows] = useState<string[][]>([]);
+  const [importMapping, setImportMapping] = useState<BankImportMapping>({});
+  const [importErrors, setImportErrors] = useState<string[]>([]);
+  const [duplicateRows, setDuplicateRows] = useState<number[]>([]);
+  const [duplicatesReviewed, setDuplicatesReviewed] = useState(false);
+  const [importNotice, setImportNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { locale } = useLocalization();
+  const bg = locale === 'bg';
   const calculatedClosing = useMemo(
     () => lines.reduce((total, line) => total + signedAmount(line), Number(openingBalance || 0)),
     [lines, openingBalance],
@@ -275,6 +287,86 @@ function CreateBankStatementDrawer({
   function updateLine(key: string, update: Partial<DraftLine>) {
     setLines((current) =>
       current.map((line) => (line.key === key ? { ...line, ...update } : line)),
+    );
+  }
+
+  async function readStatementFile(file: File | undefined) {
+    if (!file) return;
+    setImportErrors([]);
+    setImportNotice(null);
+    setImportHeaders([]);
+    setImportRows([]);
+    setImportMapping({});
+    setDuplicateRows([]);
+    setDuplicatesReviewed(false);
+    if (file.size > 10 * 1024 * 1024) {
+      setImportErrors([bg ? 'Файлът трябва да е до 10 MB.' : 'Choose a file smaller than 10 MB.']);
+      return;
+    }
+    try {
+      let table: string[][];
+      if (file.name.toLowerCase().endsWith('.csv')) table = parseCsv(await file.text());
+      else if (file.name.toLowerCase().endsWith('.xlsx')) {
+        const ExcelJS = await import('exceljs');
+        const workbook = new ExcelJS.Workbook();
+        await workbook.xlsx.load(await file.arrayBuffer());
+        const sheet = workbook.worksheets[0];
+        if (!sheet)
+          throw new Error(bg ? 'Във файла няма работен лист.' : 'The workbook has no sheet.');
+        table = [];
+        sheet.eachRow({ includeEmpty: false }, (row) => {
+          const values = (row.values as unknown[]).slice(1).map(spreadsheetCell);
+          table.push(values);
+        });
+      } else {
+        throw new Error(
+          bg ? 'Изберете CSV или Excel файл (.xlsx).' : 'Choose a CSV or Excel workbook (.xlsx).',
+        );
+      }
+      const [headerRow, ...dataRows] = table;
+      if (!headerRow?.some(Boolean) || !dataRows.length)
+        throw new Error(
+          bg
+            ? 'Добавете заглавен ред и поне един банков ред.'
+            : 'Include a header row and at least one bank transaction.',
+        );
+      const headers = headerRow.map(
+        (header, index) => header || (bg ? `Колона ${index + 1}` : `Column ${index + 1}`),
+      );
+      if (headers.length > 80 || dataRows.length > 5000)
+        throw new Error(
+          bg
+            ? 'Файлът надхвърля допустимия размер за предварителен преглед.'
+            : 'This file is too large to preview safely.',
+        );
+      setImportHeaders(headers);
+      setImportRows(dataRows);
+      setImportNotice(
+        bg
+          ? `Заредени са ${dataRows.length} реда. Съпоставете колоните.`
+          : `${dataRows.length} rows loaded. Map the columns below.`,
+      );
+    } catch (caught) {
+      setImportErrors([
+        caught instanceof Error
+          ? caught.message
+          : bg
+            ? 'Файлът не може да бъде прочетен.'
+            : 'The file could not be read.',
+      ]);
+    }
+  }
+
+  function applyImportedRows() {
+    const result = mapBankImportRows(importHeaders, importRows, importMapping);
+    setImportErrors(result.errors);
+    setDuplicateRows(result.duplicateRows);
+    if (result.errors.length || (result.duplicateRows.length && !duplicatesReviewed)) return;
+    setLines(result.lines.map((line) => ({ ...line, key: crypto.randomUUID() })));
+    setImportNotice(
+      bg
+        ? `${result.lines.length} банкови реда са добавени за преглед.`
+        : `${result.lines.length} transactions are ready for review.`,
     );
   }
 
@@ -287,7 +379,7 @@ function CreateBankStatementDrawer({
         accountIban,
         bankName,
         closingBalance,
-        currencyCode: 'BGN',
+        currencyCode: 'EUR',
         lines: lines.map((line) => ({
           amount: line.amount,
           ...(line.counterpartyIban ? { counterpartyIban: line.counterpartyIban } : {}),
@@ -313,7 +405,7 @@ function CreateBankStatementDrawer({
     <BankDrawer
       busy={busy}
       onBack={onBack}
-      subtitle="Balanced BGN statement entry"
+      subtitle="Balanced EUR statement entry"
       title="New bank statement"
     >
       <form className="bank-form" onSubmit={(event) => void submit(event)}>
@@ -360,7 +452,7 @@ function CreateBankStatementDrawer({
               />
             </BankField>
             <BankField label="Currency">
-              <input disabled value="BGN" />
+              <input disabled value="EUR" />
             </BankField>
             <BankField label="Opening balance">
               <input
@@ -396,9 +488,139 @@ function CreateBankStatementDrawer({
           </div>
         </section>
 
+        <section
+          aria-label={bg ? 'Импорт на банков файл' : 'Bank-file import'}
+          className="bank-form-section"
+        >
+          <header>
+            <span>2</span>
+            <div>
+              <h3>{bg ? 'Импорт на банков файл' : 'Import a bank file'}</h3>
+              <p>
+                {bg
+                  ? 'Качете CSV или Excel файл, съпоставете колоните и проверете дублиращите се редове преди добавяне.'
+                  : 'Upload a CSV or Excel file, map its columns, and review duplicate-looking rows before adding them.'}
+              </p>
+            </div>
+          </header>
+          <BankField label={bg ? 'CSV или Excel файл (.xlsx)' : 'CSV or Excel file (.xlsx)'} wide>
+            <input
+              accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+              onChange={(event) => void readStatementFile(event.target.files?.[0])}
+              type="file"
+            />
+          </BankField>
+          {importNotice ? <InlineAlert tone="info">{importNotice}</InlineAlert> : null}
+          {importErrors.length ? (
+            <InlineAlert tone="error">
+              <ul>
+                {importErrors.map((message) => (
+                  <li key={message}>{message}</li>
+                ))}
+              </ul>
+            </InlineAlert>
+          ) : null}
+          {importHeaders.length ? (
+            <>
+              <div className="bank-form-grid">
+                {(
+                  [
+                    ['transactionDate', bg ? 'Дата на операцията' : 'Transaction date', true],
+                    ['direction', bg ? 'Посока' : 'Direction', true],
+                    ['amount', bg ? 'Сума' : 'Amount', true],
+                    ['currency', bg ? 'Валута' : 'Currency', true],
+                    ['paymentReference', bg ? 'Основание' : 'Payment reference', true],
+                    [
+                      'counterpartyName',
+                      bg ? 'Насрещна страна (по избор)' : 'Counterparty (optional)',
+                      false,
+                    ],
+                  ] as const
+                ).map(([field, label, required]) => (
+                  <BankField key={field} label={label}>
+                    <select
+                      aria-label={label}
+                      onChange={(event) => {
+                        const value = event.target.value;
+                        setImportMapping((current) => {
+                          const next = { ...current };
+                          if (value === '') delete next[field];
+                          else next[field] = Number(value);
+                          return next;
+                        });
+                        setImportErrors([]);
+                        setDuplicateRows([]);
+                        setDuplicatesReviewed(false);
+                      }}
+                      required={required}
+                      value={importMapping[field] === undefined ? '' : String(importMapping[field])}
+                    >
+                      <option value="">{bg ? 'Изберете колона' : 'Choose a column'}</option>
+                      {importHeaders.map((header, index) => (
+                        <option key={`${index}-${header}`} value={index}>
+                          {header}
+                        </option>
+                      ))}
+                    </select>
+                  </BankField>
+                ))}
+              </div>
+              <div className="bank-import-preview">
+                <strong>{bg ? 'Примерни редове' : 'Sample rows'}</strong>
+                <span>
+                  {importRows.length} {bg ? 'реда' : 'rows'}
+                </span>
+                <div className="bank-import-preview-table">
+                  <div>
+                    {importHeaders.map((header, index) => (
+                      <span key={`${index}-${header}`}>{header}</span>
+                    ))}
+                  </div>
+                  {importRows.slice(0, 3).map((row, rowIndex) => (
+                    <div key={rowIndex}>
+                      {importHeaders.map((_, cellIndex) => (
+                        <span key={cellIndex}>{row[cellIndex] ?? ''}</span>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              </div>
+              {duplicateRows.length ? (
+                <InlineAlert tone="warning">
+                  {bg
+                    ? `Възможно дублиране в редове ${duplicateRows.join(', ')}. Проверете ги и потвърдете прегледа преди добавяне.`
+                    : `Possible duplicate rows: ${duplicateRows.join(', ')}. Review them, then confirm before adding the statement.`}
+                </InlineAlert>
+              ) : null}
+              {duplicateRows.length ? (
+                <label className="bank-import-review-check">
+                  <input
+                    checked={duplicatesReviewed}
+                    onChange={(event) => setDuplicatesReviewed(event.target.checked)}
+                    type="checkbox"
+                  />
+                  <span>
+                    {bg
+                      ? 'Проверих редовете, маркирани като възможни дубликати.'
+                      : 'I reviewed the rows marked as possible duplicates.'}
+                  </span>
+                </label>
+              ) : null}
+              <Button
+                disabled={Boolean(duplicateRows.length && !duplicatesReviewed)}
+                onClick={applyImportedRows}
+                type="button"
+                variant="secondary"
+              >
+                {bg ? 'Добави редовете за преглед' : 'Use these transactions'}
+              </Button>
+            </>
+          ) : null}
+        </section>
+
         <section className="bank-form-section">
           <header className="bank-lines-header">
-            <span>2</span>
+            <span>3</span>
             <div>
               <h3>Transactions</h3>
               <p>
@@ -549,6 +771,8 @@ function BankStatementDrawer({
   token: string;
 }) {
   const [matching, setMatching] = useState<FinanceBankTransaction | null>(null);
+  const { locale } = useLocalization();
+  const bg = locale === 'bg';
   const finishMatching = (next: FinanceBankStatement) => {
     setMatching(null);
     onSaved(next);
@@ -639,6 +863,13 @@ function BankStatementDrawer({
                       · {transaction.supplierMatch.paymentNumber} · Matched manually
                     </p>
                   ) : null}
+                  {transaction.possibleDuplicate ? (
+                    <p className="bank-possible-duplicate-note" role="status">
+                      {bg
+                        ? 'Възможно повторение: проверете извлеченията, преди да съпоставите.'
+                        : 'Possible duplicate: check the statements before matching this transfer.'}
+                    </p>
+                  ) : null}
                 </div>
                 <div className="bank-transaction-value">
                   <strong>
@@ -683,6 +914,9 @@ function BankMatchDrawer({
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [duplicateReviewed, setDuplicateReviewed] = useState(false);
+  const { locale } = useLocalization();
+  const bg = locale === 'bg';
   useEffect(() => {
     let active = true;
     getFinanceBankMatchCandidates(token, transaction.id)
@@ -711,6 +945,7 @@ function BankMatchDrawer({
         await matchFinanceBankTransaction(token, transaction.id, crypto.randomUUID(), {
           customerDocumentId: selectedId,
           expectedVersion: transaction.version,
+          ...(transaction.possibleDuplicate ? { reviewPossibleDuplicate: duplicateReviewed } : {}),
         }),
       );
     } catch (caught) {
@@ -728,6 +963,13 @@ function BankMatchDrawer({
     >
       <div className="bank-match-review">
         {error ? <InlineAlert tone="error">{error}</InlineAlert> : null}
+        {transaction.possibleDuplicate ? (
+          <InlineAlert tone="warning">
+            {bg
+              ? 'Този ред прилича на вече импортирана транзакция. Съпоставете го само ако потвърдите, че е отделно плащане.'
+              : 'This line looks like a transaction already imported. Match it only after confirming it is a separate payment.'}
+          </InlineAlert>
+        ) : null}
         <section className="bank-match-source">
           <span>Payment reference</span>
           <strong>{transaction.paymentReference}</strong>
@@ -742,6 +984,20 @@ function BankMatchDrawer({
             </div>
           </dl>
         </section>
+        {transaction.possibleDuplicate ? (
+          <label className="bank-duplicate-review-check">
+            <input
+              checked={duplicateReviewed}
+              onChange={(event) => setDuplicateReviewed(event.target.checked)}
+              type="checkbox"
+            />
+            <span>
+              {bg
+                ? 'Проверих извлеченията и потвърждавам, че това е отделна транзакция.'
+                : 'I checked the statements and confirm this is a separate transaction.'}
+            </span>
+          </label>
+        ) : null}
         <section className="bank-match-candidates">
           <header>
             <h3>Possible collection records</h3>
@@ -791,8 +1047,12 @@ function BankMatchDrawer({
           )}
         </section>
         <div className="bank-drawer-actions">
-          <Button busy={busy} disabled={!selectedId} onClick={() => void match()}>
-            Confirm match
+          <Button
+            busy={busy}
+            disabled={!selectedId || (transaction.possibleDuplicate && !duplicateReviewed)}
+            onClick={() => void match()}
+          >
+            {bg ? 'Потвърди съпоставянето' : 'Confirm match'}
           </Button>
           <Button disabled={busy} onClick={onBack} variant="secondary">
             Back
@@ -829,6 +1089,9 @@ function SupplierBankMatchDrawer({
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [duplicateReviewed, setDuplicateReviewed] = useState(false);
+  const { locale } = useLocalization();
+  const bg = locale === 'bg';
 
   useEffect(() => {
     let active = true;
@@ -863,6 +1126,7 @@ function SupplierBankMatchDrawer({
       await matchFinanceSupplierBankTransaction(token, transaction.id, crypto.randomUUID(), {
         expectedVersion: transaction.version,
         mode,
+        ...(transaction.possibleDuplicate ? { reviewPossibleDuplicate: duplicateReviewed } : {}),
         ...(mode === 'payable'
           ? { supplierPayableId: selectedPayableId }
           : { supplierPartnerId: supplierId }),
@@ -884,6 +1148,13 @@ function SupplierBankMatchDrawer({
     >
       <div className="bank-match-review supplier-bank-match-review">
         {error ? <InlineAlert tone="error">{error}</InlineAlert> : null}
+        {transaction.possibleDuplicate ? (
+          <InlineAlert tone="warning">
+            {bg
+              ? 'Този ред прилича на вече импортирана транзакция. Продължете само след проверка.'
+              : 'This line looks like a transaction already imported. Continue only after checking it.'}
+          </InlineAlert>
+        ) : null}
         <section className="bank-match-source">
           <span>Payment reference</span>
           <strong>{transaction.paymentReference}</strong>
@@ -982,10 +1253,28 @@ function SupplierBankMatchDrawer({
             </label>
           </section>
         )}
+        {transaction.possibleDuplicate ? (
+          <label className="bank-duplicate-review-check">
+            <input
+              checked={duplicateReviewed}
+              onChange={(event) => setDuplicateReviewed(event.target.checked)}
+              type="checkbox"
+            />
+            <span>
+              {bg
+                ? 'Проверих извлеченията и потвърждавам, че това е отделна транзакция.'
+                : 'I checked the statements and confirm this is a separate transaction.'}
+            </span>
+          </label>
+        ) : null}
         <div className="bank-drawer-actions">
           <Button
             busy={busy}
-            disabled={loading || (mode === 'payable' ? !selectedPayableId : !supplierId)}
+            disabled={
+              loading ||
+              (transaction.possibleDuplicate && !duplicateReviewed) ||
+              (mode === 'payable' ? !selectedPayableId : !supplierId)
+            }
             onClick={() => void match()}
           >
             {mode === 'payable' ? 'Confirm supplier match' : 'Record supplier advance'}
@@ -1142,6 +1431,25 @@ function newLine(): DraftLine {
     valueDate: date,
   };
 }
+function spreadsheetCell(value: unknown): string {
+  if (value === null || value === undefined) return '';
+  if (value instanceof Date) return value.toISOString().slice(0, 10);
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean')
+    return String(value).trim();
+  if (typeof value === 'object') {
+    const cell = value as {
+      formula?: unknown;
+      result?: unknown;
+      richText?: Array<{ text?: string }>;
+      text?: unknown;
+    };
+    if (Array.isArray(cell.richText)) return cell.richText.map((part) => part.text ?? '').join('');
+    if (cell.text !== undefined) return spreadsheetCell(cell.text);
+    if (cell.result !== undefined) return spreadsheetCell(cell.result);
+    if (cell.formula !== undefined) return '';
+  }
+  return '';
+}
 function signedAmount(line: DraftLine) {
   const amount = Number(line.amount || 0);
   return line.direction === 'incoming' ? amount : -amount;
@@ -1162,7 +1470,7 @@ function formatDate(value: string) {
   return formatOperationsDate(new Date(`${value}T12:00:00Z`), { dateStyle: 'medium' });
 }
 function formatMoney(value: string) {
-  return formatOperationsCurrency(value, 'BGN');
+  return formatOperationsCurrency(value, 'EUR');
 }
 function maskIban(value: string) {
   return value.length > 8 ? `${value.slice(0, 4)} ···· ${value.slice(-4)}` : value;

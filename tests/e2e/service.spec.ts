@@ -121,12 +121,21 @@ test('assigned technician completes a signed repair with parts and Finance prepa
       .getByLabel('Completion notes', { exact: true })
       .fill('Replaced print head and checked clear test receipts.');
     await work.getByLabel('Minutes', { exact: true }).fill('45');
-    await work.getByLabel('Labour cost (BGN)', { exact: true }).fill('50');
-    await work.getByLabel('Transport cost (BGN)', { exact: true }).fill('10');
+    await work.getByLabel('Labour cost', { exact: true }).fill('50');
+    await work.getByLabel('Transport cost', { exact: true }).fill('10');
+    await work.getByLabel('Labour charge', { exact: true }).fill('75');
+    await work.getByLabel('Transport charge', { exact: true }).fill('15');
     await work.getByRole('button', { name: 'Add used part', exact: true }).click();
-    await choose(technician, 'Part', /Demo Thermal Print Head/);
+    const partField = work.locator('.service-part-editor-row select').first();
+    const partId = await partField
+      .locator('option')
+      .filter({ hasText: 'Demo Thermal Print Head' })
+      .getAttribute('value');
+    if (!partId)
+      throw new Error('Demo Thermal Print Head is not available in the technician warehouse');
+    await partField.selectOption(partId);
     await work.getByLabel('Quantity', { exact: true }).fill('1');
-    await work.getByLabel('Batch number', { exact: true }).fill('DEMO-HEAD-2028');
+    await work.locator('.service-part-editor-row select').nth(1).selectOption('DEMO-HEAD-2028');
     await work
       .getByLabel('Customer representative', { exact: true })
       .fill('Browser Service Customer');
@@ -147,14 +156,18 @@ test('assigned technician completes a signed repair with parts and Finance prepa
     await work.getByRole('button', { name: 'Complete work', exact: true }).click();
     await expect(work.getByText('Completed', { exact: true }).first()).toBeVisible();
     await expect(work.getByText('Browser Service Customer', { exact: true })).toBeVisible();
-    await expect(work.locator('.service-cost-grid dd')).toHaveText([
-      'BGN 50.00',
-      'BGN 46.00',
-      'BGN 10.00',
-      'BGN 106.00',
+    await expect(
+      work.locator('.service-cost-grid:not(.service-customer-charge-grid) dd'),
+    ).toHaveText(['Not billed automatically', '50.00 EUR', '23.52 EUR', '10.00 EUR', '83.52 EUR']);
+    await expect(work.locator('.service-customer-charge-grid dd')).toHaveText([
+      'Used for the invoice draft',
+      '75.00 EUR',
+      '0.00 EUR',
+      '15.00 EUR',
+      '90.00 EUR',
     ]);
     await expect(work.locator('.service-part-list')).toContainText(
-      '1.0000 from Demo Technician Warehouse',
+      '1.0000 · Demo Technician Warehouse',
     );
     await expect(
       work.getByRole('img', { name: 'Signature from Browser Service Customer' }),

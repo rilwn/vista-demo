@@ -19,6 +19,7 @@ import { FinanceReportsService } from './finance-reports.service.js';
 import { FinanceService } from './finance.service.js';
 import { FinancialDocumentsController } from './financial-documents.controller.js';
 import { FinancialDocumentsService } from './financial-documents.service.js';
+import { BnbCurrencyRatesService } from './bnb-currency-rates.service.js';
 
 @Module({
   controllers: [
@@ -39,6 +40,7 @@ import { FinancialDocumentsService } from './financial-documents.service.js';
     FinanceReportsService,
     FinanceService,
     FinancialDocumentsService,
+    BnbCurrencyRatesService,
   ],
   imports: [AuditModule, DatabaseModule, SalesModule],
   providers: [
@@ -50,6 +52,7 @@ import { FinancialDocumentsService } from './financial-documents.service.js';
     FinanceReportsService,
     FinanceService,
     FinancialDocumentsService,
+    BnbCurrencyRatesService,
   ],
 })
 export class FinanceModule {}

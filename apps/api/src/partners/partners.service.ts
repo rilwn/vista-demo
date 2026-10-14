@@ -1049,7 +1049,7 @@ function normalizeBankAccountInput(
       HttpStatus.BAD_REQUEST,
     );
   }
-  const currencyCode = (normalizeOptionalText(input.currencyCode) ?? 'BGN').toUpperCase();
+  const currencyCode = (normalizeOptionalText(input.currencyCode) ?? 'EUR').toUpperCase();
   if (!/^[A-Z]{3}$/u.test(currencyCode)) {
     throw new ApiErrorException(
       'PARTNER_BANK_CURRENCY_INVALID',

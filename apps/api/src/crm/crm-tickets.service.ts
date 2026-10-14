@@ -7,7 +7,6 @@ import type {
   CreateCrmTicketRequest,
   CreateServiceRequestFromCrmTicketRequest,
   CrmSlaPolicyReference,
-  CrmSlaTimerState,
   CrmTicket,
   CrmTicketChannel,
   CrmTicketPage,
@@ -29,6 +28,7 @@ import { APP_ENVIRONMENT } from '../config/config.module.js';
 import { DatabaseService } from '../database/database.service.js';
 import type { BackgroundJobContext } from '../jobs/job-handler-registry.service.js';
 import { ServiceOperationsService } from '../service/service.service.js';
+import { addBusinessMinutes, businessTimerState } from './crm-sla-clock.js';
 import type { ListCrmTicketsQueryDto } from './crm-tickets.dto.js';
 
 interface TicketRow {
@@ -227,36 +227,61 @@ export class CrmTicketsService {
         [...parameters, pageSize, (page - 1) * pageSize],
       ),
       pool.query<{
-        at_risk: string;
-        breached: string;
-        open: string;
-        unassigned: string;
+        assigned_to_account_id: string | null;
+        created_at: Date | string;
+        responded_at: Date | string | null;
+        response_due_at: Date | string;
+        resolution_due_at: Date | string;
+        resolved_at: Date | string | null;
+        sla_resolution_minutes: number;
+        sla_response_minutes: number;
+        sla_risk_threshold_percent: number;
+        status: CrmTicketStatus;
       }>(
-        `SELECT
-           count(*) FILTER (WHERE status NOT IN ('resolved','closed','cancelled'))::text AS open,
-           count(*) FILTER (WHERE assigned_to_account_id IS NULL
-             AND status NOT IN ('resolved','closed','cancelled'))::text AS unassigned,
-           count(*) FILTER (WHERE status NOT IN ('resolved','closed','cancelled')
-             AND now() > resolution_due_at)::text AS breached,
-           count(*) FILTER (WHERE status NOT IN ('resolved','closed','cancelled')
-             AND now() <= resolution_due_at
-             AND now() >= created_at + make_interval(mins =>
-               floor(sla_resolution_minutes * sla_risk_threshold_percent / 100.0)::integer)
-           )::text AS at_risk
-         FROM crm.tickets`,
+        `SELECT assigned_to_account_id, created_at, responded_at, response_due_at,
+                resolution_due_at, resolved_at, sla_resolution_minutes, sla_response_minutes,
+                sla_risk_threshold_percent, status
+         FROM crm.tickets WHERE status NOT IN ('resolved','closed','cancelled')`,
       ),
     ]);
     const total = Number(count.rows[0]?.total ?? '0');
-    const summaryRow = summary.rows[0];
+    const summaryValue = { atRisk: 0, breached: 0, open: summary.rows.length, unassigned: 0 };
+    const summaryNow = new Date();
+    for (const ticket of summary.rows) {
+      if (!ticket.assigned_to_account_id) summaryValue.unassigned += 1;
+      const responseState = ticket.responded_at
+        ? null
+        : businessTimerState({
+            completedAt: null,
+            createdAt: ticket.created_at,
+            dueAt: ticket.response_due_at,
+            minutes: ticket.sla_response_minutes,
+            now: summaryNow,
+            thresholdPercent: ticket.sla_risk_threshold_percent,
+            timezone: this.environment.BUSINESS_TIMEZONE,
+          });
+      const resolutionState = businessTimerState({
+        completedAt: ticket.resolved_at,
+        createdAt: ticket.created_at,
+        dueAt: ticket.resolution_due_at,
+        minutes: ticket.sla_resolution_minutes,
+        now: summaryNow,
+        thresholdPercent: ticket.sla_risk_threshold_percent,
+        timezone: this.environment.BUSINESS_TIMEZONE,
+      });
+      if (resolutionState === 'breached') summaryValue.breached += 1;
+      else if (responseState === 'at_risk' || resolutionState === 'at_risk')
+        summaryValue.atRisk += 1;
+    }
     return {
       items: await Promise.all(rows.rows.map((row) => this.mapTicket(pool, row))),
       page,
       pageSize,
       summary: {
-        atRisk: Number(summaryRow?.at_risk ?? '0'),
-        breached: Number(summaryRow?.breached ?? '0'),
-        open: Number(summaryRow?.open ?? '0'),
-        unassigned: Number(summaryRow?.unassigned ?? '0'),
+        atRisk: summaryValue.atRisk,
+        breached: summaryValue.breached,
+        open: summaryValue.open,
+        unassigned: summaryValue.unassigned,
       },
       total,
       totalPages: Math.ceil(total / pageSize),
@@ -276,6 +301,19 @@ export class CrmTicketsService {
     const normalized = normalizeCreate(input);
     return this.command('crm.ticket.create', key, normalized, 201, async (client, commandKey) => {
       const policy = await this.requireReferences(client, normalized);
+      const clock = await client.query<{ now: string }>('SELECT now()::text AS now');
+      const createdAt = clock.rows[0]?.now;
+      if (!createdAt) throw new Error('Ticket clock is unavailable');
+      const responseDueAt = addBusinessMinutes(
+        createdAt,
+        policy.response_minutes,
+        this.environment.BUSINESS_TIMEZONE,
+      );
+      const resolutionDueAt = addBusinessMinutes(
+        createdAt,
+        policy.resolution_minutes,
+        this.environment.BUSINESS_TIMEZONE,
+      );
       const id = randomUUID();
       const number = await this.nextNumber(client);
       await client.query(
@@ -287,8 +325,7 @@ export class CrmTicketsService {
            sla_resolution_minutes, sla_risk_threshold_percent,
            response_due_at, resolution_due_at, created_by, updated_by
          ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,
-           now() + make_interval(mins => $15),
-           now() + make_interval(mins => $16),$18,$18)`,
+           $18,$19,$20,$20)`,
         [
           id,
           number,
@@ -307,6 +344,8 @@ export class CrmTicketsService {
           policy.response_minutes,
           policy.resolution_minutes,
           policy.risk_threshold_percent,
+          responseDueAt,
+          resolutionDueAt,
           auth.accountId,
         ],
       );
@@ -597,6 +636,19 @@ export class CrmTicketsService {
           subject: `Service request ${source.request_number}`,
         });
         const policy = await this.requireReferences(client, createInput);
+        const clock = await client.query<{ now: string }>('SELECT now()::text AS now');
+        const createdAt = clock.rows[0]?.now;
+        if (!createdAt) throw new Error('Ticket clock is unavailable');
+        const responseDueAt = addBusinessMinutes(
+          createdAt,
+          policy.response_minutes,
+          this.environment.BUSINESS_TIMEZONE,
+        );
+        const resolutionDueAt = addBusinessMinutes(
+          createdAt,
+          policy.resolution_minutes,
+          this.environment.BUSINESS_TIMEZONE,
+        );
         const id = randomUUID();
         const number = await this.nextNumber(client);
         await client.query(
@@ -608,8 +660,7 @@ export class CrmTicketsService {
            sla_resolution_minutes, sla_risk_threshold_percent,
            response_due_at, resolution_due_at, created_by, updated_by
          ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,
-           now() + make_interval(mins => $15),
-           now() + make_interval(mins => $16),$18,$18)`,
+           $18,$19,$20,$20)`,
           [
             id,
             number,
@@ -628,6 +679,8 @@ export class CrmTicketsService {
             policy.response_minutes,
             policy.resolution_minutes,
             policy.risk_threshold_percent,
+            responseDueAt,
+            resolutionDueAt,
             auth.accountId,
           ],
         );
@@ -706,16 +759,18 @@ export class CrmTicketsService {
             type: 'resolution' as const,
           },
         ];
+        const thresholdPercent = await this.riskThreshold(client, ticket.id);
         for (const timer of timers) {
           const dueAt = new Date(timer.dueAt);
-          const atRiskAt = new Date(
-            new Date(ticket.created_at).getTime() +
-              (timer.minutes * 60_000 * (await this.riskThreshold(client, ticket.id))) / 100,
+          const atRiskAt = addBusinessMinutes(
+            ticket.created_at,
+            Math.max(1, Math.floor((timer.minutes * thresholdPercent) / 100)),
+            this.environment.BUSINESS_TIMEZONE,
           );
           const eventType = asOf > dueAt ? 'breached' : asOf >= atRiskAt ? 'at_risk' : null;
           if (!eventType) continue;
           const recipients = new Set(primaryRecipients);
-          if (eventType === 'breached') {
+          if (eventType === 'breached' || eventType === 'at_risk') {
             const escalationId = policy.rows[0]?.escalation_account_id;
             if (escalationId) recipients.add(escalationId);
             else fallbackRecipients.forEach((recipient) => recipients.add(recipient));
@@ -981,23 +1036,25 @@ export class CrmTicketsService {
       priority: row.priority,
       ...(row.responded_at ? { respondedAt: iso(row.responded_at) } : {}),
       responseDueAt: iso(row.response_due_at),
-      responseState: timerState(
+      responseState: businessTimerState({
+        completedAt: row.responded_at,
+        createdAt: row.created_at,
+        dueAt: row.response_due_at,
+        minutes: row.sla_response_minutes,
         now,
-        row.created_at,
-        row.response_due_at,
-        row.responded_at,
-        row.sla_response_minutes,
-        await this.riskThreshold(queryable, row.id),
-      ),
+        thresholdPercent: await this.riskThreshold(queryable, row.id),
+        timezone: this.environment.BUSINESS_TIMEZONE,
+      }),
       resolutionDueAt: iso(row.resolution_due_at),
-      resolutionState: timerState(
+      resolutionState: businessTimerState({
+        completedAt: row.resolved_at,
+        createdAt: row.created_at,
+        dueAt: row.resolution_due_at,
+        minutes: row.sla_resolution_minutes,
         now,
-        row.created_at,
-        row.resolution_due_at,
-        row.resolved_at,
-        row.sla_resolution_minutes,
-        await this.riskThreshold(queryable, row.id),
-      ),
+        thresholdPercent: await this.riskThreshold(queryable, row.id),
+        timezone: this.environment.BUSINESS_TIMEZONE,
+      }),
       slaEvents: slaEvents.rows.map((item) => ({
         createdAt: iso(item.created_at),
         deliveryStatus: item.delivery_status,
@@ -1037,7 +1094,7 @@ export class CrmTicketsService {
       `SELECT sla_risk_threshold_percent AS value FROM crm.tickets WHERE id = $1`,
       [id],
     );
-    return result.rows[0]?.value ?? 80;
+    return result.rows[0]?.value ?? 75;
   }
 
   private async slaFallbackRecipients(client: PoolClient): Promise<string[]> {
@@ -1237,21 +1294,6 @@ function mapPolicy(row: PolicyRow): CrmSlaPolicyReference {
       ? { serviceSubscriptionContractId: row.service_subscription_contract_id }
       : {}),
   };
-}
-
-function timerState(
-  now: Date,
-  createdAt: Date | string,
-  dueAt: Date | string,
-  completedAt: Date | string | null,
-  minutes: number,
-  threshold: number,
-): CrmSlaTimerState {
-  const due = new Date(dueAt);
-  if (completedAt) return new Date(completedAt) <= due ? 'met' : 'breached';
-  if (now > due) return 'breached';
-  const risk = new Date(createdAt).getTime() + (minutes * 60_000 * threshold) / 100;
-  return now.getTime() >= risk ? 'at_risk' : 'on_track';
 }
 
 function serviceSource(

@@ -36,8 +36,8 @@ test('cashier sells a serialised device, reopens its documents, returns it and b
     .getByRole('listbox')
     .getByRole('option', { name: 'DEMO-FR-STOCK-01', exact: true })
     .click();
-  await basket.getByLabel('Cash received', { exact: true }).fill('750');
-  await expect(complete).toContainText('720.00');
+  await basket.getByLabel('Cash received', { exact: true }).fill('400');
+  await expect(complete).toContainText('368.13 EUR');
   await complete.scrollIntoViewIfNeeded();
   await expect(complete).toBeInViewport();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
@@ -50,7 +50,7 @@ test('cashier sells a serialised device, reopens its documents, returns it and b
     .filter({ has: page.getByText('Sale', { exact: true }) })
     .locator('dd')
     .innerText();
-  await expect(dialog.locator('.pos-receipt-summary')).toContainText('30.00');
+  await expect(dialog.locator('.pos-receipt-summary')).toContainText('31.87 EUR');
   await expect(dialog.getByRole('region', { name: 'Warranty cards' })).toContainText(
     'DEMO-FR-STOCK-01',
   );
@@ -87,7 +87,7 @@ test('cashier sells a serialised device, reopens its documents, returns it and b
   await dialog.getByRole('button', { name: /^Complete return/ }).click();
   await expect(dialog).toContainText('Return complete');
   await expect(dialog).toContainText(saleNumber);
-  await expect(dialog).toContainText('720.00');
+  await expect(dialog).toContainText('368.13');
   await dialog.getByRole('button', { name: 'Done', exact: true }).click();
   await expect(page.locator('.pos-return-history')).toContainText('Restocked');
   await nav.getByRole('link', { name: 'Sale history', exact: true }).click();
@@ -100,7 +100,7 @@ test('cashier sells a serialised device, reopens its documents, returns it and b
   await nav.getByRole('link', { name: 'Shifts', exact: true }).click();
   await expect(
     page.locator('.pos-current-shift dl > div').filter({ hasText: 'Expected cash' }).locator('dd'),
-  ).toHaveText('100.00 BGN');
+  ).toHaveText('100.00 EUR');
   await page.getByLabel('Counted cash', { exact: false }).fill('100');
   await page.getByRole('button', { name: 'Close cashier shift', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Open cashier shift', exact: true })).toBeVisible();

@@ -152,7 +152,7 @@ export class CreatePriceListDto implements CreatePriceListRequest {
   @MaxLength(40)
   code!: string;
 
-  @ApiProperty({ example: 'BGN', type: String })
+  @ApiProperty({ example: 'EUR', type: String })
   @IsString()
   @Matches(/^[A-Za-z]{3}$/u)
   currencyCode!: string;
@@ -219,7 +219,7 @@ export class ResolveSalesPriceQueryDto {
   @IsUUID('loose')
   customerPartnerId!: string;
 
-  @ApiProperty({ example: 'BGN', maxLength: 3, minLength: 3, type: String })
+  @ApiProperty({ example: 'EUR', maxLength: 3, minLength: 3, type: String })
   @IsString()
   @Matches(/^[A-Za-z]{3}$/u)
   currencyCode!: string;

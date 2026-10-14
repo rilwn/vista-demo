@@ -808,7 +808,7 @@ function formFor(
     active: true,
     billingAmount: '0.00',
     billingFrequencyMonths: 1,
-    currencyCode: 'BGN',
+    currencyCode: 'EUR',
     customerLocationId: customerLocationId ?? '',
     customerPartnerId,
     equipmentIds: references.equipment

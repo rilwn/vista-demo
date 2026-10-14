@@ -69,17 +69,17 @@ describe('Operations localization', () => {
         minimumFractionDigits: 2,
       }).replace(/[\u00a0\u202f]/gu, ' '),
     ).toBe('12 345,50');
-    expect(formatOperationsCurrency('12345.56', 'BGN').replace(/[\u00a0\u202f]/gu, ' ')).toContain(
-      '12 345,56 BGN',
+    expect(formatOperationsCurrency('12345.56', 'EUR').replace(/[\u00a0\u202f]/gu, ' ')).toContain(
+      '12 345,56 EUR',
     );
     expect(
-      formatOperationsCurrency('12345678901234567890.12', 'BGN').replace(/[\u00a0\u202f]/gu, ' '),
-    ).toContain('12 345 678 901 234 567 890,12 BGN');
-    expect(formatOperationsCurrency('1.005', 'BGN')).toContain('1,01');
-    expect(formatOperationsCurrency('-0.50', 'BGN')).toContain('-0,50');
+      formatOperationsCurrency('12345678901234567890.12', 'EUR').replace(/[\u00a0\u202f]/gu, ' '),
+    ).toContain('12 345 678 901 234 567 890,12 EUR');
+    expect(formatOperationsCurrency('1.005', 'EUR')).toContain('1,01');
+    expect(formatOperationsCurrency('-0.50', 'EUR')).toContain('-0,50');
     expect(
-      formatOperationsMinorCurrency(123456789012345678901n, 'BGN').replace(/[\u00a0\u202f]/gu, ' '),
-    ).toContain('1 234 567 890 123 456 789,01 BGN');
+      formatOperationsMinorCurrency(123456789012345678901n, 'EUR').replace(/[\u00a0\u202f]/gu, ' '),
+    ).toContain('1 234 567 890 123 456 789,01 EUR');
     expect(reportDecimal('12345.60', true).replace(/[\u00a0\u202f]/gu, ' ')).toBe('12 345,60');
     expect(reportDate('2026-09-08')).not.toContain('Sept');
     expect(formatOperationsNumber(0.205, { maximumFractionDigits: 1, style: 'percent' })).toContain(

@@ -668,7 +668,7 @@ export interface CustomerOverviewSummary {
   financialDocuments: number;
   lastPurchaseAt?: string;
   openReceivables: number;
-  outstandingBgn: string;
+  outstandingEur: string;
   payments: number;
   purchases: number;
 }
@@ -693,7 +693,7 @@ export interface CustomerPurchaseHistoryEntry {
 }
 
 export interface CustomerFinancialDocumentSummary {
-  bgnGrossTotal: string;
+  eurGrossTotal: string;
   currencyCode: string;
   documentType: 'credit_note' | 'debit_note' | 'invoice' | 'proforma';
   draftNumber: string;
@@ -708,7 +708,7 @@ export interface CustomerFinancialDocumentSummary {
 
 export interface CustomerReceivableSummary {
   allocatedTotal: string;
-  bgnTotal: string;
+  eurTotal: string;
   currencyCode: string;
   documentDate: string;
   dueDate: string;
@@ -766,11 +766,11 @@ export interface PosShift {
   cashRegisterId: string;
   cashRegisterName: string;
   closedAt?: string;
-  closingCashBgn?: string;
-  expectedCashBgn: string;
+  closingCashEur?: string;
+  expectedCashEur: string;
   id: string;
   openedAt: string;
-  openingCashBgn: string;
+  openingCashEur: string;
   operatorCode: string;
   operatorId: string;
   shiftNumber: string;
@@ -787,11 +787,11 @@ export interface PosTerminalContext {
 
 export interface OpenPosShiftRequest {
   cashRegisterId: string;
-  openingCashBgn: string;
+  openingCashEur: string;
 }
 
 export interface ClosePosShiftRequest {
-  closingCashBgn: string;
+  closingCashEur: string;
   version: number;
 }
 
@@ -806,7 +806,7 @@ export interface PosCatalogItem {
   availableQuantity: string;
   barcodes: string[];
   batches: PosCatalogBatch[];
-  currencyCode: 'BGN';
+  currencyCode: 'EUR';
   id: string;
   name: string;
   priceListId?: string;
@@ -858,7 +858,7 @@ export interface PosLoyaltyAccount {
   cardNumber: string;
   id: string;
   programName: string;
-  redemptionValueBgn: string;
+  redemptionValueEur: string;
   status: 'active' | 'suspended';
 }
 
@@ -962,7 +962,7 @@ export type CustomerAdvancePaymentMethod = 'bank_transfer' | 'card' | 'cash' | '
 export type CustomerPaymentTermsStatus = 'active' | 'suspended';
 
 export interface CustomerPaymentTerms {
-  creditLimitBgn: string;
+  creditLimitEur: string;
   id: string;
   onAccountEnabled: boolean;
   paymentTermsDays: number;
@@ -1022,7 +1022,7 @@ export interface CustomerPaymentAccountReferenceData {
 }
 
 export interface UpsertCustomerPaymentTermsRequest {
-  creditLimitBgn: string;
+  creditLimitEur: string;
   expectedVersion?: number;
   onAccountEnabled: boolean;
   paymentTermsDays: number;
@@ -1114,7 +1114,7 @@ export interface PosSaleInvoiceDocument {
   id: string;
   number: string;
   sourceFiscalReceiptNumber: string;
-  status: 'cancelled' | 'draft';
+  status: 'cancelled' | 'draft' | 'issued';
 }
 
 export interface PosWarrantyCardDocument {
@@ -1134,7 +1134,7 @@ export interface PosSale {
   cashTendered: string;
   changeAmount: string;
   completedAt: string;
-  currencyCode: 'BGN';
+  currencyCode: 'EUR';
   customerName?: string;
   customerPartnerId?: string;
   fiscalAdapter: string;
@@ -1276,23 +1276,23 @@ export interface PosReportReferenceData {
 }
 
 export interface PosReportTotals {
-  averageSaleBgn: string;
-  grossReturnsBgn: string;
-  grossSalesBgn: string;
+  averageSaleEur: string;
+  grossReturnsEur: string;
+  grossSalesEur: string;
   itemQuantityReturned: string;
   itemQuantitySold: string;
-  netRevenueBgn: string;
-  netSalesBgn: string;
+  netRevenueEur: string;
+  netSalesEur: string;
   returnCount: number;
   saleCount: number;
-  vatSalesBgn: string;
+  vatSalesEur: string;
 }
 
 export interface PosCashierReportRow {
-  grossReturnsBgn: string;
-  grossSalesBgn: string;
+  grossReturnsEur: string;
+  grossSalesEur: string;
   name: string;
-  netRevenueBgn: string;
+  netRevenueEur: string;
   operatorCode: string;
   operatorId: string;
   returnCount: number;
@@ -1301,9 +1301,9 @@ export interface PosCashierReportRow {
 
 export interface PosProductReportRow {
   categoryName: string;
-  grossReturnsBgn: string;
-  grossSalesBgn: string;
-  netRevenueBgn: string;
+  grossReturnsEur: string;
+  grossSalesEur: string;
+  netRevenueEur: string;
   productCode: string;
   productId: string;
   productName: string;
@@ -1314,27 +1314,27 @@ export interface PosProductReportRow {
 export interface PosCategoryReportRow {
   categoryId: string;
   categoryName: string;
-  grossReturnsBgn: string;
-  grossSalesBgn: string;
-  netRevenueBgn: string;
+  grossReturnsEur: string;
+  grossSalesEur: string;
+  netRevenueEur: string;
   quantityReturned: string;
   quantitySold: string;
 }
 
 export interface PosPaymentReportRow {
-  collectedBgn: string;
+  collectedEur: string;
   method: PosPaymentMethod;
-  netBgn: string;
-  refundedBgn: string;
+  netEur: string;
+  refundedEur: string;
 }
 
 export interface PosLocationReportRow {
-  averageSaleBgn: string;
+  averageSaleEur: string;
   businessLocationId: string;
-  grossReturnsBgn: string;
-  grossSalesBgn: string;
+  grossReturnsEur: string;
+  grossSalesEur: string;
   locationName: string;
-  netRevenueBgn: string;
+  netRevenueEur: string;
   revenueSharePercent: number;
   returnCount: number;
   saleCount: number;
@@ -1344,20 +1344,20 @@ export interface PosShiftReportRow {
   cashRegisterCode: string;
   cashRegisterId: string;
   cashRegisterName: string;
-  cashRefundsBgn: string;
-  cashSalesBgn: string;
+  cashRefundsEur: string;
+  cashSalesEur: string;
   closedAt?: string;
-  closingCashBgn?: string;
-  differenceBgn?: string;
-  expectedCashBgn: string;
+  closingCashEur?: string;
+  differenceEur?: string;
+  expectedCashEur: string;
   fiscalMode: 'disabled' | 'hardware' | 'simulator';
-  grossReturnsBgn: string;
-  grossSalesBgn: string;
+  grossReturnsEur: string;
+  grossSalesEur: string;
   id: string;
   locationName: string;
-  netRevenueBgn: string;
+  netRevenueEur: string;
   openedAt: string;
-  openingCashBgn: string;
+  openingCashEur: string;
   operatorCode: string;
   operatorId: string;
   operatorName: string;
@@ -1590,6 +1590,8 @@ export interface CreatePurchaseOrderRequest {
 }
 
 export interface PurchaseOrderLine {
+  costBaselineEur?: string;
+  costBaselineSource?: 'latest_product_cost' | 'supplier_invoice';
   deliveredQuantity: string;
   expectedDeliveryDate: string;
   id: string;
@@ -1602,14 +1604,17 @@ export interface PurchaseOrderLine {
 
 export interface GoodsReceiptLine {
   batchId?: string;
+  costBaselineEur?: string;
+  costBaselineSource?: 'latest_product_cost' | 'supplier_invoice';
+  costVariancePercent?: string;
   id: string;
   orderLineId: string;
   productId: string;
   quantity: string;
   serialItemIds: string[];
   stockMovementId: string;
-  totalCostBgn: string;
-  unitCostBgn: string;
+  totalCostEur: string;
+  unitCostEur: string;
 }
 
 export interface GoodsReceipt {
@@ -1663,7 +1668,7 @@ export interface ReceivePurchaseOrderLineRequest {
   orderLineId: string;
   quantity: string;
   serialNumbers?: string[];
-  unitCostBgn?: string;
+  unitCostEur?: string;
 }
 
 export interface ReceivePurchaseOrderRequest {
@@ -2025,6 +2030,13 @@ export interface FinanceReferenceData {
   invoiceDrafts: FinanceInvoiceDraftReference[];
 }
 
+export interface FinanceExchangeRate {
+  currencyCode: string;
+  exchangeRate: string;
+  rateDate: string;
+  rateSource: 'BNB' | 'internal_eur';
+}
+
 export interface CreateFinanceCustomerDocumentRequest {
   dueDate: string;
   salesInvoiceId: string;
@@ -2059,6 +2071,17 @@ export interface FinancePayment {
   paymentReference?: string;
   sourceCustomerAdvanceNumber?: string;
   recordedAt: string;
+  reversal?: {
+    number: string;
+    reason: string;
+    reversedAt: string;
+    reversedOn: string;
+  };
+}
+
+export interface ReverseFinancePaymentRequest {
+  expectedDocumentVersion: number;
+  reason: string;
 }
 
 export interface FinancePaymentStatusHistoryEntry {
@@ -2072,11 +2095,17 @@ export interface FinancePaymentStatusHistoryEntry {
 
 export interface FinanceCustomerDocument {
   allocatedTotal: string;
-  bgnTotal: string;
+  eurTotal: string;
   createdAt: string;
   currencyCode: string;
   customerName: string;
   customerPartnerId: string;
+  financialDocument?: {
+    id: string;
+    number: string;
+    status: FinancialDocumentStatus;
+    type: FinancialDocumentType;
+  };
   documentDate: string;
   dueDate: string;
   exchangeRate: string;
@@ -2120,8 +2149,8 @@ export interface FinanceAgingReportItem {
   dueDate: string;
   id: string;
   number: string;
-  originalBgnTotal: string;
-  outstandingBgnTotal: string;
+  originalEurTotal: string;
+  outstandingEurTotal: string;
   partnerId: string;
   partnerName: string;
   paymentStatus: Exclude<FinancePaymentStatus, 'cancelled'>;
@@ -2152,19 +2181,19 @@ export const financeTurnoverKinds = ['customer', 'supplier'] as const;
 export type FinanceTurnoverKind = (typeof financeTurnoverKinds)[number];
 
 export interface FinanceTurnoverReportItem {
-  allocatedBgnTotal: string;
+  allocatedEurTotal: string;
   documentCount: number;
-  grossBgnTotal: string;
-  outstandingBgnTotal: string;
+  grossEurTotal: string;
+  outstandingEurTotal: string;
   partnerId: string;
   partnerName: string;
 }
 
 export interface FinanceTurnoverTotals {
-  allocatedBgnTotal: string;
+  allocatedEurTotal: string;
   documentCount: number;
-  grossBgnTotal: string;
-  outstandingBgnTotal: string;
+  grossEurTotal: string;
+  outstandingEurTotal: string;
 }
 
 export interface FinanceTurnoverReport {
@@ -2187,9 +2216,9 @@ export interface FinanceJournalReportItem {
   documentDate: string;
   documentType: FinancialDocumentType | 'supplier_invoice';
   exchangeRate?: string;
-  grossBgnTotal: string;
+  grossEurTotal: string;
   id: string;
-  netBgnTotal: string;
+  netEurTotal: string;
   number: string;
   partnerName: string;
   partnerVatNumber?: string;
@@ -2197,15 +2226,15 @@ export interface FinanceJournalReportItem {
   status: 'cancelled' | 'draft' | 'recorded';
   taxBreakdownComplete: boolean;
   taxEventDate?: string;
-  vatBgnTotal: string;
+  vatEurTotal: string;
 }
 
 export interface FinanceJournalTotals {
   documentCount: number;
-  grossBgnTotal: string;
+  grossEurTotal: string;
   incompleteTaxDocuments: number;
-  netBgnTotal: string;
-  vatBgnTotal: string;
+  netEurTotal: string;
+  vatEurTotal: string;
 }
 
 export interface FinanceJournalReport {
@@ -2225,8 +2254,8 @@ export type FinanceVatDirection = 'input' | 'output';
 export interface FinanceVatReviewItem {
   direction: FinanceVatDirection;
   documentCount: number;
-  netBgnTotal: string;
-  vatBgnTotal: string;
+  netEurTotal: string;
+  vatEurTotal: string;
   vatRate: string;
   vatTreatment: VatTreatment;
 }
@@ -2237,9 +2266,9 @@ export interface FinanceVatReviewReport {
   incompletePurchaseDocumentNumbers: string[];
   incompletePurchaseDocuments: number;
   items: FinanceVatReviewItem[];
-  recordedDifferenceBgn: string;
-  recordedInputVatBgn: string;
-  recordedOutputVatBgn: string;
+  recordedDifferenceEur: string;
+  recordedInputVatEur: string;
+  recordedOutputVatEur: string;
 }
 
 export const logisticsDeliveryMethods = ['company_transport', 'econt', 'speedy'] as const;
@@ -2553,6 +2582,8 @@ export const financeReportDefinitionKeys = [
   'finance.sales-journal',
   'finance.purchase-journal',
   'finance.vat-review',
+  'finance.income',
+  'finance.outcome',
 ] as const;
 export type FinanceReportDefinitionKey = (typeof financeReportDefinitionKeys)[number];
 
@@ -2579,10 +2610,10 @@ export interface SavedFinanceReport extends CreateFinanceReportExportRequest {
 }
 
 export const overviewMetricKeys = [
-  'recordedRevenueBgn',
+  'recordedRevenueEur',
   'activeServiceRequests',
   'expiringWarranties',
-  'overdueReceivablesBgn',
+  'overdueReceivablesEur',
 ] as const;
 export type OverviewMetricKey = (typeof overviewMetricKeys)[number];
 export interface OverviewPreferences {
@@ -2595,8 +2626,8 @@ export interface OperationsOverview {
   asOf: string;
   dateFrom: string;
   dateTo: string;
-  recordedRevenueBgn?: string;
-  overdueReceivablesBgn?: string;
+  recordedRevenueEur?: string;
+  overdueReceivablesEur?: string;
   activeServiceRequests?: number;
   expiringWarranties?: number;
   warrantyDays: number;
@@ -2802,7 +2833,7 @@ export interface ServiceReportTypeTotal {
   completedCount: number;
   requestCount: number;
   serviceType: ServiceType;
-  totalCostBgn: string;
+  totalCostEur: string;
 }
 
 export interface ServiceTechnicianPerformance {
@@ -2810,7 +2841,7 @@ export interface ServiceTechnicianPerformance {
   completedCount: number;
   displayName: string;
   laborMinutes: number;
-  totalCostBgn: string;
+  totalCostEur: string;
 }
 
 export interface ServiceReportOverview {
@@ -2824,7 +2855,7 @@ export interface ServiceReportOverview {
     completedRequests: number;
     laborMinutes: number;
     openRequests: number;
-    totalCostBgn: string;
+    totalCostEur: string;
     totalRequests: number;
   };
   typeTotals: ServiceReportTypeTotal[];
@@ -2915,6 +2946,7 @@ export interface FinanceSupplierPayment {
   allocations: FinanceSupplierPaymentAllocation[];
   amount: string;
   availableTotal: string;
+  currencyCode: string;
   id: string;
   kind: FinanceSupplierPaymentKind;
   notes?: string;
@@ -2931,7 +2963,7 @@ export interface FinanceSupplierPayment {
 
 export interface FinanceSupplierPayable {
   allocatedTotal: string;
-  bgnTotal: string;
+  eurTotal: string;
   createdAt: string;
   currencyCode: string;
   documentDate: string;
@@ -3006,6 +3038,7 @@ export interface FinanceSupplierBankMatchCandidate {
 export interface MatchFinanceSupplierBankTransactionRequest {
   expectedVersion: number;
   mode: 'advance' | 'payable';
+  reviewPossibleDuplicate?: boolean;
   supplierPartnerId?: string;
   supplierPayableId?: string;
 }
@@ -3038,6 +3071,7 @@ export interface CreateFinanceBankStatementRequest {
 export interface MatchFinanceBankTransactionRequest {
   customerDocumentId: string;
   expectedVersion: number;
+  reviewPossibleDuplicate?: boolean;
 }
 
 export interface FinanceBankTransactionMatch {
@@ -3071,6 +3105,7 @@ export interface FinanceBankTransaction {
   supplierMatch?: FinanceSupplierBankTransactionMatch;
   matchStatus: FinanceBankTransactionMatchStatus;
   paymentReference: string;
+  possibleDuplicate?: boolean;
   transactionDate: string;
   valueDate: string;
   version: number;
@@ -3242,7 +3277,7 @@ export interface FinanceCashDailyReport {
 export const financialDocumentTypes = ['invoice', 'proforma', 'credit_note', 'debit_note'] as const;
 export type FinancialDocumentType = (typeof financialDocumentTypes)[number];
 
-export const financialDocumentStatuses = ['draft', 'cancelled'] as const;
+export const financialDocumentStatuses = ['draft', 'issued', 'cancelled'] as const;
 export type FinancialDocumentStatus = (typeof financialDocumentStatuses)[number];
 
 export interface FinancialDocumentPartySnapshot {
@@ -3310,7 +3345,7 @@ export interface FinancialDocumentServiceDraftLineReference {
 }
 
 export interface FinancialDocumentServiceDraftReference {
-  currencyCode: 'BGN';
+  currencyCode: 'EUR';
   customerName: string;
   customerPartnerId: string;
   id: string;
@@ -3394,6 +3429,20 @@ export interface CancelFinancialDocumentRequest {
   expectedVersion: number;
 }
 
+export interface IssueFinancialDocumentRequest {
+  expectedVersion: number;
+}
+
+export interface SendDocumentEmailRequest {
+  expectedVersion: number;
+  recipientEmail: string;
+}
+
+export interface QueuedEmailReceipt {
+  recipientEmail: string;
+  status: 'queued';
+}
+
 export interface FinancialDocumentLine {
   description: string;
   discountPercent: string;
@@ -3418,9 +3467,9 @@ export interface FinancialDocumentVatSummary {
 }
 
 export interface FinancialDocument {
-  bgnGrossTotal: string;
-  bgnNetTotal: string;
-  bgnVatTotal: string;
+  eurGrossTotal: string;
+  eurNetTotal: string;
+  eurVatTotal: string;
   branchName: string;
   businessLocationId: string;
   businessLocationName: string;
@@ -3433,6 +3482,10 @@ export interface FinancialDocument {
   customerPartnerId: string;
   customerSnapshot: FinancialDocumentPartySnapshot;
   documentType: FinancialDocumentType;
+  issuedAt?: string;
+  issuedByName?: string;
+  convertedFromDocumentId?: string;
+  convertedFromDocumentNumber?: string;
   dueDate?: string;
   exchangeRate: string;
   grossTotal: string;
@@ -3962,7 +4015,7 @@ export interface CrmNewCustomerInput {
 
 export interface CrmOpportunityInput {
   description?: string;
-  estimatedRevenueBgn: string;
+  estimatedRevenueEur: string;
   expectedCloseOn?: string;
   ownerAccountId: string;
   probabilityPercent: number;
@@ -4019,7 +4072,7 @@ export interface CrmOpportunity {
   createdAt: string;
   customer: ServiceCustomerReference;
   description?: string;
-  estimatedRevenueBgn: string;
+  estimatedRevenueEur: string;
   expectedCloseOn?: string;
   history: CrmOpportunityHistoryEntry[];
   id: string;
@@ -4032,7 +4085,7 @@ export interface CrmOpportunity {
   title: string;
   updatedAt: string;
   version: number;
-  weightedRevenueBgn: string;
+  weightedRevenueEur: string;
 }
 
 export interface CrmOpportunityPage {
@@ -4041,9 +4094,9 @@ export interface CrmOpportunityPage {
   pageSize: number;
   summary: {
     openCount: number;
-    openRevenueBgn: string;
-    weightedRevenueBgn: string;
-    wonRevenueBgn: string;
+    openRevenueEur: string;
+    weightedRevenueEur: string;
+    wonRevenueEur: string;
   };
   total: number;
   totalPages: number;
@@ -4211,9 +4264,9 @@ export type CrmAnalyticsRevenueDimension = (typeof crmAnalyticsRevenueDimensions
 
 export interface CrmAnalyticsCustomerMetrics {
   activeCustomers: number;
-  averageTransactionValueBgn: string;
+  averageTransactionValueEur: string;
   churnPercent: string;
-  observedLifetimeValueBgn: string;
+  observedLifetimeValueEur: string;
   purchaseFrequency: string;
   retentionPercent: string;
 }
@@ -4227,9 +4280,9 @@ export interface CrmAnalyticsPipelineStageMetric {
 
 export interface CrmAnalyticsPipelineMetrics {
   createdOpportunities: number;
-  estimatedRevenueBgn: string;
+  estimatedRevenueEur: string;
   lostCount: number;
-  openPipelineValueBgn: string;
+  openPipelineValueEur: string;
   stages: CrmAnalyticsPipelineStageMetric[];
   winRatePercent: string;
   wonCount: number;
@@ -4247,7 +4300,7 @@ export interface CrmAnalyticsPreference {
   documentCount: number;
   kind: 'product' | 'service';
   label: string;
-  netRevenueBgn: string;
+  netRevenueEur: string;
   quantity: string;
 }
 
@@ -4256,7 +4309,7 @@ export interface CrmAnalyticsRevenueMetric {
   documentCount: number;
   key: string;
   label: string;
-  netRevenueBgn: string;
+  netRevenueEur: string;
   sharePercent: string;
 }
 
@@ -4282,7 +4335,7 @@ export interface CrmAnalyticsOverview {
   previousDateFrom: string;
   previousDateTo: string;
   revenue: CrmAnalyticsRevenueMetric[];
-  totalNetRevenueBgn: string;
+  totalNetRevenueEur: string;
   timezone: string;
 }
 
@@ -4368,6 +4421,7 @@ export interface ServiceWorkTimeEntryInput {
 
 export interface ServicePartUsageInput {
   batchNumber?: string;
+  customerUnitPriceEur: string;
   productId: string;
   quantity: string;
   serialNumbers?: string[];
@@ -4375,13 +4429,15 @@ export interface ServicePartUsageInput {
 
 export interface CompleteServiceWorkOrderRequest {
   completionNotes: string;
+  customerLaborChargeEur: string;
+  customerTransportChargeEur: string;
   expectedVersion: number;
-  laborCostBgn: string;
+  laborCostEur: string;
   parts: ServicePartUsageInput[];
   signatureImageDataUrl: string;
   signerName: string;
   timeEntries: ServiceWorkTimeEntryInput[];
-  transportCostBgn: string;
+  transportCostEur: string;
 }
 
 export interface CancelServiceRequest {
@@ -4442,14 +4498,16 @@ export interface ServiceWorkOrderTimeEntry {
 
 export interface ServiceWorkOrderPartUsage {
   batchNumber?: string;
+  customerTotalChargeEur: string;
+  customerUnitPriceEur: string;
   id: string;
   productId: string;
   productName: string;
   quantity: string;
   serialNumbers: string[];
   stockIssueId: string;
-  totalCostBgn: string;
-  unitCostBgn: string;
+  totalCostEur: string;
+  unitCostEur: string;
   warehouseId: string;
   warehouseName: string;
 }
@@ -4480,6 +4538,10 @@ export interface ServiceWorkOrder {
   assignedTechnician?: ServiceTechnicianReference;
   completedAt?: string;
   completionNotes?: string;
+  customerChargeRecorded: boolean;
+  customerLaborChargeEur: string;
+  customerPartsChargeEur: string;
+  customerTransportChargeEur: string;
   createdAt: string;
   customerEquipmentId: string;
   customerLocationId: string;
@@ -4492,11 +4554,11 @@ export interface ServiceWorkOrder {
   history: ServiceWorkOrderHistoryEntry[];
   id: string;
   isOverdue: boolean;
-  laborCostBgn: string;
+  laborCostEur: string;
   laborMinutes: number;
   number: string;
   parts: ServiceWorkOrderPartUsage[];
-  partsCostBgn: string;
+  partsCostEur: string;
   photos: ServiceWorkOrderPhoto[];
   priority: ServicePriority;
   problemDescription: string;
@@ -4511,8 +4573,9 @@ export interface ServiceWorkOrder {
   status: ServiceWorkOrderStatus;
   subscriptionContractId?: string;
   timeEntries: ServiceWorkOrderTimeEntry[];
-  totalCostBgn: string;
-  transportCostBgn: string;
+  totalCostEur: string;
+  totalCustomerChargeEur: string;
+  transportCostEur: string;
   updatedAt: string;
   version: number;
 }
@@ -4956,8 +5019,8 @@ export interface CreateWarehouseRequest {
 
 export interface StockBalance {
   availableQuantity: string;
-  averageUnitCostBgn: string;
-  inventoryValueBgn: string;
+  averageUnitCostEur: string;
+  inventoryValueEur: string;
   productId: string;
   quantity: string;
   reservedQuantity: string;
@@ -4972,7 +5035,7 @@ export interface ReceiveStockRequest {
   referenceId: string;
   serialNumbers?: string[];
   supplierPartnerId?: string;
-  unitCostBgn?: string;
+  unitCostEur?: string;
   warehouseId: string;
 }
 
@@ -4982,8 +5045,8 @@ export interface StockReceipt {
   productId: string;
   quantity: string;
   serialItemIds: string[];
-  totalCostBgn: string;
-  unitCostBgn: string;
+  totalCostEur: string;
+  unitCostEur: string;
   warehouseId: string;
 }
 
@@ -5011,8 +5074,8 @@ export interface StockIssue {
   reason: StockIssueReason;
   reservationId?: string;
   serialItemIds: string[];
-  totalCostBgn: string;
-  unitCostBgn: string;
+  totalCostEur: string;
+  unitCostEur: string;
   warehouseId: string;
 }
 
@@ -5037,8 +5100,8 @@ export interface StockReturn {
   productId: string;
   quantity: string;
   serialItemIds: string[];
-  totalCostBgn: string;
-  unitCostBgn: string;
+  totalCostEur: string;
+  unitCostEur: string;
 }
 
 export interface TransferStockRequest {
@@ -5061,8 +5124,8 @@ export interface StockTransfer {
   serialItemIds: string[];
   toMovementId: string;
   toWarehouseId: string;
-  totalCostBgn: string;
-  unitCostBgn: string;
+  totalCostEur: string;
+  unitCostEur: string;
 }
 
 export const stockMovementTypes = [
@@ -5087,8 +5150,8 @@ export interface StockMovementJournalItem {
   referenceLabel: string;
   referenceType: string;
   sourceHref?: string;
-  totalCostBgn: string;
-  unitCostBgn: string;
+  totalCostEur: string;
+  unitCostEur: string;
   warehouseId: string;
   warehouseName: string;
 }
@@ -5230,7 +5293,7 @@ export interface SerialTraceEvent {
   supplier?: SerialTraceParty;
   technician?: SerialTraceParty;
   toWarehouse?: SerialTraceParty;
-  unitCostBgn?: string;
+  unitCostEur?: string;
   warehouse?: SerialTraceParty;
 }
 export interface SerialTraceability {

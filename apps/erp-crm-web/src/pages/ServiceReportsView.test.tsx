@@ -44,7 +44,7 @@ beforeEach(() => {
       completedRequests: 0,
       laborMinutes: 0,
       openRequests: 0,
-      totalCostBgn: '0',
+      totalCostEur: '0',
       totalRequests: 0,
     },
   });

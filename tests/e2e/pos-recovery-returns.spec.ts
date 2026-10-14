@@ -40,11 +40,11 @@ async function number(page: Page) {
     .locator('dd')
     .innerText();
 }
-async function closeShift(page: Page, amount = '100') {
+async function closeShift(page: Page, amount = '100.00') {
   await navFor(page).getByRole('link', { name: 'Shifts', exact: true }).click();
   await expect(
     page.locator('.pos-current-shift dl > div').filter({ hasText: 'Expected cash' }).locator('dd'),
-  ).toHaveText(`${amount}.00 BGN`);
+  ).toHaveText(`${amount} EUR`);
   await page.getByLabel('Counted cash', { exact: false }).fill(amount);
   await page.getByRole('button', { name: 'Close cashier shift', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Open cashier shift', exact: true })).toBeVisible();
@@ -91,7 +91,7 @@ test('card-paid bundle with a fixed discount restores earned and redeemed loyalt
   await basket.getByRole('button', { name: /^Manual discount/ }).click();
   const dialog = page.getByRole('dialog');
   await choose(page, dialog, 'Discount type', 'Fixed amount');
-  await dialog.getByRole('spinbutton', { name: 'Amount (BGN)', exact: true }).fill('2');
+  await dialog.getByRole('spinbutton', { name: 'Amount (EUR)', exact: true }).fill('1.02');
   await dialog
     .getByRole('textbox', { name: 'Reason', exact: true })
     .fill('Approved print care discount');
@@ -102,7 +102,7 @@ test('card-paid bundle with a fixed discount restores earned and redeemed loyalt
   await basket.getByLabel('Points to use', { exact: true }).fill('100');
   await basket.getByRole('button', { name: 'Bank card', exact: true }).click();
   const complete = basket.getByRole('button', { name: /^Complete sale/ });
-  await expect(complete).toContainText('83.40 BGN');
+  await expect(complete).toContainText('42.65 EUR');
   await complete.click();
   await expect(dialog).toContainText('Sale complete');
   const saleNumber = await number(page);
@@ -111,7 +111,7 @@ test('card-paid bundle with a fixed discount restores earned and redeemed loyalt
       .locator('.pos-receipt-summary > div')
       .filter({ has: page.getByText('Bank card', { exact: true }) })
       .locator('dd'),
-  ).toHaveText('83.40 BGN');
+  ).toHaveText('42.65 EUR');
   await beginReturn(page, saleNumber);
   await dialog.getByRole('checkbox', { name: /Demo Receipt Roll 80 mm/ }).check();
   await dialog.getByRole('checkbox', { name: /Demo Thermal Print Head/ }).check();
@@ -121,7 +121,7 @@ test('card-paid bundle with a fixed discount restores earned and redeemed loyalt
   await page.screenshot({ path: test.info().outputPath('discounted-return.png') });
   await dialog.getByRole('button', { name: /^Complete return/ }).click();
   await expect(dialog).toContainText('Return complete');
-  await expect(dialog).toContainText('83.40 BGN');
+  await expect(dialog).toContainText('42.65 EUR');
   await dialog.getByRole('button', { name: 'Done', exact: true }).click();
   await navFor(page).getByRole('link', { name: 'Sell', exact: true }).click();
   await page.reload();
@@ -132,7 +132,7 @@ test('card-paid bundle with a fixed discount restores earned and redeemed loyalt
   const entries = dialog.locator('.pos-loyalty-history article');
   await expect(entries.filter({ hasText: saleNumber })).toHaveCount(2);
   await expect(entries.locator('.is-credit').filter({ hasText: /^\+100/ })).toHaveCount(1);
-  await expect(entries.locator('.is-debit').filter({ hasText: /^-83/ })).toHaveCount(1);
+  await expect(entries.locator('.is-debit').filter({ hasText: /^-85/ })).toHaveCount(1);
   await dialog.getByRole('button', { name: 'Close rewards', exact: true }).click();
   await closeShift(page);
 });
@@ -228,5 +228,5 @@ test('lost sale acknowledgement survives reload and recovers one committed recei
   await expect(
     page.locator('.pos-sale-history article').filter({ hasText: committed!.saleNumber }),
   ).toHaveCount(1);
-  await closeShift(page, '160');
+  await closeShift(page, '130.68');
 });

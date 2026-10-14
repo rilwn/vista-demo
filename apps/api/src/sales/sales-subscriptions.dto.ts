@@ -37,7 +37,7 @@ export class CreateServiceSubscriptionDto implements CreateServiceSubscriptionRe
   @Max(120)
   billingFrequencyMonths!: number;
 
-  @ApiProperty({ example: 'BGN', type: String })
+  @ApiProperty({ example: 'EUR', type: String })
   @IsString()
   @Matches(/^[A-Za-z]{3}$/u)
   currencyCode!: string;

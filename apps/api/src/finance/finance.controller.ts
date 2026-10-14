@@ -35,6 +35,7 @@ import {
   FinanceCustomerDocumentSearchQueryDto,
   FinanceReferenceDataDto,
   FinanceSummaryDto,
+  ReverseFinancePaymentDto,
 } from './finance.dto.js';
 import { FinanceService } from './finance.service.js';
 
@@ -117,6 +118,31 @@ export class FinanceController {
     @Req() request: AuthenticatedRequest,
   ): Promise<FinanceCustomerDocumentDto> {
     return this.finance.recordPayment(id, input, key, request.authentication, metadata(request));
+  }
+
+  @Post('documents/:id/payments/:paymentId/reverse')
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissions({ action: 'approve', module: 'erp.finance' })
+  @ApiBody({ type: ReverseFinancePaymentDto })
+  @ApiOkResponse({ type: FinanceCustomerDocumentDto })
+  @ApiHeader({ name: 'Idempotency-Key', required: true })
+  @ApiParam({ format: 'uuid', name: 'id' })
+  @ApiParam({ format: 'uuid', name: 'paymentId' })
+  reversePayment(
+    @Param('id') id: string,
+    @Param('paymentId') paymentId: string,
+    @Body() input: ReverseFinancePaymentDto,
+    @Headers('idempotency-key') key: string | undefined,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<FinanceCustomerDocumentDto> {
+    return this.finance.reversePayment(
+      id,
+      paymentId,
+      input,
+      key,
+      request.authentication,
+      metadata(request),
+    );
   }
 
   @Post('documents/:id/advance-allocations')

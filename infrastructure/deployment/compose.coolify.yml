@@ -106,6 +106,7 @@ services:
       SMTP_HOST: mailpit
       SMTP_PORT: '1025'
       SMTP_FROM: staging@vista.local
+      SMTP_TLS_MODE: none
       DEV_FIXTURES_ENABLED: 'false'
     depends_on:
       postgres: { condition: service_healthy }

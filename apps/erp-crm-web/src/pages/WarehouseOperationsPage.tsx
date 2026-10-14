@@ -381,7 +381,7 @@ function StockView({
     (item) => warehouseId === 'all' || item.warehouseId === warehouseId,
   );
   const totalValue = visibleBalances.reduce(
-    (sum, item) => sum + displayedBgnMinorUnits(item.inventoryValueBgn),
+    (sum, item) => sum + displayedEurMinorUnits(item.inventoryValueEur),
     0n,
   );
   const reserved = visibleBalances.reduce((sum, item) => sum + Number(item.reservedQuantity), 0);
@@ -395,7 +395,7 @@ function StockView({
           </Button>
         ) : undefined
       }
-      description="Monitor physical, reserved, and available inventory with weighted-average BGN valuation and reservation-aware replenishment."
+      description="Monitor physical, reserved, and available inventory with weighted-average EUR valuation and reservation-aware replenishment."
       eyebrow="ERP · Warehouse"
       title="Stock overview"
     >
@@ -438,8 +438,8 @@ function StockView({
       <section className="inventory-kpis" aria-label="Inventory summary">
         <Metric
           label="Inventory value"
-          value={moneyFromBgnMinorUnits(totalValue)}
-          detail="Weighted-average value in BGN"
+          value={moneyFromEurMinorUnits(totalValue)}
+          detail="Weighted-average value in EUR"
         />
         <Metric
           label="Reserved"
@@ -492,8 +492,8 @@ function StockView({
                 <span>{quantity(balance.quantity)}</span>
                 <span>{quantity(balance.reservedQuantity)}</span>
                 <strong>{quantity(balance.availableQuantity)}</strong>
-                <span>{money(balance.averageUnitCostBgn)}</span>
-                <strong>{money(balance.inventoryValueBgn)}</strong>
+                <span>{money(balance.averageUnitCostEur)}</span>
+                <strong>{money(balance.inventoryValueEur)}</strong>
               </div>
             ))}
           </div>
@@ -753,8 +753,8 @@ function ReturnMovementForm({
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<{
     id: string;
-    totalCostBgn: string;
-    unitCostBgn: string;
+    totalCostEur: string;
+    unitCostEur: string;
   } | null>(null);
   const attempt = useStableAttempt();
 
@@ -856,8 +856,8 @@ function ReturnMovementForm({
         ) : null}
         {result ? (
           <InlineAlert tone="success" title="Return posted">
-            Return posted; inventory restored at {money(result.unitCostBgn)} per unit, total value{' '}
-            {money(result.totalCostBgn)}.{' '}
+            Return posted; inventory restored at {money(result.unitCostEur)} per unit, total value{' '}
+            {money(result.totalCostEur)}.{' '}
             <TechnicalIdentifier kind="stockMovement" value={result.id} />
           </InlineAlert>
         ) : null}
@@ -911,13 +911,13 @@ function MovementForm({
   const [serialText, setSerialText] = useState('');
   const [batchNumber, setBatchNumber] = useState('');
   const [expiresAt, setExpiresAt] = useState('');
-  const [unitCostBgn, setUnitCostBgn] = useState('0');
+  const [unitCostEur, setUnitCostEur] = useState('0');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<{
     id: string;
-    totalCostBgn: string;
-    unitCostBgn: string;
+    totalCostEur: string;
+    unitCostEur: string;
   } | null>(null);
   const attempt = useStableAttempt();
   const product = products.find((item) => item.id === productId);
@@ -933,7 +933,7 @@ function MovementForm({
           productId,
           quantity: quantityValue,
           referenceId: referenceId.trim(),
-          unitCostBgn,
+          unitCostEur,
           warehouseId,
           ...tracking,
           ...(expiresAt && batchNumber ? { expiresAt } : {}),
@@ -1034,13 +1034,13 @@ function MovementForm({
           {mode === 'receipt' ? (
             <TextField
               id="movement-cost"
-              label="Unit cost (BGN)"
+              label="Unit cost (EUR)"
               min="0"
-              onChange={(event) => setUnitCostBgn(event.target.value)}
+              onChange={(event) => setUnitCostEur(event.target.value)}
               required
               step="0.0001"
               type="number"
-              value={unitCostBgn}
+              value={unitCostEur}
             />
           ) : null}
           {mode === 'issue' ? (
@@ -1094,8 +1094,8 @@ function MovementForm({
         ) : null}
         {result ? (
           <InlineAlert tone="success" title="Movement posted">
-            Movement posted at {money(result.unitCostBgn)} per unit; total value{' '}
-            {money(result.totalCostBgn)}.{' '}
+            Movement posted at {money(result.unitCostEur)} per unit; total value{' '}
+            {money(result.totalCostEur)}.{' '}
             <TechnicalIdentifier kind="stockMovement" value={result.id} />
           </InlineAlert>
         ) : null}
@@ -1311,8 +1311,8 @@ function StockMovementJournal({
                       {formatMovementQuantity(item.quantity, dateLocale)}
                     </td>
                     <td className="is-numeric">
-                      <strong>{money(item.totalCostBgn)}</strong>
-                      <small>{money(item.unitCostBgn)} / unit</small>
+                      <strong>{money(item.totalCostEur)}</strong>
+                      <small>{money(item.unitCostEur)} / unit</small>
                     </td>
                     <td>{item.actorDisplayName}</td>
                   </tr>
@@ -2126,17 +2126,17 @@ function quantity(value: string | number) {
   return formatOperationsNumber(Number(value), { maximumFractionDigits: 4 });
 }
 function money(value: string | number) {
-  return formatOperationsCurrency(value, 'BGN');
+  return formatOperationsCurrency(value, 'EUR');
 }
-function displayedBgnMinorUnits(value: string) {
+function displayedEurMinorUnits(value: string) {
   const match = /^(-?)(\d+)(?:\.(\d+))?$/.exec(value);
   if (!match) return 0n;
   let minor = BigInt(match[2]!) * 100n + BigInt((match[3] ?? '').padEnd(2, '0').slice(0, 2));
   if ((match[3] ?? '')[2] && (match[3] ?? '')[2]! >= '5') minor += 1n;
   return match[1] === '-' ? -minor : minor;
 }
-function moneyFromBgnMinorUnits(value: bigint) {
-  return formatOperationsMinorCurrency(value, 'BGN');
+function moneyFromEurMinorUnits(value: bigint) {
+  return formatOperationsMinorCurrency(value, 'EUR');
 }
 function formatMovementDate(value: string, locale: string) {
   const date = new Date(value);

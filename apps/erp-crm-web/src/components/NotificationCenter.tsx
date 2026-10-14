@@ -192,7 +192,7 @@ function notificationDetail(
   ) {
     const number = value(notification.payload, 'number');
     const counterparty = value(notification.payload, 'counterpartyName');
-    const amount = money(value(notification.payload, 'outstandingBgn'));
+    const amount = money(value(notification.payload, 'outstandingEur'));
     const dueDate = dateValue(notification.payload, 'dueDate', dateLocale);
     return t('notifications.paymentDetail', { amount, counterparty, date: dueDate, number });
   }
@@ -256,8 +256,8 @@ function dateValue(payload: Record<string, unknown>, key: string, locale: string
 
 function money(candidate: string): string {
   return /^-?\d+(?:\.\d+)?$/u.test(candidate)
-    ? formatOperationsCurrency(candidate, 'BGN')
-    : 'BGN —';
+    ? formatOperationsCurrency(candidate, 'EUR')
+    : 'EUR —';
 }
 
 function value(payload: Record<string, unknown>, key: string): string {

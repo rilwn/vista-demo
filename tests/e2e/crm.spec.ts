@@ -101,7 +101,7 @@ test('qualified lead reuses a customer, links a quotation and retains its won op
   await dialog
     .getByLabel('Opportunity name', { exact: true })
     .fill('Browser CRM equipment opportunity');
-  await dialog.getByLabel('Estimated value (BGN)', { exact: true }).fill('600');
+  await dialog.getByLabel('Estimated value (EUR)', { exact: true }).fill('600');
   await dialog.getByRole('button', { name: 'Convert lead', exact: true }).click();
   await expect(dialog).toHaveCount(0);
   await page.getByRole('button', { name: /^Sales pipeline/ }).click();
@@ -278,7 +278,7 @@ test('new-customer conversion and a Lost outcome recover safely and remain linke
   await newQualifiedLead(page, 'Browser North Star Retail');
   const dialog = page.getByRole('dialog');
   await dialog.getByLabel('Opportunity name', { exact: true }).fill('North Star equipment enquiry');
-  await dialog.getByLabel('Estimated value (BGN)', { exact: true }).fill('600');
+  await dialog.getByLabel('Estimated value (EUR)', { exact: true }).fill('600');
   await page.setViewportSize({ width: 390, height: 844 });
   await dialog.getByRole('button', { name: 'Convert lead', exact: true }).scrollIntoViewIfNeeded();
   expect(await dialog.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);

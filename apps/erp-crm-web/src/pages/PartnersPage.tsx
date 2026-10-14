@@ -1107,7 +1107,7 @@ function ProfileRecordForm({
   const [saving, setSaving] = useState(false);
   const [values, setValues] = useState<Record<string, string>>({
     countryCode: 'BG',
-    currencyCode: 'BGN',
+    currencyCode: 'EUR',
     type: 'registered',
   });
   const lastAttempt = useRef<{ fingerprint: string; key: string } | null>(null);
@@ -1307,7 +1307,7 @@ function profileInput(kind: ProfileRecordKind, values: Record<string, string>) {
     };
   }
   return {
-    currencyCode: values['currencyCode'] ?? 'BGN',
+    currencyCode: values['currencyCode'] ?? 'EUR',
     iban: values['iban'] ?? '',
     ...withOptional('bankName'),
     ...withOptional('bic'),

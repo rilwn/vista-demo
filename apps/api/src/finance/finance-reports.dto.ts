@@ -92,8 +92,8 @@ class FinanceAgingReportItemDto implements FinanceAgingReportItem {
   @ApiProperty({ format: 'date', type: String }) dueDate!: string;
   @ApiProperty({ format: 'uuid', type: String }) id!: string;
   @ApiProperty({ type: String }) number!: string;
-  @ApiProperty({ type: String }) originalBgnTotal!: string;
-  @ApiProperty({ type: String }) outstandingBgnTotal!: string;
+  @ApiProperty({ type: String }) originalEurTotal!: string;
+  @ApiProperty({ type: String }) outstandingEurTotal!: string;
   @ApiProperty({ format: 'uuid', type: String }) partnerId!: string;
   @ApiProperty({ type: String }) partnerName!: string;
   @ApiProperty({ enum: ['unpaid', 'partially_paid', 'paid', 'overdue'] })
@@ -122,19 +122,19 @@ export class FinanceAgingReportDto implements FinanceAgingReport {
 }
 
 class FinanceTurnoverReportItemDto implements FinanceTurnoverReportItem {
-  @ApiProperty({ type: String }) allocatedBgnTotal!: string;
+  @ApiProperty({ type: String }) allocatedEurTotal!: string;
   @ApiProperty({ minimum: 0, type: Number }) documentCount!: number;
-  @ApiProperty({ type: String }) grossBgnTotal!: string;
-  @ApiProperty({ type: String }) outstandingBgnTotal!: string;
+  @ApiProperty({ type: String }) grossEurTotal!: string;
+  @ApiProperty({ type: String }) outstandingEurTotal!: string;
   @ApiProperty({ format: 'uuid', type: String }) partnerId!: string;
   @ApiProperty({ type: String }) partnerName!: string;
 }
 
 class FinanceTurnoverTotalsDto implements FinanceTurnoverTotals {
-  @ApiProperty({ type: String }) allocatedBgnTotal!: string;
+  @ApiProperty({ type: String }) allocatedEurTotal!: string;
   @ApiProperty({ minimum: 0, type: Number }) documentCount!: number;
-  @ApiProperty({ type: String }) grossBgnTotal!: string;
-  @ApiProperty({ type: String }) outstandingBgnTotal!: string;
+  @ApiProperty({ type: String }) grossEurTotal!: string;
+  @ApiProperty({ type: String }) outstandingEurTotal!: string;
 }
 
 export class FinanceTurnoverReportDto implements FinanceTurnoverReport {
@@ -155,9 +155,9 @@ class FinanceJournalReportItemDto implements FinanceJournalReportItem {
   @ApiProperty({ enum: ['invoice', 'proforma', 'credit_note', 'debit_note', 'supplier_invoice'] })
   documentType!: FinanceJournalReportItem['documentType'];
   @ApiPropertyOptional({ type: String }) exchangeRate?: string;
-  @ApiProperty({ type: String }) grossBgnTotal!: string;
+  @ApiProperty({ type: String }) grossEurTotal!: string;
   @ApiProperty({ format: 'uuid', type: String }) id!: string;
-  @ApiProperty({ type: String }) netBgnTotal!: string;
+  @ApiProperty({ type: String }) netEurTotal!: string;
   @ApiProperty({ type: String }) number!: string;
   @ApiProperty({ type: String }) partnerName!: string;
   @ApiPropertyOptional({ type: String }) partnerVatNumber?: string;
@@ -166,15 +166,15 @@ class FinanceJournalReportItemDto implements FinanceJournalReportItem {
   status!: FinanceJournalReportItem['status'];
   @ApiProperty({ type: Boolean }) taxBreakdownComplete!: boolean;
   @ApiPropertyOptional({ format: 'date', type: String }) taxEventDate?: string;
-  @ApiProperty({ type: String }) vatBgnTotal!: string;
+  @ApiProperty({ type: String }) vatEurTotal!: string;
 }
 
 class FinanceJournalTotalsDto implements FinanceJournalTotals {
   @ApiProperty({ minimum: 0, type: Number }) documentCount!: number;
-  @ApiProperty({ type: String }) grossBgnTotal!: string;
+  @ApiProperty({ type: String }) grossEurTotal!: string;
   @ApiProperty({ minimum: 0, type: Number }) incompleteTaxDocuments!: number;
-  @ApiProperty({ type: String }) netBgnTotal!: string;
-  @ApiProperty({ type: String }) vatBgnTotal!: string;
+  @ApiProperty({ type: String }) netEurTotal!: string;
+  @ApiProperty({ type: String }) vatEurTotal!: string;
 }
 
 export class FinanceJournalReportDto implements FinanceJournalReport {
@@ -192,8 +192,8 @@ export class FinanceJournalReportDto implements FinanceJournalReport {
 class FinanceVatReviewItemDto implements FinanceVatReviewItem {
   @ApiProperty({ enum: ['input', 'output'] }) direction!: FinanceVatReviewItem['direction'];
   @ApiProperty({ minimum: 0, type: Number }) documentCount!: number;
-  @ApiProperty({ type: String }) netBgnTotal!: string;
-  @ApiProperty({ type: String }) vatBgnTotal!: string;
+  @ApiProperty({ type: String }) netEurTotal!: string;
+  @ApiProperty({ type: String }) vatEurTotal!: string;
   @ApiProperty({ type: String }) vatRate!: string;
   @ApiProperty({ enum: vatTreatments }) vatTreatment!: FinanceVatReviewItem['vatTreatment'];
 }
@@ -204,7 +204,7 @@ export class FinanceVatReviewReportDto implements FinanceVatReviewReport {
   @ApiProperty({ type: [String] }) incompletePurchaseDocumentNumbers!: string[];
   @ApiProperty({ minimum: 0, type: Number }) incompletePurchaseDocuments!: number;
   @ApiProperty({ type: [FinanceVatReviewItemDto] }) items!: FinanceVatReviewItem[];
-  @ApiProperty({ type: String }) recordedDifferenceBgn!: string;
-  @ApiProperty({ type: String }) recordedInputVatBgn!: string;
-  @ApiProperty({ type: String }) recordedOutputVatBgn!: string;
+  @ApiProperty({ type: String }) recordedDifferenceEur!: string;
+  @ApiProperty({ type: String }) recordedInputVatEur!: string;
+  @ApiProperty({ type: String }) recordedOutputVatEur!: string;
 }

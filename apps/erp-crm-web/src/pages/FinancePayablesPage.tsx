@@ -108,7 +108,7 @@ export function FinancePayablesPage() {
       <FinanceTabs />
 
       <InlineAlert tone="info">
-        This subledger uses BGN supplier-invoice evidence. Legal posting, deductible VAT, and
+        This subledger uses EUR supplier-invoice evidence. Legal posting, deductible VAT, and
         foreign-currency conversion remain controlled by the approved accounting configuration. Cash
         disbursements must still be issued through Cash operations; direct voucher allocation is not
         enabled here.
@@ -445,7 +445,7 @@ function CreatePayableDrawer({
         <div className="supplier-finance-drawer-empty">
           <Icon name="finance" size={24} />
           <h3>No supplier invoices are ready</h3>
-          <p>Record a BGN supplier invoice in Procurement before adding a payable.</p>
+          <p>Record a EUR supplier invoice in Procurement before adding a payable.</p>
           <Link
             className="vista-button vista-button--secondary"
             to="/modules/erp.procurement/supplier-invoices"
@@ -1338,7 +1338,7 @@ function useSupplierFinance(token: string) {
 }
 
 function money(value: string) {
-  return formatOperationsCurrency(value, 'BGN', {
+  return formatOperationsCurrency(value, 'EUR', {
     maximumFractionDigits: 2,
     minimumFractionDigits: 2,
   });

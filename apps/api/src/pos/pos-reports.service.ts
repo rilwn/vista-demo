@@ -19,23 +19,23 @@ import { DatabaseService } from '../database/database.service.js';
 import type { FinanceReportExportData } from '../finance/finance-reports.service.js';
 
 interface TotalRow {
-  gross_returns_bgn: string;
-  gross_sales_bgn: string;
+  gross_returns_eur: string;
+  gross_sales_eur: string;
   item_quantity_returned: string;
   item_quantity_sold: string;
-  net_returns_bgn: string;
-  net_sales_bgn: string;
+  net_returns_eur: string;
+  net_sales_eur: string;
   return_count: string;
   sale_count: string;
-  vat_returns_bgn: string;
-  vat_sales_bgn: string;
+  vat_returns_eur: string;
+  vat_sales_eur: string;
 }
 
 interface CashierRow {
-  gross_returns_bgn: string;
-  gross_sales_bgn: string;
+  gross_returns_eur: string;
+  gross_sales_eur: string;
   name: string;
-  net_revenue_bgn: string;
+  net_revenue_eur: string;
   operator_code: string;
   operator_id: string;
   return_count: string;
@@ -44,9 +44,9 @@ interface CashierRow {
 
 interface ProductRow {
   category_name: string;
-  gross_returns_bgn: string;
-  gross_sales_bgn: string;
-  net_revenue_bgn: string;
+  gross_returns_eur: string;
+  gross_sales_eur: string;
+  net_revenue_eur: string;
   product_code: string;
   product_id: string;
   product_name: string;
@@ -57,26 +57,26 @@ interface ProductRow {
 interface CategoryRow {
   category_id: string;
   category_name: string;
-  gross_returns_bgn: string;
-  gross_sales_bgn: string;
-  net_revenue_bgn: string;
+  gross_returns_eur: string;
+  gross_sales_eur: string;
+  net_revenue_eur: string;
   quantity_returned: string;
   quantity_sold: string;
 }
 
 interface PaymentRow {
-  collected_bgn: string;
+  collected_eur: string;
   method: PosPaymentReportRow['method'];
-  net_bgn: string;
-  refunded_bgn: string;
+  net_eur: string;
+  refunded_eur: string;
 }
 
 interface LocationRow {
   business_location_id: string;
-  gross_returns_bgn: string;
-  gross_sales_bgn: string;
+  gross_returns_eur: string;
+  gross_sales_eur: string;
   location_name: string;
-  net_revenue_bgn: string;
+  net_revenue_eur: string;
   return_count: string;
   sale_count: string;
 }
@@ -85,20 +85,20 @@ interface ShiftReportRow {
   cash_register_code: string;
   cash_register_id: string;
   cash_register_name: string;
-  cash_refunds_bgn: string;
-  cash_sales_bgn: string;
+  cash_refunds_eur: string;
+  cash_sales_eur: string;
   closed_at: Date | string | null;
-  closing_cash_bgn: string | null;
-  difference_bgn: string | null;
-  expected_cash_bgn: string;
+  closing_cash_eur: string | null;
+  difference_eur: string | null;
+  expected_cash_eur: string;
   fiscal_mode: PosShiftReportRow['fiscalMode'];
-  gross_returns_bgn: string;
-  gross_sales_bgn: string;
+  gross_returns_eur: string;
+  gross_sales_eur: string;
   id: string;
   location_name: string;
-  net_revenue_bgn: string;
+  net_revenue_eur: string;
   opened_at: Date | string;
-  opening_cash_bgn: string;
+  opening_cash_eur: string;
   operator_code: string;
   operator_id: string;
   operator_name: string;
@@ -219,18 +219,18 @@ export class PosReportsService {
       shifts: shifts.rows.map(mapShift),
       timezone: this.environment.BUSINESS_TIMEZONE,
       totals: {
-        averageSaleBgn: saleCount
-          ? (Number(total.gross_sales_bgn) / saleCount).toFixed(4)
+        averageSaleEur: saleCount
+          ? (Number(total.gross_sales_eur) / saleCount).toFixed(4)
           : '0.0000',
-        grossReturnsBgn: total.gross_returns_bgn,
-        grossSalesBgn: total.gross_sales_bgn,
+        grossReturnsEur: total.gross_returns_eur,
+        grossSalesEur: total.gross_sales_eur,
         itemQuantityReturned: total.item_quantity_returned,
         itemQuantitySold: total.item_quantity_sold,
-        netRevenueBgn: subtract(total.gross_sales_bgn, total.gross_returns_bgn),
-        netSalesBgn: subtract(total.net_sales_bgn, total.net_returns_bgn),
+        netRevenueEur: subtract(total.gross_sales_eur, total.gross_returns_eur),
+        netSalesEur: subtract(total.net_sales_eur, total.net_returns_eur),
         returnCount: Number(total.return_count),
         saleCount,
-        vatSalesBgn: subtract(total.vat_sales_bgn, total.vat_returns_bgn),
+        vatSalesEur: subtract(total.vat_sales_eur, total.vat_returns_eur),
       },
     };
   }
@@ -272,7 +272,7 @@ export class PosReportsService {
               ]
             : []),
           `Times use ${this.environment.BUSINESS_TIMEZONE}`,
-          'Currency: BGN',
+          'Currency: EUR',
           fiscalCriterion(shift.fiscalMode),
         ],
         generatedAt: new Date().toISOString(),
@@ -304,9 +304,9 @@ export class PosReportsService {
         cashierColumns,
         report.cashiers.map((row) => ({
           cashier: row.name,
-          grossReturnsBgn: row.grossReturnsBgn,
-          grossSalesBgn: row.grossSalesBgn,
-          netRevenueBgn: row.netRevenueBgn,
+          grossReturnsEur: row.grossReturnsEur,
+          grossSalesEur: row.grossSalesEur,
+          netRevenueEur: row.netRevenueEur,
           operatorCode: row.operatorCode,
           returnCount: row.returnCount,
           saleCount: row.saleCount,
@@ -318,9 +318,9 @@ export class PosReportsService {
         productColumns,
         report.products.map((row) => ({
           category: row.categoryName,
-          grossReturnsBgn: row.grossReturnsBgn,
-          grossSalesBgn: row.grossSalesBgn,
-          netRevenueBgn: row.netRevenueBgn,
+          grossReturnsEur: row.grossReturnsEur,
+          grossSalesEur: row.grossSalesEur,
+          netRevenueEur: row.netRevenueEur,
           productCode: row.productCode,
           productName: row.productName,
           quantityReturned: row.quantityReturned,
@@ -333,9 +333,9 @@ export class PosReportsService {
         categoryColumns,
         report.categories.map((row) => ({
           category: row.categoryName,
-          grossReturnsBgn: row.grossReturnsBgn,
-          grossSalesBgn: row.grossSalesBgn,
-          netRevenueBgn: row.netRevenueBgn,
+          grossReturnsEur: row.grossReturnsEur,
+          grossSalesEur: row.grossSalesEur,
+          netRevenueEur: row.netRevenueEur,
           quantityReturned: row.quantityReturned,
           quantitySold: row.quantitySold,
         })),
@@ -345,10 +345,10 @@ export class PosReportsService {
         'POS payment methods',
         paymentColumns,
         report.payments.map((row) => ({
-          collectedBgn: row.collectedBgn,
+          collectedEur: row.collectedEur,
           method: paymentLabel(row.method),
-          netBgn: row.netBgn,
-          refundedBgn: row.refundedBgn,
+          netEur: row.netEur,
+          refundedEur: row.refundedEur,
         })),
       );
     const comparison = definitionKey === 'pos.location-comparison';
@@ -356,11 +356,11 @@ export class PosReportsService {
       comparison ? 'POS location comparison' : 'POS location sales',
       comparison ? locationComparisonColumns : locationColumns,
       report.locations.map((row) => ({
-        averageSaleBgn: row.averageSaleBgn,
-        grossReturnsBgn: row.grossReturnsBgn,
-        grossSalesBgn: row.grossSalesBgn,
+        averageSaleEur: row.averageSaleEur,
+        grossReturnsEur: row.grossReturnsEur,
+        grossSalesEur: row.grossSalesEur,
         location: row.locationName,
-        netRevenueBgn: row.netRevenueBgn,
+        netRevenueEur: row.netRevenueEur,
         returnCount: row.returnCount,
         revenueSharePercent: row.revenueSharePercent,
         saleCount: row.saleCount,
@@ -398,7 +398,7 @@ export class PosReportsService {
     return [
       `Period: ${filters.dateFrom} to ${filters.dateTo}`,
       `Dates use ${this.environment.BUSINESS_TIMEZONE}`,
-      'Currency: BGN',
+      'Currency: EUR',
       ...(location ? [`Location: ${location.name}`] : []),
       ...(register ? [`Register: ${register.name}`] : []),
       ...(operator ? [`Cashier: ${operator.name}`] : []),
@@ -415,9 +415,9 @@ const transactionPeriod = (alias: string) => `
 const totalsSql = `
   WITH sale_values AS (
     SELECT count(*)::text AS sale_count,
-      COALESCE(sum(sale.net_total), 0)::text AS net_sales_bgn,
-      COALESCE(sum(sale.vat_total), 0)::text AS vat_sales_bgn,
-      COALESCE(sum(sale.gross_total), 0)::text AS gross_sales_bgn
+      COALESCE(sum(sale.net_total), 0)::text AS net_sales_eur,
+      COALESCE(sum(sale.vat_total), 0)::text AS vat_sales_eur,
+      COALESCE(sum(sale.gross_total), 0)::text AS gross_sales_eur
     FROM pos.sales sale
     JOIN pos.shifts shift ON shift.id = sale.shift_id
     JOIN organization.cash_registers register ON register.id = shift.cash_register_id
@@ -431,9 +431,9 @@ const totalsSql = `
     WHERE ${transactionPeriod('sale')}
   ), return_values AS (
     SELECT count(*)::text AS return_count,
-      COALESCE(sum(pos_return.net_total), 0)::text AS net_returns_bgn,
-      COALESCE(sum(pos_return.vat_total), 0)::text AS vat_returns_bgn,
-      COALESCE(sum(pos_return.gross_total), 0)::text AS gross_returns_bgn
+      COALESCE(sum(pos_return.net_total), 0)::text AS net_returns_eur,
+      COALESCE(sum(pos_return.vat_total), 0)::text AS vat_returns_eur,
+      COALESCE(sum(pos_return.gross_total), 0)::text AS gross_returns_eur
     FROM pos.returns pos_return
     JOIN pos.shifts shift ON shift.id = pos_return.shift_id
     JOIN organization.cash_registers register ON register.id = shift.cash_register_id
@@ -452,7 +452,7 @@ const totalsSql = `
 const cashiersSql = `
   WITH activity AS (
     SELECT shift.operator_id, 1 AS sale_count, 0 AS return_count,
-      sale.gross_total AS gross_sales_bgn, 0::numeric AS gross_returns_bgn
+      sale.gross_total AS gross_sales_eur, 0::numeric AS gross_returns_eur
     FROM pos.sales sale
     JOIN pos.shifts shift ON shift.id = sale.shift_id
     JOIN organization.cash_registers register ON register.id = shift.cash_register_id
@@ -467,22 +467,22 @@ const cashiersSql = `
   SELECT operator.id AS operator_id, operator.code AS operator_code,
     employee.display_name AS name, sum(activity.sale_count)::text AS sale_count,
     sum(activity.return_count)::text AS return_count,
-    sum(activity.gross_sales_bgn)::text AS gross_sales_bgn,
-    sum(activity.gross_returns_bgn)::text AS gross_returns_bgn,
-    (sum(activity.gross_sales_bgn) - sum(activity.gross_returns_bgn))::text
-      AS net_revenue_bgn
+    sum(activity.gross_sales_eur)::text AS gross_sales_eur,
+    sum(activity.gross_returns_eur)::text AS gross_returns_eur,
+    (sum(activity.gross_sales_eur) - sum(activity.gross_returns_eur))::text
+      AS net_revenue_eur
   FROM activity
   JOIN organization.operators operator ON operator.id = activity.operator_id
   JOIN identity.user_accounts account ON account.id = operator.account_id
   JOIN identity.employees employee ON employee.id = account.employee_id
   GROUP BY operator.id, operator.code, employee.display_name
-  ORDER BY net_revenue_bgn DESC, employee.display_name, operator.id`;
+  ORDER BY net_revenue_eur DESC, employee.display_name, operator.id`;
 
 const productsSql = `
   WITH activity AS (
     SELECT line.product_id, line.product_code, line.product_name, line.category_name,
       line.quantity AS quantity_sold, 0::numeric AS quantity_returned,
-      line.gross_total AS gross_sales_bgn, 0::numeric AS gross_returns_bgn
+      line.gross_total AS gross_sales_eur, 0::numeric AS gross_returns_eur
     FROM pos.sale_lines line
     JOIN pos.sales sale ON sale.id = line.sale_id
     JOIN pos.shifts shift ON shift.id = sale.shift_id
@@ -500,18 +500,18 @@ const productsSql = `
   SELECT product_id, product_code, product_name, category_name,
     sum(quantity_sold)::text AS quantity_sold,
     sum(quantity_returned)::text AS quantity_returned,
-    sum(gross_sales_bgn)::text AS gross_sales_bgn,
-    sum(gross_returns_bgn)::text AS gross_returns_bgn,
-    (sum(gross_sales_bgn) - sum(gross_returns_bgn))::text AS net_revenue_bgn
+    sum(gross_sales_eur)::text AS gross_sales_eur,
+    sum(gross_returns_eur)::text AS gross_returns_eur,
+    (sum(gross_sales_eur) - sum(gross_returns_eur))::text AS net_revenue_eur
   FROM activity
   GROUP BY product_id, product_code, product_name, category_name
-  ORDER BY net_revenue_bgn DESC, product_name, product_id`;
+  ORDER BY net_revenue_eur DESC, product_name, product_id`;
 
 const categoriesSql = `
   WITH activity AS (
     SELECT line.category_id, line.category_name, line.quantity AS quantity_sold,
-      0::numeric AS quantity_returned, line.gross_total AS gross_sales_bgn,
-      0::numeric AS gross_returns_bgn
+      0::numeric AS quantity_returned, line.gross_total AS gross_sales_eur,
+      0::numeric AS gross_returns_eur
     FROM pos.sale_lines line
     JOIN pos.sales sale ON sale.id = line.sale_id
     JOIN pos.shifts shift ON shift.id = sale.shift_id
@@ -528,17 +528,17 @@ const categoriesSql = `
   )
   SELECT category_id, category_name, sum(quantity_sold)::text AS quantity_sold,
     sum(quantity_returned)::text AS quantity_returned,
-    sum(gross_sales_bgn)::text AS gross_sales_bgn,
-    sum(gross_returns_bgn)::text AS gross_returns_bgn,
-    (sum(gross_sales_bgn) - sum(gross_returns_bgn))::text AS net_revenue_bgn
+    sum(gross_sales_eur)::text AS gross_sales_eur,
+    sum(gross_returns_eur)::text AS gross_returns_eur,
+    (sum(gross_sales_eur) - sum(gross_returns_eur))::text AS net_revenue_eur
   FROM activity
   GROUP BY category_id, category_name
-  ORDER BY net_revenue_bgn DESC, category_name, category_id`;
+  ORDER BY net_revenue_eur DESC, category_name, category_id`;
 
 const paymentsSql = `
   WITH activity AS (
-    SELECT payment.payment_method AS method, payment.amount AS collected_bgn,
-      0::numeric AS refunded_bgn
+    SELECT payment.payment_method AS method, payment.amount AS collected_eur,
+      0::numeric AS refunded_eur
     FROM pos.payments payment
     JOIN pos.sales sale ON sale.id = payment.sale_id
     JOIN pos.shifts shift ON shift.id = sale.shift_id
@@ -552,15 +552,15 @@ const paymentsSql = `
     JOIN organization.cash_registers register ON register.id = shift.cash_register_id
     WHERE ${transactionPeriod('pos_return')}
   )
-  SELECT method, sum(collected_bgn)::text AS collected_bgn,
-    sum(refunded_bgn)::text AS refunded_bgn,
-    (sum(collected_bgn) - sum(refunded_bgn))::text AS net_bgn
+  SELECT method, sum(collected_eur)::text AS collected_eur,
+    sum(refunded_eur)::text AS refunded_eur,
+    (sum(collected_eur) - sum(refunded_eur))::text AS net_eur
   FROM activity GROUP BY method ORDER BY method`;
 
 const locationsSql = `
   WITH activity AS (
     SELECT register.business_location_id, 1 AS sale_count, 0 AS return_count,
-      sale.gross_total AS gross_sales_bgn, 0::numeric AS gross_returns_bgn
+      sale.gross_total AS gross_sales_eur, 0::numeric AS gross_returns_eur
     FROM pos.sales sale
     JOIN pos.shifts shift ON shift.id = sale.shift_id
     JOIN organization.cash_registers register ON register.id = shift.cash_register_id
@@ -575,18 +575,18 @@ const locationsSql = `
   SELECT location.id AS business_location_id, location.name AS location_name,
     sum(activity.sale_count)::text AS sale_count,
     sum(activity.return_count)::text AS return_count,
-    sum(activity.gross_sales_bgn)::text AS gross_sales_bgn,
-    sum(activity.gross_returns_bgn)::text AS gross_returns_bgn,
-    (sum(activity.gross_sales_bgn) - sum(activity.gross_returns_bgn))::text
-      AS net_revenue_bgn
+    sum(activity.gross_sales_eur)::text AS gross_sales_eur,
+    sum(activity.gross_returns_eur)::text AS gross_returns_eur,
+    (sum(activity.gross_sales_eur) - sum(activity.gross_returns_eur))::text
+      AS net_revenue_eur
   FROM activity
   JOIN organization.business_locations location
     ON location.id = activity.business_location_id
   GROUP BY location.id, location.name
-  ORDER BY net_revenue_bgn DESC, location.name, location.id`;
+  ORDER BY net_revenue_eur DESC, location.name, location.id`;
 
 const shiftSelect = `shift.id, shift.shift_number, shift.status, shift.opened_at,
-  shift.closed_at, shift.opening_cash_bgn::text, shift.closing_cash_bgn::text,
+  shift.closed_at, shift.opening_cash_eur::text, shift.closing_cash_eur::text,
   register.id AS cash_register_id, register.code AS cash_register_code,
   register.name AS cash_register_name, location.name AS location_name,
   operator.id AS operator_id, operator.code AS operator_code,
@@ -594,18 +594,18 @@ const shiftSelect = `shift.id, shift.shift_number, shift.status, shift.opened_at
   configuration.fiscal_mode,
   COALESCE(sales.sale_count, 0)::text AS sale_count,
   COALESCE(returns.return_count, 0)::text AS return_count,
-  COALESCE(sales.gross_sales_bgn, 0)::text AS gross_sales_bgn,
-  COALESCE(returns.gross_returns_bgn, 0)::text AS gross_returns_bgn,
-  (COALESCE(sales.gross_sales_bgn, 0) - COALESCE(returns.gross_returns_bgn, 0))::text
-    AS net_revenue_bgn,
-  COALESCE(sales.cash_sales_bgn, 0)::text AS cash_sales_bgn,
-  COALESCE(returns.cash_refunds_bgn, 0)::text AS cash_refunds_bgn,
-  (shift.opening_cash_bgn + COALESCE(sales.cash_sales_bgn, 0)
-    - COALESCE(returns.cash_refunds_bgn, 0))::text AS expected_cash_bgn,
-  CASE WHEN shift.closing_cash_bgn IS NULL THEN NULL ELSE
-    (shift.closing_cash_bgn - shift.opening_cash_bgn
-      - COALESCE(sales.cash_sales_bgn, 0) + COALESCE(returns.cash_refunds_bgn, 0))::text
-  END AS difference_bgn`;
+  COALESCE(sales.gross_sales_eur, 0)::text AS gross_sales_eur,
+  COALESCE(returns.gross_returns_eur, 0)::text AS gross_returns_eur,
+  (COALESCE(sales.gross_sales_eur, 0) - COALESCE(returns.gross_returns_eur, 0))::text
+    AS net_revenue_eur,
+  COALESCE(sales.cash_sales_eur, 0)::text AS cash_sales_eur,
+  COALESCE(returns.cash_refunds_eur, 0)::text AS cash_refunds_eur,
+  (shift.opening_cash_eur + COALESCE(sales.cash_sales_eur, 0)
+    - COALESCE(returns.cash_refunds_eur, 0))::text AS expected_cash_eur,
+  CASE WHEN shift.closing_cash_eur IS NULL THEN NULL ELSE
+    (shift.closing_cash_eur - shift.opening_cash_eur
+      - COALESCE(sales.cash_sales_eur, 0) + COALESCE(returns.cash_refunds_eur, 0))::text
+  END AS difference_eur`;
 
 const shiftsSql = `
   SELECT ${shiftSelect}
@@ -645,8 +645,8 @@ function shiftSalesAggregate(asOfParameter: string): string {
       ? ''
       : `AND (${asOfParameter}::timestamptz IS NULL
           OR sale.completed_at <= ${asOfParameter}::timestamptz)`;
-  return `SELECT count(*) AS sale_count, COALESCE(sum(sale.gross_total), 0) AS gross_sales_bgn,
-    COALESCE(sum(payment.cash_amount), 0) AS cash_sales_bgn
+  return `SELECT count(*) AS sale_count, COALESCE(sum(sale.gross_total), 0) AS gross_sales_eur,
+    COALESCE(sum(payment.cash_amount), 0) AS cash_sales_eur
     FROM pos.sales sale
     LEFT JOIN LATERAL (
       SELECT sum(pos_payment.amount) AS cash_amount FROM pos.payments pos_payment
@@ -662,8 +662,8 @@ function shiftReturnsAggregate(asOfParameter: string): string {
       : `AND (${asOfParameter}::timestamptz IS NULL
           OR pos_return.completed_at <= ${asOfParameter}::timestamptz)`;
   return `SELECT count(*) AS return_count,
-    COALESCE(sum(pos_return.gross_total), 0) AS gross_returns_bgn,
-    COALESCE(sum(refund.cash_amount), 0) AS cash_refunds_bgn
+    COALESCE(sum(pos_return.gross_total), 0) AS gross_returns_eur,
+    COALESCE(sum(refund.cash_amount), 0) AS cash_refunds_eur
     FROM pos.returns pos_return
     LEFT JOIN LATERAL (
       SELECT sum(pos_refund.amount) AS cash_amount FROM pos.return_refunds pos_refund
@@ -705,10 +705,10 @@ function requiredPeriod(filters: PosExportFilters): { dateFrom: string; dateTo: 
 
 function mapCashier(row: CashierRow): PosCashierReportRow {
   return {
-    grossReturnsBgn: row.gross_returns_bgn,
-    grossSalesBgn: row.gross_sales_bgn,
+    grossReturnsEur: row.gross_returns_eur,
+    grossSalesEur: row.gross_sales_eur,
     name: row.name,
-    netRevenueBgn: row.net_revenue_bgn,
+    netRevenueEur: row.net_revenue_eur,
     operatorCode: row.operator_code,
     operatorId: row.operator_id,
     returnCount: Number(row.return_count),
@@ -719,9 +719,9 @@ function mapCashier(row: CashierRow): PosCashierReportRow {
 function mapProduct(row: ProductRow): PosProductReportRow {
   return {
     categoryName: row.category_name,
-    grossReturnsBgn: row.gross_returns_bgn,
-    grossSalesBgn: row.gross_sales_bgn,
-    netRevenueBgn: row.net_revenue_bgn,
+    grossReturnsEur: row.gross_returns_eur,
+    grossSalesEur: row.gross_sales_eur,
+    netRevenueEur: row.net_revenue_eur,
     productCode: row.product_code,
     productId: row.product_id,
     productName: row.product_name,
@@ -734,9 +734,9 @@ function mapCategory(row: CategoryRow): PosCategoryReportRow {
   return {
     categoryId: row.category_id,
     categoryName: row.category_name,
-    grossReturnsBgn: row.gross_returns_bgn,
-    grossSalesBgn: row.gross_sales_bgn,
-    netRevenueBgn: row.net_revenue_bgn,
+    grossReturnsEur: row.gross_returns_eur,
+    grossSalesEur: row.gross_sales_eur,
+    netRevenueEur: row.net_revenue_eur,
     quantityReturned: row.quantity_returned,
     quantitySold: row.quantity_sold,
   };
@@ -744,26 +744,26 @@ function mapCategory(row: CategoryRow): PosCategoryReportRow {
 
 function mapPayment(row: PaymentRow): PosPaymentReportRow {
   return {
-    collectedBgn: row.collected_bgn,
+    collectedEur: row.collected_eur,
     method: row.method,
-    netBgn: row.net_bgn,
-    refundedBgn: row.refunded_bgn,
+    netEur: row.net_eur,
+    refundedEur: row.refunded_eur,
   };
 }
 
 function mapLocations(rows: LocationRow[]): PosLocationReportRow[] {
-  const totalRevenue = rows.reduce((sum, row) => sum + Number(row.net_revenue_bgn), 0);
+  const totalRevenue = rows.reduce((sum, row) => sum + Number(row.net_revenue_eur), 0);
   return rows.map((row) => {
     const saleCount = Number(row.sale_count);
     return {
-      averageSaleBgn: saleCount ? (Number(row.gross_sales_bgn) / saleCount).toFixed(4) : '0.0000',
+      averageSaleEur: saleCount ? (Number(row.gross_sales_eur) / saleCount).toFixed(4) : '0.0000',
       businessLocationId: row.business_location_id,
-      grossReturnsBgn: row.gross_returns_bgn,
-      grossSalesBgn: row.gross_sales_bgn,
+      grossReturnsEur: row.gross_returns_eur,
+      grossSalesEur: row.gross_sales_eur,
       locationName: row.location_name,
-      netRevenueBgn: row.net_revenue_bgn,
+      netRevenueEur: row.net_revenue_eur,
       revenueSharePercent:
-        totalRevenue === 0 ? 0 : roundPercent((Number(row.net_revenue_bgn) / totalRevenue) * 100),
+        totalRevenue === 0 ? 0 : roundPercent((Number(row.net_revenue_eur) / totalRevenue) * 100),
       returnCount: Number(row.return_count),
       saleCount,
     };
@@ -775,20 +775,20 @@ function mapShift(row: ShiftReportRow): PosShiftReportRow {
     cashRegisterCode: row.cash_register_code,
     cashRegisterId: row.cash_register_id,
     cashRegisterName: row.cash_register_name,
-    cashRefundsBgn: row.cash_refunds_bgn,
-    cashSalesBgn: row.cash_sales_bgn,
+    cashRefundsEur: row.cash_refunds_eur,
+    cashSalesEur: row.cash_sales_eur,
     ...(row.closed_at ? { closedAt: iso(row.closed_at) } : {}),
-    ...(row.closing_cash_bgn ? { closingCashBgn: row.closing_cash_bgn } : {}),
-    ...(row.difference_bgn ? { differenceBgn: row.difference_bgn } : {}),
-    expectedCashBgn: row.expected_cash_bgn,
+    ...(row.closing_cash_eur ? { closingCashEur: row.closing_cash_eur } : {}),
+    ...(row.difference_eur ? { differenceEur: row.difference_eur } : {}),
+    expectedCashEur: row.expected_cash_eur,
     fiscalMode: row.fiscal_mode,
-    grossReturnsBgn: row.gross_returns_bgn,
-    grossSalesBgn: row.gross_sales_bgn,
+    grossReturnsEur: row.gross_returns_eur,
+    grossSalesEur: row.gross_sales_eur,
     id: row.id,
     locationName: row.location_name,
-    netRevenueBgn: row.net_revenue_bgn,
+    netRevenueEur: row.net_revenue_eur,
     openedAt: iso(row.opened_at),
-    openingCashBgn: row.opening_cash_bgn,
+    openingCashEur: row.opening_cash_eur,
     operatorCode: row.operator_code,
     operatorId: row.operator_id,
     operatorName: row.operator_name,
@@ -802,19 +802,19 @@ function mapShift(row: ShiftReportRow): PosShiftReportRow {
 
 function shiftExportRow(row: PosShiftReportRow, timeZone: string): Record<string, number | string> {
   return {
-    cashRefundsBgn: row.cashRefundsBgn,
-    cashSalesBgn: row.cashSalesBgn,
+    cashRefundsEur: row.cashRefundsEur,
+    cashSalesEur: row.cashSalesEur,
     cashier: row.operatorName,
     closedAt: row.closedAt ? posReportTimestamp(row.closedAt, timeZone) : '',
-    closingCashBgn: row.closingCashBgn ?? '',
-    differenceBgn: row.differenceBgn ?? '',
-    expectedCashBgn: row.expectedCashBgn,
-    grossReturnsBgn: row.grossReturnsBgn,
-    grossSalesBgn: row.grossSalesBgn,
+    closingCashEur: row.closingCashEur ?? '',
+    differenceEur: row.differenceEur ?? '',
+    expectedCashEur: row.expectedCashEur,
+    grossReturnsEur: row.grossReturnsEur,
+    grossSalesEur: row.grossSalesEur,
     location: row.locationName,
-    netRevenueBgn: row.netRevenueBgn,
+    netRevenueEur: row.netRevenueEur,
     openedAt: posReportTimestamp(row.openedAt, timeZone),
-    openingCashBgn: row.openingCashBgn,
+    openingCashEur: row.openingCashEur,
     register: row.cashRegisterName,
     reportType: row.reportType.toUpperCase(),
     returnCount: row.returnCount,
@@ -905,15 +905,15 @@ const shiftColumns = [
   { key: 'closedAt', label: 'Closed', type: 'text' },
   { key: 'saleCount', label: 'Sales', type: 'number' },
   { key: 'returnCount', label: 'Returns', type: 'number' },
-  { key: 'grossSalesBgn', label: 'Sales BGN', type: 'money' },
-  { key: 'grossReturnsBgn', label: 'Returns BGN', type: 'money' },
-  { key: 'netRevenueBgn', label: 'Net revenue BGN', type: 'money' },
-  { key: 'openingCashBgn', label: 'Opening cash BGN', type: 'money' },
-  { key: 'cashSalesBgn', label: 'Cash sales BGN', type: 'money' },
-  { key: 'cashRefundsBgn', label: 'Cash refunds BGN', type: 'money' },
-  { key: 'expectedCashBgn', label: 'Expected cash BGN', type: 'money' },
-  { key: 'closingCashBgn', label: 'Counted cash BGN', type: 'money' },
-  { key: 'differenceBgn', label: 'Difference BGN', type: 'money' },
+  { key: 'grossSalesEur', label: 'Sales EUR', type: 'money' },
+  { key: 'grossReturnsEur', label: 'Returns EUR', type: 'money' },
+  { key: 'netRevenueEur', label: 'Net revenue EUR', type: 'money' },
+  { key: 'openingCashEur', label: 'Opening cash EUR', type: 'money' },
+  { key: 'cashSalesEur', label: 'Cash sales EUR', type: 'money' },
+  { key: 'cashRefundsEur', label: 'Cash refunds EUR', type: 'money' },
+  { key: 'expectedCashEur', label: 'Expected cash EUR', type: 'money' },
+  { key: 'closingCashEur', label: 'Counted cash EUR', type: 'money' },
+  { key: 'differenceEur', label: 'Difference EUR', type: 'money' },
 ] as const;
 
 const cashierColumns = [
@@ -921,9 +921,9 @@ const cashierColumns = [
   { key: 'cashier', label: 'Cashier', type: 'text' },
   { key: 'saleCount', label: 'Sales', type: 'number' },
   { key: 'returnCount', label: 'Returns', type: 'number' },
-  { key: 'grossSalesBgn', label: 'Sales BGN', type: 'money' },
-  { key: 'grossReturnsBgn', label: 'Returns BGN', type: 'money' },
-  { key: 'netRevenueBgn', label: 'Net revenue BGN', type: 'money' },
+  { key: 'grossSalesEur', label: 'Sales EUR', type: 'money' },
+  { key: 'grossReturnsEur', label: 'Returns EUR', type: 'money' },
+  { key: 'netRevenueEur', label: 'Net revenue EUR', type: 'money' },
 ] as const;
 
 const productColumns = [
@@ -932,35 +932,35 @@ const productColumns = [
   { key: 'category', label: 'Category', type: 'text' },
   { key: 'quantitySold', label: 'Quantity sold', type: 'number' },
   { key: 'quantityReturned', label: 'Quantity returned', type: 'number' },
-  { key: 'grossSalesBgn', label: 'Sales BGN', type: 'money' },
-  { key: 'grossReturnsBgn', label: 'Returns BGN', type: 'money' },
-  { key: 'netRevenueBgn', label: 'Net revenue BGN', type: 'money' },
+  { key: 'grossSalesEur', label: 'Sales EUR', type: 'money' },
+  { key: 'grossReturnsEur', label: 'Returns EUR', type: 'money' },
+  { key: 'netRevenueEur', label: 'Net revenue EUR', type: 'money' },
 ] as const;
 
 const categoryColumns = [
   { key: 'category', label: 'Category', type: 'text' },
   { key: 'quantitySold', label: 'Quantity sold', type: 'number' },
   { key: 'quantityReturned', label: 'Quantity returned', type: 'number' },
-  { key: 'grossSalesBgn', label: 'Sales BGN', type: 'money' },
-  { key: 'grossReturnsBgn', label: 'Returns BGN', type: 'money' },
-  { key: 'netRevenueBgn', label: 'Net revenue BGN', type: 'money' },
+  { key: 'grossSalesEur', label: 'Sales EUR', type: 'money' },
+  { key: 'grossReturnsEur', label: 'Returns EUR', type: 'money' },
+  { key: 'netRevenueEur', label: 'Net revenue EUR', type: 'money' },
 ] as const;
 
 const paymentColumns = [
   { key: 'method', label: 'Payment method', type: 'text' },
-  { key: 'collectedBgn', label: 'Collected BGN', type: 'money' },
-  { key: 'refundedBgn', label: 'Refunded BGN', type: 'money' },
-  { key: 'netBgn', label: 'Net BGN', type: 'money' },
+  { key: 'collectedEur', label: 'Collected EUR', type: 'money' },
+  { key: 'refundedEur', label: 'Refunded EUR', type: 'money' },
+  { key: 'netEur', label: 'Net EUR', type: 'money' },
 ] as const;
 
 const locationColumns = [
   { key: 'location', label: 'Location', type: 'text' },
   { key: 'saleCount', label: 'Sales', type: 'number' },
   { key: 'returnCount', label: 'Returns', type: 'number' },
-  { key: 'grossSalesBgn', label: 'Sales BGN', type: 'money' },
-  { key: 'grossReturnsBgn', label: 'Returns BGN', type: 'money' },
-  { key: 'netRevenueBgn', label: 'Net revenue BGN', type: 'money' },
-  { key: 'averageSaleBgn', label: 'Average sale BGN', type: 'money' },
+  { key: 'grossSalesEur', label: 'Sales EUR', type: 'money' },
+  { key: 'grossReturnsEur', label: 'Returns EUR', type: 'money' },
+  { key: 'netRevenueEur', label: 'Net revenue EUR', type: 'money' },
+  { key: 'averageSaleEur', label: 'Average sale EUR', type: 'money' },
 ] as const;
 
 const locationComparisonColumns = [

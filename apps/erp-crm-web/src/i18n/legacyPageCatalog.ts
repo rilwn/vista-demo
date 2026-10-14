@@ -11,7 +11,7 @@ export const legacyBulgarianText: Readonly<Record<string, string>> = {
     'Плащането запазва първоначалните си дата и начин и остава свързано с аванса.',
   'Customer advance': 'Клиентски аванс',
   'Open receivable': 'Отворено вземане',
-  'Amount to apply (BGN)': 'Сума за прилагане (лв.)',
+  'Amount to apply (EUR)': 'Сума за прилагане (EUR)',
   'No open receivables are available.': 'Няма отворени вземания.',
   'The advance could not be applied. Refresh and try again.':
     'Авансът не може да бъде приложен. Обновете страницата и опитайте отново.',
@@ -295,7 +295,7 @@ export const legacyBulgarianText: Readonly<Record<string, string>> = {
     'Статус „Просрочен“ се задава автоматично след тази дата, ако има остатък.',
   'Add record': 'Добавяне на запис',
   'Record payment': 'Записване на плащане',
-  'Amounts remain in BGN for this collection record.': 'Сумите по този запис се водят в BGN.',
+  'Amounts remain in EUR for this collection record.': 'Сумите по този запис се водят в EUR.',
   Allocated: 'Разпределено',
   'The collection record is linked to the prepared sales invoice draft.':
     'Записът за вземане е свързан с подготвената чернова на фактура.',
@@ -447,8 +447,8 @@ export const legacyBulgarianText: Readonly<Record<string, string>> = {
   'Receivable offsets': 'Прихванати вземания',
   'No offsets recorded.': 'Няма записани прихващания.',
   'No supplier invoices are ready': 'Няма готови фактури от доставчици',
-  'Record a BGN supplier invoice in Procurement before adding a payable.':
-    'Въведете фактура от доставчик в BGN в Снабдяване, преди да добавите задължение.',
+  'Record a EUR supplier invoice in Procurement before adding a payable.':
+    'Въведете фактура от доставчик в EUR в Снабдяване, преди да добавите задължение.',
   'Source invoice': 'Изходна фактура',
   'Choose supplier evidence that has not entered Finance yet.':
     'Изберете документ от доставчик, който още не е въведен във Финанси.',
@@ -566,8 +566,8 @@ export const legacyBulgarianText: Readonly<Record<string, string>> = {
   'Loading bank reconciliation': 'Зареждане на банковото съпоставяне',
   'Bank reconciliation could not be loaded': 'Банковото съпоставяне не може да бъде заредено',
   'Bank reconciliation': 'Банково съпоставяне',
-  'Enter BGN statements, review incoming transfers, and connect them to collections.':
-    'Въвеждайте извлечения в BGN, преглеждайте постъпленията и ги свързвайте с вземания.',
+  'Enter EUR statements, review incoming transfers, and connect them to collections.':
+    'Въвеждайте извлечения в EUR, преглеждайте постъпленията и ги свързвайте с вземания.',
   'New statement': 'Ново извлечение',
   'Bank reconciliation summary': 'Обобщение на банковото съпоставяне',
   'Bank statement register': 'Регистър на банковите извлечения',

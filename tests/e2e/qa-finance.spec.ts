@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { Pool } from 'pg';
 import { signIn } from './sign-in.js';
 
 async function choose(page: Page, label: string, value: string | RegExp) {
@@ -7,6 +8,30 @@ async function choose(page: Page, label: string, value: string | RegExp) {
     .getByRole('combobox', { name: `Search ${label}`, exact: true })
     .fill('');
   await page.getByRole('listbox').getByRole('option', { name: value, exact: true }).click();
+}
+
+async function seedUsdRate(rateDate: string) {
+  const databaseUrl = new URL(process.env['DATABASE_URL'] ?? '');
+  if (
+    process.env['VISTA_E2E_ISOLATED'] !== 'true' ||
+    databaseUrl.hostname !== '127.0.0.1' ||
+    databaseUrl.port !== '58432' ||
+    databaseUrl.pathname !== '/vista_e2e' ||
+    databaseUrl.username !== 'vista_e2e'
+  )
+    throw Error('Exchange-rate fixtures require the disposable browser database.');
+  const pool = new Pool({ connectionString: databaseUrl.href });
+  try {
+    await pool.query(
+      `INSERT INTO finance.currency_rates (currency_code, rate_date, eur_per_unit, rate_source)
+       VALUES ('USD', $1, 0.92000000, 'BNB')
+       ON CONFLICT (currency_code, rate_date) DO UPDATE
+       SET eur_per_unit = EXCLUDED.eur_per_unit, imported_at = now()`,
+      [rateDate],
+    );
+  } finally {
+    await pool.end();
+  }
 }
 
 test('foreign rates are explicit and credit notes start from the original invoice', async ({
@@ -25,11 +50,11 @@ test('foreign rates are explicit and credit notes start from the original invoic
   await choose(page, 'Customer', 'Alfa Market Demo Ltd.');
   await choose(page, 'Product or service', /DEV-ADAPTER-12V/);
   await dialog.getByLabel('Unit price', { exact: true }).fill('100');
-  await dialog.getByLabel('Currency', { exact: true }).fill('EUR');
-  await expect(dialog.getByLabel('BGN exchange rate', { exact: true })).toHaveValue('');
-  await expect(dialog.getByLabel('Rate source', { exact: true })).toHaveValue('');
-  await dialog.getByLabel('BGN exchange rate', { exact: true }).fill('1.95583');
-  await dialog.getByLabel('Rate source', { exact: true }).fill('QA supplied rate');
+  const rateDate = await dialog.getByLabel('Document date', { exact: true }).inputValue();
+  await seedUsdRate(rateDate);
+  await dialog.getByLabel('Currency', { exact: true }).fill('USD');
+  await expect(dialog.getByLabel('EUR exchange rate', { exact: true })).toHaveValue('0.92000000');
+  await expect(dialog.getByLabel('Rate source', { exact: true })).toHaveValue('BNB');
   const created = page.waitForResponse(
     (response) =>
       response.url().endsWith('/finance/financial-documents') &&
@@ -38,8 +63,8 @@ test('foreign rates are explicit and credit notes start from the original invoic
   await dialog.getByRole('button', { name: 'Prepare draft', exact: true }).click();
   const response = await created;
   expect(response.status()).toBe(201);
-  const invoice = (await response.json()) as { number: string; bgnGrossTotal: string };
-  expect(invoice.bgnGrossTotal).toBe('234.6996');
+  const invoice = (await response.json()) as { number: string; eurGrossTotal: string };
+  expect(invoice.eurGrossTotal).toBe('110.4000');
   await expect(dialog.getByText(invoice.number, { exact: true }).first()).toBeVisible();
   await dialog.locator('header').getByRole('button', { name: 'Close', exact: true }).click();
   await expect(dialog).toHaveCount(0);
@@ -49,11 +74,9 @@ test('foreign rates are explicit and credit notes start from the original invoic
   await choose(page, 'Original invoice draft', new RegExp(invoice.number));
   await expect(dialog.getByLabel('Unit price', { exact: true })).toHaveValue('100.0000');
   await expect(dialog.getByLabel('Quantity', { exact: true })).toHaveValue('1.0000');
-  await expect(dialog.getByLabel('Currency', { exact: true })).toHaveValue('EUR');
-  await expect(dialog.getByLabel('BGN exchange rate', { exact: true })).toHaveValue('');
+  await expect(dialog.getByLabel('Currency', { exact: true })).toHaveValue('USD');
+  await expect(dialog.getByLabel('EUR exchange rate', { exact: true })).toHaveValue('0.92000000');
   await dialog.getByLabel('Correction reason', { exact: true }).fill('Return verification');
-  await dialog.getByLabel('BGN exchange rate', { exact: true }).fill('1.95583');
-  await dialog.getByLabel('Rate source', { exact: true }).fill('QA supplied rate');
   await dialog.getByLabel('Unit price', { exact: true }).fill('1000');
   const rejected = page.waitForResponse(
     (result) =>
@@ -129,7 +152,7 @@ test('manual Finance prices use the shared customer price and retain a manually 
   await choose(page, 'Document source', 'Manual document');
   await choose(page, 'Customer', 'Alfa Market Demo Ltd.');
   await choose(page, 'Product or service', /DEV-FISCAL-X1/);
-  await expect(dialog.getByLabel('Unit price', { exact: true })).toHaveValue('600.0000');
+  await expect(dialog.getByLabel('Unit price', { exact: true })).toHaveValue('306.7751');
   await dialog.getByLabel('Unit price', { exact: true }).fill('650');
   let release!: () => void;
   const held = new Promise<void>((resolve) => {
@@ -144,13 +167,13 @@ test('manual Finance prices use the shared customer price and retain a manually 
     await held;
     await route.continue();
   });
+  const nextDate = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Europe/Sofia',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date(Date.now() + 86400000));
   try {
-    const nextDate = new Intl.DateTimeFormat('en-CA', {
-      timeZone: 'Europe/Sofia',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-    }).format(new Date(Date.now() + 86400000));
     await dialog.getByLabel('Document date', { exact: true }).fill(nextDate);
     await requested;
     await dialog.getByLabel('Unit price', { exact: true }).fill('675');
@@ -158,12 +181,15 @@ test('manual Finance prices use the shared customer price and retain a manually 
     await expect(dialog.getByText('Finding customer price…', { exact: true })).toHaveCount(0);
     await expect(dialog.getByLabel('Unit price', { exact: true })).toHaveValue('675');
     await dialog.getByRole('button', { name: 'Use customer price', exact: true }).click();
-    await expect(dialog.getByLabel('Unit price', { exact: true })).toHaveValue('600.0000');
+    await expect(dialog.getByLabel('Unit price', { exact: true })).toHaveValue('306.7751');
   } finally {
     release();
     await page.unrouteAll({ behavior: 'wait' });
   }
-  await dialog.getByLabel('Currency', { exact: true }).fill('EUR');
+  await seedUsdRate(nextDate);
+  await dialog.getByLabel('Currency', { exact: true }).fill('USD');
+  await expect(dialog.getByLabel('EUR exchange rate', { exact: true })).toHaveValue('0.92000000');
+  await expect(dialog.getByLabel('Rate source', { exact: true })).toHaveValue('BNB');
   await expect(
     dialog.getByText('No price matches this customer, date and currency. Enter the unit price.', {
       exact: true,
@@ -217,7 +243,7 @@ test('a recurring billing period opens in Finance and cannot create a second act
     dialog.getByRole('heading', { name: 'New financial document', exact: true }),
   ).toBeVisible();
   await expect(dialog.getByText('Subscription charge', { exact: true })).toBeVisible();
-  await expect(dialog.getByLabel('Currency', { exact: true })).toHaveValue('BGN');
+  await expect(dialog.getByLabel('Currency', { exact: true })).toHaveValue('EUR');
   await page.setViewportSize({ width: 900, height: 720 });
   expect(await dialog.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
   await page.screenshot({ path: testInfo.outputPath('subscription-review-tablet.png') });
@@ -287,7 +313,7 @@ test('a customer advance can be applied to an open receivable and remains tracea
   await receivable.getByRole('button', { name: 'Apply advance', exact: true }).click();
 
   dialog = page.getByRole('dialog', { name: 'Apply customer advance' });
-  await expect(dialog.getByLabel('Amount to apply (BGN)', { exact: true })).toHaveValue('40.0000');
+  await expect(dialog.getByLabel('Amount to apply (EUR)', { exact: true })).toHaveValue('20.4517');
   const allocation = page.waitForResponse(
     (response) =>
       response.url().includes('/finance/documents/') &&

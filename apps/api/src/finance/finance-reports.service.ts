@@ -26,8 +26,8 @@ interface AgingRow {
   due_date: string;
   id: string;
   number: string;
-  original_bgn_total: string;
-  outstanding_bgn_total: string;
+  original_eur_total: string;
+  outstanding_eur_total: string;
   partner_id: string;
   partner_name: string;
   payment_status: FinanceAgingReport['items'][number]['paymentStatus'];
@@ -45,20 +45,20 @@ interface AgingTotalsRow {
 }
 
 interface TurnoverRow {
-  allocated_bgn_total: string;
+  allocated_eur_total: string;
   document_count: string;
-  gross_bgn_total: string;
-  outstanding_bgn_total: string;
+  gross_eur_total: string;
+  outstanding_eur_total: string;
   partner_id: string;
   partner_name: string;
   total_count: string;
 }
 
 interface TurnoverTotalsRow {
-  allocated_bgn_total: string;
+  allocated_eur_total: string;
   document_count: string;
-  gross_bgn_total: string;
-  outstanding_bgn_total: string;
+  gross_eur_total: string;
+  outstanding_eur_total: string;
 }
 
 interface JournalRow {
@@ -66,9 +66,9 @@ interface JournalRow {
   document_date: string;
   document_type: FinanceJournalReport['items'][number]['documentType'];
   exchange_rate: string | null;
-  gross_bgn_total: string;
+  gross_eur_total: string;
   id: string;
-  net_bgn_total: string;
+  net_eur_total: string;
   number: string;
   partner_name: string;
   partner_vat_number: string | null;
@@ -77,22 +77,22 @@ interface JournalRow {
   tax_breakdown_complete: boolean;
   tax_event_date: string | null;
   total_count: string;
-  vat_bgn_total: string;
+  vat_eur_total: string;
 }
 
 interface JournalTotalsRow {
   document_count: string;
-  gross_bgn_total: string;
+  gross_eur_total: string;
   incomplete_tax_documents: string;
-  net_bgn_total: string;
-  vat_bgn_total: string;
+  net_eur_total: string;
+  vat_eur_total: string;
 }
 
 interface VatReviewRow {
   direction: FinanceVatReviewReport['items'][number]['direction'];
   document_count: string;
-  net_bgn_total: string;
-  vat_bgn_total: string;
+  net_eur_total: string;
+  vat_eur_total: string;
   vat_rate: string;
   vat_treatment: VatTreatment;
 }
@@ -135,12 +135,12 @@ export class FinanceReportsService {
       ),
       pool.query<AgingTotalsRow>(
         `SELECT
-           COALESCE(sum(outstanding_bgn_total) FILTER (WHERE days_overdue = 0), 0)::text AS current_total,
-           COALESCE(sum(outstanding_bgn_total) FILTER (WHERE days_overdue BETWEEN 1 AND 30), 0)::text AS days_0_30_total,
-           COALESCE(sum(outstanding_bgn_total) FILTER (WHERE days_overdue BETWEEN 31 AND 60), 0)::text AS days_31_60_total,
-           COALESCE(sum(outstanding_bgn_total) FILTER (WHERE days_overdue BETWEEN 61 AND 90), 0)::text AS days_61_90_total,
-           COALESCE(sum(outstanding_bgn_total) FILTER (WHERE days_overdue > 90), 0)::text AS over_90_total,
-           COALESCE(sum(outstanding_bgn_total), 0)::text AS total
+           COALESCE(sum(outstanding_eur_total) FILTER (WHERE days_overdue = 0), 0)::text AS current_total,
+           COALESCE(sum(outstanding_eur_total) FILTER (WHERE days_overdue BETWEEN 1 AND 30), 0)::text AS days_0_30_total,
+           COALESCE(sum(outstanding_eur_total) FILTER (WHERE days_overdue BETWEEN 31 AND 60), 0)::text AS days_31_60_total,
+           COALESCE(sum(outstanding_eur_total) FILTER (WHERE days_overdue BETWEEN 61 AND 90), 0)::text AS days_61_90_total,
+           COALESCE(sum(outstanding_eur_total) FILTER (WHERE days_overdue > 90), 0)::text AS over_90_total,
+           COALESCE(sum(outstanding_eur_total), 0)::text AS total
          FROM (${source}) source`,
         [asOf],
       ),
@@ -156,8 +156,8 @@ export class FinanceReportsService {
         dueDate: row.due_date,
         id: row.id,
         number: row.number,
-        originalBgnTotal: row.original_bgn_total,
-        outstandingBgnTotal: row.outstanding_bgn_total,
+        originalEurTotal: row.original_eur_total,
+        outstandingEurTotal: row.outstanding_eur_total,
         partnerId: row.partner_id,
         partnerName: row.partner_name,
         paymentStatus: row.payment_status,
@@ -199,16 +199,16 @@ export class FinanceReportsService {
       pool.query<TurnoverRow>(
         `SELECT source.*, count(*) OVER ()::text AS total_count
          FROM (${source}) source
-         ORDER BY source.gross_bgn_total DESC, source.partner_name, source.partner_id
+         ORDER BY source.gross_eur_total DESC, source.partner_name, source.partner_id
          LIMIT $3 OFFSET $4`,
         [dateFrom, dateTo, pageSize, offset],
       ),
       pool.query<TurnoverTotalsRow>(
         `SELECT
-           COALESCE(sum(source.allocated_bgn_total), 0)::text AS allocated_bgn_total,
+           COALESCE(sum(source.allocated_eur_total), 0)::text AS allocated_eur_total,
            COALESCE(sum(source.document_count), 0)::text AS document_count,
-           COALESCE(sum(source.gross_bgn_total), 0)::text AS gross_bgn_total,
-           COALESCE(sum(source.outstanding_bgn_total), 0)::text AS outstanding_bgn_total
+           COALESCE(sum(source.gross_eur_total), 0)::text AS gross_eur_total,
+           COALESCE(sum(source.outstanding_eur_total), 0)::text AS outstanding_eur_total
          FROM (${source}) source`,
         [dateFrom, dateTo],
       ),
@@ -219,10 +219,10 @@ export class FinanceReportsService {
       dateFrom,
       dateTo,
       items: rows.rows.map((row) => ({
-        allocatedBgnTotal: row.allocated_bgn_total,
+        allocatedEurTotal: row.allocated_eur_total,
         documentCount: Number(row.document_count),
-        grossBgnTotal: row.gross_bgn_total,
-        outstandingBgnTotal: row.outstanding_bgn_total,
+        grossEurTotal: row.gross_eur_total,
+        outstandingEurTotal: row.outstanding_eur_total,
         partnerId: row.partner_id,
         partnerName: row.partner_name,
       })),
@@ -232,10 +232,10 @@ export class FinanceReportsService {
       totalItems,
       totalPages: Math.ceil(totalItems / pageSize),
       totals: {
-        allocatedBgnTotal: summary.allocated_bgn_total,
+        allocatedEurTotal: summary.allocated_eur_total,
         documentCount: Number(summary.document_count),
-        grossBgnTotal: summary.gross_bgn_total,
-        outstandingBgnTotal: summary.outstanding_bgn_total,
+        grossEurTotal: summary.gross_eur_total,
+        outstandingEurTotal: summary.outstanding_eur_total,
       },
     };
   }
@@ -256,9 +256,9 @@ export class FinanceReportsService {
       ),
       this.database.getPool().query<JournalTotalsRow>(
         `SELECT count(*)::text AS document_count,
-                COALESCE(sum(source.net_bgn_total), 0)::text AS net_bgn_total,
-                COALESCE(sum(source.vat_bgn_total), 0)::text AS vat_bgn_total,
-                COALESCE(sum(source.gross_bgn_total), 0)::text AS gross_bgn_total,
+                COALESCE(sum(source.net_eur_total), 0)::text AS net_eur_total,
+                COALESCE(sum(source.vat_eur_total), 0)::text AS vat_eur_total,
+                COALESCE(sum(source.gross_eur_total), 0)::text AS gross_eur_total,
                 count(*) FILTER (WHERE NOT source.tax_breakdown_complete)::text
                   AS incomplete_tax_documents
          FROM (${source}) source`,
@@ -278,10 +278,10 @@ export class FinanceReportsService {
       totalPages: Math.ceil(totalItems / pageSize),
       totals: {
         documentCount: Number(summary.document_count),
-        grossBgnTotal: summary.gross_bgn_total,
+        grossEurTotal: summary.gross_eur_total,
         incompleteTaxDocuments: Number(summary.incomplete_tax_documents),
-        netBgnTotal: summary.net_bgn_total,
-        vatBgnTotal: summary.vat_bgn_total,
+        netEurTotal: summary.net_eur_total,
+        vatEurTotal: summary.vat_eur_total,
       },
     };
   }
@@ -298,10 +298,10 @@ export class FinanceReportsService {
         ]),
     ]);
     const outputVat = sumDecimalStrings(
-      items.rows.filter((row) => row.direction === 'output').map((row) => row.vat_bgn_total),
+      items.rows.filter((row) => row.direction === 'output').map((row) => row.vat_eur_total),
     );
     const inputVat = sumDecimalStrings(
-      items.rows.filter((row) => row.direction === 'input').map((row) => row.vat_bgn_total),
+      items.rows.filter((row) => row.direction === 'input').map((row) => row.vat_eur_total),
     );
     return {
       dateFrom,
@@ -311,14 +311,14 @@ export class FinanceReportsService {
       items: items.rows.map((row) => ({
         direction: row.direction,
         documentCount: Number(row.document_count),
-        netBgnTotal: row.net_bgn_total,
-        vatBgnTotal: row.vat_bgn_total,
+        netEurTotal: row.net_eur_total,
+        vatEurTotal: row.vat_eur_total,
         vatRate: row.vat_rate,
         vatTreatment: row.vat_treatment,
       })),
-      recordedDifferenceBgn: subtractDecimalStrings(outputVat, inputVat),
-      recordedInputVatBgn: inputVat,
-      recordedOutputVatBgn: outputVat,
+      recordedDifferenceEur: subtractDecimalStrings(outputVat, inputVat),
+      recordedInputVatEur: inputVat,
+      recordedOutputVatEur: outputVat,
     };
   }
 
@@ -341,7 +341,7 @@ export class FinanceReportsService {
       );
       return {
         columns: agingExportColumns,
-        criteria: [`As of ${businessDate}`, 'Currency: BGN'],
+        criteria: [`As of ${businessDate}`, 'Currency: EUR'],
         generatedAt,
         rows: result.rows.map((row) => ({
           aging: agingBucketLabel(agingBucket(row.days_overdue)),
@@ -349,8 +349,8 @@ export class FinanceReportsService {
           documentDate: row.document_date,
           dueDate: row.due_date,
           number: row.number,
-          originalBgnTotal: row.original_bgn_total,
-          outstandingBgnTotal: row.outstanding_bgn_total,
+          originalEurTotal: row.original_eur_total,
+          outstandingEurTotal: row.outstanding_eur_total,
           partnerName: row.partner_name,
           paymentStatus: paymentStatusLabel(row.payment_status),
           sourceNumber: row.source_number,
@@ -372,7 +372,7 @@ export class FinanceReportsService {
         columns: journalExportColumns,
         criteria: [
           `Period: ${dateFrom} to ${dateTo}`,
-          'Currency: BGN',
+          'Currency: EUR',
           kind === 'sales'
             ? 'Preparation report: official issuance is not enabled'
             : 'Rows without a tax snapshot are identified for Finance review',
@@ -382,8 +382,8 @@ export class FinanceReportsService {
           currencyCode: row.currency_code,
           documentDate: row.document_date,
           documentType: journalDocumentTypeLabel(row.document_type),
-          grossBgnTotal: row.gross_bgn_total,
-          netBgnTotal: row.net_bgn_total,
+          grossEurTotal: row.gross_eur_total,
+          netEurTotal: row.net_eur_total,
           number: row.number,
           partnerName: row.partner_name,
           partnerVatNumber: row.partner_vat_number ?? '',
@@ -391,7 +391,7 @@ export class FinanceReportsService {
           status: journalStatusLabel(row.status),
           taxBreakdown: row.tax_breakdown_complete ? 'Complete' : 'Needs review',
           taxEventDate: row.tax_event_date ?? '',
-          vatBgnTotal: row.vat_bgn_total,
+          vatEurTotal: row.vat_eur_total,
         })),
         title: kind === 'sales' ? 'Sales journal review' : 'Purchase journal review',
       };
@@ -404,7 +404,7 @@ export class FinanceReportsService {
         columns: vatReviewExportColumns,
         criteria: [
           `Period: ${dateFrom} to ${dateTo}`,
-          'Currency: BGN',
+          'Currency: EUR',
           `Purchase documents awaiting tax breakdown: ${report.incompletePurchaseDocuments}`,
           'Preparation report: deductibility and filing remain subject to Finance approval',
         ],
@@ -412,12 +412,166 @@ export class FinanceReportsService {
         rows: report.items.map((row) => ({
           direction: row.direction === 'output' ? 'Output VAT' : 'Recorded input VAT',
           documentCount: row.documentCount,
-          netBgnTotal: row.netBgnTotal,
-          vatBgnTotal: row.vatBgnTotal,
+          netEurTotal: row.netEurTotal,
+          vatEurTotal: row.vatEurTotal,
           vatRate: row.vatRate,
           vatTreatment: vatTreatmentLabel(row.vatTreatment),
         })),
         title: 'VAT review',
+      };
+    }
+
+    if (definitionKey === 'finance.income' || definitionKey === 'finance.outcome') {
+      const { dateFrom, dateTo } = requiredExportPeriod(filters);
+      if (definitionKey === 'finance.income') {
+        const result = await this.database.getPool().query<{
+          account_code: string;
+          currency_code: string;
+          invoice_date: string;
+          invoice_number: string;
+          net_total: string;
+          partner_name: string;
+          payment_date: string;
+          tax_rates: string;
+          total: string;
+          transaction_number: string;
+          vat_total: string;
+        }>(
+          `SELECT document.official_number AS transaction_number,
+                  coalesce(original.official_number, document.official_number) AS invoice_number,
+                  document.issue_date::text AS invoice_date,
+                  document.customer_name AS partner_name,
+                  ''::text AS account_code,
+                  (CASE WHEN document.document_type = 'credit_note' THEN -1 ELSE 1 END
+                    * document.net_total)::text AS net_total,
+                  (CASE WHEN document.document_type = 'credit_note' THEN -1 ELSE 1 END
+                    * document.vat_total)::text AS vat_total,
+                  (CASE WHEN document.document_type = 'credit_note' THEN -1 ELSE 1 END
+                    * document.gross_total)::text AS total,
+                  document.currency_code,
+                  coalesce(rates.tax_rates, '') AS tax_rates,
+                  coalesce(payment.payment_date, '') AS payment_date
+           FROM finance.financial_documents document
+           LEFT JOIN finance.financial_documents original
+             ON original.id = document.correction_of_document_id
+           LEFT JOIN LATERAL (
+             SELECT string_agg(rate, ', ' ORDER BY rate) AS tax_rates
+             FROM (
+               SELECT DISTINCT summary.vat_rate::numeric::text AS rate
+               FROM finance.financial_document_vat_summary summary
+               WHERE summary.financial_document_id = document.id
+             ) distinct_rates
+           ) rates ON true
+           LEFT JOIN LATERAL (
+             SELECT max(payment.payment_date)::text AS payment_date
+             FROM finance.customer_documents receivable
+             JOIN finance.payment_allocations allocation
+               ON allocation.customer_document_id = receivable.id
+             JOIN finance.payments payment ON payment.id = allocation.payment_id
+             WHERE receivable.source_sales_invoice_id = coalesce(
+               document.source_sales_invoice_id, original.source_sales_invoice_id
+             )
+               AND receivable.review_state <> 'cancelled'
+               AND NOT EXISTS (
+                 SELECT 1 FROM finance.payment_reversals reversal
+                 WHERE reversal.payment_id = payment.id
+               )
+           ) payment ON true
+           WHERE document.status = 'issued'
+             AND document.document_type <> 'proforma'
+             AND document.official_number IS NOT NULL
+             AND document.issue_date BETWEEN $1 AND $2
+           ORDER BY document.issue_date, document.official_number`,
+          [dateFrom, dateTo],
+        );
+        return {
+          columns: incomeOutcomeExportColumns,
+          criteria: [`Period: ${dateFrom} to ${dateTo}`, 'Issued customer documents only'],
+          generatedAt,
+          rows: result.rows.map((row) => ({
+            transactionNumber: row.transaction_number,
+            invoiceNumber: row.invoice_number,
+            invoiceDate: row.invoice_date,
+            partnerName: row.partner_name,
+            accountCode: row.account_code,
+            netTotal: row.net_total,
+            vatTotal: row.vat_total,
+            vatRates: row.tax_rates,
+            total: row.total,
+            currencyCode: row.currency_code,
+            paymentDate: row.payment_date,
+          })),
+          title: 'Income',
+        };
+      }
+
+      const result = await this.database.getPool().query<{
+        account_code: string;
+        currency_code: string;
+        invoice_date: string;
+        invoice_number: string;
+        net_total: string;
+        partner_name: string;
+        payment_date: string;
+        tax_rates: string;
+        total: string;
+        transaction_number: string;
+        vat_total: string;
+      }>(
+        `SELECT invoice.supplier_invoice_number AS transaction_number,
+                invoice.supplier_invoice_number AS invoice_number,
+                invoice.invoice_date::text AS invoice_date,
+                supplier.display_name AS partner_name,
+                ''::text AS account_code,
+                coalesce(sum(line.line_total), 0)::text AS net_total,
+                coalesce(sum(line.vat_amount), 0)::text AS vat_total,
+                coalesce(sum(line.gross_total), 0)::text AS total,
+                invoice.currency_code,
+                coalesce(rates.tax_rates, '') AS tax_rates,
+                coalesce(payment.payment_date, '') AS payment_date
+         FROM procurement.supplier_invoices invoice
+         JOIN master_data.partners supplier ON supplier.id = invoice.supplier_partner_id
+         JOIN procurement.supplier_invoice_lines line ON line.supplier_invoice_id = invoice.id
+         LEFT JOIN LATERAL (
+           SELECT string_agg(rate, ', ' ORDER BY rate) AS tax_rates
+           FROM (
+             SELECT DISTINCT line_rate.vat_rate::numeric::text AS rate
+             FROM procurement.supplier_invoice_lines line_rate
+             WHERE line_rate.supplier_invoice_id = invoice.id AND line_rate.vat_rate IS NOT NULL
+           ) distinct_rates
+         ) rates ON true
+         LEFT JOIN LATERAL (
+           SELECT max(payment.payment_date)::text AS payment_date
+           FROM finance.supplier_payables payable
+           JOIN finance.supplier_payment_allocations allocation
+             ON allocation.supplier_payable_id = payable.id
+           JOIN finance.supplier_payments payment
+             ON payment.id = allocation.supplier_payment_id
+           WHERE payable.source_supplier_invoice_id = invoice.id
+         ) payment ON true
+         WHERE invoice.invoice_date BETWEEN $1 AND $2
+         GROUP BY invoice.id, supplier.display_name, rates.tax_rates, payment.payment_date
+         ORDER BY invoice.invoice_date, invoice.supplier_invoice_number`,
+        [dateFrom, dateTo],
+      );
+      return {
+        columns: incomeOutcomeExportColumns,
+        criteria: [`Period: ${dateFrom} to ${dateTo}`, 'Supplier invoices recorded in Procurement'],
+        generatedAt,
+        rows: result.rows.map((row) => ({
+          transactionNumber: row.transaction_number,
+          invoiceNumber: row.invoice_number,
+          invoiceDate: row.invoice_date,
+          partnerName: row.partner_name,
+          accountCode: row.account_code,
+          netTotal: row.net_total,
+          vatTotal: row.vat_total,
+          vatRates: row.tax_rates,
+          total: row.total,
+          currencyCode: row.currency_code,
+          paymentDate: row.payment_date,
+        })),
+        title: 'Outcome',
       };
     }
 
@@ -441,18 +595,18 @@ export class FinanceReportsService {
     const result = await this.database.getPool().query<TurnoverRow>(
       `SELECT source.*, '0'::text AS total_count
        FROM (${turnoverSource(kind)}) source
-       ORDER BY source.gross_bgn_total DESC, source.partner_name, source.partner_id`,
+       ORDER BY source.gross_eur_total DESC, source.partner_name, source.partner_id`,
       [dateFrom, dateTo],
     );
     return {
       columns: turnoverExportColumns,
-      criteria: [`Period: ${dateFrom} to ${dateTo}`, 'Currency: BGN'],
+      criteria: [`Period: ${dateFrom} to ${dateTo}`, 'Currency: EUR'],
       generatedAt,
       rows: result.rows.map((row) => ({
-        allocatedBgnTotal: row.allocated_bgn_total,
+        allocatedEurTotal: row.allocated_eur_total,
         documentCount: Number(row.document_count),
-        grossBgnTotal: row.gross_bgn_total,
-        outstandingBgnTotal: row.outstanding_bgn_total,
+        grossEurTotal: row.gross_eur_total,
+        outstandingEurTotal: row.outstanding_eur_total,
         partnerName: row.partner_name,
       })),
       title: kind === 'customer' ? 'Customer turnover' : 'Supplier turnover',
@@ -478,12 +632,27 @@ export class FinanceReportsService {
 }
 
 export function financeReportColumns(key: FinanceReportDefinitionKey): FinanceReportExportColumn[] {
+  if (key === 'finance.income' || key === 'finance.outcome') return incomeOutcomeExportColumns;
   if (key.endsWith('-aging')) return agingExportColumns;
   if (key.endsWith('-turnover')) return turnoverExportColumns;
   if (key.endsWith('-journal')) return journalExportColumns;
   if (key === 'finance.vat-review') return vatReviewExportColumns;
   throw new ApiErrorException('REPORT_NOT_FOUND', 'This report is not available.', 404);
 }
+
+const incomeOutcomeExportColumns: FinanceReportExportColumn[] = [
+  { key: 'transactionNumber', label: 'Transaction number', type: 'text' },
+  { key: 'invoiceNumber', label: 'Invoice number', type: 'text' },
+  { key: 'invoiceDate', label: 'Invoice date', type: 'date' },
+  { key: 'partnerName', label: 'Partner', type: 'text' },
+  { key: 'accountCode', label: 'Account code', type: 'text' },
+  { key: 'netTotal', label: 'Net amount', type: 'money' },
+  { key: 'vatTotal', label: 'VAT amount', type: 'money' },
+  { key: 'vatRates', label: 'VAT rate(s)', type: 'text' },
+  { key: 'total', label: 'Total amount', type: 'money' },
+  { key: 'currencyCode', label: 'Currency', type: 'text' },
+  { key: 'paymentDate', label: 'Payment date', type: 'date' },
+];
 
 export function selectReportColumns(
   data: FinanceReportExportData,
@@ -513,16 +682,16 @@ const agingExportColumns: FinanceReportExportColumn[] = [
   { key: 'daysOverdue', label: 'Days overdue', type: 'number' },
   { key: 'aging', label: 'Aging', type: 'text' },
   { key: 'paymentStatus', label: 'Payment status', type: 'text' },
-  { key: 'originalBgnTotal', label: 'Original BGN', type: 'money' },
-  { key: 'outstandingBgnTotal', label: 'Outstanding BGN', type: 'money' },
+  { key: 'originalEurTotal', label: 'Original EUR', type: 'money' },
+  { key: 'outstandingEurTotal', label: 'Outstanding EUR', type: 'money' },
 ];
 
 const turnoverExportColumns: FinanceReportExportColumn[] = [
   { key: 'partnerName', label: 'Partner', type: 'text' },
   { key: 'documentCount', label: 'Documents', type: 'number' },
-  { key: 'grossBgnTotal', label: 'Gross BGN', type: 'money' },
-  { key: 'allocatedBgnTotal', label: 'Allocated BGN', type: 'money' },
-  { key: 'outstandingBgnTotal', label: 'Outstanding BGN', type: 'money' },
+  { key: 'grossEurTotal', label: 'Gross EUR', type: 'money' },
+  { key: 'allocatedEurTotal', label: 'Allocated EUR', type: 'money' },
+  { key: 'outstandingEurTotal', label: 'Outstanding EUR', type: 'money' },
 ];
 
 const journalExportColumns: FinanceReportExportColumn[] = [
@@ -535,9 +704,9 @@ const journalExportColumns: FinanceReportExportColumn[] = [
   { key: 'documentDate', label: 'Document date', type: 'date' },
   { key: 'taxEventDate', label: 'Tax-event date', type: 'date' },
   { key: 'currencyCode', label: 'Currency', type: 'text' },
-  { key: 'netBgnTotal', label: 'Net BGN', type: 'money' },
-  { key: 'vatBgnTotal', label: 'VAT BGN', type: 'money' },
-  { key: 'grossBgnTotal', label: 'Gross BGN', type: 'money' },
+  { key: 'netEurTotal', label: 'Net EUR', type: 'money' },
+  { key: 'vatEurTotal', label: 'VAT EUR', type: 'money' },
+  { key: 'grossEurTotal', label: 'Gross EUR', type: 'money' },
   { key: 'taxBreakdown', label: 'Tax breakdown', type: 'text' },
 ];
 
@@ -546,8 +715,8 @@ const vatReviewExportColumns: FinanceReportExportColumn[] = [
   { key: 'vatTreatment', label: 'VAT treatment', type: 'text' },
   { key: 'vatRate', label: 'Rate %', type: 'number' },
   { key: 'documentCount', label: 'Documents', type: 'number' },
-  { key: 'netBgnTotal', label: 'Tax base BGN', type: 'money' },
-  { key: 'vatBgnTotal', label: 'VAT BGN', type: 'money' },
+  { key: 'netEurTotal', label: 'Tax base EUR', type: 'money' },
+  { key: 'vatEurTotal', label: 'VAT EUR', type: 'money' },
 ];
 
 function journalSource(kind: FinanceJournalReport['kind']): string {
@@ -565,19 +734,19 @@ function journalSource(kind: FinanceJournalReport['kind']): string {
                    document.exchange_rate::text,
                    CASE
                      WHEN document.status = 'cancelled' OR document.document_type = 'proforma' THEN 0
-                     WHEN document.document_type = 'credit_note' THEN -document.bgn_net_total
-                     ELSE document.bgn_net_total
-                   END AS net_bgn_total,
+                     WHEN document.document_type = 'credit_note' THEN -document.eur_net_total
+                     ELSE document.eur_net_total
+                   END AS net_eur_total,
                    CASE
                      WHEN document.status = 'cancelled' OR document.document_type = 'proforma' THEN 0
-                     WHEN document.document_type = 'credit_note' THEN -document.bgn_vat_total
-                     ELSE document.bgn_vat_total
-                   END AS vat_bgn_total,
+                     WHEN document.document_type = 'credit_note' THEN -document.eur_vat_total
+                     ELSE document.eur_vat_total
+                   END AS vat_eur_total,
                    CASE
                      WHEN document.status = 'cancelled' OR document.document_type = 'proforma' THEN 0
-                     WHEN document.document_type = 'credit_note' THEN -document.bgn_gross_total
-                     ELSE document.bgn_gross_total
-                   END AS gross_bgn_total,
+                     WHEN document.document_type = 'credit_note' THEN -document.eur_gross_total
+                     ELSE document.eur_gross_total
+                   END AS gross_eur_total,
                    true AS tax_breakdown_complete
             FROM finance.financial_documents document
             LEFT JOIN sales.invoices source ON source.id = document.source_sales_invoice_id
@@ -596,17 +765,17 @@ function journalSource(kind: FinanceJournalReport['kind']): string {
                  invoice.invoice_date::text AS document_date,
                  invoice.invoice_date::text AS tax_event_date,
                  invoice.currency_code,
-                 CASE WHEN invoice.currency_code = 'BGN' THEN '1.00000000' END AS exchange_rate,
-                 CASE WHEN invoice.currency_code = 'BGN'
+                 CASE WHEN invoice.currency_code = 'EUR' THEN '1.00000000' END AS exchange_rate,
+                 CASE WHEN invoice.currency_code = 'EUR'
                         AND bool_and(line.vat_treatment IS NOT NULL)
-                      THEN coalesce(sum(line.line_total), 0) ELSE 0 END AS net_bgn_total,
-                 CASE WHEN invoice.currency_code = 'BGN'
+                      THEN coalesce(sum(line.line_total), 0) ELSE 0 END AS net_eur_total,
+                 CASE WHEN invoice.currency_code = 'EUR'
                         AND bool_and(line.vat_treatment IS NOT NULL)
-                      THEN coalesce(sum(line.vat_amount), 0) ELSE 0 END AS vat_bgn_total,
-                 CASE WHEN invoice.currency_code = 'BGN'
+                      THEN coalesce(sum(line.vat_amount), 0) ELSE 0 END AS vat_eur_total,
+                 CASE WHEN invoice.currency_code = 'EUR'
                         AND bool_and(line.vat_treatment IS NOT NULL)
-                      THEN coalesce(sum(line.gross_total), 0) ELSE 0 END AS gross_bgn_total,
-                 (invoice.currency_code = 'BGN'
+                      THEN coalesce(sum(line.gross_total), 0) ELSE 0 END AS gross_eur_total,
+                 (invoice.currency_code = 'EUR'
                    AND bool_and(line.vat_treatment IS NOT NULL)) AS tax_breakdown_complete
           FROM procurement.supplier_invoices invoice
           JOIN master_data.partners supplier ON supplier.id = invoice.supplier_partner_id
@@ -618,7 +787,7 @@ function journalSource(kind: FinanceJournalReport['kind']): string {
 function vatReviewSource(): string {
   return `WITH purchase_completeness AS (
             SELECT invoice.id,
-                   invoice.currency_code = 'BGN'
+                   invoice.currency_code = 'EUR'
                      AND bool_and(line.vat_treatment IS NOT NULL) AS complete
             FROM procurement.supplier_invoices invoice
             JOIN procurement.supplier_invoice_lines line ON line.supplier_invoice_id = invoice.id
@@ -631,11 +800,11 @@ function vatReviewSource(): string {
                  round(sum(
                    (CASE WHEN document.document_type = 'credit_note' THEN -1 ELSE 1 END)
                    * summary.net_total * document.exchange_rate
-                 ), 4)::text AS net_bgn_total,
+                 ), 4)::text AS net_eur_total,
                  round(sum(
                    (CASE WHEN document.document_type = 'credit_note' THEN -1 ELSE 1 END)
                    * summary.vat_amount * document.exchange_rate
-                 ), 4)::text AS vat_bgn_total
+                 ), 4)::text AS vat_eur_total
           FROM finance.financial_document_vat_summary summary
           JOIN finance.financial_documents document ON document.id = summary.financial_document_id
           WHERE document.status NOT IN ('draft', 'cancelled')
@@ -647,8 +816,8 @@ function vatReviewSource(): string {
           SELECT 'input'::varchar AS direction,
                  line.vat_treatment, line.vat_rate::text,
                  count(DISTINCT invoice.id)::text AS document_count,
-                 round(sum(line.line_total), 4)::text AS net_bgn_total,
-                 round(sum(line.vat_amount), 4)::text AS vat_bgn_total
+                 round(sum(line.line_total), 4)::text AS net_eur_total,
+                 round(sum(line.vat_amount), 4)::text AS vat_eur_total
           FROM procurement.supplier_invoice_lines line
           JOIN procurement.supplier_invoices invoice ON invoice.id = line.supplier_invoice_id
           JOIN purchase_completeness completeness
@@ -668,7 +837,7 @@ function incompletePurchaseTaxSource(): string {
             JOIN procurement.supplier_invoice_lines line ON line.supplier_invoice_id = invoice.id
             WHERE invoice.invoice_date BETWEEN $1 AND $2
             GROUP BY invoice.id, invoice.supplier_invoice_number
-            HAVING invoice.currency_code <> 'BGN'
+            HAVING invoice.currency_code <> 'EUR'
                OR NOT bool_and(line.vat_treatment IS NOT NULL)
           ) incomplete`;
 }
@@ -679,9 +848,9 @@ function mapJournalRow(row: JournalRow): FinanceJournalReport['items'][number] {
     documentDate: row.document_date,
     documentType: row.document_type,
     ...(row.exchange_rate ? { exchangeRate: row.exchange_rate } : {}),
-    grossBgnTotal: row.gross_bgn_total,
+    grossEurTotal: row.gross_eur_total,
     id: row.id,
-    netBgnTotal: row.net_bgn_total,
+    netEurTotal: row.net_eur_total,
     number: row.number,
     partnerName: row.partner_name,
     ...(row.partner_vat_number ? { partnerVatNumber: row.partner_vat_number } : {}),
@@ -689,7 +858,7 @@ function mapJournalRow(row: JournalRow): FinanceJournalReport['items'][number] {
     status: row.status,
     taxBreakdownComplete: row.tax_breakdown_complete,
     ...(row.tax_event_date ? { taxEventDate: row.tax_event_date } : {}),
-    vatBgnTotal: row.vat_bgn_total,
+    vatEurTotal: row.vat_eur_total,
   };
 }
 
@@ -725,8 +894,8 @@ function agingSource(kind: FinanceAgingReport['kind']): string {
                    partner.display_name AS partner_name,
                    document.document_date::text, document.due_date::text,
                    document.payment_status,
-                   document.bgn_total AS original_bgn_total,
-                   round(document.outstanding_total * document.exchange_rate, 4) AS outstanding_bgn_total,
+                   document.eur_total AS original_eur_total,
+                   round(document.outstanding_total * document.exchange_rate, 4) AS outstanding_eur_total,
                    GREATEST($1::date - document.due_date, 0)::integer AS days_overdue
             FROM finance.customer_documents document
             JOIN sales.invoices invoice ON invoice.id = document.source_sales_invoice_id
@@ -740,8 +909,8 @@ function agingSource(kind: FinanceAgingReport['kind']): string {
                  partner.display_name AS partner_name,
                  payable.document_date::text, payable.due_date::text,
                  payable.payment_status,
-                 payable.bgn_total AS original_bgn_total,
-                 round(payable.outstanding_total * payable.exchange_rate, 4) AS outstanding_bgn_total,
+                 payable.eur_total AS original_eur_total,
+                 round(payable.outstanding_total * payable.exchange_rate, 4) AS outstanding_eur_total,
                  GREATEST($1::date - payable.due_date, 0)::integer AS days_overdue
           FROM finance.supplier_payables payable
           JOIN procurement.supplier_invoices invoice ON invoice.id = payable.source_supplier_invoice_id
@@ -754,9 +923,9 @@ function turnoverSource(kind: FinanceTurnoverReport['kind']): string {
     return `SELECT document.customer_partner_id AS partner_id,
                    partner.display_name AS partner_name,
                    count(*)::integer AS document_count,
-                   sum(document.bgn_total) AS gross_bgn_total,
-                   sum(round(document.allocated_total * document.exchange_rate, 4)) AS allocated_bgn_total,
-                   sum(round(document.outstanding_total * document.exchange_rate, 4)) AS outstanding_bgn_total
+                   sum(document.eur_total) AS gross_eur_total,
+                   sum(round(document.allocated_total * document.exchange_rate, 4)) AS allocated_eur_total,
+                   sum(round(document.outstanding_total * document.exchange_rate, 4)) AS outstanding_eur_total
             FROM finance.customer_documents document
             JOIN master_data.partners partner ON partner.id = document.customer_partner_id
             WHERE document.review_state = 'pending_finance_review'
@@ -766,9 +935,9 @@ function turnoverSource(kind: FinanceTurnoverReport['kind']): string {
   return `SELECT payable.supplier_partner_id AS partner_id,
                  partner.display_name AS partner_name,
                  count(*)::integer AS document_count,
-                 sum(payable.bgn_total) AS gross_bgn_total,
-                 sum(round(payable.allocated_total * payable.exchange_rate, 4)) AS allocated_bgn_total,
-                 sum(round(payable.outstanding_total * payable.exchange_rate, 4)) AS outstanding_bgn_total
+                 sum(payable.eur_total) AS gross_eur_total,
+                 sum(round(payable.allocated_total * payable.exchange_rate, 4)) AS allocated_eur_total,
+                 sum(round(payable.outstanding_total * payable.exchange_rate, 4)) AS outstanding_eur_total
           FROM finance.supplier_payables payable
           JOIN master_data.partners partner ON partner.id = payable.supplier_partner_id
           WHERE payable.document_date BETWEEN $1 AND $2

@@ -6,11 +6,30 @@ AGENTS.md remains authoritative. No test records or audit history are to be dele
 
 Status: **Pending** = not verified/fixed; **In progress** = partial implementation;
 **Verified locally** = applicable local regressions passed, hosted retest pending;
-**Decision** = a recorded client/provider dependency, not a waived requirement.
-Local verification is not hosted, statutory or hardware acceptance.
+**External acceptance** = code uses the recorded default, but needs real hardware,
+infrastructure or witnessed evidence; **Deferred** = accepted as outside the
+current rollout, still required by the SRS. Local verification is not hosted,
+statutory or hardware acceptance.
 
-Current: **36 locally verified** (hosted retest pending), **3 in progress**,
-**13 decision-dependent** (52 findings total).
+Current: **49 locally verified** (hosted retest pending), **2 external acceptance**,
+**1 deferred** (52 findings total).
+
+Current implementation update, 14 October 2026: FIN-01, FIN-02, FIN-07, FIN-12,
+FIN-13, SEC-02, WH-01, WH-04, SAL-02, SRV-02, SRV-03 and CRM-10 are now
+**Verified locally**. The project owner selected the configurable defaults in
+ADR-0004, so these items no longer wait on client decisions. The new WH-01
+journey uses a purchase order and goods receipt created through the API, then
+traces the same serial through sale, handover, return and Service repair.
+
+Latest verification: 270/270 isolated API tests and 30/30 browser journeys
+passed. The migration rehearsal converted representative BGN customer-credit,
+advance-ledger, loyalty and CRM opportunity values to EUR at the statutory rate,
+rejected a new BGN balance, and completed rollback/reapply on its disposable
+database. The migration regression, full API suite, and browser suite passed;
+`npm run validate` had also passed on this code before the migration-test-only
+addition. Hosted retests remain open. ORG-03 fiscal-device acceptance and
+BCK-01 witnessed backup/restore acceptance remain external evidence gates;
+LOG-01 remains deferred for this rollout.
 
 ## 1. Platform processing
 
@@ -21,60 +40,60 @@ Current: **36 locally verified** (hosted retest pending), **3 in progress**,
 
 ## 2. Finance
 
-| Finding | Remaining work / verification                                                                                                                                                                                        | Status           |
-| ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------- |
-| FIN-01  | Official issuance, approved legal numbering, PDF/email, BNB, proforma conversion and fiscal linkage. FIN-001/002, DOC-001 and POS-001 apply. Vista has reported a candidate FP-2000; fiscal acceptance remains open. | Decision         |
-| GEN-01  | Accountant-approved base-currency migration decision, FIN-004. Do not silently change the specification's BGN accounting or existing snapshots.                                                                      | Decision         |
-| FIN-02  | Explicit foreign rate/source and cleared BGN defaults verified in API/browser. Approved automatic BNB provider remains pending, FIN-002.                                                                             | In progress      |
-| FIN-03  | Cumulative amount/quantity limits, original-line prefill, cancelled-note capacity and concurrent/idempotent credit regression verified.                                                                              | Verified locally |
-| FIN-04  | Cash protection verified for concurrent payments, backdating and receipt cancellation; cancelled test payments restore the original balance.                                                                         | Verified locally |
-| FIN-05  | Drafts excluded from revenue, sales journals/output VAT and invoice-derived CRM metrics; negative/zero-baseline trend styling verified.                                                                              | Verified locally |
-| FIN-06  | Future collection/customer/supplier payment and advance rejection verified, including incoming/outgoing bank matching and offsets without allocations.                                                               | Verified locally |
-| FIN-07  | Audited payment reversal/correction preserving cash/bank/advance/offset links. Approve the workflow through FIN-005.                                                                                                 | Decision         |
-| FIN-08  | Subscription periods open in Finance for VAT review; saved charges preserved, linked previews reopen the same draft, concurrent preparation deduplicated.                                                            | Verified locally |
-| FIN-12  | Approved Bulgarian bank format adapters and import reconciliation. FIN-003.                                                                                                                                          | Decision         |
-| FIN-09  | Manual Finance lines resolve shared customer/date/currency prices with Finance permission; missing prices stay blank and delayed reads preserve manual edits.                                                        | Verified locally |
-| FIN-10  | Customer advances apply to the same customer's open receivable as linked, auditable payments; concurrency, retry and balance checks pass locally. Hosted retest pending.                                             | Verified locally |
-| FIN-11  | Readable scope-aware draft references; collision-safe sequences; permission-aware Finance-to-Sales source navigation and return. Hosted retest pending.                                                              | Verified locally |
-| FIN-13  | Approved structured accounting export format/adapter. FIN-003.                                                                                                                                                       | Decision         |
+| Finding | Remaining work / verification                                                                                                                                                                                                                                                                                                                                             | Status           |
+| ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------- |
+| FIN-01  | Bulgarian invoice/proforma/credit/debit documents, scoped concurrency-safe numbering, PDF/email delivery with retry, BNB rate snapshots, paid-proforma conversion and POS receipt links pass isolated local tests. The chosen layout is a standard Bulgarian review format; no accountant approval gate is added. Physical fiscal-device acceptance remains under ORG-03. | Verified locally |
+| GEN-01  | EUR accounting is effective 1 Jan 2026 (ADR-0003). Existing local/test amounts are converted, EUR defaults are applied, and active schemas reject BGN; local reconciliation passes. Hosted migration and restore rehearsal remain.                                                                                                                                        | Verified locally |
+| FIN-02  | EUR is the default, BGN is rejected for new transactions, and supported foreign-currency documents use dated BNB rate snapshots with EUR accounting values. Rate retrieval and conversion regressions pass locally.                                                                                                                                                       | Verified locally |
+| FIN-03  | Cumulative amount/quantity limits, original-line prefill, cancelled-note capacity and concurrent/idempotent credit regression verified.                                                                                                                                                                                                                                   | Verified locally |
+| FIN-04  | Cash protection verified for concurrent payments, backdating and receipt cancellation; cancelled test payments restore the original balance.                                                                                                                                                                                                                              | Verified locally |
+| FIN-05  | Drafts excluded from revenue, sales journals/output VAT and invoice-derived CRM metrics; negative/zero-baseline trend styling verified.                                                                                                                                                                                                                                   | Verified locally |
+| FIN-06  | Future collection/customer/supplier payment and advance rejection verified, including incoming/outgoing bank matching and offsets without allocations.                                                                                                                                                                                                                    | Verified locally |
+| FIN-07  | Authorized Accounting Manager/Owner roles can reverse a posted payment with a reason; original payment and allocation links remain intact, retries are idempotent, and closed-period corrections use the current open period. Permission, balance and replay tests pass locally.                                                                                          | Verified locally |
+| FIN-08  | Subscription periods open in Finance for VAT review; saved charges preserved, linked previews reopen the same draft, concurrent preparation deduplicated.                                                                                                                                                                                                                 | Verified locally |
+| FIN-12  | CSV/XLSX statement import maps date, direction, amount, currency and reference; counterparty is optional. EUR is the import currency. Possible duplicates require explicit review; unknown matches are not guessed. Parser, validation and bank workflow tests pass locally.                                                                                              | Verified locally |
+| FIN-09  | Manual Finance lines resolve shared customer/date/currency prices with Finance permission; missing prices stay blank and delayed reads preserve manual edits.                                                                                                                                                                                                             | Verified locally |
+| FIN-10  | Customer advances apply to the same customer's open receivable as linked, auditable payments; concurrency, retry and balance checks pass locally. Hosted retest pending.                                                                                                                                                                                                  | Verified locally |
+| FIN-11  | Readable scope-aware draft references; collision-safe sequences; permission-aware Finance-to-Sales source navigation and return. Hosted retest pending.                                                                                                                                                                                                                   | Verified locally |
+| FIN-13  | Income and Outcome exports provide the agreed fields in CSV/XLSX; unavailable partner account codes stay blank. Worker generation, downloads, output format and permissions pass local integration tests. No accountant approval gate is added for the current review flow.                                                                                               | Verified locally |
 
 ## 3. Administration
 
-| Finding | Remaining work / verification                                                                                                                                                                                                                                  | Status           |
-| ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------- |
-| ORG-01  | Bulgarian UIC 9/13-digit checksums and EU VAT formats are validated in Business Structure, Partners, and CRM lead conversion. VAT registration is not checked. Hosted retest remains.                                                                          | Verified locally |
-| ORG-02  | Version-checked edits and reversible deactivation for entities, branches, locations, operators and registers. Delete permission deactivates; Edit permission restores. Dependency guards prevent cascades; audit/outbox retain history. Hosted retest pending. | Verified locally |
-| ORG-03  | Vista reported a DATECS FP-2000 candidate. Confirm the exact variant's H-18 registration, protocol/configuration and test-device access before final fiscal-device metadata and hardware validation (POS-001).                                                 | Decision         |
-| SEC-01  | Admin role creation/editing, distinct role descriptions, five-action permission matrix, no-View warning, and Manager POS view without cashier privileges verified locally. Hosted retest pending.                                                              | Verified locally |
-| SEC-02  | Define/enforce administrative-capability MFA classification and review Manager access after the employee/role and non-admin MFA policy is approved (IAM-001).                                                                                                  | Decision         |
-| SEC-03  | Actual assigned role names, explicitly labelled active-session count and failed sign-in target display verified in API/browser. Hosted retest remains.                                                                                                         | Verified locally |
+| Finding | Remaining work / verification                                                                                                                                                                                                                                                                    | Status              |
+| ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------- |
+| ORG-01  | Bulgarian UIC 9/13-digit checksums and EU VAT formats are validated in Business Structure, Partners, and CRM lead conversion. VAT registration is not checked. Hosted retest remains.                                                                                                            | Verified locally    |
+| ORG-02  | Version-checked edits and reversible deactivation for entities, branches, locations, operators and registers. Delete permission deactivates; Edit permission restores. Dependency guards prevent cascades; audit/outbox retain history. Hosted retest pending.                                   | Verified locally    |
+| ORG-03  | Adopt the reported DATECS FP-2000, connected through a local USB adapter; keep the protocol behind the fiscal-device interface and use the simulator in development. Exact-unit H-18 registration and a real receipt/reversal on the target POS remain hardware acceptance, not a code decision. | External acceptance |
+| SEC-01  | Admin role creation/editing, distinct role descriptions, five-action permission matrix, no-View warning, and Manager POS view without cashier privileges verified locally. Hosted retest pending.                                                                                                | Verified locally    |
+| SEC-02  | Backend-enforced verified TOTP is mandatory for administrators and optional for other roles. Enrollment, login enforcement, recovery, authorization and audit regressions pass locally. Hosted role/account retest remains.                                                                      | Verified locally    |
+| SEC-03  | Actual assigned role names, explicitly labelled active-session count and failed sign-in target display verified in API/browser. Hosted retest remains.                                                                                                                                           | Verified locally    |
 
 ## 4. Warehouse
 
-| Finding | Remaining work / verification                                                                                                                                                                                                                                                                                | Status           |
-| ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------- |
-| WH-01   | Installed serials resolve to registered customer equipment and Service history without an inventory link. `DEMO-FR-ALFA-01` has no linked receipt/stock source in current demo data, so full supplier-to-sale acceptance remains open; do not fabricate its history.                                         | In progress      |
-| WH-02   | Unknown source references are rejected without saving. The permission-protected active register persists, shows document numbers instead of internal IDs, prevents duplicate reservations when an order is referenced by ID or number, and supports release. Local validation passed; hosted retest pending. | Verified locally |
-| WH-03   | Posted movement journal filters by warehouse, product, movement type and reference; linked receipts, shipments, returns, stocktakes and Service part issues open their source register. Internal UUIDs are not shown. Local API/UI tests passed; hosted retest pending.                                      | Verified locally |
-| WH-04   | BGN receipt-cost variance warning is bilingual and locally verified; entered cost drives weighted-average valuation. Approval threshold/authority and foreign-currency comparison require WH-001 and FIN-002; hosted retest pending.                                                                         | Decision         |
-| WH-05   | Stock value summary now sums the displayed, cent-rounded line values using integer minor units; regression confirms the shown total reconciles. Hosted retest pending.                                                                                                                                       | Verified locally |
+| Finding | Remaining work / verification                                                                                                                                                                                                                                                                                                   | Status           |
+| ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------- |
+| WH-01   | One serial is now tested through a real supplier purchase-order receipt, sale, customer handover, repair return, Service work and technician repair history. Full trace is linked and locally verified. The older `DEMO-FR-ALFA-01` sample has no source receipt, so it remains explicitly unlinked; no history was fabricated. | Verified locally |
+| WH-02   | Unknown source references are rejected without saving. The permission-protected active register persists, shows document numbers instead of internal IDs, prevents duplicate reservations when an order is referenced by ID or number, and supports release. Local validation passed; hosted retest pending.                    | Verified locally |
+| WH-03   | Posted movement journal filters by warehouse, product, movement type and reference; linked receipts, shipments, returns, stocktakes and Service part issues open their source register. Internal UUIDs are not shown. Local API/UI tests passed; hosted retest pending.                                                         | Verified locally |
+| WH-04   | A 10% or greater receipt-cost difference warns without blocking receipt. Compare the latest supplier-invoice cost, then latest product cost; show no warning without a baseline. EUR cost is used. Procurement UI/API and valuation regressions pass locally.                                                                   | Verified locally |
+| WH-05   | Stock value summary now sums the displayed, cent-rounded line values using integer minor units; regression confirms the shown total reconciles. Hosted retest pending.                                                                                                                                                          | Verified locally |
 
 ## 5. Sales
 
-| Finding | Remaining work / verification                                                                                                                                                                                                     | Status           |
-| ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------- |
-| SAL-01  | Past validity dates are rejected using the configured business timezone. Expired drafts are displayed as Expired without rewriting their stored state and cannot be confirmed. Local API/UI checks passed; hosted retest pending. | Verified locally |
-| SAL-02  | Versioned draft revision, cancellation, stock-availability guidance and bilingual quotation PDF pass local API/UI tests. Email delivery still needs the approved sender/provider and delivery rules; hosted retest remains.       | In progress      |
+| Finding | Remaining work / verification                                                                                                                                                                                                                          | Status           |
+| ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------- |
+| SAL-01  | Past validity dates are rejected using the configured business timezone. Expired drafts are displayed as Expired without rewriting their stored state and cannot be confirmed. Local API/UI checks passed; hosted retest pending.                      | Verified locally |
+| SAL-02  | Draft revision, cancellation, stock guidance, bilingual quotation PDF, queued email delivery and retry after SMTP failure pass local API/UI integration tests. Production SMTP credentials still need deployment configuration; hosted retest remains. | Verified locally |
 
 ## 6. Service
 
-| Finding | Remaining work / verification                                                                                                                                                                                                                                 | Status           |
-| ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------- |
-| SRV-01  | Technician drawer lists stocked batches with available quantities/expiry. Unknown batch returns a controlled 404; failed completion leaves work order and stock unchanged. Valid batch use, trace movement and deduction pass locally. Hosted retest pending. | Verified locally |
-| SRV-02  | Warranty-covered billing eligibility and explicit authorized exceptions require the approved warranty/billing policy (SVC-001).                                                                                                                               | Decision         |
-| SRV-03  | Separate stock cost from customer selling price using the approved Service labor, transport and pricing policy (SVC-001).                                                                                                                                     | Decision         |
-| SRV-04  | Unified equipment history now includes linked sales handovers, claim status history, unassigned requests, visits, completed repairs, used parts, technician and dates. Locally verified; hosted retest pending.                                               | Verified locally |
-| SRV-05  | Computed overdue flags appear for active scheduled/in-progress visits past their end and active inspections due before the Sofia business date. Due-today is distinct; stored workflow states are unchanged. API and Operations UI regressions pass locally.  | Verified locally |
+| Finding | Remaining work / verification                                                                                                                                                                                                                                                                                                         | Status           |
+| ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------- |
+| SRV-01  | Technician drawer lists stocked batches with available quantities/expiry. Unknown batch returns a controlled 404; failed completion leaves work order and stock unchanged. Valid batch use, trace movement and deduction pass locally. Hosted retest pending.                                                                         | Verified locally |
+| SRV-02  | Warranty customer charges are limited to labor and parts; transport and other charges are rejected. API integration tests pass locally.                                                                                                                                                                                               | Verified locally |
+| SRV-03  | Work-order customer charges are recorded per job and kept separate from internal labor, part and transport costs. The completed-work browser journey verifies a EUR invoice draft from customer labor/transport charges while a zero-charge used part remains internal cost only. Totals, snapshots and Finance handoff pass locally. | Verified locally |
+| SRV-04  | Unified equipment history now includes linked sales handovers, claim status history, unassigned requests, visits, completed repairs, used parts, technician and dates. Locally verified; hosted retest pending.                                                                                                                       | Verified locally |
+| SRV-05  | Computed overdue flags appear for active scheduled/in-progress visits past their end and active inspections due before the Sofia business date. Due-today is distinct; stored workflow states are unchanged. API and Operations UI regressions pass locally.                                                                          | Verified locally |
 
 ## 7. CRM
 
@@ -89,15 +108,15 @@ Current: **36 locally verified** (hosted retest pending), **3 in progress**,
 | CRM-07  | Feedback & NPS lists completed Service jobs and accepted deliveries awaiting a survey; staff can open the preselected one-question survey, share it using their usual contact method, record the invitation and later save the customer's score. Duplicate attempts conflict; API/browser coverage passes locally. Automatic email remains subject to INT-001. Hosted retest pending. | Verified locally |
 | CRM-08  | Lead telephone values accept common local/international notation with 7–15 digits, without forcing a country. The form shows a bilingual field error and blocks invalid submission; API responds with a telephone-specific validation detail. Domain, CRM API, component, and browser checks pass locally. Hosted retest pending.                                                     | Verified locally |
 | CRM-09  | The pipeline now opens an unquoted opportunity when staff try to move it to Quotation sent, explains that a Sales quotation must be linked, and keeps the move disabled until linked. The API rejects direct attempts without changing stage/version; linking then moving passes locally. Hosted retest pending.                                                                      | Verified locally |
-| CRM-10  | Calendar vs business-hour SLA calculation; approved working hours, holidays, warning thresholds and escalation paths (SLA-001).                                                                                                                                                                                                                                                       | Decision         |
+| CRM-10  | Configurable Sofia weekday hours; response/resolution timers start on ticket creation and stop when the corresponding event is recorded; 4-business-hour response, 2-business-day resolution, 75% at-risk alerts and overdue notices to the assignee and CRM manager are implemented and locally tested. Public holidays are excluded initially.                                      | Verified locally |
 
 ## 8. Logistics, POS and Recovery
 
-| Finding | Remaining work / verification                                                                                                                                                                                                             | Status           |
-| ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------- |
-| LOG-01  | Econt/Speedy credentials, approved adapters, label/tracking/return workflows and environments (INT-002).                                                                                                                                  | Decision         |
-| POS-01  | Operations opens POS Reports at the configured public URL. Manager can review all views without export/write access; POS Operator can create exports. Isolated API/browser checks and frontend build pass locally. Hosted retest pending. | Verified locally |
-| BCK-01  | Recheck Recovery with approved backup roles/MFA, source inventory and plan, storage/tape, restore responsibilities and witnessed DR acceptance (BAK-001–005, IAM-001–003, DEP-001).                                                       | Decision         |
+| Finding | Remaining work / verification                                                                                                                                                                                                                                                                                                                     | Status              |
+| ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------- |
+| LOG-01  | Courier adapters are deferred for the current rollout; Econt/Speedy remain in the SRS and require vendor details and acceptance before activation.                                                                                                                                                                                                | Deferred            |
+| POS-01  | Operations opens POS Reports at the configured public URL. Manager can review all views without export/write access; POS Operator can create exports. Isolated API/browser checks and frontend build pass locally. Hosted retest pending.                                                                                                         | Verified locally    |
+| BCK-01  | Use the ADR-0004 baseline: deployed Vista database/object storage first, hourly critical database recovery points, daily full backups, 1h/4h critical RPO/RTO, encrypted independent copy and separated backup roles. Remaining evidence is the actual asset/hardware inventory and witnessed restore; production destructive actions stay gated. | External acceptance |
 
 ## 9. Shared interface
 
@@ -182,7 +201,7 @@ Current: **36 locally verified** (hosted retest pending), **3 in progress**,
 ## Shared interface batch, 9 October 2026
 
 - UI-02 is locally verified. Shared formatters now keep exact decimal inputs,
-  localize dates, quantities, decimal/group separators and BGN/foreign-currency
+  localize dates, quantities, decimal/group separators and EUR/foreign-currency
   amounts consistently across Finance, CRM, Service, Sales, Procurement,
   Logistics, Warehouse, reports, partner files and payment notifications. VAT
   percentages follow the selected language; date-input and machine ISO values
@@ -222,8 +241,8 @@ Current: **36 locally verified** (hosted retest pending), **3 in progress**,
   policy and development-account fixture tests passed. OpenAPI/client generation
   and checks passed. Hosted retest remains pending.
 
-Hosted platform verification and decision-controlled Finance requirements
-remain open.
+Hosted platform verification and external hardware/restore evidence remain
+open. No client decision blocks the 12 items listed in the 14 October update.
 
 ## Seventh batch evidence, 9 October 2026
 
@@ -242,9 +261,10 @@ remain open.
   workspace types, enabled tests, and production builds. The existing Operations
   bundle-size warning remains. No hosted roles or permissions were changed.
 
-Next: obtain authentic source history for WH-01 or keep its trace limitation
-explicit; then continue with WH-03. Hosted platform verification and
-decision-controlled requirements remain open.
+At this point in the 9 October sequence, WH-01 still awaited a genuine source
+receipt. The 14 October update above supersedes that status: the complete trace
+is now verified against a purchase order and receipt created through the API.
+Hosted verification remains open.
 
 ## Eighth batch evidence, 9 October 2026
 
@@ -268,10 +288,11 @@ decision-controlled requirements remain open.
   exists. The response includes its customer, location, product/device name and
   linked Service history; it does not invent a warehouse, receipt, or sale.
   Operations shows an explicit notice when inventory history is not linked.
-- The source QA sample `DEMO-FR-ALFA-01` is registered at Alfa Market but has no
-  serialized inventory/receipt source in the current demo fixture. The finding
-  remains in progress until full traceability is verified against genuine linked
-  source records. Existing tests cover complete traces for linked inventory.
+- At this point in the 9 October sequence, the source QA sample
+  `DEMO-FR-ALFA-01` was registered at Alfa Market but had no serialized
+  inventory/receipt source in the demo fixture. The finding remained in
+  progress until genuine source records were added to the isolated test flow;
+  the 14 October update above records that verification.
 - The isolated QA suite passed all 43 selected API integration tests and one
   browser journey. The ERP/CRM app suite passed all 56 tests; API type checking
   passed. `npm run validate` passed OpenAPI/client checks, formatting, lint,
@@ -316,24 +337,25 @@ decision-controlled requirements remain open.
 
 ## Twelfth batch evidence, 9 October 2026
 
-- WH-04 now displays a bilingual, non-blocking warning when a BGN receipt unit
-  cost differs from the BGN purchase-order price. Excluding the line hides the
+- WH-04 now displays a bilingual, non-blocking warning when a EUR receipt unit
+  cost differs from the EUR purchase-order price. Excluding the line hides the
   warning. The user-entered cost is submitted and retained for stock valuation;
   isolated PostgreSQL integration confirms the weighted average uses that cost.
 - The purchase-order UI regression passed. The full API suite exposed stale POS
   role expectations, which were corrected to match Manager's configured
   read-only POS access and operator-scoped transaction lookup. An unrelated
   managed-file cleanup hook was extended for full-suite parallel load.
-- Approval enforcement and foreign-currency variance comparison remain
-  decision-dependent. Hosted retest remains pending. No hosted or development
-  stock records were changed.
+- The project owner later confirmed the 10% threshold, latest-cost comparison,
+  and warning-only behavior in ADR-0004. EUR-aware comparison follows the
+  accounting transition. Hosted retest remains pending. No hosted or
+  development stock records were changed.
 
 ## Thirteenth batch evidence, 9 October 2026
 
 - WH-05 is locally verified. Inventory value now sums each stock row after the
   same two-decimal display rounding, using integer minor units rather than
   floating-point accumulation. The regression covers values that previously
-  could make the total differ by BGN 0.01.
+  could make the total differ by EUR 0.01.
 - SAL-01 is locally verified. A quotation cannot be created with a validity date
   before today's configured business date. Existing drafts whose validity has
   ended display **Expired** without changing their persisted draft status, and
@@ -572,7 +594,7 @@ decision-controlled requirements remain open.
 ## Twenty-ninth batch evidence, 9 October 2026
 
 - UI-02 is locally verified. Shared formatters now localize dates, quantities,
-  decimal/group separators, BGN/foreign-currency amounts and VAT presentation
+  decimal/group separators, EUR/foreign-currency amounts and VAT presentation
   across Operations Finance, CRM, Service, Sales, Procurement, Logistics,
   Warehouse, reports, partner files and payment notifications. Exact financial
   decimal strings and machine date values remain unchanged.
@@ -662,10 +684,9 @@ decision-controlled requirements remain open.
   guidance, the safe error code and a copyable support reference in English
   and Bulgarian. The hosted 503 still needs to be captured and retested after
   deployment; no hosted data was changed.
-- Reconciliation with the decision register moved SYS-02 to **Verified locally**
-  and recorded `WH-001` for the still-unapproved goods-receipt variance gate and
-  foreign-currency comparison. That keeps the local warning/valuation behavior
-  while making the approval needed for WH-04 explicit.
+- At that time, reconciliation recorded `WH-001` for the goods-receipt
+  variance threshold and foreign-currency comparison. The project owner later
+  selected the 10% EUR baseline in ADR-0004; WH-04 is now **Verified locally**.
 - Hosted activity backlog review remains pending. No hosted records or local
   business data were changed.
 

@@ -306,7 +306,7 @@ export class CreatePartnerBankAccountDto implements CreatePartnerBankAccountRequ
   @MaxLength(20)
   bic?: string;
 
-  @ApiPropertyOptional({ default: 'BGN', maxLength: 3, minLength: 3, type: String })
+  @ApiPropertyOptional({ default: 'EUR', maxLength: 3, minLength: 3, type: String })
   @IsOptional()
   @IsString()
   @Matches(/^[A-Za-z]{3}$/u)

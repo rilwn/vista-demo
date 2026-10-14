@@ -26,7 +26,7 @@ describe('CRM report field selection', () => {
           {
             period: 'Selected period',
             activeCustomers: 7,
-            observedLifetimeValueBgn: '120.0000',
+            observedLifetimeValueEur: '120.0000',
           },
         ],
         title: 'Customer value and retention',
@@ -47,7 +47,7 @@ describe('CRM report field selection', () => {
       workbook.worksheets[0]?.eachRow((row) => row.eachCell((cell) => values.push(cell.value)));
       expect(values).toContain('Selected period');
       expect(values).toContain(7);
-      expect(values).not.toContain('Observed customer value BGN');
+      expect(values).not.toContain('Observed customer value EUR');
       expect(values).not.toContain(120);
     } else expect(rendered.buffer.subarray(0, 5).toString()).toBe('%PDF-');
   });

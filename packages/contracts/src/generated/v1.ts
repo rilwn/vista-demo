@@ -1252,6 +1252,22 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/finance/documents/{id}/payments/{paymentId}/reverse': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['FinanceController_reversePayment'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/finance/documents/search': {
     parameters: {
       query?: never;
@@ -1310,6 +1326,70 @@ export interface paths {
     get?: never;
     put?: never;
     post: operations['FinancialDocumentsController_cancel'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/finance/financial-documents/{id}/email': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['FinancialDocumentsController_email'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/finance/financial-documents/{id}/issue': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['FinancialDocumentsController_issue'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/finance/financial-documents/{id}/pdf': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['FinancialDocumentsController_pdf'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/finance/financial-documents/exchange-rate': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['FinancialDocumentsController_exchangeRate'];
+    put?: never;
+    post?: never;
     delete?: never;
     options?: never;
     head?: never;
@@ -3894,6 +3974,22 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/sales/quotations/{id}/email': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['SalesController_emailQuotation'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/sales/quotations/{id}/pdf': {
     parameters: {
       query?: never;
@@ -4935,7 +5031,7 @@ export interface components {
     };
     ClosePosShiftDto: {
       /** @example 160.0000 */
-      closingCashBgn: string;
+      closingCashEur: string;
       version: number;
     };
     CompleteAccountRecoveryRequestDto: {
@@ -4968,16 +5064,20 @@ export interface components {
     };
     CompleteServiceWorkOrderDto: {
       completionNotes: string;
+      /** @example 60.0000 */
+      customerLaborChargeEur: string;
+      /** @example 0.0000 */
+      customerTransportChargeEur: string;
       expectedVersion: number;
       /** @example 60.0000 */
-      laborCostBgn: string;
+      laborCostEur: string;
       parts: components['schemas']['ServicePartUsageInputDto'][];
       /** @description PNG data URL produced by the customer signature pad. */
       signatureImageDataUrl: string;
       signerName: string;
       timeEntries: components['schemas']['ServiceWorkTimeEntryInputDto'][];
       /** @example 10.0000 */
-      transportCostBgn: string;
+      transportCostEur: string;
     };
     ConfigureStockSettingsDto: {
       alertRecipientAccountIds?: string[];
@@ -5070,7 +5170,7 @@ export interface components {
       customerPartnerId: string;
       description?: string;
       /** @example 1500.00 */
-      estimatedRevenueBgn: string;
+      estimatedRevenueEur: string;
       /** @example 2026-10-31 */
       expectedCloseOn?: string;
       /** Format: uuid */
@@ -5226,7 +5326,7 @@ export interface components {
       bankName: string;
       /** @example 140.0000 */
       closingBalance: string;
-      /** @example BGN */
+      /** @example EUR */
       currencyCode: string;
       lines: components['schemas']['CreateFinanceBankStatementLineDto'][];
       /** @example 100.0000 */
@@ -5298,7 +5398,9 @@ export interface components {
         | 'finance.supplier-turnover'
         | 'finance.sales-journal'
         | 'finance.purchase-journal'
-        | 'finance.vat-review';
+        | 'finance.vat-review'
+        | 'finance.income'
+        | 'finance.outcome';
       /** @enum {string} */
       format: 'csv' | 'xlsx' | 'pdf';
     };
@@ -5351,7 +5453,7 @@ export interface components {
       /** Format: uuid */
       correctionOfDocumentId?: string;
       correctionReason?: string;
-      /** @example BGN */
+      /** @example EUR */
       currencyCode: string;
       /** Format: uuid */
       customerPartnerId: string;
@@ -5477,7 +5579,7 @@ export interface components {
     CreatePartnerBankAccountDto: {
       bankName?: string;
       bic?: string;
-      /** @default BGN */
+      /** @default EUR */
       currencyCode?: string;
       iban: string;
     };
@@ -5626,7 +5728,7 @@ export interface components {
       /** Format: uuid */
       campaignId?: string;
       code: string;
-      /** @example BGN */
+      /** @example EUR */
       currencyCode: string;
       /** Format: uuid */
       customerGroupId?: string;
@@ -5679,7 +5781,7 @@ export interface components {
       validTo: string;
     };
     CreatePurchaseOrderDto: {
-      /** @example BGN */
+      /** @example EUR */
       currencyCode: string;
       lines: components['schemas']['CreatePurchaseOrderLineDto'][];
       /** Format: uuid */
@@ -5698,7 +5800,7 @@ export interface components {
       unitPrice: string;
     };
     CreateSalesQuotationDto: {
-      /** @example BGN */
+      /** @example EUR */
       currencyCode: string;
       /** Format: uuid */
       customerPartnerId: string;
@@ -5795,7 +5897,7 @@ export interface components {
       /** @example 120.0000 */
       billingAmount: string;
       billingFrequencyMonths: number;
-      /** @example BGN */
+      /** @example EUR */
       currencyCode: string;
       /** Format: uuid */
       customerLocationId: string;
@@ -5903,11 +6005,11 @@ export interface components {
     CrmAnalyticsCustomerMetricsDto: {
       activeCustomers: number;
       /** @example 60.00 */
-      averageTransactionValueBgn: string;
+      averageTransactionValueEur: string;
       /** @example 0.00 */
       churnPercent: string;
       /** @example 60.00 */
-      observedLifetimeValueBgn: string;
+      observedLifetimeValueEur: string;
       /** @example 1.00 */
       purchaseFrequency: string;
       /** @example 100.00 */
@@ -5949,15 +6051,15 @@ export interface components {
       /** @example Europe/Sofia */
       timezone: string;
       /** @example 60.00 */
-      totalNetRevenueBgn: string;
+      totalNetRevenueEur: string;
     };
     CrmAnalyticsPipelineMetricsDto: {
       createdOpportunities: number;
       /** @example 1250.00 */
-      estimatedRevenueBgn: string;
+      estimatedRevenueEur: string;
       lostCount: number;
       /** @example 1250.00 */
-      openPipelineValueBgn: string;
+      openPipelineValueEur: string;
       stages: components['schemas']['CrmAnalyticsPipelineStageMetricDto'][];
       /** @example 50.00 */
       winRatePercent: string;
@@ -5977,7 +6079,7 @@ export interface components {
       kind: 'product' | 'service';
       label: string;
       /** @example 60.00 */
-      netRevenueBgn: string;
+      netRevenueEur: string;
       /** @example 1.0000 */
       quantity: string;
     };
@@ -5988,7 +6090,7 @@ export interface components {
       key: string;
       label: string;
       /** @example 60.00 */
-      netRevenueBgn: string;
+      netRevenueEur: string;
       /** @example 100.00 */
       sharePercent: string;
     };
@@ -6152,7 +6254,7 @@ export interface components {
       createdAt: string;
       customer: components['schemas']['CrmCustomerReferenceDto'];
       description?: string;
-      estimatedRevenueBgn: string;
+      estimatedRevenueEur: string;
       /** Format: date */
       expectedCloseOn?: string;
       history: components['schemas']['CrmOpportunityHistoryEntryDto'][];
@@ -6170,7 +6272,7 @@ export interface components {
       /** Format: date-time */
       updatedAt: string;
       version: number;
-      weightedRevenueBgn: string;
+      weightedRevenueEur: string;
     };
     CrmOpportunityHistoryEntryDto: {
       /** Format: date-time */
@@ -6190,7 +6292,7 @@ export interface components {
     CrmOpportunityInputDto: {
       description?: string;
       /** @example 1500.00 */
-      estimatedRevenueBgn: string;
+      estimatedRevenueEur: string;
       /** @example 2026-10-31 */
       expectedCloseOn?: string;
       /** Format: uuid */
@@ -6628,15 +6730,15 @@ export interface components {
       warrantyStartsOn: string;
     };
     CustomerFinancialDocumentSummaryDto: {
-      /** @example 60.0000 */
-      bgnGrossTotal: string;
-      /** @example BGN */
+      /** @example EUR */
       currencyCode: string;
       /** @enum {string} */
       documentType: 'invoice' | 'proforma' | 'credit_note' | 'debit_note';
       draftNumber: string;
       /** Format: date */
       dueDate?: string;
+      /** @example 60.0000 */
+      eurGrossTotal: string;
       /** @example 60.0000 */
       grossTotal: string;
       /** Format: uuid */
@@ -6699,7 +6801,7 @@ export interface components {
       lastPurchaseAt?: string;
       openReceivables: number;
       /** @example 60.0000 */
-      outstandingBgn: string;
+      outstandingEur: string;
       payments: number;
       purchases: number;
     };
@@ -6728,7 +6830,7 @@ export interface components {
     CustomerPaymentSummaryDto: {
       /** @example 20.0000 */
       amount: string;
-      /** @example BGN */
+      /** @example EUR */
       currencyCode: string;
       /** Format: uuid */
       id: string;
@@ -6742,7 +6844,7 @@ export interface components {
       recordedAt: string;
     };
     CustomerPaymentTermsDto: {
-      creditLimitBgn: string;
+      creditLimitEur: string;
       /** Format: uuid */
       id: string;
       onAccountEnabled: boolean;
@@ -6769,7 +6871,7 @@ export interface components {
       version: number;
     };
     CustomerPurchaseHistoryEntryDto: {
-      /** @example BGN */
+      /** @example EUR */
       currencyCode: string;
       /** Format: uuid */
       id: string;
@@ -6798,14 +6900,14 @@ export interface components {
     CustomerReceivableSummaryDto: {
       /** @example 20.0000 */
       allocatedTotal: string;
-      /** @example 60.0000 */
-      bgnTotal: string;
-      /** @example BGN */
+      /** @example EUR */
       currencyCode: string;
       /** Format: date */
       documentDate: string;
       /** Format: date */
       dueDate: string;
+      /** @example 60.0000 */
+      eurTotal: string;
       /** Format: uuid */
       id: string;
       number: string;
@@ -6933,8 +7035,8 @@ export interface components {
       /** Format: uuid */
       id: string;
       number: string;
-      originalBgnTotal: string;
-      outstandingBgnTotal: string;
+      originalEurTotal: string;
+      outstandingEurTotal: string;
       /** Format: uuid */
       partnerId: string;
       partnerName: string;
@@ -7033,6 +7135,7 @@ export interface components {
       /** @enum {string} */
       matchStatus: 'matched' | 'unmatched';
       paymentReference: string;
+      possibleDuplicate?: boolean;
       supplierMatch?: components['schemas']['FinanceSupplierBankTransactionMatchDto'];
       /** Format: date */
       transactionDate: string;
@@ -7161,7 +7264,6 @@ export interface components {
     };
     FinanceCustomerDocumentDto: {
       allocatedTotal: string;
-      bgnTotal: string;
       /** Format: date-time */
       createdAt: string;
       currencyCode: string;
@@ -7172,7 +7274,9 @@ export interface components {
       documentDate: string;
       /** Format: date */
       dueDate: string;
+      eurTotal: string;
       exchangeRate: string;
+      financialDocument?: components['schemas']['FinanceLinkedDocumentReferenceDto'];
       /** Format: uuid */
       id: string;
       number: string;
@@ -7191,6 +7295,19 @@ export interface components {
       statusHistory: components['schemas']['FinancePaymentStatusHistoryEntryDto'][];
       total: string;
       version: number;
+    };
+    FinanceExchangeRateDto: {
+      /** @example USD */
+      currencyCode: string;
+      /** @example 0.89380000 */
+      exchangeRate: string;
+      /**
+       * Format: date
+       * @example 2026-10-13
+       */
+      rateDate: string;
+      /** @enum {string} */
+      rateSource: 'BNB' | 'internal_eur';
     };
     FinanceInvoiceDraftReferenceDto: {
       currencyCode: string;
@@ -7225,10 +7342,10 @@ export interface components {
       /** @enum {string} */
       documentType: 'invoice' | 'proforma' | 'credit_note' | 'debit_note' | 'supplier_invoice';
       exchangeRate?: string;
-      grossBgnTotal: string;
+      grossEurTotal: string;
       /** Format: uuid */
       id: string;
-      netBgnTotal: string;
+      netEurTotal: string;
       number: string;
       partnerName: string;
       partnerVatNumber?: string;
@@ -7238,14 +7355,23 @@ export interface components {
       taxBreakdownComplete: boolean;
       /** Format: date */
       taxEventDate?: string;
-      vatBgnTotal: string;
+      vatEurTotal: string;
     };
     FinanceJournalTotalsDto: {
       documentCount: number;
-      grossBgnTotal: string;
+      grossEurTotal: string;
       incompleteTaxDocuments: number;
-      netBgnTotal: string;
-      vatBgnTotal: string;
+      netEurTotal: string;
+      vatEurTotal: string;
+    };
+    FinanceLinkedDocumentReferenceDto: {
+      /** Format: uuid */
+      id: string;
+      number: string;
+      /** @enum {string} */
+      status: 'draft' | 'issued' | 'cancelled';
+      /** @enum {string} */
+      type: 'invoice' | 'proforma' | 'credit_note' | 'debit_note';
     };
     FinanceOffsetReceivableReferenceDto: {
       customerName: string;
@@ -7275,7 +7401,16 @@ export interface components {
       paymentReference?: string;
       /** Format: date-time */
       recordedAt: string;
+      reversal?: components['schemas']['FinancePaymentReversalDto'];
       sourceCustomerAdvanceNumber?: string;
+    };
+    FinancePaymentReversalDto: {
+      number: string;
+      reason: string;
+      /** Format: date-time */
+      reversedAt: string;
+      /** Format: date */
+      reversedOn: string;
     };
     FinancePaymentStatusHistoryEntryDto: {
       /** Format: date-time */
@@ -7309,7 +7444,9 @@ export interface components {
         | 'finance.supplier-turnover'
         | 'finance.sales-journal'
         | 'finance.purchase-journal'
-        | 'finance.vat-review';
+        | 'finance.vat-review'
+        | 'finance.income'
+        | 'finance.outcome';
       name: string;
       requiresDateRange: boolean;
     };
@@ -7327,7 +7464,9 @@ export interface components {
         | 'finance.supplier-turnover'
         | 'finance.sales-journal'
         | 'finance.purchase-journal'
-        | 'finance.vat-review';
+        | 'finance.vat-review'
+        | 'finance.income'
+        | 'finance.outcome';
       errorCode?: string;
       fileName?: string;
       /** @enum {string} */
@@ -7433,7 +7572,6 @@ export interface components {
     };
     FinanceSupplierPayableDto: {
       allocatedTotal: string;
-      bgnTotal: string;
       /** Format: date-time */
       createdAt: string;
       currencyCode: string;
@@ -7441,6 +7579,7 @@ export interface components {
       documentDate: string;
       /** Format: date */
       dueDate: string;
+      eurTotal: string;
       exchangeRate: string;
       /** Format: uuid */
       id: string;
@@ -7483,6 +7622,7 @@ export interface components {
       allocations: components['schemas']['FinanceSupplierPaymentAllocationDto'][];
       amount: string;
       availableTotal: string;
+      currencyCode: string;
       /** Format: uuid */
       id: string;
       /** @enum {string} */
@@ -7530,26 +7670,26 @@ export interface components {
       totals: components['schemas']['FinanceTurnoverTotalsDto'];
     };
     FinanceTurnoverReportItemDto: {
-      allocatedBgnTotal: string;
+      allocatedEurTotal: string;
       documentCount: number;
-      grossBgnTotal: string;
-      outstandingBgnTotal: string;
+      grossEurTotal: string;
+      outstandingEurTotal: string;
       /** Format: uuid */
       partnerId: string;
       partnerName: string;
     };
     FinanceTurnoverTotalsDto: {
-      allocatedBgnTotal: string;
+      allocatedEurTotal: string;
       documentCount: number;
-      grossBgnTotal: string;
-      outstandingBgnTotal: string;
+      grossEurTotal: string;
+      outstandingEurTotal: string;
     };
     FinanceVatReviewItemDto: {
       /** @enum {string} */
       direction: 'input' | 'output';
       documentCount: number;
-      netBgnTotal: string;
-      vatBgnTotal: string;
+      netEurTotal: string;
+      vatEurTotal: string;
       vatRate: string;
       /** @enum {string} */
       vatTreatment: 'standard_20' | 'reduced_9' | 'zero' | 'exempt' | 'ica';
@@ -7562,9 +7702,9 @@ export interface components {
       incompletePurchaseDocumentNumbers: string[];
       incompletePurchaseDocuments: number;
       items: components['schemas']['FinanceVatReviewItemDto'][];
-      recordedDifferenceBgn: string;
-      recordedInputVatBgn: string;
-      recordedOutputVatBgn: string;
+      recordedDifferenceEur: string;
+      recordedInputVatEur: string;
+      recordedOutputVatEur: string;
     };
     FinancialDocumentCorrectionReferenceDto: {
       currencyCode: string;
@@ -7585,15 +7725,15 @@ export interface components {
       vatNumber?: string;
     };
     FinancialDocumentDto: {
-      bgnGrossTotal: string;
-      bgnNetTotal: string;
-      bgnVatTotal: string;
       branchName: string;
       /** Format: uuid */
       businessLocationId: string;
       businessLocationName: string;
       cancellationReason?: string;
       cashRegisterName?: string;
+      /** Format: uuid */
+      convertedFromDocumentId?: string;
+      convertedFromDocumentNumber?: string;
       correctionOf?: components['schemas']['FinancialDocumentCorrectionReferenceDto'];
       correctionReason?: string;
       /** Format: date-time */
@@ -7606,12 +7746,18 @@ export interface components {
       documentType: 'invoice' | 'proforma' | 'credit_note' | 'debit_note';
       /** Format: date */
       dueDate?: string;
+      eurGrossTotal: string;
+      eurNetTotal: string;
+      eurVatTotal: string;
       exchangeRate: string;
       grossTotal: string;
       /** Format: uuid */
       id: string;
+      /** Format: date-time */
+      issuedAt?: string;
       /** Format: date */
       issueDate: string;
+      issuedByName?: string;
       issuerSnapshot: components['schemas']['FinancialDocumentPartySnapshotDto'];
       /** Format: uuid */
       legalEntityId: string;
@@ -7638,7 +7784,7 @@ export interface components {
       sourceSubscriptionDraftId?: string;
       sourceSubscriptionDraftNumber?: string;
       /** @enum {string} */
-      status: 'draft' | 'cancelled';
+      status: 'draft' | 'issued' | 'cancelled';
       /** Format: date */
       taxEventDate: string;
       vatSummary: components['schemas']['FinancialDocumentVatSummaryDto'][];
@@ -7749,7 +7895,7 @@ export interface components {
     };
     FinancialDocumentServiceDraftReferenceDto: {
       /** @enum {string} */
-      currencyCode: 'BGN';
+      currencyCode: 'EUR';
       customerName: string;
       /** Format: uuid */
       customerPartnerId: string;
@@ -7801,6 +7947,10 @@ export interface components {
     GoodsReceiptLineDto: {
       /** Format: uuid */
       batchId?: string;
+      costBaselineEur?: string;
+      /** @enum {string} */
+      costBaselineSource?: 'latest_product_cost' | 'supplier_invoice';
+      costVariancePercent?: string;
       /** Format: uuid */
       id: string;
       /** Format: uuid */
@@ -7811,8 +7961,8 @@ export interface components {
       serialItemIds: string[];
       /** Format: uuid */
       stockMovementId: string;
-      totalCostBgn: string;
-      unitCostBgn: string;
+      totalCostEur: string;
+      unitCostEur: string;
     };
     HealthCheckDto: {
       detail?: string;
@@ -7923,6 +8073,9 @@ export interface components {
     IssueAccountRecoveryHandoffDto: {
       expectedVersion: number;
       reason: string;
+    };
+    IssueFinancialDocumentDto: {
+      expectedVersion: number;
     };
     IssueStockDto: {
       batchNumber?: string;
@@ -8343,11 +8496,13 @@ export interface components {
       /** Format: uuid */
       customerDocumentId: string;
       expectedVersion: number;
+      reviewPossibleDuplicate?: boolean;
     };
     MatchFinanceSupplierBankTransactionDto: {
       expectedVersion: number;
       /** @enum {string} */
       mode: 'advance' | 'payable';
+      reviewPossibleDuplicate?: boolean;
       /** Format: uuid */
       supplierPartnerId?: string;
       /** Format: uuid */
@@ -8381,7 +8536,7 @@ export interface components {
       /** Format: uuid */
       cashRegisterId: string;
       /** @example 100.0000 */
-      openingCashBgn: string;
+      openingCashEur: string;
     };
     OpenStocktakeDto: {
       referenceId: string;
@@ -8397,9 +8552,9 @@ export interface components {
       /** Format: date */
       dateTo: string;
       expiringWarranties?: number;
-      overdueReceivablesBgn?: string;
+      overdueReceivablesEur?: string;
       preferences?: components['schemas']['OverviewPreferencesDto'];
-      recordedRevenueBgn?: string;
+      recordedRevenueEur?: string;
       warrantyDays: number;
     };
     OrganizationMemberDto: {
@@ -8420,10 +8575,10 @@ export interface components {
     };
     OverviewPreferencesDto: {
       hiddenCards: (
-        | 'recordedRevenueBgn'
+        | 'recordedRevenueEur'
         | 'activeServiceRequests'
         | 'expiringWarranties'
-        | 'overdueReceivablesBgn'
+        | 'overdueReceivablesEur'
       )[];
       version: number;
     };
@@ -8541,10 +8696,10 @@ export interface components {
       vatTotal: string;
     };
     PosCashierReportRowDto: {
-      grossReturnsBgn: string;
-      grossSalesBgn: string;
+      grossReturnsEur: string;
+      grossSalesEur: string;
       name: string;
-      netRevenueBgn: string;
+      netRevenueEur: string;
       operatorCode: string;
       /** Format: uuid */
       operatorId: string;
@@ -8564,7 +8719,7 @@ export interface components {
       barcodes: string[];
       batches: components['schemas']['PosCatalogBatchDto'][];
       /** @enum {string} */
-      currencyCode: 'BGN';
+      currencyCode: 'EUR';
       /** Format: uuid */
       id: string;
       name: string;
@@ -8591,9 +8746,9 @@ export interface components {
       /** Format: uuid */
       categoryId: string;
       categoryName: string;
-      grossReturnsBgn: string;
-      grossSalesBgn: string;
-      netRevenueBgn: string;
+      grossReturnsEur: string;
+      grossSalesEur: string;
+      netRevenueEur: string;
       quantityReturned: string;
       quantitySold: string;
     };
@@ -8679,13 +8834,13 @@ export interface components {
       reason: string;
     };
     PosLocationReportRowDto: {
-      averageSaleBgn: string;
+      averageSaleEur: string;
       /** Format: uuid */
       businessLocationId: string;
-      grossReturnsBgn: string;
-      grossSalesBgn: string;
+      grossReturnsEur: string;
+      grossSalesEur: string;
       locationName: string;
-      netRevenueBgn: string;
+      netRevenueEur: string;
       returnCount: number;
       revenueSharePercent: number;
       saleCount: number;
@@ -8696,7 +8851,7 @@ export interface components {
       /** Format: uuid */
       id: string;
       programName: string;
-      redemptionValueBgn: string;
+      redemptionValueEur: string;
       /** @enum {string} */
       status: 'active' | 'suspended';
     };
@@ -8728,11 +8883,11 @@ export interface components {
       discountValue: string;
     };
     PosPaymentReportRowDto: {
-      collectedBgn: string;
+      collectedEur: string;
       /** @enum {string} */
       method: 'card' | 'cash';
-      netBgn: string;
-      refundedBgn: string;
+      netEur: string;
+      refundedEur: string;
     };
     PosPricingAdjustmentDto: {
       amount: string;
@@ -8743,9 +8898,9 @@ export interface components {
     };
     PosProductReportRowDto: {
       categoryName: string;
-      grossReturnsBgn: string;
-      grossSalesBgn: string;
-      netRevenueBgn: string;
+      grossReturnsEur: string;
+      grossSalesEur: string;
+      netRevenueEur: string;
       productCode: string;
       /** Format: uuid */
       productId: string;
@@ -8887,16 +9042,16 @@ export interface components {
       name: string;
     };
     PosReportTotalsDto: {
-      averageSaleBgn: string;
-      grossReturnsBgn: string;
-      grossSalesBgn: string;
+      averageSaleEur: string;
+      grossReturnsEur: string;
+      grossSalesEur: string;
       itemQuantityReturned: string;
       itemQuantitySold: string;
-      netRevenueBgn: string;
-      netSalesBgn: string;
+      netRevenueEur: string;
+      netSalesEur: string;
       returnCount: number;
       saleCount: number;
-      vatSalesBgn: string;
+      vatSalesEur: string;
     };
     PosReturnDto: {
       /** Format: date-time */
@@ -8968,7 +9123,7 @@ export interface components {
       /** Format: date-time */
       completedAt: string;
       /** @enum {string} */
-      currencyCode: 'BGN';
+      currencyCode: 'EUR';
       customerName?: string;
       /** Format: uuid */
       customerPartnerId?: string;
@@ -9063,13 +9218,13 @@ export interface components {
       cashRegisterName: string;
       /** Format: date-time */
       closedAt?: string;
-      closingCashBgn?: string;
-      expectedCashBgn: string;
+      closingCashEur?: string;
+      expectedCashEur: string;
       /** Format: uuid */
       id: string;
       /** Format: date-time */
       openedAt: string;
-      openingCashBgn: string;
+      openingCashEur: string;
       operatorCode: string;
       /** Format: uuid */
       operatorId: string;
@@ -9082,28 +9237,28 @@ export interface components {
       warehouseName: string;
     };
     PosShiftReportRowDto: {
-      cashRefundsBgn: string;
+      cashRefundsEur: string;
       cashRegisterCode: string;
       /** Format: uuid */
       cashRegisterId: string;
       cashRegisterName: string;
-      cashSalesBgn: string;
+      cashSalesEur: string;
       /** Format: date-time */
       closedAt?: string;
-      closingCashBgn?: string;
-      differenceBgn?: string;
-      expectedCashBgn: string;
+      closingCashEur?: string;
+      differenceEur?: string;
+      expectedCashEur: string;
       /** @enum {string} */
       fiscalMode: 'disabled' | 'hardware' | 'simulator';
-      grossReturnsBgn: string;
-      grossSalesBgn: string;
+      grossReturnsEur: string;
+      grossSalesEur: string;
       /** Format: uuid */
       id: string;
       locationName: string;
-      netRevenueBgn: string;
+      netRevenueEur: string;
       /** Format: date-time */
       openedAt: string;
-      openingCashBgn: string;
+      openingCashEur: string;
       operatorCode: string;
       /** Format: uuid */
       operatorId: string;
@@ -9302,6 +9457,9 @@ export interface components {
       warehouseName: string;
     };
     PurchaseOrderLineDto: {
+      costBaselineEur?: string;
+      /** @enum {string} */
+      costBaselineSource?: 'latest_product_cost' | 'supplier_invoice';
       deliveredQuantity: string;
       /** Format: date */
       expectedDeliveryDate: string;
@@ -9325,6 +9483,18 @@ export interface components {
       expectedVersion: number;
       note?: string;
     };
+    QueuedEmailReceiptDto: {
+      /** @example accounting@example.com */
+      recipientEmail: string;
+      /** @enum {string} */
+      status: 'queued';
+    };
+    QueuedSalesEmailDto: {
+      /** @example customer@example.com */
+      recipientEmail: string;
+      /** @enum {string} */
+      status: 'queued';
+    };
     ReceiveLogisticsReturnDto: {
       expectedVersion: number;
     };
@@ -9342,7 +9512,7 @@ export interface components {
       quantity: string;
       serialNumbers?: string[];
       /** @example 125.5000 */
-      unitCostBgn?: string;
+      unitCostEur?: string;
     };
     ReceiveStockDto: {
       batchNumber?: string;
@@ -9357,7 +9527,7 @@ export interface components {
       /** Format: uuid */
       supplierPartnerId?: string;
       /** @example 125.5000 */
-      unitCostBgn?: string;
+      unitCostEur?: string;
       /** Format: uuid */
       warehouseId: string;
     };
@@ -9480,6 +9650,10 @@ export interface components {
       quantity: string;
       referenceId: string;
       serialNumbers?: string[];
+    };
+    ReverseFinancePaymentDto: {
+      expectedDocumentVersion: number;
+      reason: string;
     };
     SalesAvailabilityOptionDto: {
       /** Format: uuid */
@@ -9771,7 +9945,9 @@ export interface components {
         | 'finance.supplier-turnover'
         | 'finance.sales-journal'
         | 'finance.purchase-journal'
-        | 'finance.vat-review';
+        | 'finance.vat-review'
+        | 'finance.income'
+        | 'finance.outcome';
       /** @enum {string} */
       format: 'csv' | 'xlsx' | 'pdf';
       /** Format: uuid */
@@ -9929,6 +10105,16 @@ export interface components {
       /** @enum {string} */
       sourceKind: 'delivery' | 'service';
     };
+    SendDocumentEmailDto: {
+      expectedVersion: number;
+      /** @example accounting@example.com */
+      recipientEmail: string;
+    };
+    SendSalesQuotationEmailDto: {
+      expectedVersion: number;
+      /** @example customer@example.com */
+      recipientEmail: string;
+    };
     SerialTraceabilityDto: {
       currentCustody: components['schemas']['SerialTraceCustodyDto'];
       currentWarehouse?: components['schemas']['SerialTracePartyDto'];
@@ -9990,7 +10176,7 @@ export interface components {
       supplier?: components['schemas']['SerialTracePartyDto'];
       technician?: components['schemas']['SerialTracePartyDto'];
       toWarehouse?: components['schemas']['SerialTracePartyDto'];
-      unitCostBgn?: string;
+      unitCostEur?: string;
       warehouse?: components['schemas']['SerialTracePartyDto'];
     };
     SerialTracePartyDto: {
@@ -10117,6 +10303,8 @@ export interface components {
     };
     ServicePartUsageInputDto: {
       batchNumber?: string;
+      /** @example 20.0000 */
+      customerUnitPriceEur: string;
       /** Format: uuid */
       productId: string;
       /** @example 1.0000 */
@@ -10198,7 +10386,7 @@ export interface components {
       completedRequests: number;
       laborMinutes: number;
       openRequests: number;
-      totalCostBgn: string;
+      totalCostEur: string;
       totalRequests: number;
     };
     ServiceReportTypeTotalDto: {
@@ -10206,7 +10394,7 @@ export interface components {
       requestCount: number;
       /** @enum {string} */
       serviceType: 'warranty' | 'out_of_warranty' | 'subscription';
-      totalCostBgn: string;
+      totalCostEur: string;
     };
     ServiceRequestDto: {
       assignedTechnician?: components['schemas']['ServiceTechnicianDto'];
@@ -10360,7 +10548,7 @@ export interface components {
       completedCount: number;
       displayName: string;
       laborMinutes: number;
-      totalCostBgn: string;
+      totalCostEur: string;
     };
     ServiceTechnicianReferenceDto: {
       /** Format: uuid */
@@ -10418,24 +10606,28 @@ export interface components {
       completionNotes?: string;
       /** Format: date-time */
       createdAt: string;
+      customerChargeRecorded: boolean;
       /** Format: uuid */
       customerEquipmentId: string;
+      customerLaborChargeEur: string;
       /** Format: uuid */
       customerLocationId: string;
       customerLocationName: string;
       customerName: string;
       /** Format: uuid */
       customerPartnerId: string;
+      customerPartsChargeEur: string;
+      customerTransportChargeEur: string;
       deviceName: string;
       history: components['schemas']['ServiceWorkOrderHistoryEntryDto'][];
       /** Format: uuid */
       id: string;
       isOverdue: boolean;
-      laborCostBgn: string;
+      laborCostEur: string;
       laborMinutes: number;
       number: string;
       parts: components['schemas']['ServiceWorkOrderPartUsageDto'][];
-      partsCostBgn: string;
+      partsCostEur: string;
       photos: components['schemas']['ServiceWorkOrderPhotoDto'][];
       /** @enum {string} */
       priority: 'low' | 'normal' | 'high' | 'critical';
@@ -10458,8 +10650,9 @@ export interface components {
       /** Format: uuid */
       subscriptionContractId?: string;
       timeEntries: components['schemas']['ServiceWorkOrderTimeEntryDto'][];
-      totalCostBgn: string;
-      transportCostBgn: string;
+      totalCostEur: string;
+      totalCustomerChargeEur: string;
+      transportCostEur: string;
       /** Format: date-time */
       updatedAt: string;
       version: number;
@@ -10485,6 +10678,8 @@ export interface components {
     };
     ServiceWorkOrderPartUsageDto: {
       batchNumber?: string;
+      customerTotalChargeEur: string;
+      customerUnitPriceEur: string;
       /** Format: uuid */
       id: string;
       /** Format: uuid */
@@ -10494,8 +10689,8 @@ export interface components {
       serialNumbers: string[];
       /** Format: uuid */
       stockIssueId: string;
-      totalCostBgn: string;
-      unitCostBgn: string;
+      totalCostEur: string;
+      unitCostEur: string;
       /** Format: uuid */
       warehouseId: string;
       warehouseName: string;
@@ -10566,8 +10761,8 @@ export interface components {
     };
     StockBalanceDto: {
       availableQuantity: string;
-      averageUnitCostBgn: string;
-      inventoryValueBgn: string;
+      averageUnitCostEur: string;
+      inventoryValueEur: string;
       /** Format: uuid */
       productId: string;
       quantity: string;
@@ -10588,8 +10783,8 @@ export interface components {
       /** Format: uuid */
       reservationId?: string;
       serialItemIds: string[];
-      totalCostBgn: string;
-      unitCostBgn: string;
+      totalCostEur: string;
+      unitCostEur: string;
       /** Format: uuid */
       warehouseId: string;
     };
@@ -10616,8 +10811,8 @@ export interface components {
       referenceLabel: string;
       referenceType: string;
       sourceHref?: string;
-      totalCostBgn: string;
-      unitCostBgn: string;
+      totalCostEur: string;
+      unitCostEur: string;
       /** Format: uuid */
       warehouseId: string;
       warehouseName: string;
@@ -10638,8 +10833,8 @@ export interface components {
       productId: string;
       quantity: string;
       serialItemIds: string[];
-      totalCostBgn: string;
-      unitCostBgn: string;
+      totalCostEur: string;
+      unitCostEur: string;
       /** Format: uuid */
       warehouseId: string;
     };
@@ -10682,8 +10877,8 @@ export interface components {
       productId: string;
       quantity: string;
       serialItemIds: string[];
-      totalCostBgn: string;
-      unitCostBgn: string;
+      totalCostEur: string;
+      unitCostEur: string;
     };
     StockSettingsDto: {
       alertRecipientAccountIds: string[];
@@ -10726,10 +10921,10 @@ export interface components {
       serialItemIds: string[];
       /** Format: uuid */
       toMovementId: string;
-      totalCostBgn: string;
+      totalCostEur: string;
       /** Format: uuid */
       toWarehouseId: string;
-      unitCostBgn: string;
+      unitCostEur: string;
     };
     SubscriptionCustomerOptionDto: {
       /** Format: uuid */
@@ -11038,7 +11233,7 @@ export interface components {
       /** Format: uuid */
       campaignId?: string;
       code: string;
-      /** @example BGN */
+      /** @example EUR */
       currencyCode: string;
       /** Format: uuid */
       customerGroupId?: string;
@@ -11065,7 +11260,7 @@ export interface components {
       version: number;
     };
     UpdateSalesQuotationDto: {
-      /** @example BGN */
+      /** @example EUR */
       currencyCode: string;
       /** Format: uuid */
       customerPartnerId: string;
@@ -11089,7 +11284,7 @@ export interface components {
       /** @example 120.0000 */
       billingAmount: string;
       billingFrequencyMonths: number;
-      /** @example BGN */
+      /** @example EUR */
       currencyCode: string;
       /** Format: uuid */
       customerLocationId: string;
@@ -11123,7 +11318,7 @@ export interface components {
     };
     UpsertCustomerPaymentTermsDto: {
       /** @example 2000.0000 */
-      creditLimitBgn: string;
+      creditLimitEur: string;
       expectedVersion?: number;
       onAccountEnabled: boolean;
       paymentTermsDays: number;
@@ -14690,6 +14885,48 @@ export interface operations {
       };
     };
   };
+  FinanceController_reversePayment: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path: {
+        id: unknown;
+        paymentId: unknown;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ReverseFinancePaymentDto'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['FinanceCustomerDocumentDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
   FinanceController_searchDocuments: {
     parameters: {
       query: {
@@ -14734,7 +14971,7 @@ export interface operations {
         page?: number;
         pageSize?: number;
         search?: string;
-        status?: 'draft' | 'cancelled';
+        status?: 'draft' | 'issued' | 'cancelled';
         type?: 'invoice' | 'proforma' | 'credit_note' | 'debit_note';
       };
       header?: never;
@@ -14864,6 +15101,160 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['FinancialDocumentDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  FinancialDocumentsController_email: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path: {
+        id: unknown;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['SendDocumentEmailDto'];
+      };
+    };
+    responses: {
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['QueuedEmailReceiptDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  FinancialDocumentsController_issue: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path: {
+        id: unknown;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['IssueFinancialDocumentDto'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['FinancialDocumentDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  FinancialDocumentsController_pdf: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: unknown;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Printable financial document. Drafts are marked as drafts. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/pdf': string;
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  FinancialDocumentsController_exchangeRate: {
+    parameters: {
+      query: {
+        currencyCode: string;
+        rateDate: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['FinanceExchangeRateDto'];
         };
       };
       /** @description The endpoint request limit was exceeded. */
@@ -22124,6 +22515,47 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['SalesWorkflowDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  SalesController_emailQuotation: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path: {
+        id: unknown;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['SendSalesQuotationEmailDto'];
+      };
+    };
+    responses: {
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['QueuedSalesEmailDto'];
         };
       };
       /** @description The endpoint request limit was exceeded. */

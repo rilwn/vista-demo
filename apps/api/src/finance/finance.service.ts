@@ -13,6 +13,9 @@ import type {
   FinancePaymentStatusHistoryEntry,
   FinanceReferenceData,
   FinanceSummary,
+  FinancialDocumentStatus,
+  FinancialDocumentType,
+  ReverseFinancePaymentRequest,
 } from '@vista/contracts';
 import type { AppEnvironment } from '@vista/config';
 import type { PoolClient } from 'pg';
@@ -25,15 +28,21 @@ import type {
 import { ApiErrorException } from '../common/api-error.exception.js';
 import { APP_ENVIRONMENT } from '../config/config.module.js';
 import { DatabaseService } from '../database/database.service.js';
+import { BnbCurrencyRatesService } from './bnb-currency-rates.service.js';
+import { FinancialDocumentsService } from './financial-documents.service.js';
 import type { BackgroundJobContext } from '../jobs/job-handler-registry.service.js';
 
 interface DocumentRow {
   allocated_total: string;
-  bgn_total: string;
+  eur_total: string;
   created_at: string | Date;
   currency_code: string;
   customer_name: string;
   customer_partner_id: string;
+  financial_document_id: string | null;
+  financial_document_number: string | null;
+  financial_document_status: FinancialDocumentStatus | null;
+  financial_document_type: FinancialDocumentType | null;
   document_date: string;
   document_number: string;
   due_date: string;
@@ -55,7 +64,7 @@ interface PaymentReminderRow {
   due_date: string;
   id: string;
   number: string;
-  outstanding_bgn: string;
+  outstanding_eur: string;
   record_type: 'customer_document' | 'supplier_payable';
   reminder_state: 'overdue' | 'upcoming';
 }
@@ -66,6 +75,9 @@ export class FinanceService {
     @Inject(AuditService) private readonly audit: AuditService,
     @Inject(DatabaseService) private readonly database: DatabaseService,
     @Inject(APP_ENVIRONMENT) private readonly environment: AppEnvironment,
+    @Inject(BnbCurrencyRatesService) private readonly currencyRates: BnbCurrencyRatesService,
+    @Inject(FinancialDocumentsService)
+    private readonly financialDocuments: FinancialDocumentsService,
   ) {}
 
   async referenceData(): Promise<FinanceReferenceData> {
@@ -85,7 +97,7 @@ export class FinanceService {
        JOIN master_data.partners customer ON customer.id = invoice.customer_partner_id
        LEFT JOIN finance.customer_documents document
          ON document.source_sales_invoice_id = invoice.id
-       WHERE invoice.status = 'draft' AND invoice.currency_code = 'BGN'
+       WHERE invoice.status = 'draft' AND invoice.currency_code <> 'BGN'
          AND invoice.total > 0 AND document.id IS NULL
        ORDER BY invoice.recorded_at DESC, invoice.id DESC`,
     );
@@ -181,11 +193,14 @@ export class FinanceService {
           currency_code: string;
           customer_partner_id: string;
           id: string;
+          issue_date: string;
           total: string;
         }>(
-          `SELECT id, customer_partner_id, currency_code, total::text FROM sales.invoices
+          `SELECT id, customer_partner_id, currency_code, total::text,
+                  (recorded_at AT TIME ZONE $2)::date::text AS issue_date
+         FROM sales.invoices
          WHERE id = $1 AND status = 'draft' FOR KEY SHARE`,
-          [normalized.salesInvoiceId],
+          [normalized.salesInvoiceId, this.environment.BUSINESS_TIMEZONE],
         );
         const invoice = source.rows[0];
         if (!invoice)
@@ -194,12 +209,13 @@ export class FinanceService {
             'The selected sales invoice draft was not found.',
             HttpStatus.NOT_FOUND,
           );
-        if (invoice.currency_code !== 'BGN')
-          throw new ApiErrorException(
-            'FINANCE_BNB_RATE_REQUIRED',
-            'Foreign-currency invoice drafts require the approved BNB rate workflow before Finance review.',
-            HttpStatus.UNPROCESSABLE_ENTITY,
-          );
+        const rate = await this.currencyRates.latestRate(invoice.currency_code, invoice.issue_date);
+        const linkedProforma = await client.query<{ id: string }>(
+          `SELECT id FROM finance.financial_documents
+           WHERE source_sales_invoice_id = $1 AND document_type = 'proforma' AND status = 'issued'
+           ORDER BY issued_at DESC, id DESC LIMIT 1 FOR KEY SHARE`,
+          [invoice.id],
+        );
         if (decimalUnits(invoice.total) === 0n)
           throw new ApiErrorException(
             'FINANCE_ZERO_VALUE_SOURCE',
@@ -220,9 +236,10 @@ export class FinanceService {
           `INSERT INTO finance.customer_documents (
            id, document_number, source_sales_invoice_id, customer_partner_id, document_date,
            due_date, currency_code, exchange_rate, rate_date, rate_source, total,
-           allocated_total, outstanding_total, bgn_total, payment_status, created_by
-         ) VALUES ($1, $2, $3, $4, $5, $6, 'BGN', 1, $5, 'internal_bgn_review',
-                   $7, 0, $7, $7, $8, $9)`,
+           allocated_total, outstanding_total, eur_total, payment_status, created_by,
+           financial_document_id
+         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
+                   $11, 0, $11, round($11::numeric * $8::numeric, 4), $12, $13, $14)`,
           [
             id,
             number,
@@ -230,9 +247,14 @@ export class FinanceService {
             invoice.customer_partner_id,
             documentDate,
             normalized.dueDate,
+            rate.currencyCode,
+            rate.exchangeRate,
+            rate.rateDate,
+            rate.rateSource,
             invoice.total,
             initialStatus,
             auth.accountId,
+            linkedProforma.rows[0]?.id ?? null,
           ],
         );
         await this.appendStatusHistory(
@@ -304,6 +326,178 @@ export class FinanceService {
     );
   }
 
+  async reversePayment(
+    documentId: string,
+    paymentId: string,
+    input: ReverseFinancePaymentRequest,
+    key: string | undefined,
+    auth: AuthenticationContext,
+    metadata: RequestSecurityMetadata,
+  ): Promise<FinanceCustomerDocument> {
+    const normalized = {
+      expectedDocumentVersion: input.expectedDocumentVersion,
+      reason: input.reason.trim(),
+    };
+    if (normalized.reason.length < 10)
+      throw new ApiErrorException(
+        'FINANCE_PAYMENT_REVERSAL_REASON_REQUIRED',
+        'Enter a reason of at least 10 characters.',
+        HttpStatus.BAD_REQUEST,
+      );
+    return this.command(
+      `finance.document.payment-reversal:${documentId}:${paymentId}`,
+      key,
+      normalized,
+      200,
+      async (client, commandKey) => {
+        const before = await this.lockDocument(client, documentId);
+        if (before.version !== normalized.expectedDocumentVersion)
+          throw new ApiErrorException(
+            'FINANCE_DOCUMENT_VERSION_CONFLICT',
+            'This collection record changed after it was opened. Refresh and try again.',
+            HttpStatus.CONFLICT,
+          );
+        const paymentResult = await client.query<{
+          amount: string;
+          allocation_count: string;
+          payment_method: FinancePaymentMethod;
+          payment_number: string;
+          source_customer_advance_entry_id: string | null;
+          source_customer_advance_id: string | null;
+        }>(
+          `SELECT payment.amount::text, payment.payment_method, payment.payment_number,
+                  payment.source_customer_advance_id, payment.source_customer_advance_entry_id,
+                  (SELECT count(*)::text FROM finance.payment_allocations count_allocation
+                   WHERE count_allocation.payment_id = payment.id) AS allocation_count
+           FROM finance.payments payment
+           JOIN finance.payment_allocations allocation ON allocation.payment_id = payment.id
+           WHERE payment.id = $1 AND allocation.customer_document_id = $2
+           FOR UPDATE OF payment`,
+          [paymentId, documentId],
+        );
+        const payment = paymentResult.rows[0];
+        if (!payment)
+          throw new ApiErrorException(
+            'FINANCE_PAYMENT_NOT_FOUND',
+            'This payment is not linked to the selected collection record.',
+            HttpStatus.NOT_FOUND,
+          );
+        if (Number(payment.allocation_count) !== 1)
+          throw new ApiErrorException(
+            'FINANCE_PAYMENT_REVERSAL_ALLOCATION_SCOPE_UNSUPPORTED',
+            'This payment is linked to more than one collection record and needs a Finance review before it can be corrected.',
+            HttpStatus.CONFLICT,
+          );
+        const existing = await client.query(
+          `SELECT 1 FROM finance.payment_reversals WHERE payment_id = $1`,
+          [paymentId],
+        );
+        if (existing.rowCount)
+          throw new ApiErrorException(
+            'FINANCE_PAYMENT_ALREADY_REVERSED',
+            'This payment has already been reversed.',
+            HttpStatus.CONFLICT,
+          );
+
+        const businessDate = await this.businessDate(client);
+        const reversalNumber = await this.nextNumber(client, 'payment_reversal', 'PRV');
+        await client.query(
+          `INSERT INTO finance.payment_reversals (
+             payment_id, reversal_number, reason, reversed_on, recorded_by
+           ) VALUES ($1, $2, $3, $4, $5)`,
+          [paymentId, reversalNumber, normalized.reason, businessDate, auth.accountId],
+        );
+        if (payment.source_customer_advance_id && payment.source_customer_advance_entry_id)
+          await client.query(
+            `INSERT INTO finance.customer_advance_entries (
+               id, advance_id, entry_type, amount, source_entry_id,
+               customer_document_id, actor_account_id, correlation_id
+             ) VALUES ($1, $2, 'reversed', $3, $4, $5, $6, $7)`,
+            [
+              randomUUID(),
+              payment.source_customer_advance_id,
+              payment.amount,
+              payment.source_customer_advance_entry_id,
+              documentId,
+              auth.accountId,
+              metadata.correlationId,
+            ],
+          );
+
+        const allocations = await client.query<{ allocated_total: string }>(
+          `SELECT coalesce(sum(allocation.amount), 0)::text AS allocated_total
+           FROM finance.payment_allocations allocation
+           WHERE allocation.customer_document_id = $1
+             AND NOT EXISTS (
+               SELECT 1 FROM finance.payment_reversals reversal
+               WHERE reversal.payment_id = allocation.payment_id
+             )`,
+          [documentId],
+        );
+        const allocatedTotal = required(
+          allocations.rows[0],
+          'Payment balance could not be recalculated',
+        ).allocated_total;
+        const outstandingTotal = decimalString(
+          decimalUnits(before.total) - decimalUnits(allocatedTotal),
+        );
+        const paymentStatus = statusFor(before.total, allocatedTotal, before.dueDate, businessDate);
+        await client.query(
+          `UPDATE finance.customer_documents
+           SET allocated_total = $2, outstanding_total = $3, payment_status = $4,
+               version = version + 1, updated_at = now()
+           WHERE id = $1`,
+          [documentId, allocatedTotal, outstandingTotal, paymentStatus],
+        );
+        if (paymentStatus !== before.paymentStatus)
+          await this.appendStatusHistory(
+            client,
+            documentId,
+            before.paymentStatus,
+            paymentStatus,
+            'payment_reversed',
+            auth.accountId,
+          );
+        const bankTransaction = await client.query<{ bank_statement_id: string }>(
+          `UPDATE finance.bank_transactions
+           SET match_status = 'unmatched', match_method = NULL,
+               matched_customer_document_id = NULL, matched_payment_id = NULL,
+               matched_by = NULL, matched_at = NULL, version = version + 1, updated_at = now()
+           WHERE matched_payment_id = $1
+           RETURNING bank_statement_id`,
+          [paymentId],
+        );
+        if (bankTransaction.rows[0])
+          await client.query(
+            `UPDATE finance.bank_statements SET version = version + 1, updated_at = now()
+             WHERE id = $1`,
+            [bankTransaction.rows[0].bank_statement_id],
+          );
+        const document = await this.loadDocument(client, documentId);
+        await this.sideEffects(
+          client,
+          'finance_payment',
+          paymentId,
+          'finance.payment.reversed',
+          {
+            amount: payment.amount,
+            documentId,
+            documentNumber: before.number,
+            paymentNumber: payment.payment_number,
+            reason: normalized.reason,
+            reversalNumber,
+            reversedOn: businessDate,
+          },
+          auth,
+          metadata,
+          commandKey,
+          before,
+        );
+        return document;
+      },
+    );
+  }
+
   async allocateCustomerAdvance(
     documentId: string,
     input: AllocateCustomerAdvanceRequest,
@@ -325,12 +519,13 @@ export class FinanceService {
         this.assertReceivableOpen(before, normalized.amount);
         const advanceResult = await client.query<{
           advance_number: string;
+          currency_code: string;
           customer_partner_id: string;
           payment_method: FinancePaymentMethod;
           payment_reference: string | null;
           received_on: string;
         }>(
-          `SELECT advance_number, customer_partner_id, payment_method,
+          `SELECT advance_number, currency_code, customer_partner_id, payment_method,
                   payment_reference, received_on::text
            FROM finance.customer_advances WHERE id = $1 FOR UPDATE`,
           [normalized.customerAdvanceId],
@@ -340,6 +535,12 @@ export class FinanceService {
           throw new ApiErrorException(
             'FINANCE_ADVANCE_NOT_AVAILABLE',
             'Choose an available advance belonging to this customer.',
+            HttpStatus.CONFLICT,
+          );
+        if (advance.currency_code !== before.currencyCode)
+          throw new ApiErrorException(
+            'FINANCE_ADVANCE_CURRENCY_MISMATCH',
+            'The advance and collection record must use the same currency.',
             HttpStatus.CONFLICT,
           );
         const balance = await client.query<{ available: string }>(
@@ -416,23 +617,41 @@ export class FinanceService {
   ) {
     const paymentId = randomUUID();
     const paymentNumber = await this.nextNumber(client, 'payment', 'PAY');
+    const advanceEntryId = sourceAdvance ? randomUUID() : null;
+    if (sourceAdvance && advanceEntryId)
+      await client.query(
+        `INSERT INTO finance.customer_advance_entries (
+           id, advance_id, entry_type, amount, customer_document_id,
+           actor_account_id, correlation_id
+         ) VALUES ($1, $2, 'applied', $3, $4, $5, $6)`,
+        [
+          advanceEntryId,
+          sourceAdvance.id,
+          paymentInput.amount,
+          id,
+          auth.accountId,
+          metadata.correlationId,
+        ],
+      );
     await client.query(
       `INSERT INTO finance.payments (
        id, payment_number, customer_partner_id, payment_date, payment_method,
        currency_code, amount, payment_reference, notes, recorded_by,
-       source_customer_advance_id
-     ) VALUES ($1, $2, $3, $4, $5, 'BGN', $6, $7, $8, $9, $10)`,
+       source_customer_advance_id, source_customer_advance_entry_id
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
       [
         paymentId,
         paymentNumber,
         before.customerPartnerId,
         paymentInput.paymentDate,
         paymentInput.paymentMethod,
+        before.currencyCode,
         paymentInput.amount,
         paymentInput.paymentReference ?? null,
         paymentInput.notes ?? null,
         auth.accountId,
         sourceAdvance?.id ?? null,
+        advanceEntryId,
       ],
     );
     await client.query(
@@ -441,21 +660,6 @@ export class FinanceService {
      ) VALUES ($1, $2, $3, $4, $5)`,
       [randomUUID(), paymentId, id, paymentInput.amount, auth.accountId],
     );
-    if (sourceAdvance)
-      await client.query(
-        `INSERT INTO finance.customer_advance_entries (
-           id, advance_id, entry_type, amount, customer_document_id,
-           actor_account_id, correlation_id
-         ) VALUES ($1, $2, 'applied', $3, $4, $5, $6)`,
-        [
-          randomUUID(),
-          sourceAdvance.id,
-          paymentInput.amount,
-          id,
-          auth.accountId,
-          metadata.correlationId,
-        ],
-      );
     const allocatedTotal = decimalString(
       decimalUnits(before.allocatedTotal) + decimalUnits(paymentInput.amount),
     );
@@ -475,6 +679,18 @@ export class FinanceService {
        WHERE id = $1`,
       [id, allocatedTotal, outstandingTotal, paymentStatus],
     );
+    const convertedInvoice =
+      paymentStatus === 'paid'
+        ? await this.financialDocuments.convertPaidProforma(
+            client,
+            before.sourceSalesInvoiceId,
+            paymentInput.paymentDate,
+            id,
+            auth,
+            metadata,
+            commandKey,
+          )
+        : undefined;
     if (paymentStatus !== before.paymentStatus)
       await this.appendStatusHistory(
         client,
@@ -492,7 +708,11 @@ export class FinanceService {
       sourceAdvance
         ? 'finance.payment.allocated_from_customer_advance'
         : 'finance.payment.recorded',
-      { document, payment: document.payments.find((payment) => payment.id === paymentId) },
+      {
+        document,
+        payment: document.payments.find((payment) => payment.id === paymentId),
+        ...(convertedInvoice ? { convertedInvoice } : {}),
+      },
       auth,
       metadata,
       commandKey,
@@ -658,7 +878,7 @@ export class FinanceService {
       `SELECT 'customer_document'::text AS record_type, document.id,
               document.document_number AS number, partner.display_name AS counterparty_name,
               document.due_date::text,
-              round(document.outstanding_total * document.exchange_rate, 4)::text AS outstanding_bgn,
+              round(document.outstanding_total * document.exchange_rate, 4)::text AS outstanding_eur,
               CASE WHEN document.due_date < $1::date THEN 'overdue' ELSE 'upcoming' END AS reminder_state
        FROM finance.customer_documents document
        JOIN master_data.partners partner ON partner.id = document.customer_partner_id
@@ -668,7 +888,7 @@ export class FinanceService {
        SELECT 'supplier_payable'::text AS record_type, payable.id,
               payable.payable_number AS number, partner.display_name AS counterparty_name,
               payable.due_date::text,
-              round(payable.outstanding_total * payable.exchange_rate, 4)::text AS outstanding_bgn,
+              round(payable.outstanding_total * payable.exchange_rate, 4)::text AS outstanding_eur,
               CASE WHEN payable.due_date < $1::date THEN 'overdue' ELSE 'upcoming' END AS reminder_state
        FROM finance.supplier_payables payable
        JOIN master_data.partners partner ON partner.id = payable.supplier_partner_id
@@ -704,7 +924,7 @@ export class FinanceService {
               counterpartyName: reminder.counterparty_name,
               dueDate: reminder.due_date,
               number: reminder.number,
-              outstandingBgn: reminder.outstanding_bgn,
+              outstandingEur: reminder.outstanding_eur,
               recordId: reminder.id,
               recordType: reminder.record_type,
             },
@@ -728,11 +948,14 @@ export class FinanceService {
         `SELECT payment.id, payment.payment_number, payment.payment_date::text,
                 payment.payment_method, payment.amount::text, payment.payment_reference,
                 payment.notes, payment.recorded_at, allocation.allocated_at,
-                advance.advance_number AS source_customer_advance_number
+                advance.advance_number AS source_customer_advance_number,
+                reversal.reversal_number, reversal.reason AS reversal_reason,
+                reversal.reversed_on::text AS reversed_on, reversal.recorded_at AS reversed_at
          FROM finance.payment_allocations allocation
          JOIN finance.payments payment ON payment.id = allocation.payment_id
          LEFT JOIN finance.customer_advances advance
            ON advance.id = payment.source_customer_advance_id
+         LEFT JOIN finance.payment_reversals reversal ON reversal.payment_id = payment.id
          WHERE allocation.customer_document_id = $1
          ORDER BY allocation.allocated_at DESC, payment.id DESC`,
         [id],
@@ -753,7 +976,7 @@ export class FinanceService {
 
   private async lockDocument(client: PoolClient, id: string): Promise<FinanceCustomerDocument> {
     const result = await client.query<DocumentRow>(
-      `${documentQuery()} WHERE document.id = $1 FOR UPDATE`,
+      `${documentQuery()} WHERE document.id = $1 FOR UPDATE OF document`,
       [id],
     );
     const row = result.rows[0];
@@ -958,6 +1181,10 @@ interface PaymentRow {
   payment_method: FinancePaymentMethod;
   payment_number: string;
   payment_reference: string | null;
+  reversal_number: string | null;
+  reversal_reason: string | null;
+  reversed_at: string | Date | null;
+  reversed_on: string | null;
   recorded_at: string | Date;
   source_customer_advance_number: string | null;
 }
@@ -975,15 +1202,21 @@ function documentQuery() {
   return `SELECT document.id, document.document_number, document.source_sales_invoice_id,
                  source.invoice_number AS source_invoice_number,
                  document.customer_partner_id, customer.display_name AS customer_name,
+                 financial.id AS financial_document_id,
+                 coalesce(financial.official_number, financial.draft_number) AS financial_document_number,
+                 financial.status AS financial_document_status,
+                 financial.document_type AS financial_document_type,
                  document.document_date::text, document.due_date::text, document.currency_code,
                  document.exchange_rate::text, document.rate_date::text, document.rate_source,
                  document.total::text, document.allocated_total::text,
-                 document.outstanding_total::text, document.bgn_total::text,
+                 document.outstanding_total::text, document.eur_total::text,
                  document.payment_status, document.review_state, document.version,
                  document.created_at
           FROM finance.customer_documents document
           JOIN sales.invoices source ON source.id = document.source_sales_invoice_id
-          JOIN master_data.partners customer ON customer.id = document.customer_partner_id`;
+          JOIN master_data.partners customer ON customer.id = document.customer_partner_id
+          LEFT JOIN finance.financial_documents financial
+            ON financial.id = document.financial_document_id`;
 }
 
 function escapeLikeSearch(value: string): string {
@@ -997,11 +1230,24 @@ function mapDocument(
 ): FinanceCustomerDocument {
   return {
     allocatedTotal: row.allocated_total,
-    bgnTotal: row.bgn_total,
+    eurTotal: row.eur_total,
     createdAt: asIso(row.created_at),
     currencyCode: row.currency_code,
     customerName: row.customer_name,
     customerPartnerId: row.customer_partner_id,
+    ...(row.financial_document_id &&
+    row.financial_document_number &&
+    row.financial_document_status &&
+    row.financial_document_type
+      ? {
+          financialDocument: {
+            id: row.financial_document_id,
+            number: row.financial_document_number,
+            status: row.financial_document_status,
+            type: row.financial_document_type,
+          },
+        }
+      : {}),
     documentDate: row.document_date,
     dueDate: row.due_date,
     exchangeRate: row.exchange_rate,
@@ -1033,6 +1279,16 @@ function mapPayment(row: PaymentRow): FinancePayment {
     ...(row.payment_reference ? { paymentReference: row.payment_reference } : {}),
     ...(row.source_customer_advance_number
       ? { sourceCustomerAdvanceNumber: row.source_customer_advance_number }
+      : {}),
+    ...(row.reversal_number && row.reversal_reason && row.reversed_at && row.reversed_on
+      ? {
+          reversal: {
+            number: row.reversal_number,
+            reason: row.reversal_reason,
+            reversedAt: asIso(row.reversed_at),
+            reversedOn: row.reversed_on,
+          },
+        }
       : {}),
     recordedAt: asIso(row.recorded_at),
   };

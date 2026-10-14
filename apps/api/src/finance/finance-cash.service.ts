@@ -128,7 +128,7 @@ export class FinanceCashService {
          JOIN master_data.partners customer ON customer.id = document.customer_partner_id
          JOIN sales.invoices source ON source.id = document.source_sales_invoice_id
          WHERE document.review_state = 'pending_finance_review'
-           AND document.currency_code = 'BGN' AND document.outstanding_total > 0
+           AND document.currency_code = 'EUR' AND document.outstanding_total > 0
          ORDER BY document.due_date, document.document_number, document.id`,
       ),
       this.businessDate(),
@@ -371,7 +371,7 @@ export class FinanceCashService {
             );
           if (
             beforeDocument.review_state !== 'pending_finance_review' ||
-            beforeDocument.currency_code !== 'BGN' ||
+            beforeDocument.currency_code !== 'EUR' ||
             decimalUnits(beforeDocument.outstanding_total) === 0n
           )
             throw conflict(
@@ -427,7 +427,7 @@ export class FinanceCashService {
             `INSERT INTO finance.payments (
                id, payment_number, customer_partner_id, payment_date, payment_method,
                currency_code, amount, payment_reference, notes, recorded_by
-             ) VALUES ($1,$2,$3,$4,'cash','BGN',$5,$6,$7,$8)`,
+             ) VALUES ($1,$2,$3,$4,'cash','EUR',$5,$6,$7,$8)`,
             [
               paymentId,
               paymentNumber,

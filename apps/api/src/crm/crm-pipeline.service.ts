@@ -70,7 +70,7 @@ interface OpportunityRow {
   customer_name: string;
   customer_partner_id: string;
   description: string | null;
-  estimated_revenue_bgn: string;
+  estimated_revenue_eur: string;
   expected_close_on: Date | string | null;
   id: string;
   opportunity_number: string;
@@ -82,7 +82,7 @@ interface OpportunityRow {
   title: string;
   updated_at: Date | string;
   version: number;
-  weighted_revenue_bgn: string;
+  weighted_revenue_eur: string;
 }
 
 interface OpportunityHistoryRow {
@@ -406,17 +406,17 @@ export class CrmPipelineService {
       ),
       pool.query<{
         open_count: string;
-        open_revenue_bgn: string;
-        weighted_revenue_bgn: string;
-        won_revenue_bgn: string;
+        open_revenue_eur: string;
+        weighted_revenue_eur: string;
+        won_revenue_eur: string;
       }>(
         `SELECT count(*) FILTER (WHERE stage NOT IN ('won','lost'))::text AS open_count,
-                coalesce(sum(estimated_revenue_bgn) FILTER (
-                  WHERE stage NOT IN ('won','lost')), 0)::text AS open_revenue_bgn,
-                coalesce(sum(round(estimated_revenue_bgn * probability_percent / 100.0, 2))
-                  FILTER (WHERE stage NOT IN ('won','lost')), 0)::text AS weighted_revenue_bgn,
-                coalesce(sum(estimated_revenue_bgn) FILTER (WHERE stage = 'won'), 0)::text
-                  AS won_revenue_bgn
+                coalesce(sum(estimated_revenue_eur) FILTER (
+                  WHERE stage NOT IN ('won','lost')), 0)::text AS open_revenue_eur,
+                coalesce(sum(round(estimated_revenue_eur * probability_percent / 100.0, 2))
+                  FILTER (WHERE stage NOT IN ('won','lost')), 0)::text AS weighted_revenue_eur,
+                coalesce(sum(estimated_revenue_eur) FILTER (WHERE stage = 'won'), 0)::text
+                  AS won_revenue_eur
          FROM crm.opportunities`,
       ),
     ]);
@@ -427,9 +427,9 @@ export class CrmPipelineService {
       pageSize,
       summary: {
         openCount: Number(summary.rows[0]?.open_count ?? '0'),
-        openRevenueBgn: summary.rows[0]?.open_revenue_bgn ?? '0',
-        weightedRevenueBgn: summary.rows[0]?.weighted_revenue_bgn ?? '0',
-        wonRevenueBgn: summary.rows[0]?.won_revenue_bgn ?? '0',
+        openRevenueEur: summary.rows[0]?.open_revenue_eur ?? '0',
+        weightedRevenueEur: summary.rows[0]?.weighted_revenue_eur ?? '0',
+        wonRevenueEur: summary.rows[0]?.won_revenue_eur ?? '0',
       },
       total,
       totalPages: total === 0 ? 0 : Math.ceil(total / pageSize),
@@ -654,7 +654,7 @@ export class CrmPipelineService {
     await client.query(
       `INSERT INTO crm.opportunities (
          id, opportunity_number, customer_partner_id, source_lead_id, title, description,
-         estimated_revenue_bgn, probability_percent, stage, expected_close_on,
+         estimated_revenue_eur, probability_percent, stage, expected_close_on,
          owner_account_id, created_by, updated_by
        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$12)`,
       [
@@ -664,7 +664,7 @@ export class CrmPipelineService {
         sourceLeadId,
         input.title,
         input.description ?? null,
-        input.estimatedRevenueBgn,
+        input.estimatedRevenueEur,
         input.probabilityPercent,
         stage,
         input.expectedCloseOn ?? null,
@@ -927,7 +927,7 @@ export class CrmPipelineService {
       createdAt: iso(row.created_at),
       customer: { id: row.customer_partner_id, name: row.customer_name },
       ...(row.description ? { description: row.description } : {}),
-      estimatedRevenueBgn: row.estimated_revenue_bgn,
+      estimatedRevenueEur: row.estimated_revenue_eur,
       ...(row.expected_close_on ? { expectedCloseOn: dateOnly(row.expected_close_on) } : {}),
       history: history.rows.map((entry) => ({
         changedAt: iso(entry.changed_at),
@@ -956,7 +956,7 @@ export class CrmPipelineService {
       title: row.title,
       updatedAt: iso(row.updated_at),
       version: row.version,
-      weightedRevenueBgn: row.weighted_revenue_bgn,
+      weightedRevenueEur: row.weighted_revenue_eur,
     };
   }
 
@@ -1055,13 +1055,13 @@ function leadQuery(): string {
 function opportunityQuery(): string {
   return `SELECT opportunity.id, opportunity.opportunity_number,
     opportunity.customer_partner_id, opportunity.source_lead_id, opportunity.title,
-    opportunity.description, opportunity.estimated_revenue_bgn::text,
+    opportunity.description, opportunity.estimated_revenue_eur::text,
     opportunity.probability_percent, opportunity.stage, opportunity.expected_close_on,
     opportunity.owner_account_id, opportunity.closed_at, opportunity.version,
     opportunity.created_at, opportunity.updated_at, partner.display_name AS customer_name,
     employee.display_name AS owner_name,
-    round(opportunity.estimated_revenue_bgn * opportunity.probability_percent / 100.0, 2)::text
-      AS weighted_revenue_bgn
+    round(opportunity.estimated_revenue_eur * opportunity.probability_percent / 100.0, 2)::text
+      AS weighted_revenue_eur
   FROM crm.opportunities opportunity
   JOIN master_data.partners partner ON partner.id = opportunity.customer_partner_id
   JOIN identity.user_accounts owner ON owner.id = opportunity.owner_account_id
@@ -1170,7 +1170,7 @@ function normalizeOpportunity(input: CreateCrmOpportunityRequest) {
 
 function normalizeOpportunityBase(input: {
   description?: string;
-  estimatedRevenueBgn: string;
+  estimatedRevenueEur: string;
   expectedCloseOn?: string;
   ownerAccountId: string;
   probabilityPercent: number;
@@ -1189,7 +1189,7 @@ function normalizeOpportunityBase(input: {
     ...(optionalText(input.description, 4000)
       ? { description: optionalText(input.description, 4000)! }
       : {}),
-    estimatedRevenueBgn: positiveMoney(input.estimatedRevenueBgn),
+    estimatedRevenueEur: positiveMoney(input.estimatedRevenueEur),
     ...(input.expectedCloseOn ? { expectedCloseOn: validDate(input.expectedCloseOn) } : {}),
     ownerAccountId: input.ownerAccountId.trim(),
     probabilityPercent: input.probabilityPercent,
