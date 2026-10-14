@@ -72,7 +72,7 @@ try {
     'minio',
     'mailpit',
   ]);
-  await run('docker', [...compose, 'run', '--rm', 'minio-init']);
+  await run('node', ['--import', 'tsx', 'apps/api/src/storage/ensure-bucket.ts']);
   await run('npm', ['run', 'build:packages']);
   await run('npm', ['run', 'build', '-w', '@vista/api']);
   await run('node', ['--import', 'tsx', 'apps/api/src/database/migrate.ts', 'up']);

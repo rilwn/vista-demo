@@ -34,11 +34,3 @@ services:
   mailpit:
     image: axllent/mailpit:v1.27.8
     ports: ['127.0.0.1:58025:1025']
-  minio-init:
-    image: quay.io/minio/mc:RELEASE.2025-07-21T05-28-08Z
-    entrypoint: /bin/sh
-    command:
-      [
-        '-c',
-        'mc alias set e2e http://minio:9000 vista-e2e local-e2e-storage-only && mc mb e2e/vista-e2e && mc anonymous set none e2e/vista-e2e',
-      ]

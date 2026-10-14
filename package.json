@@ -48,7 +48,7 @@
     "db:rollback": "npm run db:rollback -w @vista/api",
     "db:fixtures:dev": "npm run db:fixtures:dev -w @vista/api",
     "db:seed:dev": "npm run db:fixtures:dev",
-    "infra:up": "docker compose --env-file .env -f infrastructure/docker/compose.yml up -d --wait postgres redis minio mailpit && docker compose --env-file .env -f infrastructure/docker/compose.yml run --rm minio-init",
+    "infra:up": "docker compose --env-file .env -f infrastructure/docker/compose.yml up -d --wait postgres redis minio mailpit && node --import dotenv/config --import tsx apps/api/src/storage/ensure-bucket.ts",
     "infra:down": "docker compose --env-file .env -f infrastructure/docker/compose.yml down"
   },
   "devDependencies": {
