@@ -40,12 +40,16 @@ describe.skipIf(process.env['RUN_INFRASTRUCTURE_TESTS'] !== 'true')(
           expect(await migrateDown(database, directory)).toBe(migration);
         }
 
-        // Seed representative pre-transition BGN data before replaying the
-        // EUR migration. This checks actual value conversion, not only schema
-        // rollback/reapply on an empty database.
+        // Seed representative pre-transition BGN data and a EUR-denominated
+        // financial document before replaying the EUR migration. This checks
+        // conversion and rate normalization, not only an empty-schema replay.
         const employeeId = randomUUID();
         const accountId = randomUUID();
         const partnerId = randomUUID();
+        const legalEntityId = randomUUID();
+        const branchId = randomUUID();
+        const locationId = randomUUID();
+        const financialDocumentId = randomUUID();
         const advanceId = randomUUID();
         const advanceEntryId = randomUUID();
         const loyaltyProgramId = randomUUID();
@@ -68,6 +72,49 @@ describe.skipIf(process.env['RUN_INFRASTRUCTURE_TESTS'] !== 'true')(
           `INSERT INTO master_data.partners (id, kind, display_name, created_by, updated_by)
            VALUES ($1, 'legal_entity', $2, $3, $3)`,
           [partnerId, `EUR migration QA ${partnerId.slice(0, 8)}`, accountId],
+        );
+        await database.query(
+          `INSERT INTO organization.legal_entities (id, code, name, created_by, updated_by)
+           VALUES ($1, $2, 'EUR migration QA issuer', $3, $3)`,
+          [legalEntityId, `EUR-${legalEntityId.slice(0, 8)}`, accountId],
+        );
+        await database.query(
+          `INSERT INTO organization.branches
+             (id, legal_entity_id, code, name, created_by, updated_by)
+           VALUES ($1, $2, $3, 'EUR migration QA branch', $4, $4)`,
+          [branchId, legalEntityId, `EUR-${branchId.slice(0, 8)}`, accountId],
+        );
+        await database.query(
+          `INSERT INTO organization.business_locations
+             (id, branch_id, code, name, location_type, address_line_1, city, created_by, updated_by)
+           VALUES ($1, $2, $3, 'EUR migration QA location', 'office',
+             '1 Test Street', 'Vratsa', $4, $4)`,
+          [locationId, branchId, `EUR-${locationId.slice(0, 8)}`, accountId],
+        );
+        await database.query(
+          `INSERT INTO finance.financial_documents (
+             id, draft_number, document_type, legal_entity_id, branch_id,
+             business_location_id, customer_partner_id, issue_date, tax_event_date,
+             due_date, currency_code, exchange_rate, rate_date, rate_source,
+             issuer_name, issuer_address, customer_name, customer_address,
+             net_total, vat_total, gross_total, bgn_net_total, bgn_vat_total,
+             bgn_gross_total, created_by
+           ) VALUES (
+             $1, $2, 'invoice', $3, $4, $5, $6, CURRENT_DATE, CURRENT_DATE,
+             CURRENT_DATE, 'EUR', 1.95583000, CURRENT_DATE, 'BNB',
+             'EUR migration QA issuer', '1 Test Street, Vratsa',
+             'EUR migration QA customer', '2 Test Street, Vratsa',
+             100, 20, 120, 195.5830, 39.1166, 234.6996, $7
+           )`,
+          [
+            financialDocumentId,
+            `EUR-MIGRATION-${financialDocumentId.slice(0, 8)}`,
+            legalEntityId,
+            branchId,
+            locationId,
+            partnerId,
+            accountId,
+          ],
         );
         await database.query(
           `INSERT INTO sales.customer_payment_terms
@@ -171,6 +218,26 @@ describe.skipIf(process.env['RUN_INFRASTRUCTURE_TESTS'] !== 'true')(
             estimated_revenue_eur: '1000.00',
           },
         ]);
+        const convertedDocument = await database.query(
+          `SELECT currency_code, exchange_rate::text, rate_source,
+                  net_total::text, vat_total::text, gross_total::text,
+                  eur_net_total::text, eur_vat_total::text, eur_gross_total::text
+           FROM finance.financial_documents WHERE id = $1`,
+          [financialDocumentId],
+        );
+        expect(convertedDocument.rows).toEqual([
+          {
+            currency_code: 'EUR',
+            exchange_rate: '1.00000000',
+            rate_source: 'internal_eur',
+            net_total: '100.0000',
+            vat_total: '20.0000',
+            gross_total: '120.0000',
+            eur_net_total: '100.0000',
+            eur_vat_total: '20.0000',
+            eur_gross_total: '120.0000',
+          },
+        ]);
         await expect(
           database.query(
             "UPDATE finance.customer_advances SET currency_code = 'BGN' WHERE id = $1",
@@ -180,6 +247,9 @@ describe.skipIf(process.env['RUN_INFRASTRUCTURE_TESTS'] !== 'true')(
 
         expect(await migrateUp(database, directory)).toEqual([]);
         await database.query('DELETE FROM crm.opportunities WHERE id = $1', [opportunityId]);
+        await database.query('DELETE FROM finance.financial_documents WHERE id = $1', [
+          financialDocumentId,
+        ]);
         await database.query(
           'DELETE FROM sales.customer_payment_terms WHERE customer_partner_id = $1',
           [partnerId],
@@ -196,6 +266,13 @@ describe.skipIf(process.env['RUN_INFRASTRUCTURE_TESTS'] !== 'true')(
         );
         await database.query('DELETE FROM finance.customer_advances WHERE id = $1', [advanceId]);
         await database.query('DELETE FROM master_data.partners WHERE id = $1', [partnerId]);
+        await database.query('DELETE FROM organization.business_locations WHERE id = $1', [
+          locationId,
+        ]);
+        await database.query('DELETE FROM organization.branches WHERE id = $1', [branchId]);
+        await database.query('DELETE FROM organization.legal_entities WHERE id = $1', [
+          legalEntityId,
+        ]);
         await database.query('DELETE FROM identity.user_accounts WHERE id = $1', [accountId]);
         await database.query('DELETE FROM identity.employees WHERE id = $1', [employeeId]);
         for (const migration of [...migrationRange].reverse()) {

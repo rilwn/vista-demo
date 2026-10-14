@@ -264,6 +264,14 @@ $$;
 
 -- Foreign-currency documents previously stored their accounting snapshot in
 -- BGN. The renamed EUR snapshot is already converted; update the rate basis.
+-- EUR-denominated documents are now in the accounting currency, so their
+-- source amount remains unchanged and their converted EUR rate is exactly 1.
+-- Older versions stored the BGN-per-EUR rate and source label for these rows.
+UPDATE finance.financial_documents
+SET exchange_rate = 1,
+    rate_source = 'internal_eur'
+WHERE currency_code = 'EUR';
+
 UPDATE finance.financial_documents
 SET exchange_rate = round(exchange_rate / 1.95583, 8)
 WHERE currency_code <> 'EUR' AND rate_source <> 'internal_eur';
