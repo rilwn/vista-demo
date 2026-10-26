@@ -150,10 +150,11 @@ export class FinancePayablesService {
         `SELECT document.id, document.document_number AS number,
                 document.customer_partner_id, customer.display_name AS customer_name,
                 document.due_date::text, document.outstanding_total::text,
-                source.invoice_number AS source_invoice_number, document.version
+                coalesce(financial.official_number, financial.draft_number, source.invoice_number, document.document_number) AS source_invoice_number, document.version
          FROM finance.customer_documents document
          JOIN master_data.partners customer ON customer.id = document.customer_partner_id
-         JOIN sales.invoices source ON source.id = document.source_sales_invoice_id
+         LEFT JOIN sales.invoices source ON source.id = document.source_sales_invoice_id
+         LEFT JOIN finance.financial_documents financial ON financial.id = document.financial_document_id
          JOIN master_data.partner_roles supplier_role
            ON supplier_role.partner_id = document.customer_partner_id
           AND supplier_role.role = 'supplier'
@@ -755,6 +756,15 @@ export class FinancePayablesService {
           'supplier_offset_created',
           auth.accountId,
         );
+        if (customerStatus === 'paid')
+          await this.finance.settlePaidProforma(
+            client,
+            normalized.offsetDate,
+            customerDocument.id,
+            auth,
+            metadata,
+            idempotencyKey,
+          );
 
         const id = randomUUID();
         const number = await this.nextNumber(client, 'supplier_offset', 'OFF');
@@ -1178,7 +1188,7 @@ export class FinancePayablesService {
       total: string;
       version: number;
     }>(
-      `SELECT id, customer_partner_id, currency_code, total::text, allocated_total::text,
+      `SELECT id, customer_partner_id, currency_code, adjusted_total::text AS total, allocated_total::text,
               outstanding_total::text, due_date::text, payment_status, review_state, version
        FROM finance.customer_documents WHERE id = $1 FOR UPDATE`,
       [id],

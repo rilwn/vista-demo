@@ -1,14 +1,32 @@
 # Vista implementation plan: remaining work
 
-Status date: 2026-10-14
+Status date: 2026-10-26
 Project: `BG16RFPR001-1.012-1324-C01`
 
 [`AGENTS.md`](AGENTS.md) is authoritative. This plan lists only work that is
-not yet accepted. The 12 October QA items named below are implemented and
-verified locally; the QA register holds their evidence. Practical defaults are
+not yet accepted. Practical defaults are
 in [the consolidated decision record](docs/architecture/decisions/README.md).
-No client decision blocks the remaining software work. The 12 QA items listed
-in the QA register are locally verified; hosted and hardware acceptance remain.
+Use the approved defaults for the remaining software. The 128-row specification
+comparison in `docs/qa/specification-comparison-2026-10-23.md` distinguishes
+implemented features from unfinished scope. Local defect verification is not
+full delivery acceptance.
+
+## Current milestone: Finish the Finance document lifecycle
+
+**Pending:** bank/cash matching and advance/offset allocation to deferred POS
+balances; scalable all-source payment-status registers; accounting/VAT export
+reconciliation and acceptance. Follow this order before broadening other modules.
+
+**Depends on:** existing Finance/Sales sources and approved EUR/default rules.
+
+**Next slice:** Connect bank/cash matching and advance/offset allocation to
+deferred POS balances, then finish scalable all-source payment-status registers,
+reminders, reporting and accounting/VAT export reconciliation.
+
+**Accept when:** balances across invoices, POS returns, collections, bank/cash
+and advances reconcile to their immutable sources; money is never recorded twice;
+filtered registers and accounting exports agree. Maintain existing concurrency,
+conversion, UI and migration regressions.
 
 ## 1. Release and hosted verification
 
@@ -22,6 +40,11 @@ credentials.
 **Accept when:** deployment and rollback are repeatable, the security scan has
 no unreviewed findings, and hosted workflows pass without exposing secrets.
 
+Verify that the deployment host can download BNB XML. The local host currently
+receives an HTML access-error page with HTTP 200; live foreign-currency import
+acceptance remains pending. Check queued retries and the weekday refresh without
+substituting rates or changing issued document snapshots.
+
 ## 2. Finish ERP finance and operational integrations
 
 **Work:** Complete statutory sales/purchase journal and VAT-report acceptance,
@@ -32,13 +55,19 @@ keep unavailable providers clearly disabled. Populate production master data
 and resolve detected partner duplicates through controlled review, never an
 automatic merge.
 
+Finish the remaining connected ERP/CRM operations identified in the specification
+comparison: Procurement acceptance protocol, warranty quotation generation and
+actual survey delivery. Keep unavailable email/courier providers explicit rather
+than presenting recorded intentions as successful external delivery.
+
 **Depends on:** release environment, real operating data and any required
 provider credentials. Use the adopted defaults where specific values are not
 needed.
 
 **Accept when:** finance totals reconcile to source documents, exports match
 their defined fields, retries cannot duplicate postings or notifications, and
-logistics failures remain visible and recoverable.
+logistics failures remain visible and recoverable. Procurement and CRM operations
+must complete through their connected screens, documents and customer history.
 
 ## 3. Accept the POS hardware path
 
@@ -72,7 +101,10 @@ sales or unsupported fiscal-readiness claims.
 
 ## 5. Complete custom Backup and disaster recovery
 
-**Work:** Implement the adopted ADR-0004 baseline for the deployed Vista
+**Work:** Build the operational backup/restore engine, source/policy APIs and UI,
+scheduled execution, backup types, encrypted copies, compression/deduplication,
+retention, notifications, immutable execution evidence and enforced approvals.
+Implement the adopted ADR-0004 baseline for the deployed Vista
 database, object storage, Recovery configuration and backup catalog. Add real
 company sources only when identified. Configure encrypted independent copies,
 retention, monitoring, role separation and four-eyes approval; document restore
@@ -94,6 +126,11 @@ role-based user guides; train staff and transfer ownership of source, hosting,
 credentials, backups and runbooks. Record any optional feature as enabled or
 not selected.
 
+Review the pre-existing local audit-chain warning and document its historical
+extent. Preserve original events; do not recalculate hashes or erase history
+to make an integrity check pass. New-event serialization is covered by real
+PostgreSQL integrity regression tests.
+
 **Depends on:** phases 1–5 and client-owned production environment.
 
 **Accept when:** mandatory requirements are traceable to working evidence,
@@ -105,5 +142,6 @@ and support all four deliverables.
 - DATECS exact-unit H-18/protocol verification and witnessed terminal tests.
 - Real company backup-source and storage inventory plus witnessed restore.
 - Hosted deployment/security/provider retests.
+- Successful BNB XML retrieval from the deployment host.
 
 These are infrastructure or evidence gates, not unresolved product decisions.

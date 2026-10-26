@@ -12,6 +12,14 @@ export interface DownloadedManagedFile {
   fileName: string;
 }
 
+export async function readManagedFileBlob(token: string, fileId: string): Promise<Blob> {
+  const response = await fetch(`${apiV1BaseUrl}/files/${fileId}/content`, {
+    headers: authorizationHeaders(token),
+  });
+  if (!response.ok) throw await apiError(response);
+  return response.blob();
+}
+
 export async function listManagedFiles(
   token: string,
   parentType: ManagedFileParentType,

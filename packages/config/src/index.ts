@@ -62,6 +62,7 @@ const environmentSchema = z
       .max(25 * 1024 * 1024)
       .default(10 * 1024 * 1024),
     FINANCE_PAYMENT_REMINDER_LEAD_DAYS: z.coerce.number().int().min(1).max(90).default(7),
+    FINANCE_OFFICIAL_NUMBER_BLOCK_SIZE: z.coerce.number().int().min(1).max(1_000_000).default(1000),
     CRM_SLA_EVALUATION_CRON: z.string().min(1).default('0 */5 * * * *'),
     FINANCE_PAYMENT_STATUS_CRON: z.string().min(1).default('0 25 1 * * *'),
     IDEMPOTENCY_TTL_SECONDS: z.coerce.number().int().positive().default(86_400),

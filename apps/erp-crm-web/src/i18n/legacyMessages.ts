@@ -563,6 +563,20 @@ const bulgarianJobMonitorMessages = {
 };
 
 const bulgarianFinancialDocumentMessages = {
+  recordCount: (count: number) => `${count} ${count === 1 ? 'запис' : 'записа'}`,
+  eurReference: 'EUR, без преобразуване',
+  collections: 'Вземания и плащания',
+  collectionOpenError: 'Записът за вземане не може да бъде отворен.',
+  relatedDocument: 'Свързан документ',
+  proformaPaid: 'Проформата е платена и е издадена фактура.',
+  invoiceFromProforma: 'Фактурата е издадена след пълното плащане на проформата.',
+  openFinancialDocument: 'Отвори финансовия документ',
+  collectionSource: 'Балансът и плащанията остават свързани с този документ.',
+  collectionCurrency: (currency: string) => `Сумите по този запис са в ${currency}.`,
+  paymentAmount: (currency: string) => `Сума (${currency})`,
+  noSalesDraftWaiting: 'Няма чакаща чернова от Продажби',
+  collectionAutomaticHint:
+    'Издадените фактури и проформи се добавят автоматично във Вземания и плащания. За по-стар издаден документ отворете прегледа му и изберете Вземания и плащания.',
   attachments: {
     ...bulgarianMessages.partners.documents,
     add: 'Добавяне на приложение',

@@ -64,6 +64,14 @@ and sign-in journeys are covered by `npm run test:acceptance`.
 - **Build fails:** check Docker registry/npm connectivity and available disk space.
 - **Unhealthy API:** inspect API logs privately, confirm storage health, then
   confirm migrations completed. Never publish secrets or full environment dumps.
+- **`Applied migration 0069_eur_transition has been modified`:** retain a verified
+  database backup and deploy the current migration runner. It reconciles only the
+  exact known historical EUR checksum after verifying the conversion is complete
+  and EUR rates already satisfy the correction. The checksum change is audited;
+  currency conversion is not repeated. Already-corrected databases are unchanged.
+  Coolify's existing migration command needs no new variables or manual SQL.
+  Unknown checksums or inconsistent EUR state still stop migration. Do not delete
+  migration records, disable validation or reset a database to get past this error.
 - **Port occupied:** stop the rehearsal; choose unused ports in the review env
   file. Do not stop unrelated applications.
 - **Release rollback:** retain the previous image tag and a verified database

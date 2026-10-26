@@ -110,6 +110,7 @@ export const managedFileParentTypes = [
   'warranty_claim',
   'crm_interaction',
   'financial_document',
+  'financial_branding',
 ] as const;
 export type ManagedFileParentType = (typeof managedFileParentTypes)[number];
 export type ManagedFileStatus = 'available' | 'deleted' | 'quarantined' | 'rejected';
@@ -703,7 +704,7 @@ export interface CustomerFinancialDocumentSummary {
   issueDate: string;
   officialNumber?: string;
   sourceSalesInvoiceId?: string;
-  status: 'cancelled' | 'draft';
+  status: 'cancelled' | 'draft' | 'issued';
 }
 
 export interface CustomerReceivableSummary {
@@ -716,7 +717,7 @@ export interface CustomerReceivableSummary {
   number: string;
   outstandingTotal: string;
   paymentStatus: FinancePaymentStatus;
-  sourceSalesInvoiceId: string;
+  sourceSalesInvoiceId?: string;
   total: string;
 }
 
@@ -729,6 +730,7 @@ export interface CustomerPaymentSummary {
   paymentMethod: FinancePaymentMethod;
   paymentReference?: string;
   recordedAt: string;
+  reversalNumber?: string;
 }
 
 export interface CustomerOperationalOverview {
@@ -986,11 +988,76 @@ export interface CustomerAdvance {
 export interface CustomerAccountEntry {
   amount: string;
   dueOn: string;
-  entryType: 'charge' | 'return_credit';
+  entryType: 'charge' | 'return_credit' | 'payment' | 'payment_reversal';
   id: string;
   occurredAt: string;
   saleNumber: string;
   returnNumber?: string;
+  paymentNumber?: string;
+}
+
+export interface CreatePosAccountPaymentRequest {
+  amount: string;
+  expectedOutstanding: string;
+  paymentMethod: CustomerAdvancePaymentMethod;
+  paymentDate: string;
+  paymentReference?: string;
+}
+export interface ReversePosAccountPaymentRequest {
+  reason: string;
+  expectedOutstanding: string;
+}
+export interface CreatePosAccountRefundRequest {
+  amount: string;
+  expectedRefundDue: string;
+  refundedOn: string;
+  paymentMethod: 'cash' | 'bank_transfer';
+  paymentReference: string;
+}
+export interface PosAccountReturnCredit {
+  returnId: string;
+  returnNumber: string;
+  returnedOn: string;
+  returnTotal: string;
+  releasedTotal: string;
+  refundableTotal: string;
+  refundedTotal: string;
+  refundDue: string;
+  invoice?: { id: string; number: string };
+  creditNote?: { id: string; number: string; status: 'draft' | 'issued' };
+  refunds: Array<{
+    number: string;
+    amount: string;
+    refundedOn: string;
+    paymentMethod: 'cash' | 'bank_transfer';
+    paymentReference: string;
+    payments: Array<{ number: string; amount: string }>;
+  }>;
+}
+export interface PosAccountPayment {
+  id: string;
+  number: string;
+  amount: string;
+  paymentMethod: CustomerAdvancePaymentMethod;
+  paymentDate: string;
+  paymentReference?: string;
+  reversal?: { number: string; reason: string; reversedOn: string };
+}
+export interface PosAccountReceivable {
+  returnCredits?: PosAccountReturnCredit[];
+  refundDue?: string;
+  refundedTotal?: string;
+  saleId: string;
+  saleNumber: string;
+  receiptNumber: string;
+  invoice?: { id: string; number: string };
+  dueOn: string;
+  originalTotal: string;
+  returnCredit: string;
+  paidTotal: string;
+  outstandingTotal: string;
+  status: 'unpaid' | 'partially_paid' | 'paid' | 'overdue';
+  payments: PosAccountPayment[];
 }
 
 export interface CustomerPaymentAccount {
@@ -1000,6 +1067,7 @@ export interface CustomerPaymentAccount {
   customerName: string;
   customerPartnerId: string;
   entries: CustomerAccountEntry[];
+  posReceivables?: PosAccountReceivable[];
   openReceivables: CustomerOpenReceivable[];
   outstandingBalance: string;
   terms?: CustomerPaymentTerms;
@@ -1018,6 +1086,7 @@ export interface CustomerOpenReceivable {
 }
 
 export interface CustomerPaymentAccountReferenceData {
+  businessTimezone?: string;
   customers: Array<{ id: string; name: string; uic?: string }>;
 }
 
@@ -1096,6 +1165,7 @@ export interface PosSaleLine {
 }
 
 export interface PosSalePayment {
+  collectedAmount?: string;
   accountDueOn?: string;
   adapter: string;
   advanceId?: string;
@@ -2094,6 +2164,11 @@ export interface FinancePaymentStatusHistoryEntry {
 }
 
 export interface FinanceCustomerDocument {
+  adjustedTotal?: string;
+  creditTotal?: string;
+  debitTotal?: string;
+  overpaidTotal?: string;
+  corrections?: FinanceCollectionCorrection[];
   allocatedTotal: string;
   eurTotal: string;
   createdAt: string;
@@ -2118,10 +2193,22 @@ export interface FinanceCustomerDocument {
   rateSource: string;
   reviewState: 'cancelled' | 'pending_finance_review';
   sourceInvoiceNumber: string;
-  sourceSalesInvoiceId: string;
+  sourceSalesInvoiceId?: string;
   statusHistory: FinancePaymentStatusHistoryEntry[];
   total: string;
   version: number;
+}
+
+export interface FinanceCollectionCorrection {
+  id: string;
+  documentId: string;
+  number: string;
+  documentType: 'credit_note' | 'debit_note';
+  documentDate: string;
+  amount: string;
+  eurAmount: string;
+  appliedAt: string;
+  reason: string;
 }
 
 export interface FinanceSummary {
@@ -3419,6 +3506,7 @@ export interface CreateFinancialDocumentRequest {
   rateSource: string;
   sourceSalesInvoiceId?: string;
   sourcePosSaleId?: string;
+  sourcePosReturnId?: string;
   sourceServiceWorkOrderId?: string;
   sourceSubscriptionDraftId?: string;
   taxEventDate: string;
@@ -3430,6 +3518,7 @@ export interface CancelFinancialDocumentRequest {
 }
 
 export interface IssueFinancialDocumentRequest {
+  expectedBrandingVersion?: number;
   expectedVersion: number;
 }
 
@@ -3466,7 +3555,67 @@ export interface FinancialDocumentVatSummary {
   vatTreatment: VatTreatment;
 }
 
+export interface FinancialBrandingAsset {
+  id: string;
+  fileName: string;
+  mediaType: string;
+  checksumSha256: string;
+  byteSize: number;
+}
+export interface FinancialDocumentBranding {
+  version: number;
+  logo?: FinancialBrandingAsset;
+  signature?: FinancialBrandingAsset;
+  signatoryName?: string;
+}
+export interface FinancialBrandingSettings extends FinancialDocumentBranding {
+  legalEntityId: string;
+  legalEntityName: string;
+}
+export interface SaveFinancialBrandingRequest {
+  expectedVersion: number;
+  logoFileId?: string;
+  signatureFileId?: string;
+  signatoryName?: string;
+  signatureConfirmed?: boolean;
+}
+
+/** Read-only reconciliation of an invoice's original POS payment and refund records. */
+export interface PosInvoiceSettlement {
+  refundDue?: string;
+  accountRefundedTotal?: string;
+  saleId: string;
+  saleNumber: string;
+  receiptNumber: string;
+  currencyCode: string;
+  originalTotal: string;
+  paidAtCheckout: string;
+  deferredAtCheckout: string;
+  refundedTotal: string;
+  deferredReleased: string;
+  netPaidTotal: string;
+  netSaleTotal: string;
+  outstandingTotal: string;
+  collectedTotal?: string;
+  accountPayments?: PosAccountPayment[];
+  dueOn?: string;
+  status: 'paid' | 'partially_paid' | 'unpaid' | 'overdue' | 'needs_review' | 'refund_due';
+  returnState: 'none' | 'partial' | 'full';
+  returnCount: number;
+  payments: Array<{
+    id: string;
+    method: PosPaymentMethod;
+    amount: string;
+    refundedAmount: string;
+    dueOn?: string;
+  }>;
+  returns: Array<{ id: string; number: string; amount: string; completedAt: string }>;
+}
+
 export interface FinancialDocument {
+  posSettlement?: PosInvoiceSettlement;
+  branding?: FinancialDocumentBranding;
+  collection?: { id: string; number: string };
   eurGrossTotal: string;
   eurNetTotal: string;
   eurVatTotal: string;
@@ -3486,6 +3635,8 @@ export interface FinancialDocument {
   issuedByName?: string;
   convertedFromDocumentId?: string;
   convertedFromDocumentNumber?: string;
+  convertedToDocumentId?: string;
+  convertedToDocumentNumber?: string;
   dueDate?: string;
   exchangeRate: string;
   grossTotal: string;
@@ -3506,6 +3657,7 @@ export interface FinancialDocument {
   sourceSubscriptionDraftId?: string;
   sourceSubscriptionDraftNumber?: string;
   sourcePosSaleId?: string;
+  sourcePosReturnId?: string;
   sourcePosSaleNumber?: string;
   sourceFiscalReceiptNumber?: string;
   sourceServiceWorkOrderId?: string;
@@ -3523,6 +3675,63 @@ export interface FinancialDocumentPage {
   pageSize: number;
   totalItems: number;
   totalPages: number;
+}
+
+export interface RecurringInvoiceProfileInput {
+  enabled: boolean;
+  legalEntityId: string;
+  businessLocationId: string;
+  cashRegisterId?: string;
+  operatorId?: string;
+  firstBillingDate: string;
+  paymentTermsDays: number;
+  vatTreatment: VatTreatment;
+  vatRate?: string;
+  contractVersion: number;
+  expectedVersion?: number;
+}
+export interface RecurringInvoiceProfile extends RecurringInvoiceProfileInput {
+  version: number;
+  approvedByName: string;
+  updatedAt: string;
+}
+export interface RecurringInvoicePeriod {
+  id: string;
+  billingDate: string;
+  servicePeriodStart: string;
+  servicePeriodEnd: string;
+  amount: string;
+  currencyCode: string;
+  status: 'waiting' | 'issued' | 'manual_review' | 'needs_review' | 'retry';
+  errorCode?: string;
+  document?: { id: string; number: string };
+}
+export interface RecurringInvoiceContract {
+  id: string;
+  number: string;
+  customerName: string;
+  customerLocationName: string;
+  active: boolean;
+  billingAmount: string;
+  currencyCode: string;
+  billingFrequencyMonths: number;
+  nextBillingDate: string;
+  contractVersion: number;
+  profile?: RecurringInvoiceProfile;
+  periods: RecurringInvoicePeriod[];
+}
+export interface RecurringInvoicePage {
+  items: RecurringInvoiceContract[];
+  page: number;
+  pageSize: number;
+  totalItems: number;
+  totalPages: number;
+}
+export interface RecurringInvoiceProcessResult {
+  issuedCount: number;
+  reviewCount: number;
+  retryCount: number;
+  skippedCount: number;
 }
 
 export const manualServiceRequestChannels = [
@@ -4768,6 +4977,9 @@ export interface UpdateServiceSubscriptionRequest extends CreateServiceSubscript
 }
 
 export interface SubscriptionInvoiceDraft {
+  financialDocumentId?: string;
+  financialDocumentNumber?: string;
+  financialDocumentStatus?: 'draft' | 'issued';
   amount: string;
   billingDate: string;
   currencyCode: string;

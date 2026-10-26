@@ -5,6 +5,9 @@ import type {
   CancelFinanceCashVoucherRequest,
   CreateFinanceCustomerDocumentRequest,
   CreateCustomerAdvanceRequest,
+  CreatePosAccountPaymentRequest,
+  ReversePosAccountPaymentRequest,
+  CreatePosAccountRefundRequest,
   CreateFinanceBankStatementRequest,
   CreateFinanceCashVoucherRequest,
   CreateFinancePaymentRequest,
@@ -82,6 +85,82 @@ export function resolveFinancialDocumentPrice(
   );
 }
 
+export function preparePosReturnCreditNote(
+  token: string,
+  returnId: string,
+  key: string,
+): Promise<FinancialDocument> {
+  return unwrapApiResponse(
+    apiClient.POST('/api/v1/finance/financial-documents/from-pos-return/{returnId}', {
+      headers: authorizationHeaders(token),
+      params: { path: { returnId }, header: idempotencyParameters(key).header },
+    }),
+  );
+}
+export function recordPosAccountRefund(
+  token: string,
+  customerPartnerId: string,
+  saleId: string,
+  returnId: string,
+  key: string,
+  input: CreatePosAccountRefundRequest,
+): Promise<CustomerPaymentAccount> {
+  return unwrapApiResponse(
+    apiClient.POST(
+      '/api/v1/finance/customer-accounts/{customerPartnerId}/pos-sales/{saleId}/returns/{returnId}/refunds',
+      {
+        body: input,
+        headers: authorizationHeaders(token),
+        params: {
+          path: { customerPartnerId, saleId, returnId },
+          header: idempotencyParameters(key).header,
+        },
+      },
+    ),
+  );
+}
+
+export function collectPosAccountPayment(
+  token: string,
+  customerPartnerId: string,
+  saleId: string,
+  key: string,
+  input: CreatePosAccountPaymentRequest,
+): Promise<CustomerPaymentAccount> {
+  return unwrapApiResponse(
+    apiClient.POST(
+      '/api/v1/finance/customer-accounts/{customerPartnerId}/pos-sales/{saleId}/payments',
+      {
+        body: input,
+        headers: authorizationHeaders(token),
+        params: { path: { customerPartnerId, saleId }, header: idempotencyParameters(key).header },
+      },
+    ),
+  );
+}
+export function reversePosAccountPayment(
+  token: string,
+  customerPartnerId: string,
+  saleId: string,
+  paymentId: string,
+  key: string,
+  input: ReversePosAccountPaymentRequest,
+): Promise<CustomerPaymentAccount> {
+  return unwrapApiResponse(
+    apiClient.POST(
+      '/api/v1/finance/customer-accounts/{customerPartnerId}/pos-sales/{saleId}/payments/{paymentId}/reverse',
+      {
+        body: input,
+        headers: authorizationHeaders(token),
+        params: {
+          path: { customerPartnerId, saleId, paymentId },
+          header: idempotencyParameters(key).header,
+        },
+      },
+    ),
+  );
+}
+
 export function getCustomerPaymentAccountReferenceData(
   token: string,
 ): Promise<CustomerPaymentAccountReferenceData> {
@@ -92,6 +171,17 @@ export function getCustomerPaymentAccountReferenceData(
   );
 }
 
+export function getCustomerPaymentAccount(
+  token: string,
+  customerPartnerId: string,
+): Promise<CustomerPaymentAccount> {
+  return unwrapApiResponse(
+    apiClient.GET('/api/v1/finance/customer-accounts/{customerPartnerId}', {
+      headers: authorizationHeaders(token),
+      params: { path: { customerPartnerId } },
+    }),
+  );
+}
 export function listCustomerPaymentAccounts(token: string): Promise<CustomerPaymentAccount[]> {
   return unwrapApiResponse(
     apiClient.GET('/api/v1/finance/customer-accounts', {
@@ -462,6 +552,21 @@ export function cancelFinancialDocument(
 ): Promise<FinancialDocument> {
   return unwrapApiResponse(
     apiClient.POST('/api/v1/finance/financial-documents/{id}/cancel', {
+      body: input,
+      headers: authorizationHeaders(token),
+      params: { header: idempotencyParameters(key).header, path: { id } },
+    }),
+  );
+}
+
+export function collectFinancialDocument(
+  token: string,
+  id: string,
+  key: string,
+  input: IssueFinancialDocumentRequest,
+): Promise<FinancialDocument> {
+  return unwrapApiResponse(
+    apiClient.POST('/api/v1/finance/financial-documents/{id}/collection', {
       body: input,
       headers: authorizationHeaders(token),
       params: { header: idempotencyParameters(key).header, path: { id } },

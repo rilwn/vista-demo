@@ -1124,6 +1124,54 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/finance/customer-accounts/{customerPartnerId}/pos-sales/{saleId}/payments': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['FinanceCustomerAccountsController_collect'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/finance/customer-accounts/{customerPartnerId}/pos-sales/{saleId}/payments/{paymentId}/reverse': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['FinanceCustomerAccountsController_reverse'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/finance/customer-accounts/{customerPartnerId}/pos-sales/{saleId}/returns/{returnId}/refunds': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['FinanceCustomerAccountsController_refund'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/finance/customer-accounts/{customerPartnerId}/terms': {
     parameters: {
       query?: never;
@@ -1165,6 +1213,22 @@ export interface paths {
     };
     get: operations['FinanceCustomerAccountsController_referenceData'];
     put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/finance/document-branding/{id}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['FinancialBrandingController_get'];
+    put: operations['FinancialBrandingController_save'];
     post?: never;
     delete?: never;
     options?: never;
@@ -1332,6 +1396,22 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/finance/financial-documents/{id}/collection': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['FinancialDocumentsController_collection'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/finance/financial-documents/{id}/email': {
     parameters: {
       query?: never;
@@ -1396,6 +1476,22 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/finance/financial-documents/from-pos-return/{returnId}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['FinancialDocumentsController_fromPosReturn'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/finance/financial-documents/prices/resolve': {
     parameters: {
       query?: never;
@@ -1422,6 +1518,54 @@ export interface paths {
     get: operations['FinancialDocumentsController_referenceData'];
     put?: never;
     post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/finance/recurring-invoices': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['RecurringInvoicesController_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/finance/recurring-invoices/{id}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['RecurringInvoicesController_record'];
+    put: operations['RecurringInvoicesController_save'];
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/finance/recurring-invoices/{id}/run': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['RecurringInvoicesController_run'];
     delete?: never;
     options?: never;
     head?: never;
@@ -5599,6 +5743,24 @@ export interface components {
       uic?: string;
       vatNumber?: string;
     };
+    CreatePosAccountPaymentDto: {
+      amount: string;
+      expectedOutstanding: string;
+      /** Format: date */
+      paymentDate: string;
+      /** @enum {string} */
+      paymentMethod: 'cash' | 'bank_transfer' | 'card' | 'pos_terminal';
+      paymentReference?: string;
+    };
+    CreatePosAccountRefundDto: {
+      amount: string;
+      expectedRefundDue: string;
+      /** @enum {string} */
+      paymentMethod: 'cash' | 'bank_transfer';
+      paymentReference: string;
+      /** Format: date */
+      refundedOn: string;
+    };
     CreatePosCommercialRuleDto: {
       code: string;
       /** @enum {string} */
@@ -6682,11 +6844,12 @@ export interface components {
       /** Format: date */
       dueOn: string;
       /** @enum {string} */
-      entryType: 'charge' | 'return_credit';
+      entryType: 'charge' | 'return_credit' | 'payment' | 'payment_reversal';
       /** Format: uuid */
       id: string;
       /** Format: date-time */
       occurredAt: string;
+      paymentNumber?: string;
       returnNumber?: string;
       saleNumber: string;
     };
@@ -6749,7 +6912,7 @@ export interface components {
       /** Format: uuid */
       sourceSalesInvoiceId?: string;
       /** @enum {string} */
-      status: 'draft' | 'cancelled';
+      status: 'draft' | 'issued' | 'cancelled';
     };
     CustomerLocationDto: {
       active: boolean;
@@ -6821,10 +6984,12 @@ export interface components {
       entries: components['schemas']['CustomerAccountEntryDto'][];
       openReceivables: components['schemas']['CustomerOpenReceivableDto'][];
       outstandingBalance: string;
+      posReceivables?: components['schemas']['PosAccountReceivableDto'][];
       terms?: components['schemas']['CustomerPaymentTermsDto'];
       uic?: string;
     };
     CustomerPaymentAccountReferenceDataDto: {
+      businessTimezone?: string;
       customers: components['schemas']['CustomerPaymentAccountCustomerDto'][];
     };
     CustomerPaymentSummaryDto: {
@@ -6842,6 +7007,7 @@ export interface components {
       paymentReference?: string;
       /** Format: date-time */
       recordedAt: string;
+      reversalNumber?: string;
     };
     CustomerPaymentTermsDto: {
       creditLimitEur: string;
@@ -6916,7 +7082,7 @@ export interface components {
       /** @enum {string} */
       paymentStatus: 'unpaid' | 'partially_paid' | 'paid' | 'overdue' | 'cancelled';
       /** Format: uuid */
-      sourceSalesInvoiceId: string;
+      sourceSalesInvoiceId?: string;
       /** @example 60.0000 */
       total: string;
     };
@@ -7262,14 +7428,34 @@ export interface components {
       totalItems: number;
       totalPages: number;
     };
+    FinanceCollectionCorrectionDto: {
+      amount: string;
+      /** Format: date-time */
+      appliedAt: string;
+      /** Format: date */
+      documentDate: string;
+      /** Format: uuid */
+      documentId: string;
+      /** @enum {string} */
+      documentType: 'credit_note' | 'debit_note';
+      eurAmount: string;
+      /** Format: uuid */
+      id: string;
+      number: string;
+      reason: string;
+    };
     FinanceCustomerDocumentDto: {
+      adjustedTotal?: string;
       allocatedTotal: string;
+      corrections?: components['schemas']['FinanceCollectionCorrectionDto'][];
       /** Format: date-time */
       createdAt: string;
+      creditTotal?: string;
       currencyCode: string;
       customerName: string;
       /** Format: uuid */
       customerPartnerId: string;
+      debitTotal?: string;
       /** Format: date */
       documentDate: string;
       /** Format: date */
@@ -7281,6 +7467,7 @@ export interface components {
       id: string;
       number: string;
       outstandingTotal: string;
+      overpaidTotal?: string;
       payments: components['schemas']['FinancePaymentDto'][];
       /** @enum {string} */
       paymentStatus: 'unpaid' | 'partially_paid' | 'paid' | 'overdue' | 'cancelled';
@@ -7291,7 +7478,7 @@ export interface components {
       reviewState: 'pending_finance_review' | 'cancelled';
       sourceInvoiceNumber: string;
       /** Format: uuid */
-      sourceSalesInvoiceId: string;
+      sourceSalesInvoiceId?: string;
       statusHistory: components['schemas']['FinancePaymentStatusHistoryEntryDto'][];
       total: string;
       version: number;
@@ -7706,6 +7893,34 @@ export interface components {
       recordedInputVatEur: string;
       recordedOutputVatEur: string;
     };
+    FinancialBrandingAssetDto: {
+      byteSize: number;
+      checksumSha256: string;
+      fileName: string;
+      /** Format: uuid */
+      id: string;
+      mediaType: string;
+    };
+    FinancialBrandingSettingsDto: {
+      /** Format: uuid */
+      legalEntityId: string;
+      legalEntityName: string;
+      logo?: components['schemas']['FinancialBrandingAssetDto'];
+      signatoryName?: string;
+      signature?: components['schemas']['FinancialBrandingAssetDto'];
+      version: number;
+    };
+    FinancialCollectionLinkDto: {
+      /** Format: uuid */
+      id: string;
+      number: string;
+    };
+    FinancialDocumentBrandingDto: {
+      logo?: components['schemas']['FinancialBrandingAssetDto'];
+      signatoryName?: string;
+      signature?: components['schemas']['FinancialBrandingAssetDto'];
+      version: number;
+    };
     FinancialDocumentCorrectionReferenceDto: {
       currencyCode: string;
       customerName: string;
@@ -7726,14 +7941,19 @@ export interface components {
     };
     FinancialDocumentDto: {
       branchName: string;
+      branding?: components['schemas']['FinancialDocumentBrandingDto'];
       /** Format: uuid */
       businessLocationId: string;
       businessLocationName: string;
       cancellationReason?: string;
       cashRegisterName?: string;
+      collection?: components['schemas']['FinancialCollectionLinkDto'];
       /** Format: uuid */
       convertedFromDocumentId?: string;
       convertedFromDocumentNumber?: string;
+      /** Format: uuid */
+      convertedToDocumentId?: string;
+      convertedToDocumentNumber?: string;
       correctionOf?: components['schemas']['FinancialDocumentCorrectionReferenceDto'];
       correctionReason?: string;
       /** Format: date-time */
@@ -7767,10 +7987,13 @@ export interface components {
       number: string;
       officialNumber?: string;
       operatorName?: string;
+      posSettlement?: components['schemas']['PosInvoiceSettlementDto'];
       /** Format: date */
       rateDate: string;
       rateSource: string;
       sourceFiscalReceiptNumber?: string;
+      /** Format: uuid */
+      sourcePosReturnId?: string;
       /** Format: uuid */
       sourcePosSaleId?: string;
       sourcePosSaleNumber?: string;
@@ -8075,6 +8298,7 @@ export interface components {
       reason: string;
     };
     IssueFinancialDocumentDto: {
+      expectedBrandingVersion?: number;
       expectedVersion: number;
     };
     IssueStockDto: {
@@ -8475,7 +8699,12 @@ export interface components {
       /** Format: uuid */
       parentId: string;
       /** @enum {string} */
-      parentType: 'partner' | 'warranty_claim' | 'crm_interaction' | 'financial_document';
+      parentType:
+        | 'partner'
+        | 'warranty_claim'
+        | 'crm_interaction'
+        | 'financial_document'
+        | 'financial_branding';
       /** Format: date-time */
       scannedAt?: string;
       /** @enum {string} */
@@ -8671,6 +8900,73 @@ export interface components {
       /** @enum {string} */
       status: 'in-progress';
     };
+    PosAccountInvoiceDto: {
+      /** Format: uuid */
+      id: string;
+      number: string;
+    };
+    PosAccountPaymentDto: {
+      amount: string;
+      /** Format: uuid */
+      id: string;
+      number: string;
+      /** Format: date */
+      paymentDate: string;
+      /** @enum {string} */
+      paymentMethod: 'cash' | 'bank_transfer' | 'card' | 'pos_terminal';
+      paymentReference?: string;
+      reversal?: components['schemas']['PosAccountReversalDto'];
+    };
+    PosAccountReceivableDto: {
+      /** Format: date */
+      dueOn: string;
+      invoice?: components['schemas']['PosAccountInvoiceDto'];
+      originalTotal: string;
+      outstandingTotal: string;
+      paidTotal: string;
+      payments: components['schemas']['PosAccountPaymentDto'][];
+      receiptNumber: string;
+      refundDue?: string;
+      refundedTotal?: string;
+      returnCredit: string;
+      returnCredits?: components['schemas']['PosAccountReturnCreditDto'][];
+      /** Format: uuid */
+      saleId: string;
+      saleNumber: string;
+      /** @enum {string} */
+      status: 'unpaid' | 'partially_paid' | 'paid' | 'overdue';
+    };
+    PosAccountRefundDto: {
+      amount: string;
+      number: string;
+      /** @enum {string} */
+      paymentMethod: 'cash' | 'bank_transfer';
+      paymentReference: string;
+      payments: components['schemas']['PosRefundPaymentAllocationDto'][];
+      /** Format: date */
+      refundedOn: string;
+    };
+    PosAccountReturnCreditDto: {
+      creditNote?: components['schemas']['PosReturnCreditNoteDto'];
+      invoice?: components['schemas']['PosAccountInvoiceDto'];
+      refundableTotal: string;
+      refundDue: string;
+      refundedTotal: string;
+      refunds: components['schemas']['PosAccountRefundDto'][];
+      releasedTotal: string;
+      /** Format: date */
+      returnedOn: string;
+      /** Format: uuid */
+      returnId: string;
+      returnNumber: string;
+      returnTotal: string;
+    };
+    PosAccountReversalDto: {
+      number: string;
+      reason: string;
+      /** Format: date */
+      reversedOn: string;
+    };
     PosBasketPricedLineDto: {
       automaticDiscountTotal: string;
       baseNetTotal: string;
@@ -8833,6 +9129,52 @@ export interface components {
       id: string;
       reason: string;
     };
+    PosInvoicePaymentDto: {
+      amount: string;
+      /** Format: date */
+      dueOn?: string;
+      /** Format: uuid */
+      id: string;
+      /** @enum {string} */
+      method: 'cash' | 'card' | 'advance' | 'on_account';
+      refundedAmount: string;
+    };
+    PosInvoiceReturnDto: {
+      amount: string;
+      /** Format: date-time */
+      completedAt: string;
+      /** Format: uuid */
+      id: string;
+      number: string;
+    };
+    PosInvoiceSettlementDto: {
+      accountPayments?: components['schemas']['PosAccountPaymentDto'][];
+      accountRefundedTotal?: string;
+      collectedTotal?: string;
+      currencyCode: string;
+      deferredAtCheckout: string;
+      deferredReleased: string;
+      /** Format: date */
+      dueOn?: string;
+      netPaidTotal: string;
+      netSaleTotal: string;
+      originalTotal: string;
+      outstandingTotal: string;
+      paidAtCheckout: string;
+      payments: components['schemas']['PosInvoicePaymentDto'][];
+      receiptNumber: string;
+      refundDue?: string;
+      refundedTotal: string;
+      returnCount: number;
+      returns: components['schemas']['PosInvoiceReturnDto'][];
+      /** @enum {string} */
+      returnState: 'none' | 'partial' | 'full';
+      /** Format: uuid */
+      saleId: string;
+      saleNumber: string;
+      /** @enum {string} */
+      status: 'paid' | 'partially_paid' | 'unpaid' | 'overdue' | 'needs_review' | 'refund_due';
+    };
     PosLocationReportRowDto: {
       averageSaleEur: string;
       /** Format: uuid */
@@ -8913,6 +9255,10 @@ export interface components {
       cashRegisterId: string;
       items: components['schemas']['PosCatalogItemDto'][];
       productIds: string[];
+    };
+    PosRefundPaymentAllocationDto: {
+      amount: string;
+      number: string;
     };
     PosRegisterOptionDto: {
       /** Format: uuid */
@@ -9053,6 +9399,13 @@ export interface components {
       saleCount: number;
       vatSalesEur: string;
     };
+    PosReturnCreditNoteDto: {
+      /** Format: uuid */
+      id: string;
+      number: string;
+      /** @enum {string} */
+      status: 'draft' | 'issued';
+    };
     PosReturnDto: {
       /** Format: date-time */
       completedAt: string;
@@ -9156,7 +9509,7 @@ export interface components {
       number: string;
       sourceFiscalReceiptNumber: string;
       /** @enum {string} */
-      status: 'cancelled' | 'draft';
+      status: 'cancelled' | 'draft' | 'issued';
     };
     PosSaleLineDto: {
       automaticDiscountTotal: string;
@@ -9202,6 +9555,7 @@ export interface components {
       advanceNumber?: string;
       amount: string;
       changeAmount: string;
+      collectedAmount?: string;
       /** Format: uuid */
       id: string;
       /** @enum {string} */
@@ -9550,6 +9904,98 @@ export interface components {
     RecordVersionDto: {
       expectedVersion: number;
     };
+    RecurringInvoiceContractDto: {
+      active: boolean;
+      billingAmount: string;
+      billingFrequencyMonths: number;
+      contractVersion: number;
+      currencyCode: string;
+      customerLocationName: string;
+      customerName: string;
+      /** Format: uuid */
+      id: string;
+      /** Format: date */
+      nextBillingDate: string;
+      number: string;
+      periods: components['schemas']['RecurringInvoicePeriodDto'][];
+      profile?: components['schemas']['RecurringInvoiceProfileDto'];
+    };
+    RecurringInvoiceDocumentDto: {
+      /** Format: uuid */
+      id: string;
+      number: string;
+    };
+    RecurringInvoicePageDto: {
+      items: components['schemas']['RecurringInvoiceContractDto'][];
+      page: number;
+      pageSize: number;
+      totalItems: number;
+      totalPages: number;
+    };
+    RecurringInvoicePeriodDto: {
+      amount: string;
+      /** Format: date */
+      billingDate: string;
+      currencyCode: string;
+      document?: components['schemas']['RecurringInvoiceDocumentDto'];
+      errorCode?: string;
+      /** Format: uuid */
+      id: string;
+      /** Format: date */
+      servicePeriodEnd: string;
+      /** Format: date */
+      servicePeriodStart: string;
+      /** @enum {string} */
+      status: 'waiting' | 'issued' | 'manual_review' | 'needs_review' | 'retry';
+    };
+    RecurringInvoiceProcessResultDto: {
+      issuedCount: number;
+      retryCount: number;
+      reviewCount: number;
+      skippedCount: number;
+    };
+    RecurringInvoiceProfileDto: {
+      approvedByName: string;
+      /** Format: uuid */
+      businessLocationId: string;
+      /** Format: uuid */
+      cashRegisterId?: string;
+      contractVersion: number;
+      enabled: boolean;
+      expectedVersion?: number;
+      /** Format: date */
+      firstBillingDate: string;
+      /** Format: uuid */
+      legalEntityId: string;
+      /** Format: uuid */
+      operatorId?: string;
+      paymentTermsDays: number;
+      /** Format: date-time */
+      updatedAt: string;
+      vatRate?: string;
+      /** @enum {string} */
+      vatTreatment: 'standard_20' | 'reduced_9' | 'zero' | 'exempt' | 'ica';
+      version: number;
+    };
+    RecurringInvoiceProfileInputDto: {
+      /** Format: uuid */
+      businessLocationId: string;
+      /** Format: uuid */
+      cashRegisterId?: string;
+      contractVersion: number;
+      enabled: boolean;
+      expectedVersion?: number;
+      /** Format: date */
+      firstBillingDate: string;
+      /** Format: uuid */
+      legalEntityId: string;
+      /** Format: uuid */
+      operatorId?: string;
+      paymentTermsDays: number;
+      vatRate?: string;
+      /** @enum {string} */
+      vatTreatment: 'standard_20' | 'reduced_9' | 'zero' | 'exempt' | 'ica';
+    };
     ReplaceAccountRolesDto: {
       expectedVersion: number;
       roleIds: string[];
@@ -9653,6 +10099,10 @@ export interface components {
     };
     ReverseFinancePaymentDto: {
       expectedDocumentVersion: number;
+      reason: string;
+    };
+    ReversePosAccountPaymentDto: {
+      expectedOutstanding: string;
       reason: string;
     };
     SalesAvailabilityOptionDto: {
@@ -10017,6 +10467,15 @@ export interface components {
       page: number;
       total: number;
       totalPages: number;
+    };
+    SaveFinancialBrandingDto: {
+      expectedVersion: number;
+      /** Format: uuid */
+      logoFileId?: string;
+      signatoryName?: string;
+      signatureConfirmed?: boolean;
+      /** Format: uuid */
+      signatureFileId?: string;
     };
     SecurityAccountDto: {
       /** Format: uuid */
@@ -10950,6 +11409,11 @@ export interface components {
       /** Format: date */
       billingDate: string;
       currencyCode: string;
+      /** Format: uuid */
+      financialDocumentId?: string;
+      financialDocumentNumber?: string;
+      /** @enum {string} */
+      financialDocumentStatus?: 'draft' | 'issued';
       /** Format: date-time */
       generatedAt: string;
       /** Format: uuid */
@@ -13794,7 +14258,12 @@ export interface operations {
         page?: number;
         pageSize?: number;
         parentId: string;
-        parentType: 'partner' | 'warranty_claim' | 'crm_interaction' | 'financial_document';
+        parentType:
+          | 'partner'
+          | 'warranty_claim'
+          | 'crm_interaction'
+          | 'financial_document'
+          | 'financial_branding';
       };
       header?: never;
       path?: never;
@@ -13843,7 +14312,12 @@ export interface operations {
           /** Format: uuid */
           parentId: string;
           /** @enum {string} */
-          parentType: 'partner' | 'warranty_claim' | 'crm_interaction' | 'financial_document';
+          parentType:
+            | 'partner'
+            | 'warranty_claim'
+            | 'crm_interaction'
+            | 'financial_document'
+            | 'financial_branding';
         };
       };
     };
@@ -14542,6 +15016,134 @@ export interface operations {
       };
     };
   };
+  FinanceCustomerAccountsController_collect: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path: {
+        customerPartnerId: unknown;
+        saleId: unknown;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['CreatePosAccountPaymentDto'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CustomerPaymentAccountDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  FinanceCustomerAccountsController_reverse: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path: {
+        customerPartnerId: unknown;
+        paymentId: unknown;
+        saleId: unknown;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ReversePosAccountPaymentDto'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CustomerPaymentAccountDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  FinanceCustomerAccountsController_refund: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path: {
+        customerPartnerId: unknown;
+        returnId: unknown;
+        saleId: unknown;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['CreatePosAccountRefundDto'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CustomerPaymentAccountDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
   FinanceCustomerAccountsController_upsertTerms: {
     parameters: {
       query?: never;
@@ -14637,6 +15239,82 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['CustomerPaymentAccountReferenceDataDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  FinancialBrandingController_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: unknown;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['FinancialBrandingSettingsDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  FinancialBrandingController_save: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path: {
+        id: unknown;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['SaveFinancialBrandingDto'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['FinancialBrandingSettingsDto'];
         };
       };
       /** @description The endpoint request limit was exceeded. */
@@ -15119,6 +15797,47 @@ export interface operations {
       };
     };
   };
+  FinancialDocumentsController_collection: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path: {
+        id: unknown;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['IssueFinancialDocumentDto'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['FinancialDocumentDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
   FinancialDocumentsController_email: {
     parameters: {
       query?: never;
@@ -15273,6 +15992,43 @@ export interface operations {
       };
     };
   };
+  FinancialDocumentsController_fromPosReturn: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path: {
+        returnId: unknown;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['FinancialDocumentDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
   FinancialDocumentsController_resolvePrice: {
     parameters: {
       query: {
@@ -15326,6 +16082,156 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['FinancialDocumentReferenceDataDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  RecurringInvoicesController_list: {
+    parameters: {
+      query?: {
+        page?: number;
+        pageSize?: number;
+        search?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['RecurringInvoicePageDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  RecurringInvoicesController_record: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: unknown;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['RecurringInvoiceContractDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  RecurringInvoicesController_save: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path: {
+        id: unknown;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['RecurringInvoiceProfileInputDto'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['RecurringInvoiceContractDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  RecurringInvoicesController_run: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path: {
+        id: unknown;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['RecurringInvoiceProcessResultDto'];
         };
       };
       /** @description The endpoint request limit was exceeded. */

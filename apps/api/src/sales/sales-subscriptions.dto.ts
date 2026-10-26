@@ -127,6 +127,10 @@ export class SalesSubscriptionReferenceDataDto implements SalesSubscriptionRefer
 }
 
 class SubscriptionInvoiceDraftDto implements SubscriptionInvoiceDraft {
+  @ApiPropertyOptional({ type: String, format: 'uuid' }) financialDocumentId?: string;
+  @ApiPropertyOptional({ type: String }) financialDocumentNumber?: string;
+  @ApiPropertyOptional({ type: String, enum: ['draft', 'issued'] }) financialDocumentStatus?:
+    'draft' | 'issued';
   @ApiProperty({ type: String }) amount!: string;
   @ApiProperty({ format: 'date', type: String }) billingDate!: string;
   @ApiProperty({ type: String }) currencyCode!: string;

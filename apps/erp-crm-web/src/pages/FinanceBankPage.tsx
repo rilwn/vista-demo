@@ -209,6 +209,13 @@ export function FinanceTabs() {
       <Link
         className={({ isActive }) => (isActive ? 'is-active' : undefined)}
         end
+        to="/modules/erp.finance/recurring-invoices"
+      >
+        Recurring invoices
+      </Link>
+      <Link
+        className={({ isActive }) => (isActive ? 'is-active' : undefined)}
+        end
         to="/modules/erp.finance/payments"
       >
         Collections &amp; payments

@@ -6,6 +6,7 @@ import type {
   CreateFinancialDocumentLineRequest,
   CreateFinancialDocumentRequest,
   FinancialDocument,
+  FinancialDocumentBranding,
   FinancialDocumentCorrectionReference,
   FinancialDocumentPage,
   FinancialDocumentReferenceData,
@@ -32,8 +33,12 @@ import { BnbCurrencyRatesService } from './bnb-currency-rates.service.js';
 import { renderFinancialDocument } from './financial-document-renderer.js';
 import { queueEmailMessage } from '../notifications/notification-email.js';
 import type { FinancialDocumentListQueryDto } from './financial-documents.dto.js';
+import { allocateOfficialNumber } from './official-numbering.js';
+import { FinancialBrandingService } from './financial-branding.service.js';
+import { loadPosInvoiceSettlement } from './pos-invoice-settlement.js';
 
 interface HeaderRow {
+  branding_snapshot: FinancialDocumentBranding | null;
   eur_gross_total: string;
   eur_net_total: string;
   eur_vat_total: string;
@@ -76,6 +81,7 @@ interface HeaderRow {
   source_invoice_number: string | null;
   source_fiscal_receipt_number: string | null;
   source_pos_sale_id: string | null;
+  source_pos_return_id: string | null;
   source_pos_sale_number: string | null;
   source_sales_invoice_id: string | null;
   source_subscription_draft_id: string | null;
@@ -111,10 +117,23 @@ export class FinancialDocumentsService {
     @Inject(DatabaseService) private readonly database: DatabaseService,
     @Inject(APP_ENVIRONMENT) private readonly environment: AppEnvironment,
     @Inject(BnbCurrencyRatesService) private readonly currencyRates: BnbCurrencyRatesService,
+    @Inject(FinancialBrandingService) private readonly branding: FinancialBrandingService,
   ) {}
 
   exchangeRate(currencyCode: string, rateDate: string) {
     return this.currencyRates.latestRate(currencyCode, rateDate);
+  }
+
+  async validateRecurringSetup(
+    client: PoolClient,
+    input: Pick<
+      CreateFinancialDocumentRequest,
+      'businessLocationId' | 'legalEntityId' | 'cashRegisterId' | 'operatorId'
+    >,
+    customerId: string,
+  ) {
+    await requireScope(client, input);
+    await requireCustomer(client, customerId);
   }
 
   async referenceData(): Promise<FinancialDocumentReferenceData> {
@@ -313,10 +332,10 @@ export class FinancialDocumentsService {
         draft_number: string;
         id: string;
       }>(
-        `SELECT document.id, document.draft_number, document.document_type,
+        `SELECT document.id, coalesce(document.official_number,document.draft_number) AS draft_number, document.document_type,
                 document.customer_partner_id, document.customer_name, document.currency_code
          FROM finance.financial_documents document
-         WHERE document.document_type = 'invoice' AND document.status = 'draft'
+         WHERE document.document_type = 'invoice' AND document.status IN ('draft','issued')
          ORDER BY document.issue_date DESC, document.id DESC`,
       ),
     ]);
@@ -490,10 +509,16 @@ export class FinancialDocumentsService {
     }
   }
 
-  async pdf(id: string): Promise<{ buffer: Buffer; fileName: string }> {
+  async pdf(
+    id: string,
+    auth: AuthenticationContext,
+  ): Promise<{ buffer: Buffer; fileName: string }> {
     const document = await this.document(id);
     return {
-      buffer: await renderFinancialDocument(document),
+      buffer: await renderFinancialDocument(
+        document,
+        await this.branding.assets(document.branding, auth),
+      ),
       fileName: `${document.officialNumber ?? document.number}.pdf`,
     };
   }
@@ -525,7 +550,10 @@ export class FinancialDocumentsService {
             'Only an issued document can be sent to a customer.',
             HttpStatus.CONFLICT,
           );
-        const pdf = await renderFinancialDocument(document);
+        const pdf = await renderFinancialDocument(
+          document,
+          await this.branding.assets(document.branding, auth),
+        );
         await queueEmailMessage(client, {
           attachment: {
             content: pdf,
@@ -545,7 +573,7 @@ export class FinancialDocumentsService {
             '',
             `Прикачен е Вашият документ. Сума: ${document.grossTotal} ${document.currencyCode}.`,
             '',
-            'Vista Service Ltd.',
+            document.issuerSnapshot.name,
           ].join('\n'),
         });
         await this.sideEffects(
@@ -632,11 +660,68 @@ export class FinancialDocumentsService {
     );
   }
 
+  async createFromPosReturn(
+    returnId: string,
+    key: string | undefined,
+    auth: AuthenticationContext,
+    metadata: RequestSecurityMetadata,
+  ): Promise<FinancialDocument> {
+    const source = (
+      await this.database.getPool().query<{
+        id: string;
+        legal_entity_id: string;
+        business_location_id: string;
+        cash_register_id: string | null;
+        operator_id: string | null;
+        customer_partner_id: string;
+        reason: string;
+        returned_on: string;
+      }>(
+        `SELECT invoice.id,invoice.legal_entity_id,invoice.business_location_id,invoice.cash_register_id,
+      invoice.operator_id,invoice.customer_partner_id,returned.reason,
+      (returned.completed_at AT TIME ZONE $2)::date::text AS returned_on
+      FROM pos.returns returned JOIN finance.financial_documents invoice
+        ON invoice.source_pos_sale_id=returned.original_sale_id AND invoice.document_type='invoice' AND invoice.status='issued'
+      WHERE returned.id=$1`,
+        [returnId, this.environment.BUSINESS_TIMEZONE],
+      )
+    ).rows[0];
+    if (!source)
+      throw inputError(
+        'FINANCE_POS_RETURN_INVOICE_REQUIRED',
+        'Issue the original POS invoice before preparing its return credit note.',
+      );
+    const today = businessDate(this.environment.BUSINESS_TIMEZONE);
+    return this.create(
+      {
+        businessLocationId: source.business_location_id,
+        legalEntityId: source.legal_entity_id,
+        ...(source.cash_register_id ? { cashRegisterId: source.cash_register_id } : {}),
+        ...(source.operator_id ? { operatorId: source.operator_id } : {}),
+        customerPartnerId: source.customer_partner_id,
+        documentType: 'credit_note',
+        correctionOfDocumentId: source.id,
+        correctionReason: source.reason,
+        currencyCode: 'EUR',
+        exchangeRate: '1.00000000',
+        rateDate: today,
+        rateSource: 'internal_eur',
+        issueDate: today,
+        taxEventDate: source.returned_on,
+        sourcePosReturnId: returnId,
+      },
+      key,
+      auth,
+      metadata,
+    );
+  }
+
   async create(
     input: CreateFinancialDocumentRequest,
     key: string | undefined,
     auth: AuthenticationContext,
     metadata: RequestSecurityMetadata,
+    execution?: { client: PoolClient; issueAutomatically: true },
   ): Promise<FinancialDocument> {
     const normalized = normalizeInput(input);
     const rate = await this.currencyRates.latestRate(normalized.currencyCode, normalized.rateDate);
@@ -652,9 +737,10 @@ export class FinancialDocumentsService {
         const scope = await requireScope(client, normalized);
         const customer = await requireCustomer(client, normalized.customerPartnerId);
         const correction = await requireCorrection(client, normalized);
-        const posSource = normalized.sourcePosSaleId
-          ? await posReceiptSource(client, normalized, customer.id)
-          : undefined;
+        const posSource =
+          normalized.sourcePosSaleId || normalized.sourcePosReturnId
+            ? await posReceiptSource(client, normalized, customer.id)
+            : undefined;
         const lines = posSource
           ? posSource.lines
           : normalized.sourceSubscriptionDraftId
@@ -667,7 +753,14 @@ export class FinancialDocumentsService {
         if (!lines.length)
           throw inputError('FINANCE_DOCUMENT_LINES_REQUIRED', 'Add at least one document line.');
         const existingSourceDocumentId = await findExistingSourceDocument(client, normalized);
-        if (existingSourceDocumentId) return this.loadDocument(client, existingSourceDocumentId);
+        if (existingSourceDocumentId) {
+          if (execution?.issueAutomatically)
+            throw inputError(
+              'FINANCE_RECURRING_MANUAL_DRAFT',
+              'Review the existing invoice draft before enabling automatic issuance for this period.',
+            );
+          return this.loadDocument(client, existingSourceDocumentId);
+        }
         let calculation;
         try {
           calculation =
@@ -682,6 +775,15 @@ export class FinancialDocumentsService {
           await requireCreditCapacity(client, correction.id, calculation, lines);
         }
         const id = randomUUID();
+        // Obtain official-number locks before appending draft audit evidence.
+        // Automatic preparation and issue share a transaction, unlike manual review.
+        const officialAllocation = execution?.issueAutomatically
+          ? await allocateOfficialNumber(
+              client,
+              normalized,
+              this.environment.FINANCE_OFFICIAL_NUMBER_BLOCK_SIZE,
+            )
+          : undefined;
         const number = await nextDraftNumber(
           client,
           normalized,
@@ -700,10 +802,10 @@ export class FinancialDocumentsService {
            issuer_name, issuer_uic, issuer_vat_number, issuer_address,
            customer_name, customer_uic, customer_vat_number, customer_address,
            net_total, vat_total, gross_total, eur_net_total, eur_vat_total, eur_gross_total,
-           notes, created_by, source_subscription_draft_id
+           notes, created_by, source_subscription_draft_id, source_pos_return_id
          ) VALUES (
            $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,
-           $21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39
+           $21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40
          )`,
           [
             id,
@@ -718,7 +820,7 @@ export class FinancialDocumentsService {
             normalized.sourceSalesInvoiceId ?? null,
             normalized.sourceServiceWorkOrderId ?? null,
             normalized.sourcePosSaleId ?? null,
-            posSource?.fiscalReceiptNumber ?? null,
+            normalized.sourcePosSaleId ? (posSource?.fiscalReceiptNumber ?? null) : null,
             correction?.id ?? null,
             normalized.correctionReason ?? null,
             normalized.issueDate,
@@ -745,6 +847,7 @@ export class FinancialDocumentsService {
             normalized.notes ?? null,
             auth.accountId,
             normalized.sourceSubscriptionDraftId ?? null,
+            normalized.sourcePosReturnId ?? null,
           ],
         );
         for (const [index, line] of lines.entries()) {
@@ -799,8 +902,19 @@ export class FinancialDocumentsService {
           metadata,
           commandKey,
         );
-        return document;
+        return execution?.issueAutomatically
+          ? this.issue(
+              document.id,
+              { expectedVersion: document.version },
+              `${commandKey}:issue`,
+              auth,
+              metadata,
+              client,
+              officialAllocation,
+            )
+          : document;
       },
+      execution?.client,
     );
   }
 
@@ -810,6 +924,8 @@ export class FinancialDocumentsService {
     key: string | undefined,
     auth: AuthenticationContext,
     metadata: RequestSecurityMetadata,
+    transaction?: PoolClient,
+    officialAllocation?: { number: string; seriesId: string },
   ): Promise<FinancialDocument> {
     return this.command(
       `finance.financial-document.issue:${id}`,
@@ -817,6 +933,9 @@ export class FinancialDocumentsService {
       input,
       200,
       async (client, commandKey) => {
+        // Payments lock the collection before its financial document. Use that
+        // order here too when attaching an existing Sales collection.
+        await this.lockLinkedCollections(client, id);
         const before = await this.loadDocument(client, id, true);
         if (before.version !== input.expectedVersion)
           throw new ApiErrorException(
@@ -825,6 +944,16 @@ export class FinancialDocumentsService {
             HttpStatus.CONFLICT,
           );
         if (before.status === 'issued') return before;
+        const branding = await this.branding.snapshot(client, before.legalEntityId);
+        if (
+          input.expectedBrandingVersion !== undefined &&
+          input.expectedBrandingVersion !== branding.version
+        )
+          throw new ApiErrorException(
+            'FINANCE_BRANDING_VERSION_CONFLICT',
+            'Document branding changed. Reopen the draft and review it before issuing.',
+            HttpStatus.CONFLICT,
+          );
         if (before.status === 'cancelled')
           throw new ApiErrorException(
             'FINANCE_DOCUMENT_CANCELLED',
@@ -880,11 +1009,12 @@ export class FinancialDocumentsService {
         if (before.documentType === 'credit_note' || before.documentType === 'debit_note') {
           const original = await client.query<{
             customer_partner_id: string;
+            legal_entity_id: string;
             document_type: string;
             official_number: string | null;
             status: string;
           }>(
-            `SELECT customer_partner_id, document_type, official_number, status
+            `SELECT customer_partner_id, legal_entity_id, document_type, official_number, status
              FROM finance.financial_documents WHERE id = $1 FOR UPDATE`,
             [fields.correction_of_document_id],
           );
@@ -894,6 +1024,7 @@ export class FinancialDocumentsService {
             originalRow.status !== 'issued' ||
             originalRow.document_type !== 'invoice' ||
             !originalRow.official_number ||
+            originalRow.legal_entity_id !== before.legalEntityId ||
             originalRow.customer_partner_id !== before.customerPartnerId
           )
             throw new ApiErrorException(
@@ -931,8 +1062,25 @@ export class FinancialDocumentsService {
             [fields.source_pos_sale_id],
           );
           const source = sale.rows[0];
+          if (!source)
+            throw new ApiErrorException(
+              'FINANCE_POS_RECEIPT_LINK_INVALID',
+              'The POS sale, customer, and fiscal receipt must match before an invoice can be issued.',
+              HttpStatus.CONFLICT,
+            );
           if (
-            !source ||
+            (
+              await client.query('SELECT 1 FROM pos.returns WHERE original_sale_id=$1 LIMIT 1', [
+                fields.source_pos_sale_id,
+              ])
+            ).rowCount
+          )
+            throw new ApiErrorException(
+              'FINANCE_POS_INVOICE_AFTER_RETURN',
+              'This sale was returned before its invoice was issued. Cancel the draft instead of issuing an invoice for returned goods.',
+              HttpStatus.CONFLICT,
+            );
+          if (
             source.status !== 'completed' ||
             source.fiscal_status === 'reversed' ||
             source.fiscal_receipt_number !== fields.source_fiscal_receipt_number ||
@@ -943,34 +1091,54 @@ export class FinancialDocumentsService {
               'The POS sale, customer, and fiscal receipt must match before an invoice can be issued.',
               HttpStatus.CONFLICT,
             );
+          const settlement = await loadPosInvoiceSettlement(
+            client,
+            fields.source_pos_sale_id,
+            businessDate(this.environment.BUSINESS_TIMEZONE),
+          );
+          if (
+            !settlement ||
+            settlement.status === 'needs_review' ||
+            decimalUnits(settlement.originalTotal, 4) !== decimalUnits(before.grossTotal, 4)
+          )
+            throw new ApiErrorException(
+              'FINANCE_POS_SETTLEMENT_NEEDS_REVIEW',
+              'Review the POS receipt payments and refunds before issuing this invoice.',
+              HttpStatus.CONFLICT,
+            );
         }
 
         let officialNumber: string | null = null;
+        let seriesId: string | null = null;
         if (before.documentType !== 'proforma') {
-          const allocated = await client.query<{ official_number: string }>(
-            `INSERT INTO finance.official_document_sequences (legal_entity_id, next_value)
-             VALUES ($1, 2)
-             ON CONFLICT (legal_entity_id) DO UPDATE
-               SET next_value = finance.official_document_sequences.next_value + 1
-               WHERE finance.official_document_sequences.next_value < 10000000000
-             RETURNING lpad((next_value - 1)::text, 10, '0') AS official_number`,
-            [before.legalEntityId],
-          );
-          officialNumber = allocated.rows[0]?.official_number ?? null;
-          if (!officialNumber)
-            throw new ApiErrorException(
-              'FINANCE_OFFICIAL_SEQUENCE_EXHAUSTED',
-              'The legal document sequence is exhausted. Contact the system administrator.',
-              HttpStatus.CONFLICT,
-            );
+          const scope = (
+            await client.query<{ cash_register_id: string | null; operator_id: string | null }>(
+              'SELECT cash_register_id, operator_id FROM finance.financial_documents WHERE id = $1',
+              [id],
+            )
+          ).rows[0]!;
+          const allocated =
+            officialAllocation ??
+            (await allocateOfficialNumber(
+              client,
+              {
+                legalEntityId: before.legalEntityId,
+                businessLocationId: before.businessLocationId,
+                cashRegisterId: scope.cash_register_id,
+                operatorId: scope.operator_id,
+              },
+              this.environment.FINANCE_OFFICIAL_NUMBER_BLOCK_SIZE,
+            ));
+          officialNumber = allocated.number;
+          seriesId = allocated.seriesId;
         }
 
         await client.query(
           `UPDATE finance.financial_documents
            SET status = 'issued', official_number = $2, issued_at = now(), issued_by = $3,
-               version = version + 1, updated_at = now()
+               version = version + 1, updated_at = now(), official_number_series_id = $4, branding_snapshot = $5
            WHERE id = $1`,
-          [id, officialNumber, auth.accountId],
+          [id, officialNumber, auth.accountId, seriesId, branding],
         );
         if (fields.source_pos_sale_id)
           await client.query(
@@ -978,15 +1146,16 @@ export class FinancialDocumentsService {
              WHERE id = $1 AND invoice_financial_document_id IS NULL`,
             [fields.source_pos_sale_id, id],
           );
-        if (fields.source_sales_invoice_id)
-          await client.query(
-            `UPDATE finance.customer_documents
-             SET financial_document_id = $2
-             WHERE source_sales_invoice_id = $1 AND financial_document_id IS NULL`,
-            [fields.source_sales_invoice_id, id],
-          );
-
         const document = await this.loadDocument(client, id);
+        await this.ensureCollection(
+          client,
+          document.correctionOf
+            ? await this.loadDocument(client, document.correctionOf.id)
+            : document,
+          auth,
+          metadata,
+          commandKey,
+        );
         await this.sideEffects(
           client,
           id,
@@ -997,14 +1166,334 @@ export class FinancialDocumentsService {
           commandKey,
           before,
         );
-        return document;
+        return this.loadDocument(client, id);
+      },
+      transaction,
+    );
+  }
+
+  async addToCollections(
+    id: string,
+    input: IssueFinancialDocumentRequest,
+    key: string | undefined,
+    auth: AuthenticationContext,
+    metadata: RequestSecurityMetadata,
+  ): Promise<FinancialDocument> {
+    return this.command(
+      `finance.financial-document.collection:${id}`,
+      key,
+      input,
+      200,
+      async (client, commandKey) => {
+        await this.lockLinkedCollections(client, id);
+        const document = await this.loadDocument(client, id, true);
+        if (document.version !== input.expectedVersion)
+          throw new ApiErrorException(
+            'FINANCE_DOCUMENT_VERSION_CONFLICT',
+            'This document changed. Refresh and try again.',
+            HttpStatus.CONFLICT,
+          );
+        if (
+          document.status !== 'issued' ||
+          !['invoice', 'proforma'].includes(document.documentType) ||
+          document.sourcePosSaleId ||
+          decimalUnits(document.grossTotal, 4) === 0n
+        )
+          throw inputError(
+            'FINANCE_COLLECTION_SOURCE_INVALID',
+            'Choose an issued invoice or proforma with a customer balance.',
+          );
+        await this.ensureCollection(client, document, auth, metadata, commandKey);
+        return this.loadDocument(client, id);
       },
     );
   }
 
+  private async lockLinkedCollections(client: PoolClient, id: string): Promise<void> {
+    const root = (
+      await client.query<{ id: string }>(
+        'SELECT coalesce(correction_of_document_id,id) AS id FROM finance.financial_documents WHERE id=$1',
+        [id],
+      )
+    ).rows[0]?.id;
+    if (!root) return;
+    await client.query(
+      "SELECT pg_advisory_xact_lock(hashtextextended('finance.collection:'||$1::text,0))",
+      [root],
+    );
+    await client.query(
+      `SELECT collection.id FROM finance.customer_documents collection
+       JOIN finance.financial_documents source ON source.id = $1
+       WHERE collection.financial_document_id = source.id
+          OR collection.financial_document_id IN (
+            SELECT converted.id FROM finance.financial_documents converted
+            WHERE converted.converted_from_document_id = source.id
+          )
+          OR collection.source_sales_invoice_id = source.source_sales_invoice_id
+       ORDER BY collection.id FOR UPDATE OF collection`,
+      [root],
+    );
+  }
+
+  private async ensureCollection(
+    client: PoolClient,
+    document: FinancialDocument,
+    auth: AuthenticationContext,
+    metadata: RequestSecurityMetadata,
+    key: string,
+  ): Promise<void> {
+    // POS has its own receipt settlements. Never create a second receivable
+    // for the same counter sale here.
+    if (
+      !['invoice', 'proforma'].includes(document.documentType) ||
+      document.sourcePosSaleId ||
+      decimalUnits(document.grossTotal, 4) === 0n
+    )
+      return;
+    const existing = (
+      await client.query<{
+        id: string;
+        document_number: string;
+        total: string;
+        currency_code: string;
+        review_state: string;
+        financial_document_id: string | null;
+        converted: boolean;
+      }>(
+        `SELECT id, document_number, total::text, currency_code, review_state, financial_document_id,
+         EXISTS (SELECT 1 FROM finance.financial_documents converted
+           WHERE converted.id = financial_document_id AND converted.converted_from_document_id = $1) AS converted
+       FROM finance.customer_documents
+       WHERE financial_document_id = $1
+          OR financial_document_id IN (SELECT id FROM finance.financial_documents WHERE converted_from_document_id = $1)
+          OR (source_sales_invoice_id = $2 AND $2::uuid IS NOT NULL)
+       FOR UPDATE`,
+        [document.id, document.sourceSalesInvoiceId ?? null],
+      )
+    ).rows[0];
+    if (existing?.converted) return;
+    if (existing?.financial_document_id === document.id) {
+      await this.convertSettledCollection(client, document, existing.id, auth, metadata, key);
+      await this.applyIssuedCorrections(client, document, existing.id, auth, metadata, key);
+      return;
+    }
+    if (
+      existing &&
+      (existing.review_state === 'cancelled' ||
+        existing.currency_code !== document.currencyCode ||
+        decimalUnits(existing.total, 4) !== decimalUnits(document.grossTotal, 4) ||
+        existing.financial_document_id !== null)
+    )
+      throw new ApiErrorException(
+        'FINANCE_COLLECTION_SOURCE_CONFLICT',
+        'The existing collection has a different balance or document. Review it before issuing this invoice.',
+        HttpStatus.CONFLICT,
+      );
+    let collectionId = existing?.id;
+    let number = existing?.document_number;
+    if (existing) {
+      await client.query(
+        `UPDATE finance.customer_documents SET financial_document_id = $2,
+        version = version + 1, updated_at = now() WHERE id = $1`,
+        [existing.id, document.id],
+      );
+    } else {
+      collectionId = randomUUID();
+      const sequence = (
+        await client.query<{ next: string }>(
+          `INSERT INTO finance.internal_document_sequences (document_type, next_value)
+         VALUES ('collection_review', 2) ON CONFLICT (document_type) DO UPDATE
+           SET next_value = finance.internal_document_sequences.next_value + 1
+         RETURNING (next_value - 1)::text AS next`,
+        )
+      ).rows[0]!;
+      number = `FIN-REV-${document.issueDate.slice(0, 4)}-${sequence.next.padStart(6, '0')}`;
+      const today = businessDate(this.environment.BUSINESS_TIMEZONE);
+      const due = document.dueDate ?? document.issueDate;
+      const status = due < today ? 'overdue' : 'unpaid';
+      await client.query(
+        `INSERT INTO finance.customer_documents (
+          id, document_number, source_sales_invoice_id, financial_document_id,
+          customer_partner_id, document_date, due_date, currency_code, exchange_rate,
+          rate_date, rate_source, total, allocated_total, outstanding_total, eur_total,
+          payment_status, created_by
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,0,$12,$13,$14,$15)`,
+        [
+          collectionId,
+          number,
+          document.sourceSalesInvoiceId ?? null,
+          document.id,
+          document.customerPartnerId,
+          document.issueDate,
+          due,
+          document.currencyCode,
+          document.exchangeRate,
+          document.rateDate,
+          document.rateSource,
+          document.grossTotal,
+          document.eurGrossTotal,
+          status,
+          auth.accountId,
+        ],
+      );
+      await client.query(
+        `INSERT INTO finance.payment_status_history
+        (id, customer_document_id, next_status, reason, changed_by)
+        VALUES ($1,$2,$3,'financial_document_issued',$4)`,
+        [randomUUID(), collectionId, status, auth.accountId],
+      );
+    }
+    // Allocate any conversion number before taking the audit-chain lock, just
+    // as ordinary invoice issuance does. Prepaid Sales sources can convert here.
+    await this.convertSettledCollection(client, document, collectionId!, auth, metadata, key);
+    await this.applyIssuedCorrections(client, document, collectionId!, auth, metadata, key);
+    const eventType = existing ? 'finance.collection.linked' : 'finance.collection.created';
+    const payload = {
+      id: collectionId,
+      number,
+      financialDocumentId: document.id,
+      customerPartnerId: document.customerPartnerId,
+      total: document.grossTotal,
+      currencyCode: document.currencyCode,
+    };
+    await client.query(
+      `INSERT INTO integration.outbox_events
+      (id, aggregate_type, aggregate_id, event_type, event_version, correlation_id, idempotency_key, payload)
+      VALUES ($1,'finance_customer_document',$2,$3,1,$4,$5,$6)`,
+      [
+        randomUUID(),
+        collectionId,
+        eventType,
+        metadata.correlationId,
+        createHash('sha256').update(`${eventType}:${document.id}:${key}`).digest('hex'),
+        payload,
+      ],
+    );
+    await this.audit.append(
+      {
+        action: eventType,
+        actorAccountId: auth.accountId,
+        after: payload,
+        correlationId: metadata.correlationId,
+        targetId: collectionId!,
+        targetType: 'finance_customer_document',
+      },
+      client,
+    );
+  }
+
+  private async applyIssuedCorrections(
+    client: PoolClient,
+    original: FinancialDocument,
+    collectionId: string,
+    auth: AuthenticationContext,
+    metadata: RequestSecurityMetadata,
+    key: string,
+  ) {
+    if (original.documentType !== 'invoice' || original.sourcePosSaleId) return;
+    const applied = await client.query<{ id: string; correction_document_id: string }>(
+      `INSERT INTO finance.collection_corrections(customer_document_id,original_document_id,correction_document_id,
+       document_type,document_date,currency_code,amount,eur_amount,origin,actor_account_id,correlation_id)
+       SELECT $1,$2,note.id,note.document_type,note.issue_date,note.currency_code,note.gross_total,note.eur_gross_total,'issuance',$3,$4
+       FROM finance.financial_documents note WHERE note.correction_of_document_id=$2 AND note.status='issued'
+         AND note.document_type IN ('credit_note','debit_note')
+       ORDER BY note.issued_at,note.id ON CONFLICT(correction_document_id) DO NOTHING RETURNING id,correction_document_id`,
+      [collectionId, original.id, auth.accountId, metadata.correlationId],
+    );
+    if (!applied.rowCount) return;
+    await client.query('SELECT finance.refresh_collection_corrections($1,$2,$3,$4)', [
+      collectionId,
+      auth.accountId,
+      'financial_correction_issued',
+      businessDate(this.environment.BUSINESS_TIMEZONE),
+    ]);
+    const balance = (
+      await client.query<{
+        total: string;
+        credit_total: string;
+        debit_total: string;
+        adjusted_total: string;
+        allocated_total: string;
+        outstanding_total: string;
+        overpaid_total: string;
+      }>(
+        `SELECT total::text,credit_total::text,debit_total::text,adjusted_total::text,allocated_total::text,outstanding_total::text,overpaid_total::text FROM finance.customer_documents WHERE id=$1`,
+        [collectionId],
+      )
+    ).rows[0]!;
+    const payload = {
+      collectionId,
+      originalDocumentId: original.id,
+      correctionDocumentIds: applied.rows.map((row) => row.correction_document_id),
+      balance,
+    };
+    const event = 'finance.collection.corrected';
+    await client.query(
+      `INSERT INTO integration.outbox_events(id,aggregate_type,aggregate_id,event_type,event_version,correlation_id,idempotency_key,payload)
+      VALUES($1,'finance_customer_document',$2,$3,1,$4,$5,$6)`,
+      [
+        randomUUID(),
+        collectionId,
+        event,
+        metadata.correlationId,
+        createHash('sha256')
+          .update(
+            `${event}:${collectionId}:${applied.rows
+              .map((row) => row.correction_document_id)
+              .sort()
+              .join(',')}:${key}`,
+          )
+          .digest('hex'),
+        payload,
+      ],
+    );
+    await this.audit.append(
+      {
+        action: event,
+        actorAccountId: auth.accountId,
+        targetId: collectionId,
+        targetType: 'finance_customer_document',
+        correlationId: metadata.correlationId,
+        after: payload,
+      },
+      client,
+    );
+  }
+
+  private async convertSettledCollection(
+    client: PoolClient,
+    document: FinancialDocument,
+    collectionId: string,
+    auth: AuthenticationContext,
+    metadata: RequestSecurityMetadata,
+    key: string,
+  ): Promise<void> {
+    if (document.documentType === 'proforma') {
+      // Retain the recorded settlement date for a pre-existing paid collection.
+      const settlement = (
+        await client.query<{ date: string }>(
+          `SELECT max(payment.payment_date)::text AS date
+         FROM finance.payment_allocations allocation
+         JOIN finance.payments payment ON payment.id = allocation.payment_id
+         WHERE allocation.customer_document_id = $1 AND NOT EXISTS (
+           SELECT 1 FROM finance.payment_reversals reversal WHERE reversal.payment_id = payment.id
+         )`,
+          [collectionId],
+        )
+      ).rows[0]?.date;
+      await this.convertPaidProforma(
+        client,
+        settlement ?? document.issueDate,
+        collectionId,
+        auth,
+        metadata,
+        key,
+      );
+    }
+  }
+
   async convertPaidProforma(
     client: PoolClient,
-    sourceSalesInvoiceId: string,
     settlementDate: string,
     collectionId: string,
     auth: AuthenticationContext,
@@ -1012,10 +1501,15 @@ export class FinancialDocumentsService {
     commandKey: string,
   ): Promise<FinancialDocument | undefined> {
     const proformaResult = await client.query<{ id: string }>(
-      `SELECT id FROM finance.financial_documents
-       WHERE source_sales_invoice_id = $1 AND document_type = 'proforma' AND status = 'issued'
-       ORDER BY issued_at DESC, id DESC LIMIT 1 FOR UPDATE`,
-      [sourceSalesInvoiceId],
+      `SELECT proforma.id FROM finance.financial_documents proforma
+       JOIN finance.customer_documents collection ON collection.id = $1
+       WHERE collection.payment_status = 'paid' AND proforma.document_type = 'proforma'
+         AND proforma.status = 'issued'
+         AND (collection.financial_document_id = proforma.id
+           OR (collection.financial_document_id IS NULL
+             AND collection.source_sales_invoice_id = proforma.source_sales_invoice_id))
+       ORDER BY proforma.issued_at DESC, proforma.id DESC LIMIT 1 FOR UPDATE OF proforma`,
+      [collectionId],
     );
     const proformaId = proformaResult.rows[0]?.id;
     if (!proformaId) return undefined;
@@ -1061,22 +1555,17 @@ export class FinancialDocumentsService {
     const sourceScope = source.rows[0];
     if (!sourceScope) throw new Error('The issued proforma scope could not be loaded.');
 
-    const officialSequence = await client.query<{ official_number: string }>(
-      `INSERT INTO finance.official_document_sequences (legal_entity_id, next_value)
-       VALUES ($1, 2)
-       ON CONFLICT (legal_entity_id) DO UPDATE
-         SET next_value = finance.official_document_sequences.next_value + 1
-         WHERE finance.official_document_sequences.next_value < 10000000000
-       RETURNING lpad((next_value - 1)::text, 10, '0') AS official_number`,
-      [proforma.legalEntityId],
+    const allocated = await allocateOfficialNumber(
+      client,
+      {
+        legalEntityId: proforma.legalEntityId,
+        businessLocationId: sourceScope.business_location_id,
+        cashRegisterId: sourceScope.cash_register_id,
+        operatorId: sourceScope.operator_id,
+      },
+      this.environment.FINANCE_OFFICIAL_NUMBER_BLOCK_SIZE,
     );
-    const officialNumber = officialSequence.rows[0]?.official_number;
-    if (!officialNumber)
-      throw new ApiErrorException(
-        'FINANCE_OFFICIAL_SEQUENCE_EXHAUSTED',
-        'The legal document sequence is exhausted. Contact the system administrator.',
-        HttpStatus.CONFLICT,
-      );
+    const officialNumber = allocated.number;
 
     const id = randomUUID();
     const draftNumber = `DINV-AUTO-${settlementDate.replace(/-/gu, '')}-${randomUUID()
@@ -1091,11 +1580,11 @@ export class FinancialDocumentsService {
          issuer_name, issuer_uic, issuer_vat_number, issuer_address,
          customer_name, customer_uic, customer_vat_number, customer_address,
          net_total, vat_total, gross_total, eur_net_total, eur_vat_total, eur_gross_total,
-         notes, issued_at, issued_by, converted_from_document_id, version, created_by
+         notes, issued_at, issued_by, converted_from_document_id, version, created_by, branding_snapshot
        ) VALUES (
          $1,$2,$3,'invoice','issued',$4,$5,$6,$7,$8,$9,$10,$11,$11,$11,
          $12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,
-         $24,$25,$26,$27,$28,$29,$30,now(),$31,$32,1,$31
+         $24,$25,$26,$27,$28,$29,$30,now(),$31,$32,1,$31,$33
        )`,
       [
         id,
@@ -1107,7 +1596,7 @@ export class FinancialDocumentsService {
         sourceScope.cash_register_id,
         sourceScope.operator_id,
         proforma.customerPartnerId,
-        sourceSalesInvoiceId,
+        proforma.sourceSalesInvoiceId ?? null,
         settlementDate,
         rate.currencyCode,
         rate.exchangeRate,
@@ -1130,7 +1619,15 @@ export class FinancialDocumentsService {
         proforma.notes ?? null,
         auth.accountId,
         proformaId,
+        await this.branding.snapshot(client, proforma.legalEntityId),
       ],
+    );
+    await client.query(
+      `UPDATE finance.financial_documents SET official_number_series_id = $2,
+         source_service_work_order_id = (SELECT source_service_work_order_id
+           FROM finance.financial_documents WHERE id = $3)
+       WHERE id = $1`,
+      [id, allocated.seriesId, proformaId],
     );
     for (const [index, line] of calculation.lines.entries()) {
       const sourceLine = lines[index];
@@ -1175,9 +1672,18 @@ export class FinancialDocumentsService {
       );
     }
     await client.query(
-      `UPDATE finance.customer_documents SET financial_document_id = $2
+      `UPDATE finance.customer_documents SET financial_document_id = $2,
+         exchange_rate = $3, rate_date = $4, rate_source = $5, eur_total = $6,
+         version = version + 1, updated_at = now()
        WHERE id = $1`,
-      [collectionId, id],
+      [
+        collectionId,
+        id,
+        rate.exchangeRate,
+        rate.rateDate,
+        rate.rateSource,
+        calculation.eurGrossTotal,
+      ],
     );
     const document = await this.loadDocument(client, id);
     await this.sideEffects(
@@ -1293,13 +1799,53 @@ export class FinancialDocumentsService {
           draft_number: string;
           id: string;
         }>(
-          `SELECT id, draft_number, document_type, customer_partner_id, customer_name, currency_code
+          `SELECT id, coalesce(official_number,draft_number) AS draft_number, document_type, customer_partner_id, customer_name, currency_code
            FROM finance.financial_documents WHERE id = $1`,
           [row.correction_of_document_id],
         )
       : { rows: [] };
     const correctionRow = correction.rows[0];
+    const collection = (
+      await client.query<{ id: string; document_number: string }>(
+        `SELECT id, document_number FROM finance.customer_documents WHERE financial_document_id = $1
+       OR financial_document_id IN (SELECT id FROM finance.financial_documents WHERE converted_from_document_id = $1)
+       OR financial_document_id=(SELECT correction_of_document_id FROM finance.financial_documents WHERE id=$1)`,
+        [id],
+      )
+    ).rows[0];
+    const convertedInvoice =
+      row.document_type === 'proforma'
+        ? (
+            await client.query<{ id: string; official_number: string }>(
+              `SELECT id, official_number FROM finance.financial_documents
+         WHERE converted_from_document_id = $1 AND status = 'issued'`,
+              [id],
+            )
+          ).rows[0]
+        : undefined;
+    const branding =
+      row.status === 'draft'
+        ? await this.branding.snapshot(client, row.legal_entity_id)
+        : row.branding_snapshot;
+    const posSettlement = row.source_pos_sale_id
+      ? await loadPosInvoiceSettlement(
+          client,
+          row.source_pos_sale_id,
+          businessDate(this.environment.BUSINESS_TIMEZONE),
+        )
+      : undefined;
     return {
+      ...(posSettlement ? { posSettlement } : {}),
+      ...(branding ? { branding } : {}),
+      ...(convertedInvoice
+        ? {
+            convertedToDocumentId: convertedInvoice.id,
+            convertedToDocumentNumber: convertedInvoice.official_number,
+          }
+        : {}),
+      ...(collection
+        ? { collection: { id: collection.id, number: collection.document_number } }
+        : {}),
       eurGrossTotal: row.eur_gross_total,
       eurNetTotal: row.eur_net_total,
       eurVatTotal: row.eur_vat_total,
@@ -1382,6 +1928,7 @@ export class FinancialDocumentsService {
         ? { sourceSubscriptionDraftNumber: row.source_subscription_draft_number }
         : {}),
       ...(row.source_pos_sale_id ? { sourcePosSaleId: row.source_pos_sale_id } : {}),
+      ...(row.source_pos_return_id ? { sourcePosReturnId: row.source_pos_return_id } : {}),
       ...(row.source_pos_sale_number ? { sourcePosSaleNumber: row.source_pos_sale_number } : {}),
       ...(row.source_fiscal_receipt_number
         ? { sourceFiscalReceiptNumber: row.source_fiscal_receipt_number }
@@ -1411,15 +1958,16 @@ export class FinancialDocumentsService {
     payload: object,
     responseStatus: number,
     action: (client: PoolClient, key: string) => Promise<T>,
+    transaction?: PoolClient,
   ): Promise<T> {
     const idempotencyKey = validKey(key);
     const hash = createHash('sha256').update(JSON.stringify(payload)).digest('hex');
-    const client = await this.database.getPool().connect();
+    const client = transaction ?? (await this.database.getPool().connect());
     try {
-      await client.query('BEGIN');
+      if (!transaction) await client.query('BEGIN');
       const replay = await claim(client, scope, idempotencyKey, hash);
       if (replay) {
-        await client.query('COMMIT');
+        if (!transaction) await client.query('COMMIT');
         return replay as T;
       }
       const result = await action(client, idempotencyKey);
@@ -1429,14 +1977,14 @@ export class FinancialDocumentsService {
          WHERE scope = $1 AND idempotency_key = $2`,
         [scope, idempotencyKey, responseStatus, result],
       );
-      await client.query('COMMIT');
+      if (!transaction) await client.query('COMMIT');
       return result;
     } catch (error) {
-      await client.query('ROLLBACK');
+      if (!transaction) await client.query('ROLLBACK');
       if (isUniqueViolation(error)) throw financialDocumentUniqueConflict(error.constraint);
       throw error;
     } finally {
-      client.release();
+      if (!transaction) client.release();
     }
   }
 
@@ -1519,6 +2067,7 @@ function normalizeInput(input: CreateFinancialDocumentRequest) {
     input.sourceSalesInvoiceId,
     input.sourceServiceWorkOrderId,
     input.sourcePosSaleId,
+    input.sourcePosReturnId,
     input.sourceSubscriptionDraftId,
   ].filter(Boolean).length;
   if (sourceCount > 1)
@@ -1567,6 +2116,7 @@ function normalizeInput(input: CreateFinancialDocumentRequest) {
       ? { sourceSubscriptionDraftId: input.sourceSubscriptionDraftId }
       : {}),
     ...(input.sourcePosSaleId ? { sourcePosSaleId: input.sourcePosSaleId } : {}),
+    ...(input.sourcePosReturnId ? { sourcePosReturnId: input.sourcePosReturnId } : {}),
     ...(input.sourceServiceWorkOrderId
       ? { sourceServiceWorkOrderId: input.sourceServiceWorkOrderId }
       : {}),
@@ -1592,7 +2142,13 @@ function normalizeLine(line: CreateFinancialDocumentLineRequest) {
   };
 }
 
-async function requireScope(client: PoolClient, input: ReturnType<typeof normalizeInput>) {
+async function requireScope(
+  client: PoolClient,
+  input: Pick<
+    CreateFinancialDocumentRequest,
+    'businessLocationId' | 'legalEntityId' | 'cashRegisterId' | 'operatorId'
+  >,
+) {
   const result = await client.query<{
     branch_id: string;
     issuer_address: string;
@@ -1705,7 +2261,7 @@ async function subscriptionDraftLines(
   return [
     {
       ...line,
-      description: `${source.draft_number} · ${source.service_period_start} / ${source.service_period_end}`,
+      description: `Абонаментна услуга / Subscription service · ${source.service_period_start} / ${source.service_period_end}`,
       unitCode: 'SERVICE',
     },
   ];
@@ -1756,9 +2312,12 @@ async function requireCorrection(client: PoolClient, input: ReturnType<typeof no
   const result = await client.query<{
     currency_code: string;
     customer_partner_id: string;
+    legal_entity_id: string;
     id: string;
+    source_pos_sale_id: string | null;
+    status: string;
   }>(
-    `SELECT id, customer_partner_id, currency_code FROM finance.financial_documents
+    `SELECT id, customer_partner_id, legal_entity_id, currency_code, source_pos_sale_id, status FROM finance.financial_documents
      WHERE id = $1 AND document_type = 'invoice' AND status IN ('draft', 'issued') FOR UPDATE`,
     [input.correctionOfDocumentId],
   );
@@ -1766,12 +2325,22 @@ async function requireCorrection(client: PoolClient, input: ReturnType<typeof no
   if (!row)
     throw inputError('FINANCE_CORRECTION_SOURCE_INVALID', 'Select an active original invoice.');
   if (
+    row.source_pos_sale_id &&
+    input.documentType === 'credit_note' &&
+    (!input.sourcePosReturnId || row.status !== 'issued')
+  )
+    throw inputError(
+      'FINANCE_POS_RETURN_REQUIRED',
+      'Prepare the credit note from the recorded POS return after issuing the original invoice.',
+    );
+  if (
     row.customer_partner_id !== input.customerPartnerId ||
+    row.legal_entity_id !== input.legalEntityId ||
     row.currency_code !== input.currencyCode
   )
     throw inputError(
       'FINANCE_CORRECTION_CONTEXT_MISMATCH',
-      'A correction must use the original invoice customer and currency.',
+      'A correction must use the original invoice company, customer and currency.',
     );
   return row;
 }
@@ -1911,7 +2480,11 @@ async function posReceiptSource(
   input: ReturnType<typeof normalizeInput>,
   customerId: string,
 ) {
-  if (input.documentType !== 'invoice')
+  if (
+    input.sourcePosReturnId
+      ? input.documentType !== 'credit_note'
+      : input.documentType !== 'invoice'
+  )
     throw inputError(
       'FINANCE_POS_SOURCE_TYPE_INVALID',
       'A POS receipt can be used only to prepare an invoice.',
@@ -1924,10 +2497,19 @@ async function posReceiptSource(
     net_total: string;
     vat_total: string;
   }>(
-    `SELECT sale.customer_partner_id, sale.currency_code, sale.fiscal_receipt_number,
+    input.sourcePosReturnId
+      ? `SELECT sale.customer_partner_id,sale.currency_code,
+      returned.fiscal_reversal_number AS fiscal_receipt_number,returned.net_total::text,returned.vat_total::text,returned.gross_total::text
+      FROM pos.returns returned JOIN pos.sales sale ON sale.id=returned.original_sale_id
+      JOIN finance.financial_documents invoice ON invoice.id=$2 AND invoice.source_pos_sale_id=sale.id
+        AND invoice.status='issued' AND invoice.document_type='invoice'
+      WHERE returned.id=$1`
+      : `SELECT sale.customer_partner_id, sale.currency_code, sale.fiscal_receipt_number,
             sale.net_total::text, sale.vat_total::text, sale.gross_total::text
      FROM pos.sales sale WHERE sale.id = $1 FOR UPDATE OF sale`,
-    [input.sourcePosSaleId],
+    input.sourcePosReturnId
+      ? [input.sourcePosReturnId, input.correctionOfDocumentId]
+      : [input.sourcePosSaleId],
   );
   const sale = header.rows[0];
   if (!sale) throw inputError('FINANCE_POS_RECEIPT_INVALID', 'Select an available POS receipt.');
@@ -1948,12 +2530,19 @@ async function posReceiptSource(
     vat_total: string;
     vat_treatment: VatTreatment;
   }>(
-    `SELECT line.product_id, line.product_name, line.unit_code,
+    input.sourcePosReturnId
+      ? `SELECT returned.product_id,returned.product_name,sold.unit_code,
+      returned.quantity::text,sold.unit_price::text,sold.vat_treatment,
+      round(sold.unit_price*returned.quantity,4)::text AS base_net_total,returned.net_total::text,
+      returned.vat_total::text,returned.gross_total::text
+      FROM pos.return_lines returned JOIN pos.sale_lines sold ON sold.id=returned.original_sale_line_id
+      WHERE returned.return_id=$1 ORDER BY returned.id`
+      : `SELECT line.product_id, line.product_name, line.unit_code,
             line.quantity::text, line.unit_price::text, line.vat_treatment,
             line.base_net_total::text, line.net_total::text,
             line.vat_total::text, line.gross_total::text
      FROM pos.sale_lines line WHERE line.sale_id = $1 ORDER BY line.id`,
-    [input.sourcePosSaleId],
+    [input.sourcePosReturnId ?? input.sourcePosSaleId],
   );
   if (!result.rows.length)
     throw inputError('FINANCE_POS_RECEIPT_EMPTY', 'The POS receipt has no document lines.');
@@ -2261,17 +2850,20 @@ async function findExistingSourceDocument(
         ? 'source_service_work_order_id'
         : input.sourcePosSaleId
           ? 'source_pos_sale_id'
-          : undefined;
+          : input.sourcePosReturnId
+            ? 'source_pos_return_id'
+            : undefined;
   const sourceId =
     input.sourceSalesInvoiceId ??
     input.sourceSubscriptionDraftId ??
     input.sourceServiceWorkOrderId ??
-    input.sourcePosSaleId;
+    input.sourcePosSaleId ??
+    input.sourcePosReturnId;
   if (!sourceColumn || !sourceId) return undefined;
   const result = await client.query<{ id: string }>(
     `SELECT id FROM finance.financial_documents
-     WHERE ${sourceColumn} = $1 AND document_type = $2 AND status = 'draft'
-     ORDER BY created_at DESC, id DESC LIMIT 1 FOR KEY SHARE`,
+     WHERE ${sourceColumn} = $1 AND document_type = $2 AND ${input.sourcePosSaleId || input.sourcePosReturnId ? "status IN ('draft','issued')" : "status = 'draft'"}
+     ORDER BY created_at DESC, id DESC LIMIT 1 ${input.sourcePosSaleId || input.sourcePosReturnId ? '' : 'FOR KEY SHARE'}`,
     [sourceId, input.documentType],
   );
   return result.rows[0]?.id;
@@ -2287,6 +2879,7 @@ function headerQuery() {
                  document.source_subscription_draft_id,
                  subscription_source.draft_number AS source_subscription_draft_number,
                  document.source_pos_sale_id, pos_source.sale_number AS source_pos_sale_number,
+                 document.source_pos_return_id,
                  document.source_fiscal_receipt_number,
                  document.source_service_work_order_id,
                  service_source.work_order_number AS source_service_work_order_number,
@@ -2299,7 +2892,7 @@ function headerQuery() {
                  document.net_total::text, document.vat_total::text, document.gross_total::text,
                  document.eur_net_total::text, document.eur_vat_total::text,
                  document.eur_gross_total::text, document.notes, document.cancellation_reason,
-                 document.version, document.created_at, document.issued_at,
+                 document.version, document.created_at, document.issued_at, document.branding_snapshot,
                  document.converted_from_document_id,
                  converted_source.draft_number AS converted_from_draft_number,
                  issued_employee.display_name AS issued_by_name

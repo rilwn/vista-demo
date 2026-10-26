@@ -23,6 +23,7 @@ import { DatabaseService } from '../database/database.service.js';
 import { StructuredLogger } from '../logging/structured-logger.service.js';
 import { ObjectStorageService } from '../storage/object-storage.service.js';
 import type { ManagedFileListQueryDto, ManagedFileUploadDto } from './files.dto.js';
+import { validateBrandingImage } from './branding-image.js';
 
 export interface ManagedFileUpload {
   buffer: Buffer;
@@ -297,6 +298,8 @@ export class FilesService {
         return replay;
       }
       const versionTarget = await target(client);
+      if (versionTarget.parentType === 'financial_branding')
+        await validateBrandingImage(normalized.buffer, normalized.mediaType);
       const id = randomUUID();
       const storageKey = storageKeyFor(id, versionTarget);
       await this.storage.putObject({
@@ -423,7 +426,10 @@ export class FilesService {
         ? canAccessWarrantyClaim
         : hasPermission(auth.permissions, {
             action,
-            module: parentType === 'financial_document' ? 'erp.finance' : 'crm',
+            module:
+              parentType === 'financial_document' || parentType === 'financial_branding'
+                ? 'erp.finance'
+                : 'crm',
           });
     if (!canAccessParent) {
       throw new ApiErrorException(
@@ -436,6 +442,11 @@ export class FilesService {
     if (parentType === 'partner') {
       parent = await queryable.query<{ id: string }>(
         'SELECT id FROM master_data.partners WHERE id = $1',
+        [parentId],
+      );
+    } else if (parentType === 'financial_branding') {
+      parent = await queryable.query<{ id: string }>(
+        'SELECT id FROM organization.legal_entities WHERE id=$1',
         [parentId],
       );
     } else if (parentType === 'financial_document') {

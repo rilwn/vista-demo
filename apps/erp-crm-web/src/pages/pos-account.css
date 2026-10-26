@@ -1,0 +1,241 @@
+.pos-account-sale {
+  display: grid;
+  gap: 0.9rem;
+  min-width: 0;
+  padding: 1rem;
+  border: 1px solid var(--vista-line);
+  border-radius: 0.8rem;
+  background: var(--vista-surface);
+}
+.pos-account-sale > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+.pos-account-sale > header > div {
+  min-width: 0;
+  display: grid;
+  gap: 0.35rem;
+  overflow-wrap: anywhere;
+}
+.pos-account-sale h4 {
+  margin: 0;
+  font-size: 0.85rem;
+}
+.pos-account-sale p,
+.pos-account-sale small {
+  margin: 0;
+  color: var(--vista-muted);
+  font-size: 0.75rem;
+  line-height: 1.45;
+}
+.pos-account-sale .finance-status {
+  flex-shrink: 0;
+}
+.pos-account-amounts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.9rem;
+  margin: 0;
+}
+.pos-account-amounts > div {
+  display: grid;
+  grid-template-rows: 1fr auto;
+  gap: 0.35rem;
+  min-width: 0;
+}
+.pos-account-amounts dt {
+  color: var(--vista-muted);
+  font-size: 0.75rem;
+  line-height: 1.45;
+}
+.pos-account-amounts dd {
+  margin: 0;
+  font-weight: 700;
+  font-size: 0.9rem;
+  overflow-wrap: anywhere;
+}
+.pos-account-sale-actions,
+.pos-account-payment-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.6rem;
+}
+.pos-account-history {
+  border-top: 1px solid var(--vista-line);
+  padding-top: 0.85rem;
+}
+.pos-account-history h5 {
+  margin: 0 0 0.65rem;
+  font-size: 0.78rem;
+}
+.pos-account-history > article {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 0.75rem;
+  align-items: start;
+  padding: 0.8rem 0;
+  font-size: 0.8rem;
+}
+.pos-account-history > article + article {
+  border-top: 1px solid var(--vista-line);
+}
+.pos-account-history > article > div {
+  display: grid;
+  gap: 0.35rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.financial-document-drawer.pos-account-payment-drawer > .security-drawer-body {
+  display: flex;
+  min-height: 0;
+  overflow: hidden;
+  padding: 0;
+  scrollbar-gutter: auto;
+}
+.pos-account-payment-form {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+.pos-account-payment-scroll {
+  display: grid;
+  align-content: start;
+  gap: 1rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 1.25rem;
+}
+.pos-account-payment-card {
+  display: grid;
+  gap: 1rem;
+  padding: 1rem;
+  border: 1px solid var(--vista-line);
+  border-radius: 0.8rem;
+  background: var(--vista-surface);
+}
+.pos-account-payment-card > p {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--vista-ink-soft);
+  line-height: 1.6;
+}
+.pos-account-payment-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+.pos-account-payment-fields label {
+  display: grid;
+  align-content: start;
+  gap: 0.45rem;
+  min-width: 0;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+.pos-account-payment-fields :is(input, select, textarea) {
+  width: 100%;
+  min-width: 0;
+  min-height: 2.75rem;
+  border: 1px solid var(--vista-line);
+  border-radius: 0.55rem;
+  padding: 0.65rem 0.75rem;
+  background: var(--vista-surface);
+  color: var(--vista-ink);
+  font: inherit;
+  font-weight: 500;
+  line-height: 1.4;
+}
+.pos-account-payment-fields :is(input, select, textarea):focus-visible {
+  outline: none;
+  border-color: var(--vista-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--vista-accent) 15%, transparent);
+}
+.pos-account-payment-fields textarea {
+  min-height: 7rem;
+  resize: vertical;
+}
+.pos-account-payment-fields small {
+  color: var(--vista-muted);
+  font-weight: 400;
+}
+.pos-account-payment-fields .pos-account-full {
+  grid-column: 1 / -1;
+}
+.pos-account-confirm {
+  display: grid;
+  grid-template-columns: 1.1rem minmax(0, 1fr);
+  align-items: start;
+  gap: 0.7rem;
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+.pos-account-return-credits {
+  display: grid;
+  gap: 0.85rem;
+  border-top: 1px solid var(--vista-line);
+  padding-top: 1rem;
+  min-width: 0;
+}
+.pos-account-return-credits h5 {
+  margin: 0;
+  font-size: 0.8rem;
+}
+.pos-account-return-credit {
+  display: grid;
+  gap: 0.85rem;
+  padding: 1rem;
+  border: 1px solid var(--vista-line);
+  border-radius: 0.7rem;
+  min-width: 0;
+  background: var(--vista-surface);
+}
+.pos-account-return-credit > header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+.pos-account-return-credit > header > div {
+  display: grid;
+  gap: 0.35rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 0.8rem;
+}
+.pos-account-confirm input {
+  appearance: auto;
+  width: 1.05rem;
+  height: 1.05rem;
+  margin: 0.15rem 0 0;
+  accent-color: var(--vista-accent);
+}
+.pos-account-payment-actions {
+  padding: 1rem 1.25rem;
+  border-top: 1px solid var(--vista-line);
+  background: var(--vista-surface);
+}
+@media (max-width: 540px) {
+  .pos-account-payment-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .pos-account-payment-scroll {
+    padding: 1rem;
+  }
+  .pos-account-sale > header {
+    flex-wrap: wrap;
+  }
+  .pos-account-history > article {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .pos-account-history > article > button {
+    grid-column: 1 / -1;
+    justify-self: end;
+  }
+}

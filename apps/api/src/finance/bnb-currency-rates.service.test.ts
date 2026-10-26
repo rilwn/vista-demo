@@ -20,7 +20,7 @@ describe('parseBnbRateXml', () => {
   });
 
   it('rejects empty, inconsistent, malformed, and duplicate rate payloads', () => {
-    expect(() => parseBnbRateXml('<ROWSET/>')).toThrow('no consistent, usable rate rows');
+    expect(() => parseBnbRateXml('<ROWSET/>')).toThrow('ROWSET');
     expect(() =>
       parseBnbRateXml(
         '<ROWSET><ROW><CODE>USD</CODE><REVERSERATE>0.9</REVERSERATE><CURR_DATE>13.10.2026</CURR_DATE></ROW><ROW><CODE>GBP</CODE><REVERSERATE>1.1</REVERSERATE><CURR_DATE>14.10.2026</CURR_DATE></ROW></ROWSET>',
@@ -35,6 +35,6 @@ describe('parseBnbRateXml', () => {
       parseBnbRateXml(
         '<ROWSET><ROW><CODE>USD</CODE><REVERSERATE>0.9</REVERSERATE><CURR_DATE>31.02.2026</CURR_DATE></ROW></ROWSET>',
       ),
-    ).toThrow('no consistent, usable rate rows');
+    ).toThrow('invalid currency rate or publication date');
   });
 });

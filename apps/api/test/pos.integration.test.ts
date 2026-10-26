@@ -8,6 +8,7 @@ import { Test } from '@nestjs/testing';
 import type { AppEnvironment } from '@vista/config';
 import type {
   CustomerAdvance,
+  CustomerOperationalOverview,
   CustomerPaymentAccount,
   FinancialDocument,
   PosCatalogPage,
@@ -40,6 +41,7 @@ import { bootstrapDevelopmentFixtures, fixtureId } from '../src/database/develop
 import { migrateDown, migrateUp } from '../src/database/migration-runner.js';
 import { ObjectStorageService } from '../src/storage/object-storage.service.js';
 import { PosReportsService } from '../src/pos/pos-reports.service.js';
+import { loadPosInvoiceSettlement } from '../src/finance/pos-invoice-settlement.js';
 
 const runInfrastructureTests = process.env['RUN_INFRASTRUCTURE_TESTS'] === 'true';
 const password = 'Vista-Pos-Integration-Test-8!';
@@ -79,6 +81,7 @@ describe.skipIf(!runInfrastructureTests)('POS split payment and linked return li
 
     Object.assign(process.env, {
       BUSINESS_TIMEZONE: 'Europe/Sofia',
+      API_RATE_LIMIT_REDIS_PREFIX: `vista:pos-integration:${runId}`,
       CORS_ORIGINS: 'http://localhost:5174',
       DATABASE_URL: isolatedDatabaseUrl.toString(),
       NODE_ENV: 'test',
@@ -1237,6 +1240,801 @@ describe.skipIf(!runInfrastructureTests)('POS split payment and linked return li
       reportType: 'Z',
     });
   }, 20_000);
+
+  it('reconciles POS invoice payments, deferred credit and refunds without duplicating money or collections', async () => {
+    const customerId = fixtureId('partner:alfa');
+    const terminal = await get<PosTerminalContext>(
+      application,
+      '/api/v1/pos/terminal-context',
+      posToken,
+    );
+    const shift = await post<PosShift>(application, '/api/v1/pos/shifts', posToken, randomUUID(), {
+      cashRegisterId: terminal.registers[0]!.id,
+      openingCashEur: '100',
+    });
+    const createSale = (payments: object[]) =>
+      post<PosSale>(application, '/api/v1/pos/sales', posToken, randomUUID(), {
+        clientTransactionId: randomUUID(),
+        shiftId: shift.id,
+        customerPartnerId: customerId,
+        lines: [{ productId: fixtureId('catalog:product:adapter'), quantity: '1' }],
+        payments,
+      });
+    const prepare = (sale: PosSale) =>
+      post<FinancialDocument>(
+        application,
+        `/api/v1/pos/sales/${sale.id}/invoice-draft`,
+        posToken,
+        randomUUID(),
+        {},
+      );
+    const read = (id: string) =>
+      get<FinancialDocument>(
+        application,
+        `/api/v1/finance/financial-documents/${id}`,
+        managerToken,
+      );
+    const issue = (document: FinancialDocument, key = randomUUID()) =>
+      request(application.getHttpServer())
+        .post(`/api/v1/finance/financial-documents/${document.id}/issue`)
+        .set('authorization', `Bearer ${managerToken}`)
+        .set('idempotency-key', key)
+        .send({ expectedVersion: document.version });
+    const evidence = () =>
+      database.query<{ payments: number; collections: number; stock: number }>(
+        `SELECT (SELECT count(*)::int FROM finance.payments) AS payments,(SELECT count(*)::int FROM finance.customer_documents) AS collections,(SELECT count(*)::int FROM inventory.stock_movements) AS stock`,
+      );
+    const cash = await createSale([{ method: 'cash', amount: '30.6775', tenderedAmount: '50' }]);
+    const draft = await prepare(cash);
+    expect(draft.posSettlement).toMatchObject({
+      originalTotal: '30.6775',
+      paidAtCheckout: '30.6775',
+      deferredAtCheckout: '0.0000',
+      outstandingTotal: '0.0000',
+      status: 'paid',
+      returnState: 'none',
+    });
+    const before = (await evidence()).rows;
+    await database.query(
+      'UPDATE pos.payments SET amount=amount+1,tendered_amount=tendered_amount+1 WHERE sale_id=$1',
+      [cash.id],
+    );
+    try {
+      expect((await read(draft.id)).posSettlement?.status).toBe('needs_review');
+      const conflict = await issue(draft).expect(409);
+      expect(conflict.body.error.code).toBe('FINANCE_POS_SETTLEMENT_NEEDS_REVIEW');
+      expect((await read(draft.id)).status).toBe('draft');
+    } finally {
+      await database.query(
+        'UPDATE pos.payments SET amount=amount-1,tendered_amount=tendered_amount-1 WHERE sale_id=$1',
+        [cash.id],
+      );
+    }
+    await request(application.getHttpServer())
+      .post(`/api/v1/finance/financial-documents/${draft.id}/issue`)
+      .set('authorization', `Bearer ${viewerToken}`)
+      .set('idempotency-key', randomUUID())
+      .send({ expectedVersion: draft.version })
+      .expect(403);
+    const issued = (await issue(draft).expect(200)).body as FinancialDocument;
+    expect(issued.posSettlement?.status).toBe('paid');
+    expect(issued).not.toHaveProperty('collection');
+    await issue(issued).expect(200);
+    expect((await prepare(cash)).id).toBe(issued.id);
+    expect((await evidence()).rows).toEqual(before);
+    await request(application.getHttpServer())
+      .post(`/api/v1/finance/financial-documents/${issued.id}/collection`)
+      .set('authorization', `Bearer ${managerToken}`)
+      .set('idempotency-key', randomUUID())
+      .send({ expectedVersion: issued.version })
+      .expect(400);
+    const refreshed = (
+      await get<PosSalePage>(application, '/api/v1/pos/sales', posToken)
+    ).items.find((sale) => sale.id === cash.id)!;
+    expect(refreshed.invoiceDocument).toMatchObject({
+      id: issued.id,
+      number: issued.officialNumber,
+      status: 'issued',
+    });
+    const returned = await post<PosReturn>(
+      application,
+      '/api/v1/pos/returns',
+      posToken,
+      randomUUID(),
+      {
+        originalSaleId: cash.id,
+        shiftId: shift.id,
+        reason: 'Returned for settlement verification',
+        refunds: [{ originalPaymentId: cash.payments[0]!.id, method: 'cash', amount: '15.3387' }],
+        lines: [{ originalSaleLineId: cash.lines[0]!.id, quantity: '0.5', disposition: 'restock' }],
+      },
+    );
+    const partial = await read(issued.id);
+    expect(partial.posSettlement).toMatchObject({
+      refundedTotal: returned.grossTotal,
+      returnState: 'partial',
+      status: 'paid',
+      returnCount: 1,
+      outstandingTotal: '0.0000',
+    });
+    expect(partial.posSettlement!.returns[0]).toMatchObject({
+      id: returned.id,
+      number: returned.returnNumber,
+      amount: returned.grossTotal,
+    });
+    expect(partial.grossTotal).toBe(issued.grossTotal);
+    expect(partial.version).toBe(issued.version);
+
+    const splitSale = await createSale([
+      { method: 'cash', amount: '15.3387', tenderedAmount: '20' },
+      { method: 'card', amount: '15.3388' },
+    ]);
+    const splitDraft = await prepare(splitSale);
+    const splitInvoice = (await issue(splitDraft).expect(200)).body as FinancialDocument;
+    expect(splitInvoice.posSettlement).toMatchObject({
+      status: 'paid',
+      paidAtCheckout: '30.6775',
+      outstandingTotal: '0.0000',
+    });
+    expect(splitInvoice.posSettlement?.payments).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ method: 'cash', amount: '15.3387' }),
+        expect.objectContaining({ method: 'card', amount: '15.3388' }),
+      ]),
+    );
+    await post<PosReturn>(application, '/api/v1/pos/returns', posToken, randomUUID(), {
+      originalSaleId: splitSale.id,
+      shiftId: shift.id,
+      reason: 'Return split checkout through the original payment methods',
+      refunds: splitSale.payments.map((payment) => ({
+        originalPaymentId: payment.id,
+        method: payment.method,
+        amount: payment.amount,
+      })),
+      lines: [
+        { originalSaleLineId: splitSale.lines[0]!.id, quantity: '1', disposition: 'restock' },
+      ],
+    });
+    const splitRefunded = (await read(splitInvoice.id)).posSettlement;
+    expect(splitRefunded).toMatchObject({
+      status: 'paid',
+      returnState: 'full',
+      refundedTotal: '30.6775',
+      netPaidTotal: '0.0000',
+    });
+    expect(splitRefunded?.payments).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ method: 'cash', refundedAmount: '15.3387' }),
+        expect.objectContaining({ method: 'card', refundedAmount: '15.3388' }),
+      ]),
+    );
+
+    const advance = await post<CustomerAdvance>(
+      application,
+      '/api/v1/finance/customer-accounts/advances',
+      managerToken,
+      randomUUID(),
+      {
+        amount: '15.3388',
+        customerPartnerId: customerId,
+        paymentMethod: 'bank_transfer',
+        receivedOn: new Date().toISOString().slice(0, 10),
+      },
+    );
+    const creditSale = await createSale([
+      { method: 'advance', advanceId: advance.id, amount: '15.3388' },
+      { method: 'on_account', amount: '15.3387' },
+    ]);
+    const creditDraft = await prepare(creditSale);
+    const creditInvoice = (await issue(creditDraft).expect(200)).body as FinancialDocument;
+    expect(creditInvoice.posSettlement).toMatchObject({
+      paidAtCheckout: '15.3388',
+      deferredAtCheckout: '15.3387',
+      outstandingTotal: '15.3387',
+      status: 'partially_paid',
+    });
+    expect(creditInvoice).not.toHaveProperty('collection');
+    const accountBefore = await get<CustomerPaymentAccount>(
+      application,
+      `/api/v1/finance/customer-accounts/${customerId}`,
+      managerToken,
+    );
+    expect(accountBefore.outstandingBalance).toBe('15.3387');
+    await post<PosReturn>(application, '/api/v1/pos/returns', posToken, randomUUID(), {
+      originalSaleId: creditSale.id,
+      shiftId: shift.id,
+      reason: 'Returned deferred and advance purchase',
+      refunds: creditSale.payments.map((payment) => ({
+        originalPaymentId: payment.id,
+        method: payment.method,
+        amount: payment.amount,
+      })),
+      lines: [
+        { originalSaleLineId: creditSale.lines[0]!.id, quantity: '1', disposition: 'restock' },
+      ],
+    });
+    const refunded = await read(creditInvoice.id);
+    expect(refunded.posSettlement).toMatchObject({
+      originalTotal: '30.6775',
+      refundedTotal: '15.3388',
+      deferredReleased: '15.3387',
+      netPaidTotal: '0.0000',
+      outstandingTotal: '0.0000',
+      netSaleTotal: '0.0000',
+      returnState: 'full',
+      status: 'paid',
+    });
+    expect(refunded.grossTotal).toBe('30.6775');
+    expect(
+      (
+        await get<CustomerPaymentAccount>(
+          application,
+          `/api/v1/finance/customer-accounts/${customerId}`,
+          managerToken,
+        )
+      ).outstandingBalance,
+    ).toBe('0.0000');
+    expect(
+      (
+        await get<FinancialDocument>(
+          application,
+          `/api/v1/finance/financial-documents/${creditInvoice.id}`,
+          viewerToken,
+        )
+      ).posSettlement,
+    ).toEqual(refunded.posSettlement);
+    const unpaidSale = await createSale([{ method: 'on_account', amount: '30.6775' }]);
+    const unpaidDraft = await prepare(unpaidSale);
+    const [unpaidIssued, reopened] = await Promise.all([
+      issue(unpaidDraft).expect(200),
+      prepare(unpaidSale),
+    ]);
+    expect(reopened.id).toBe(unpaidDraft.id);
+    expect((unpaidIssued.body as FinancialDocument).posSettlement).toMatchObject({
+      paidAtCheckout: '0.0000',
+      deferredAtCheckout: '30.6775',
+      outstandingTotal: '30.6775',
+      status: 'unpaid',
+    });
+    const client = await database.connect();
+    try {
+      expect((await loadPosInvoiceSettlement(client, unpaidSale.id, '2099-12-31'))?.status).toBe(
+        'overdue',
+      );
+    } finally {
+      client.release();
+    }
+    await request(application.getHttpServer())
+      .get(`/api/v1/finance/financial-documents/${creditInvoice.id}`)
+      .set('authorization', `Bearer ${posToken}`)
+      .expect(403);
+  }, 20000);
+
+  it('collects and reverses deferred POS payments once, then reconciles collected returns and linked repayments', async () => {
+    const customerId = fixtureId('partner:alfa');
+    const terms = (
+      await get<CustomerPaymentAccount>(
+        application,
+        `/api/v1/finance/customer-accounts/${customerId}`,
+        managerToken,
+      )
+    ).terms!;
+    await request(application.getHttpServer())
+      .put(`/api/v1/finance/customer-accounts/${customerId}/terms`)
+      .set('authorization', `Bearer ${managerToken}`)
+      .set('idempotency-key', randomUUID())
+      .send({
+        creditLimitEur: '1000',
+        onAccountEnabled: true,
+        paymentTermsDays: terms.paymentTermsDays,
+        validFrom: terms.validFrom,
+        status: 'active',
+        expectedVersion: terms.version,
+      })
+      .expect(200);
+    const terminal = await get<PosTerminalContext>(
+      application,
+      '/api/v1/pos/terminal-context',
+      posToken,
+    );
+    const shift = terminal.currentShift!;
+    const sale = await post<PosSale>(application, '/api/v1/pos/sales', posToken, randomUUID(), {
+      clientTransactionId: randomUUID(),
+      shiftId: shift.id,
+      customerPartnerId: customerId,
+      lines: [{ productId: fixtureId('catalog:product:adapter'), quantity: '1' }],
+      payments: [{ method: 'on_account', amount: '30.6775' }],
+    });
+    const invoice = await post<FinancialDocument>(
+      application,
+      `/api/v1/pos/sales/${sale.id}/invoice-draft`,
+      posToken,
+      randomUUID(),
+      {},
+    );
+    const path = `/api/v1/finance/customer-accounts/${customerId}/pos-sales/${sale.id}/payments`;
+    const paymentDate = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Europe/Sofia',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(new Date());
+    const requestPayment = (
+      key: string,
+      amount = '10',
+      expected = '30.6775',
+      token = managerToken,
+    ) =>
+      request(application.getHttpServer())
+        .post(path)
+        .set('authorization', `Bearer ${token}`)
+        .set('idempotency-key', key)
+        .send({
+          amount,
+          expectedOutstanding: expected,
+          paymentDate,
+          paymentMethod: 'bank_transfer',
+          paymentReference: 'POS-COLLECTION-TEST',
+        });
+    await requestPayment(randomUUID(), '10', '30.6775', viewerToken).expect(403);
+    await requestPayment(randomUUID(), '10', '30.6775', posToken).expect(403);
+    for (const invalidDate of ['2000-01-01', '9999-12-31']) {
+      const invalid = await requestPayment(randomUUID())
+        .send({ paymentDate: invalidDate })
+        .expect(400);
+      expect(invalid.body.error.code).toBe('POS_ACCOUNT_PAYMENT_DATE_INVALID');
+    }
+    await requestPayment(randomUUID(), '31').expect(409);
+    const key = randomUUID();
+    const [one, two] = await Promise.all([
+      requestPayment(key).expect(201),
+      requestPayment(key).expect(201),
+    ]);
+    expect(one.body).toEqual(two.body);
+    let account = one.body as CustomerPaymentAccount;
+    let receivable = account.posReceivables!.find((row) => row.saleId === sale.id)!;
+    expect(receivable).toMatchObject({
+      paidTotal: '10.0000',
+      outstandingTotal: '20.6775',
+      status: 'partially_paid',
+    });
+    const payment = receivable.payments[0]!;
+    await requestPayment(randomUUID()).expect(409);
+    const source = await get<FinancialDocument>(
+      application,
+      `/api/v1/finance/financial-documents/${invoice.id}`,
+      managerToken,
+    );
+    expect(source.posSettlement).toMatchObject({
+      collectedTotal: '10.0000',
+      outstandingTotal: '20.6775',
+      status: 'partially_paid',
+    });
+    expect(source.grossTotal).toBe(invoice.grossTotal);
+    const returnPayload = {
+      originalSaleId: sale.id,
+      shiftId: shift.id,
+      reason: 'Return the fully collected account purchase',
+      lines: [{ originalSaleLineId: sale.lines[0]!.id, quantity: '1', disposition: 'restock' }],
+      refunds: [
+        { originalPaymentId: sale.payments[0]!.id, method: 'on_account', amount: '30.6775' },
+      ],
+    };
+    const reversePath = `${path}/${payment.id}/reverse`;
+    const reverse = (key: string, token = managerToken) =>
+      request(application.getHttpServer())
+        .post(reversePath)
+        .set('authorization', `Bearer ${token}`)
+        .set('idempotency-key', key)
+        .send({
+          reason: 'Incorrect payment reference recorded during testing',
+          expectedOutstanding: '20.6775',
+        });
+    await reverse(randomUUID(), viewerToken).expect(403);
+    await reverse(randomUUID()).expect(403);
+    const roleId = randomUUID();
+    await database.query(
+      `INSERT INTO iam.roles(id,code,name) VALUES($1,$2,'POS collection test approver')`,
+      [roleId, `pos-collection-${runId}`],
+    );
+    const permission = (
+      await database.query<{ id: string }>(
+        `INSERT INTO iam.permissions(id,module,action) VALUES($1,'erp.finance','approve')
+      ON CONFLICT(module,action) DO UPDATE SET module=excluded.module RETURNING id`,
+        [randomUUID()],
+      )
+    ).rows[0]!.id;
+    await database.query('INSERT INTO iam.role_permissions(role_id,permission_id) VALUES($1,$2)', [
+      roleId,
+      permission,
+    ]);
+    await database.query('INSERT INTO iam.account_roles(account_id,role_id) VALUES($1,$2)', [
+      fixtureId('account:manager'),
+      roleId,
+    ]);
+    managerToken = await login(application, 'manager@vista.local');
+    const reversalKey = randomUUID();
+    account = (await reverse(reversalKey).expect(200)).body as CustomerPaymentAccount;
+    await reverse(reversalKey).expect(200);
+    receivable = account.posReceivables!.find((row) => row.saleId === sale.id)!;
+    expect(receivable).toMatchObject({
+      outstandingTotal: '30.6775',
+      paidTotal: '0.0000',
+      status: 'unpaid',
+    });
+    expect(receivable.payments[0]!.reversal?.reason).toContain('Incorrect payment');
+    const overview = await get<CustomerOperationalOverview>(
+      application,
+      `/api/v1/master-data/partners/${customerId}/customer-overview`,
+      managerToken,
+    );
+    expect(overview.payments.find((row) => row.id === payment.id)).toMatchObject({
+      reversalNumber: receivable.payments[0]!.reversal!.number,
+      paymentReference: 'POS-COLLECTION-TEST',
+    });
+    const expectedOverview = (
+      await database.query<{ total: string; count: string }>(
+        `SELECT (coalesce(sum(round(outstanding_total*exchange_rate,4)),0)+$2::numeric)::text AS total,
+          (count(*) FILTER(WHERE outstanding_total>0)+$3::integer)::text AS count
+         FROM finance.customer_documents
+         WHERE customer_partner_id=$1 AND review_state='pending_finance_review'`,
+        [
+          customerId,
+          account.outstandingBalance,
+          account.posReceivables!.filter((row) => Number(row.outstandingTotal) > 0).length,
+        ],
+      )
+    ).rows[0]!;
+    expect(overview.summary.outstandingEur).toBe(expectedOverview.total);
+    expect(overview.summary.openReceivables).toBe(Number(expectedOverview.count));
+    const concurrent = await Promise.all([
+      requestPayment(randomUUID(), '20'),
+      requestPayment(randomUUID(), '20'),
+    ]);
+    expect(concurrent.map((response) => response.status).sort()).toEqual([201, 409]);
+    account = (await requestPayment(randomUUID(), '10.6775', '10.6775').expect(201))
+      .body as CustomerPaymentAccount;
+    expect(account.posReceivables!.find((row) => row.saleId === sale.id)).toMatchObject({
+      paidTotal: '30.6775',
+      outstandingTotal: '0.0000',
+      status: 'paid',
+    });
+    const options = await get<PosCustomerPaymentOptions>(
+      application,
+      `/api/v1/pos/customers/${customerId}/payment-options`,
+      posToken,
+    );
+    expect(options.outstandingBalance).toBe(account.outstandingBalance);
+    const counts = (
+      await database.query<{ count: string }>(
+        'SELECT count(*)::text AS count FROM finance.customer_documents WHERE financial_document_id=$1',
+        [invoice.id],
+      )
+    ).rows;
+    expect(counts[0]?.count).toBe('0');
+    await expect(
+      database.query(
+        `INSERT INTO finance.payments(id,payment_number,customer_partner_id,payment_date,payment_method,
+      currency_code,amount,recorded_by,source_pos_sale_id) VALUES($1,$2,$3,CURRENT_DATE,'bank_transfer','EUR',1,$4,$5)`,
+        [randomUUID(), `ORPHAN-${runId}`, customerId, fixtureId('account:manager'), sale.id],
+      ),
+    ).rejects.toThrow('requires its account entry');
+    const partialSale = await post<PosSale>(
+      application,
+      '/api/v1/pos/sales',
+      posToken,
+      randomUUID(),
+      {
+        clientTransactionId: randomUUID(),
+        shiftId: shift.id,
+        customerPartnerId: customerId,
+        lines: [{ productId: fixtureId('catalog:product:adapter'), quantity: '1' }],
+        payments: [{ method: 'on_account', amount: '30.6775' }],
+      },
+    );
+    const lateInvoiceDraft = await post<FinancialDocument>(
+      application,
+      `/api/v1/pos/sales/${partialSale.id}/invoice-draft`,
+      posToken,
+      randomUUID(),
+      {},
+    );
+    await post<CustomerPaymentAccount>(
+      application,
+      `/api/v1/finance/customer-accounts/${customerId}/pos-sales/${partialSale.id}/payments`,
+      managerToken,
+      randomUUID(),
+      { amount: '10', expectedOutstanding: '30.6775', paymentMethod: 'cash', paymentDate },
+    );
+    await post<PosReturn>(application, '/api/v1/pos/returns', posToken, randomUUID(), {
+      originalSaleId: partialSale.id,
+      shiftId: shift.id,
+      reason: 'Return only the unpaid portion of the account sale',
+      lines: [
+        { originalSaleLineId: partialSale.lines[0]!.id, quantity: '0.5', disposition: 'restock' },
+      ],
+      refunds: [
+        { originalPaymentId: partialSale.payments[0]!.id, method: 'on_account', amount: '15.3387' },
+      ],
+    });
+    const partiallyReturned = await get<CustomerPaymentAccount>(
+      application,
+      `/api/v1/finance/customer-accounts/${customerId}`,
+      managerToken,
+    );
+    expect(
+      partiallyReturned.posReceivables!.find((row) => row.saleId === partialSale.id),
+    ).toMatchObject({ returnCredit: '15.3387', paidTotal: '10.0000', outstandingTotal: '5.3388' });
+    const lateIssue = await request(application.getHttpServer())
+      .post(`/api/v1/finance/financial-documents/${lateInvoiceDraft.id}/issue`)
+      .set('authorization', `Bearer ${managerToken}`)
+      .set('idempotency-key', randomUUID())
+      .send({ expectedVersion: lateInvoiceDraft.version })
+      .expect(409);
+    expect(lateIssue.body.error.code).toBe('FINANCE_POS_INVOICE_AFTER_RETURN');
+    await expect(
+      database.query("UPDATE finance.financial_documents SET status='issued' WHERE id=$1", [
+        lateInvoiceDraft.id,
+      ]),
+    ).rejects.toThrow('cannot be issued after the sale has been returned');
+    await request(application.getHttpServer())
+      .post(`/api/v1/finance/financial-documents/${lateInvoiceDraft.id}/cancel`)
+      .set('authorization', `Bearer ${managerToken}`)
+      .set('idempotency-key', randomUUID())
+      .send({
+        expectedVersion: lateInvoiceDraft.version,
+        cancellationReason: 'Sale returned before invoice issuance',
+      })
+      .expect(200);
+
+    const issued = (
+      await request(application.getHttpServer())
+        .post(`/api/v1/finance/financial-documents/${invoice.id}/issue`)
+        .set('authorization', `Bearer ${managerToken}`)
+        .set('idempotency-key', randomUUID())
+        .send({ expectedVersion: invoice.version })
+        .expect(200)
+    ).body as FinancialDocument;
+    const stockBeforeReturn = await stockQuantity(),
+      returnKey = randomUUID();
+    const completedReturn = await post<PosReturn>(
+      application,
+      '/api/v1/pos/returns',
+      posToken,
+      returnKey,
+      returnPayload,
+    );
+    expect(
+      (
+        await post<PosReturn>(
+          application,
+          '/api/v1/pos/returns',
+          posToken,
+          returnKey,
+          returnPayload,
+        )
+      ).id,
+    ).toBe(completedReturn.id);
+    expect(await stockQuantity()).toBe(stockBeforeReturn + 1);
+    const readAccount = () =>
+      get<CustomerPaymentAccount>(
+        application,
+        `/api/v1/finance/customer-accounts/${customerId}`,
+        managerToken,
+      );
+    const saleAccount = (value: CustomerPaymentAccount) =>
+      value.posReceivables!.find((item) => item.saleId === sale.id)!;
+    const liability = saleAccount(await readAccount()).returnCredits![0]!;
+    expect(liability).toMatchObject({
+      returnId: completedReturn.id,
+      releasedTotal: '0.0000',
+      refundDue: '30.6775',
+      refundedTotal: '0.0000',
+    });
+    expect(
+      (
+        await get<FinancialDocument>(
+          application,
+          `/api/v1/finance/financial-documents/${issued.id}`,
+          managerToken,
+        )
+      ).posSettlement,
+    ).toMatchObject({
+      status: 'refund_due',
+      refundDue: '30.6775',
+      outstandingTotal: '0.0000',
+      netSaleTotal: '0.0000',
+      netPaidTotal: '30.6775',
+    });
+    const refundPath = `/api/v1/finance/customer-accounts/${customerId}/pos-sales/${sale.id}/returns/${completedReturn.id}/refunds`;
+    await request(application.getHttpServer())
+      .post(
+        `/api/v1/finance/customer-accounts/not-a-uuid/pos-sales/${sale.id}/returns/${completedReturn.id}/refunds`,
+      )
+      .set('authorization', `Bearer ${managerToken}`)
+      .set('idempotency-key', randomUUID())
+      .send({})
+      .expect(400);
+    const repay = (key: string, amount = '10', expected = '30.6775', token = managerToken) =>
+      request(application.getHttpServer())
+        .post(refundPath)
+        .set('authorization', `Bearer ${token}`)
+        .set('idempotency-key', key)
+        .send({
+          amount,
+          expectedRefundDue: expected,
+          refundedOn: paymentDate,
+          paymentMethod: 'bank_transfer',
+          paymentReference: 'BANK-REPAYMENT-TEST-01',
+        });
+    await repay(randomUUID(), '10', '30.6775', viewerToken).expect(403);
+    await repay(randomUUID(), '10', '30.6775', posToken).expect(403);
+    expect((await repay(randomUUID()).expect(409)).body.error.code).toBe(
+      'POS_ACCOUNT_REFUND_CREDIT_REQUIRED',
+    );
+    const noteKey = randomUUID();
+    await request(application.getHttpServer())
+      .post('/api/v1/finance/financial-documents/from-pos-return/not-a-uuid')
+      .set('authorization', `Bearer ${managerToken}`)
+      .set('idempotency-key', randomUUID())
+      .send({})
+      .expect(400);
+    const note = await post<FinancialDocument>(
+      application,
+      `/api/v1/finance/financial-documents/from-pos-return/${completedReturn.id}`,
+      managerToken,
+      noteKey,
+      {},
+    );
+    const duplicateNote = await post<FinancialDocument>(
+      application,
+      `/api/v1/finance/financial-documents/from-pos-return/${completedReturn.id}`,
+      managerToken,
+      randomUUID(),
+      {},
+    );
+    expect(duplicateNote.id).toBe(note.id);
+    expect(note).toMatchObject({
+      documentType: 'credit_note',
+      grossTotal: issued.grossTotal,
+      netTotal: issued.netTotal,
+      vatTotal: issued.vatTotal,
+      sourcePosReturnId: completedReturn.id,
+      correctionOf: { id: issued.id },
+    });
+    await request(application.getHttpServer())
+      .post(`/api/v1/finance/financial-documents/${note.id}/issue`)
+      .set('authorization', `Bearer ${managerToken}`)
+      .set('idempotency-key', randomUUID())
+      .send({ expectedVersion: note.version })
+      .expect(200);
+    // Any failure in payment allocation rolls back the repayment, number, audit and outbox.
+    await database.query(`CREATE FUNCTION finance.test_refund_failure() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN
+      RAISE EXCEPTION 'Injected refund allocation failure'; END; $$;
+      CREATE TRIGGER test_refund_failure BEFORE INSERT ON finance.pos_account_refund_allocations FOR EACH ROW EXECUTE FUNCTION finance.test_refund_failure()`);
+    const failedKey = randomUUID();
+    try {
+      await repay(failedKey).expect(500);
+      expect(
+        (
+          await database.query('SELECT 1 FROM finance.pos_account_refunds WHERE pos_return_id=$1', [
+            completedReturn.id,
+          ])
+        ).rowCount,
+      ).toBe(0);
+    } finally {
+      await database.query(
+        'DROP TRIGGER test_refund_failure ON finance.pos_account_refund_allocations;DROP FUNCTION finance.test_refund_failure()',
+      );
+    }
+    const [paidOnce, paidAgain] = await Promise.all([
+      repay(failedKey).expect(201),
+      repay(failedKey).expect(201),
+    ]);
+    expect(paidOnce.body).toEqual(paidAgain.body);
+    let returnCredit = saleAccount(paidOnce.body as CustomerPaymentAccount).returnCredits![0]!;
+    expect(returnCredit).toMatchObject({ refundedTotal: '10.0000', refundDue: '20.6775' });
+    expect(returnCredit.refunds).toHaveLength(1);
+    expect(returnCredit.refunds[0]!.payments).toHaveLength(1);
+    await repay(randomUUID()).expect(409);
+    await repay(randomUUID(), '21', '20.6775').expect(409);
+    await repay(randomUUID(), '1', '20.6775').send({ refundedOn: '9999-12-31' }).expect(409);
+    const finalRepayments = await Promise.all([
+      repay(randomUUID(), '20.6775', '20.6775'),
+      repay(randomUUID(), '20.6775', '20.6775'),
+    ]);
+    expect(finalRepayments.map((item) => item.status).sort()).toEqual([201, 409]);
+    returnCredit = saleAccount(await readAccount()).returnCredits![0]!;
+    expect(returnCredit).toMatchObject({ refundedTotal: '30.6775', refundDue: '0.0000' });
+    expect(returnCredit.refunds).toHaveLength(2);
+    await expect(
+      database.query("UPDATE finance.financial_documents SET status='cancelled' WHERE id=$1", [
+        note.id,
+      ]),
+    ).rejects.toThrow('with recorded repayments cannot be cancelled');
+    const settled = await get<FinancialDocument>(
+      application,
+      `/api/v1/finance/financial-documents/${invoice.id}`,
+      managerToken,
+    );
+    expect(settled).toMatchObject({
+      grossTotal: issued.grossTotal,
+      officialNumber: issued.officialNumber,
+      version: issued.version,
+    });
+    expect(settled.posSettlement).toMatchObject({
+      status: 'paid',
+      netPaidTotal: '0.0000',
+      netSaleTotal: '0.0000',
+      refundedTotal: '30.6775',
+      refundDue: '0.0000',
+    });
+    expect(
+      (await reverse(randomUUID()).send({ expectedOutstanding: '0' }).expect(409)).body.error.code,
+    ).toBe('POS_ACCOUNT_PAYMENT_RETURNED');
+    await expect(
+      database.query(
+        'UPDATE finance.pos_account_refunds SET amount=amount+1 WHERE pos_return_id=$1',
+        [completedReturn.id],
+      ),
+    ).rejects.toThrow('append-only');
+    const partiallyCollectedReturn = await post<PosReturn>(
+      application,
+      '/api/v1/pos/returns',
+      posToken,
+      randomUUID(),
+      {
+        originalSaleId: partialSale.id,
+        shiftId: shift.id,
+        reason: 'Return the remaining partially collected purchase',
+        lines: [
+          { originalSaleLineId: partialSale.lines[0]!.id, quantity: '0.5', disposition: 'restock' },
+        ],
+        refunds: [
+          {
+            originalPaymentId: partialSale.payments[0]!.id,
+            method: 'on_account',
+            amount: '15.3388',
+          },
+        ],
+      },
+    );
+    const partialSaleReceivable = (await readAccount()).posReceivables!.find(
+      (item) => item.saleId === partialSale.id,
+    );
+    expect(partialSaleReceivable).toMatchObject({
+      returnCredit: '20.6775',
+      outstandingTotal: '0.0000',
+      refundDue: '10.0000',
+    });
+    expect(
+      partialSaleReceivable?.returnCredits?.find(
+        (credit) => credit.returnId === partiallyCollectedReturn.id,
+      ),
+    ).toMatchObject({
+      releasedTotal: '5.3388',
+      refundDue: '10.0000',
+    });
+    await post<CustomerPaymentAccount>(
+      application,
+      `/api/v1/finance/customer-accounts/${customerId}/pos-sales/${partialSale.id}/returns/${partiallyCollectedReturn.id}/refunds`,
+      managerToken,
+      randomUUID(),
+      {
+        amount: '10',
+        expectedRefundDue: '10',
+        refundedOn: paymentDate,
+        paymentMethod: 'cash',
+        paymentReference: 'CASH-REPAYMENT-NO-INVOICE',
+      },
+    );
+    await expect(
+      database.query('UPDATE finance.payments SET amount=amount+1 WHERE id=$1', [payment.id]),
+    ).rejects.toThrow('immutable');
+    await expect(
+      migrateDown(database, fileURLToPath(new URL('../src/database/migrations', import.meta.url))),
+    ).rejects.toThrow('Cannot discard');
+  }, 40000);
 
   async function stockQuantity(): Promise<number> {
     const result = await database.query<{ quantity: string }>(

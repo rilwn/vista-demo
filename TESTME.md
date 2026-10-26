@@ -1,108 +1,53 @@
-# EUR currency check
+# Test a collected POS return
 
-Use the local apps after restarting with `npm run dev`. No database reset or
-reseeding is needed; the migration converts the existing development data.
+Run locally with `npm run dev`. Use the demo accounts and local fiscal simulator.
+This does not test DATECS hardware or send an actual repayment.
 
-## Vista Operations
+## One-time permission setup
 
-1. Sign in as `manager@vista.local` and open **Finance → Financial documents**.
-2. Select **New financial document**. Choose **Invoice**, **Manual document**,
-   **Vratsa Service & Retail Centre**, **Alfa Market Demo Ltd.**, and
-   **Demo Fiscal Register X1**.
-3. Keep quantity `1`, discount `0`, and **Standard 20%**. Confirm the currency
-   defaults to **EUR**, and `BGN` is not offered.
-4. Confirm the net price is **€306.7751**, VAT is **€61.3550**, and the total is
-   **€368.1301**. Save as a draft, open **Preview**, and confirm it still shows
-   EUR. Close the panel.
+Recording a repayment needs Finance Approve. If `finance@vista.local` cannot
+record it, sign in as `local.admin@vista.local`:
 
-## Vista POS
+1. Open **Security → Roles → Add role**. Name it `Finance Return Approver`, code
+   `finance-return-approver`, and grant **Finance: View** and **Finance: Approve**.
+2. Open **Security → Employees**, select **Manage** for `finance@vista.local`,
+   assign the new role without removing its existing role, then save.
+3. Sign in again as `finance@vista.local`.
 
-1. Sign in as `pos.operator@vista.local` and open **Sell**.
-2. Search for **Demo Fiscal Register X1**. Confirm its price is **€306.7751**.
-   Do not complete a sale.
+## Create, return and reconcile the sale
 
-Expected: both apps use EUR for new amounts. Existing local demo balances and
-prices have been converted, and the app does not offer or post BGN.
+1. Open Vista POS at `http://localhost:5174` and sign in as
+   `pos.operator@vista.local`.
+2. Choose **Shifts**. Enter opening cash `100`, then **Open cashier shift**.
+3. Choose **Sell**. Search `DEV-ADAPTER-12V` and add one **Demo 12 V Power
+   Adapter**.
+4. In **Current sale**, choose **Add customer**. Search `Alfa`, select
+   **Alfa Market Demo Ltd.** and **Alfa Market · Central Store**, then **Use
+   customer**.
+5. Choose **Advance / account**. Set **Use from advance** to `0` if shown. Choose
+   **On account**, then **Complete sale**. Select **Prepare invoice** and note
+   the sale number.
+6. In Vista Operations at `http://localhost:5173`, sign in as
+   `finance@vista.local`. Open **Finance → Financial documents**, preview the new
+   draft, confirm the review checkbox and **Issue document**.
+7. Open **Finance → Customer accounts**. Preview Alfa Market, find that sale and
+   choose **Collect payment**. Enter `10`, today's date, **Bank transfer**, and
+   reference `DEMO-POS-COLLECTION-01`. Confirm and **Record payment**.
+8. In Vista POS, choose **Returns**. Find that sale, select **Start return**,
+   select the adapter, keep the full quantity, and complete the return.
+9. In Operations, return to **Finance → Customer accounts → Preview** for Alfa.
+   Find the return. Confirm it shows the unpaid amount released and the collected
+   amount still owed back. Choose **Prepare credit note**, review it, then
+   **Issue document**.
+10. Back on the customer account, choose **Record repayment**. Enter `10`,
+    today's date, **Bank transfer**, reference `DEMO-POS-REPAY-01`; confirm the
+    customer has received it, then record it.
+11. Confirm the repayment appears once in the return history and the amount still
+    owed is `0`. Reopen the invoice and confirm its original total is unchanged.
+12. In POS, choose **Shifts**. Count cash as `100` and **Close cashier shift**.
+    The recorded bank repayment must not change the POS drawer.
 
-# Operations QA fixes
-
-Run these checks on **localhost only**. Use `manager@vista.local` for ERP/CRM,
-`procurement@vista.local` for purchasing, `warehouse@vista.local` for stock,
-`sales@vista.local` for Sales, `dispatcher@vista.local` for Service intake,
-`technician@vista.local` for assigned jobs, and `local.admin@vista.local` for
-mandatory administrator two-factor sign-in. Use the account's existing
-authenticator code; do not reset or disable it for this check.
-When repeating a flow, use a new date/time suffix for statement, invoice, and
-serial references; the system correctly rejects duplicate references.
-
-## Sales document, collection and payment correction
-
-1. In **Sales → Quotations**, create a quotation for **Alfa Market Demo Ltd.**
-   with an available **Demo 12 V Power Adapter**. Save it, open **Preview**,
-   revise the quantity, and confirm the revision is recorded. Before confirming
-   the order, choose **Email quotation** and check that one message arrives in
-   local Mailpit, if enabled.
-2. From **Preview**, confirm the order, complete shipment, and prepare the
-   invoice draft. In **Finance → Financial documents**, create a **Proforma
-   invoice** from that prepared Sales draft, keep the currency **EUR**, and
-   issue it. Confirm it has no official invoice number yet.
-3. Open **Finance → Collections & payments → Add to collections**, select the
-   same Sales invoice draft and set a due date one week from today. Record a
-   full cash payment. Confirm an official invoice is created and linked to the
-   proforma.
-4. Open that payment and reverse it with reason `QA correction`. Confirm the
-   original payment remains visible and the linked reversal restores the
-   outstanding balance.
-5. From **Finance → Financial documents**, create and issue a **Credit note**
-   for the new invoice with reason `QA price correction`. Confirm the preview
-   links to the original invoice. Create a second quotation, download its PDF,
-   then cancel it; confirm the first quotation remains unchanged.
-
-## Bank import and Finance exports
-
-1. Open **Finance → Bank reconciliation → New statement**. Enter bank
-   `Vista QA Bank`, reference `QA-STMT-20261014`, IBAN
-   `BG76DEMO00000000000000`, statement date `2026-10-14`, opening balance `0`,
-   and closing balance `2.00`. In **Import a bank file**, upload
-   [`finance-bank-import.csv`](docs/qa/fixtures/finance-bank-import.csv).
-2. Map the six columns to date, direction, amount, currency, reference and
-   counterparty. Confirm EUR is accepted and the duplicate line is flagged for
-   review rather than silently matched.
-3. Open **Finance → Finance reports → Export report**, choose **Income** or
-   **Outcome**, and set a date range including `14 Oct 2026`. Prepare CSV and
-   XLSX exports. Confirm unavailable account codes are blank.
-
-## Security and serial trace
-
-1. Sign in to Vista Operations as `local.admin@vista.local`; confirm the
-   authenticator code is required.
-2. As `procurement@vista.local`, create a purchase order for one
-   **Demo Fiscal Register X1** from **TechSupply Demo Ltd.** Use unit cost
-   `250.00 EUR`, warehouse **Demo Central Warehouse**, and serial
-   `QA-FR-20261014-01`. Receive the item.
-3. In **Procurement → Supplier invoices**, select that purchase order. Record
-   invoice `TS-QA-20261014-01`, date `2026-10-14`, quantity `1`, unit price
-   `250.00 EUR`, and **Standard 20%** VAT.
-4. Create a second purchase order for the same product at `275.00 EUR` and
-   receive serial `QA-FR-20261014-02`. Confirm a 10% cost warning appears but
-   receipt is allowed.
-5. As `sales@vista.local`, sell the first serial to **Alfa Market Demo Ltd.**
-   through quotation, order, shipment and handover. Record a return against the
-   sale and send it to Service.
-6. As `dispatcher@vista.local`, open a Service request for that serial; assign
-   it to `technician@vista.local`. As the technician, complete the work and
-   record a repair note. Open **Service → Equipment history** and confirm the
-   supplier receipt, sale, handover, return and technician repair appear in
-   order.
-
-## Service charges and CRM SLA
-
-1. In **Service → Service requests**, open a warranty job and record customer
-   labour charge `20.00 EUR` and, if a part is available, use one listed part.
-   Confirm transport cannot be added to the warranty charge. For an
-   out-of-warranty job, enter labour charge `20.00 EUR`, internal labour cost
-   `12.00 EUR`, and transport cost `5.00 EUR` separately; confirm only customer
-   charges are prepared for Finance.
-2. In **Customers & CRM → Tickets**, open a ticket and confirm it shows the
-   Sofia weekday response and resolution targets. Record the first response and
-   confirm the response timer stops and the ticket timeline records the event.
+If a different collection amount is used, repay that exact amount instead of
+`10`. For a return with no issued invoice, a credit note is not required. Switch
+to **BG** and repeat the account preview at phone width to check the translation
+and panel layout.

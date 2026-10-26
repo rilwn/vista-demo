@@ -6,6 +6,7 @@ import { DatabaseService } from '../database/database.service.js';
 import { CrmTicketsService } from '../crm/crm-tickets.service.js';
 import { FinanceService } from '../finance/finance.service.js';
 import { BnbCurrencyRatesService } from '../finance/bnb-currency-rates.service.js';
+import { RecurringInvoicesService } from '../finance/recurring-invoices.service.js';
 import { StructuredLogger } from '../logging/structured-logger.service.js';
 import { SalesSubscriptionsService } from '../sales/sales-subscriptions.service.js';
 import { ServiceCareService } from '../service/service-care.service.js';
@@ -37,6 +38,7 @@ export class NamedJobTriggerHandlersService implements OnModuleInit {
     private readonly reportExports: FinanceReportExportsService,
     @Inject(ServiceCareService) private readonly serviceCare: ServiceCareService,
     @Inject(CrmTicketsService) private readonly crmTickets: CrmTicketsService,
+    @Inject(RecurringInvoicesService) private readonly recurringInvoices: RecurringInvoicesService,
   ) {}
 
   onModuleInit(): void {
@@ -48,7 +50,7 @@ export class NamedJobTriggerHandlersService implements OnModuleInit {
   async handle(context: BackgroundJobContext): Promise<TriggerResult> {
     const domainResult =
       context.name === 'sales.subscription-invoice.generate'
-        ? await this.subscriptions.generateDueInvoiceDrafts(context)
+        ? await this.generateSubscriptionInvoices(context)
         : context.name === 'finance.payment-status.detect' ||
             context.name === 'finance.payment-notification.prepare'
           ? await this.finance.detectPaymentStatuses(context)
@@ -106,6 +108,16 @@ export class NamedJobTriggerHandlersService implements OnModuleInit {
       },
     );
     return { deduplicated, eventId, ...(domainResult ?? {}) };
+  }
+
+  private async generateSubscriptionInvoices(context: BackgroundJobContext) {
+    const drafts = await this.subscriptions.generateDueInvoiceDrafts(context);
+    const issued = await this.recurringInvoices.issueDue(context);
+    if (issued.retryCount > 0)
+      throw new Error(
+        'Recurring invoice processing needs a retry. Review the Finance recurring-invoice register for details.',
+      );
+    return { ...drafts, ...issued };
   }
 }
 

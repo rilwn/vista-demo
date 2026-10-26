@@ -1,5 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
+import { FinancialDocumentBrandingDto } from './financial-branding.dto.js';
+import { PosAccountPaymentDto } from './finance-customer-accounts.dto.js';
 import {
   ArrayMaxSize,
   ArrayMinSize,
@@ -218,6 +220,11 @@ export class CancelFinancialDocumentDto implements CancelFinancialDocumentReques
 }
 
 export class IssueFinancialDocumentDto implements IssueFinancialDocumentRequest {
+  @ApiPropertyOptional({ minimum: 0, type: Number })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  expectedBrandingVersion?: number;
   @ApiProperty({ minimum: 1, type: Number })
   @Type(() => Number)
   @IsInt()
@@ -331,7 +338,60 @@ class FinancialDocumentVatSummaryDto {
   @ApiProperty({ enum: vatTreatments }) vatTreatment!: VatTreatment;
 }
 
+class FinancialCollectionLinkDto {
+  @ApiProperty({ format: 'uuid', type: String }) id!: string;
+  @ApiProperty({ type: String }) number!: string;
+}
+
+class PosInvoicePaymentDto {
+  @ApiProperty({ format: 'uuid', type: String }) id!: string;
+  @ApiProperty({ enum: ['cash', 'card', 'advance', 'on_account'] }) method!:
+    'cash' | 'card' | 'advance' | 'on_account';
+  @ApiProperty({ type: String }) amount!: string;
+  @ApiProperty({ type: String }) refundedAmount!: string;
+  @ApiPropertyOptional({ format: 'date', type: String }) dueOn?: string;
+}
+class PosInvoiceReturnDto {
+  @ApiProperty({ format: 'uuid', type: String }) id!: string;
+  @ApiProperty({ type: String }) number!: string;
+  @ApiProperty({ type: String }) amount!: string;
+  @ApiProperty({ format: 'date-time', type: String }) completedAt!: string;
+}
+class PosInvoiceSettlementDto {
+  @ApiPropertyOptional({ type: String }) refundDue?: string;
+  @ApiPropertyOptional({ type: String }) accountRefundedTotal?: string;
+  @ApiPropertyOptional({ type: String }) collectedTotal?: string;
+  @ApiPropertyOptional({ type: PosAccountPaymentDto, isArray: true })
+  accountPayments?: PosAccountPaymentDto[];
+  @ApiProperty({ format: 'uuid', type: String }) saleId!: string;
+  @ApiProperty({ type: String }) saleNumber!: string;
+  @ApiProperty({ type: String }) receiptNumber!: string;
+  @ApiProperty({ type: String }) currencyCode!: string;
+  @ApiProperty({ type: String }) originalTotal!: string;
+  @ApiProperty({ type: String }) paidAtCheckout!: string;
+  @ApiProperty({ type: String }) deferredAtCheckout!: string;
+  @ApiProperty({ type: String }) refundedTotal!: string;
+  @ApiProperty({ type: String }) deferredReleased!: string;
+  @ApiProperty({ type: String }) netPaidTotal!: string;
+  @ApiProperty({ type: String }) netSaleTotal!: string;
+  @ApiProperty({ type: String }) outstandingTotal!: string;
+  @ApiPropertyOptional({ format: 'date', type: String }) dueOn?: string;
+  @ApiProperty({
+    enum: ['paid', 'partially_paid', 'unpaid', 'overdue', 'needs_review', 'refund_due'],
+  })
+  status!: NonNullable<FinancialDocument['posSettlement']>['status'];
+  @ApiProperty({ enum: ['none', 'partial', 'full'] }) returnState!: 'none' | 'partial' | 'full';
+  @ApiProperty({ type: Number }) returnCount!: number;
+  @ApiProperty({ type: PosInvoicePaymentDto, isArray: true }) payments!: PosInvoicePaymentDto[];
+  @ApiProperty({ type: PosInvoiceReturnDto, isArray: true }) returns!: PosInvoiceReturnDto[];
+}
+
 export class FinancialDocumentDto implements FinancialDocument {
+  @ApiPropertyOptional({ type: PosInvoiceSettlementDto }) posSettlement?: PosInvoiceSettlementDto;
+  @ApiPropertyOptional({ type: FinancialDocumentBrandingDto })
+  branding?: FinancialDocumentBrandingDto;
+  @ApiPropertyOptional({ type: FinancialCollectionLinkDto })
+  collection?: FinancialCollectionLinkDto;
   @ApiProperty({ type: String }) eurGrossTotal!: string;
   @ApiProperty({ type: String }) eurNetTotal!: string;
   @ApiProperty({ type: String }) eurVatTotal!: string;
@@ -348,6 +408,8 @@ export class FinancialDocumentDto implements FinancialDocument {
   @ApiPropertyOptional({ type: String }) issuedByName?: string;
   @ApiPropertyOptional({ format: 'uuid', type: String }) convertedFromDocumentId?: string;
   @ApiPropertyOptional({ type: String }) convertedFromDocumentNumber?: string;
+  @ApiPropertyOptional({ format: 'uuid', type: String }) convertedToDocumentId?: string;
+  @ApiPropertyOptional({ type: String }) convertedToDocumentNumber?: string;
   @ApiProperty({ type: String }) currencyCode!: string;
   @ApiProperty({ format: 'uuid', type: String }) customerPartnerId!: string;
   @ApiProperty({ type: FinancialDocumentPartySnapshotDto })
@@ -376,6 +438,7 @@ export class FinancialDocumentDto implements FinancialDocument {
   @ApiPropertyOptional({ type: String }) sourceSubscriptionDraftNumber?: string;
   @ApiPropertyOptional({ type: String }) sourceFiscalReceiptNumber?: string;
   @ApiPropertyOptional({ format: 'uuid', type: String }) sourcePosSaleId?: string;
+  @ApiPropertyOptional({ format: 'uuid', type: String }) sourcePosReturnId?: string;
   @ApiPropertyOptional({ type: String }) sourcePosSaleNumber?: string;
   @ApiPropertyOptional({ format: 'uuid', type: String }) sourceServiceWorkOrderId?: string;
   @ApiPropertyOptional({ type: String }) sourceServiceWorkOrderNumber?: string;

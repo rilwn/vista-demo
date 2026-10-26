@@ -10,6 +10,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 
 import { getCustomerOperationalOverview } from '../api/partners';
 import { Icon } from '../components/Icon';
+import { posAccountMessages } from './pos-account.messages';
 import {
   formatOperationsCurrency,
   formatOperationsDate,
@@ -277,6 +278,7 @@ function DocumentRow({ record }: { record: CustomerFinancialDocumentSummary }) {
 }
 
 function PaymentRow({ record }: { record: CustomerPaymentSummary }) {
+  const { locale } = useLocalization();
   return (
     <article className="customer-overview-row">
       <div>
@@ -284,8 +286,16 @@ function PaymentRow({ record }: { record: CustomerPaymentSummary }) {
         <span>
           {paymentLabel(record.paymentMethod)} · {date(record.paymentDate)}
         </span>
+        {record.paymentReference ? <small>{record.paymentReference}</small> : null}
       </div>
-      <strong>{money(record.amount, record.currencyCode)}</strong>
+      <div>
+        <strong>{money(record.amount, record.currencyCode)}</strong>
+        {record.reversalNumber ? (
+          <span className="customer-overview-pill is-cancelled">
+            {posAccountMessages(locale).reversed} · {record.reversalNumber}
+          </span>
+        ) : null}
+      </div>
     </article>
   );
 }
@@ -327,6 +337,7 @@ function statusLabel(value: string): string {
     active: 'Active',
     cancelled: 'Cancelled',
     draft: 'Prepared',
+    issued: 'Issued',
     overdue: 'Overdue',
     paid: 'Paid',
     partially_paid: 'Partially paid',

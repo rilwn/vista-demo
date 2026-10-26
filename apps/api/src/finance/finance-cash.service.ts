@@ -21,6 +21,7 @@ import type {
 import { ApiErrorException } from '../common/api-error.exception.js';
 import { APP_ENVIRONMENT } from '../config/config.module.js';
 import { DatabaseService } from '../database/database.service.js';
+import { FinanceService } from './finance.service.js';
 import type {
   FinanceCashDailyReportQueryDto,
   FinanceCashVoucherListQueryDto,
@@ -64,6 +65,7 @@ export class FinanceCashService {
     @Inject(AuditService) private readonly audit: AuditService,
     @Inject(DatabaseService) private readonly database: DatabaseService,
     @Inject(APP_ENVIRONMENT) private readonly environment: AppEnvironment,
+    @Inject(FinanceService) private readonly finance: FinanceService,
   ) {}
 
   async referenceData(): Promise<FinanceCashReferenceData> {
@@ -123,10 +125,11 @@ export class FinanceCashService {
         `SELECT document.id, document.document_number AS number,
                 document.customer_partner_id, customer.display_name AS customer_name,
                 document.due_date::text, document.outstanding_total::text,
-                source.invoice_number AS source_invoice_number
+                coalesce(financial.official_number, financial.draft_number, source.invoice_number, document.document_number) AS source_invoice_number
          FROM finance.customer_documents document
          JOIN master_data.partners customer ON customer.id = document.customer_partner_id
-         JOIN sales.invoices source ON source.id = document.source_sales_invoice_id
+         LEFT JOIN sales.invoices source ON source.id = document.source_sales_invoice_id
+         LEFT JOIN finance.financial_documents financial ON financial.id = document.financial_document_id
          WHERE document.review_state = 'pending_finance_review'
            AND document.currency_code = 'EUR' AND document.outstanding_total > 0
          ORDER BY document.due_date, document.document_number, document.id`,
@@ -355,7 +358,7 @@ export class FinanceCashService {
             );
           const document = await client.query<CollectionRow>(
             `SELECT document.id, document.customer_partner_id, customer.display_name AS customer_name,
-                    document.document_number, document.total::text, document.allocated_total::text,
+                    document.document_number, document.adjusted_total::text AS total, document.allocated_total::text,
                     document.outstanding_total::text, document.due_date::text,
                     document.payment_status, document.review_state, document.currency_code
              FROM finance.customer_documents document
@@ -476,6 +479,15 @@ export class FinanceCashService {
                 paymentStatus,
                 auth.accountId,
               ],
+            );
+          if (paymentStatus === 'paid')
+            await this.finance.settlePaidProforma(
+              client,
+              normalized.voucherDate,
+              customerDocumentId,
+              auth,
+              metadata,
+              commandKey,
             );
         }
 

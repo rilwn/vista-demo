@@ -1,6 +1,6 @@
 import type { AppEnvironment } from '@vista/config';
 import type { DestinationStream } from 'pino';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { StructuredLogger } from './structured-logger.service.js';
 
@@ -32,5 +32,53 @@ describe('StructuredLogger', () => {
     expect(output).not.toContain('visible-password');
     expect(output).not.toContain('4111111111111111');
     expect(output).not.toContain('1234');
+  });
+
+  it('preserves the generated repeat-job timestamp without relaxing other redaction', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-10-26T13:13:52.970Z'));
+    try {
+      const lines: string[] = [];
+      const logger = new StructuredLogger(
+        { LOG_LEVEL: 'info', NODE_ENV: 'test' } as AppEnvironment,
+        { write: (message) => lines.push(message) },
+      );
+      const jobId = `repeat:crm.sla.frequent:${new Date('2026-10-26T13:15:00.000Z').getTime()}`;
+      logger.event('info', 'job.schedule.registered', {
+        jobId,
+        nested: { jobId, cardNumber: '4111111111111', token: 'private-token' },
+        suspicious: { jobId: jobId.replace('crm.sla.frequent', 'cards.4111111111111111') },
+        message: 'Card 4111 1111 1111 1111',
+        unrelated: '1793020500000',
+      });
+      const output = lines[0]!;
+      expect(output).toContain(jobId);
+      expect(output).not.toContain('4111111111111');
+      expect(output).not.toContain('4111 1111 1111 1111');
+      expect(output).not.toContain('private-token');
+      expect((JSON.parse(output) as Record<string, unknown>)['unrelated']).toBe('[REDACTED-CARD]');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('does not treat card numbers, credentials or arbitrary numeric IDs as scheduled jobs', () => {
+    const lines: string[] = [];
+    const logger = new StructuredLogger({ LOG_LEVEL: 'info', NODE_ENV: 'test' } as AppEnvironment, {
+      write: (message) => lines.push(message),
+    });
+    for (const jobId of [
+      '4111111111111',
+      'repeat:crm.sla.frequent:4111111111111',
+      'repeat:crm.sla.frequent:4111111111111111',
+      'repeat:crm.sla.frequent:4111-1111-1111-1111',
+      'repeat:password=private-password:1793020500000',
+    ])
+      logger.event('info', 'job.failed', { jobId });
+    const output = lines.join('');
+    expect(output).not.toContain('4111111111111');
+    expect(output).not.toContain('4111111111111111');
+    expect(output).not.toContain('4111-1111-1111-1111');
+    expect(output).not.toContain('private-password');
   });
 });

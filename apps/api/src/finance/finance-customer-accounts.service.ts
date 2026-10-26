@@ -9,6 +9,9 @@ import type {
   CustomerPaymentAccount,
   CustomerPaymentAccountReferenceData,
   UpsertCustomerPaymentTermsRequest,
+  CreatePosAccountPaymentRequest,
+  ReversePosAccountPaymentRequest,
+  CreatePosAccountRefundRequest,
 } from '@vista/contracts';
 import type { PoolClient } from 'pg';
 
@@ -20,6 +23,8 @@ import type {
 import { ApiErrorException } from '../common/api-error.exception.js';
 import { APP_ENVIRONMENT } from '../config/config.module.js';
 import { DatabaseService } from '../database/database.service.js';
+import { loadPosAccountReceivables } from './pos-account-ledger.js';
+import { postPosAccountRefund } from './pos-account-refunds.js';
 
 interface AccountRow {
   customer_name: string;
@@ -68,6 +73,7 @@ export class FinanceCustomerAccountsService {
        ORDER BY partner.normalized_name, partner.id`,
     );
     return {
+      businessTimezone: this.environment.BUSINESS_TIMEZONE,
       customers: result.rows.map((row) => ({
         id: row.id,
         name: row.name,
@@ -100,7 +106,13 @@ export class FinanceCustomerAccountsService {
   async account(customerPartnerId: string): Promise<CustomerPaymentAccount> {
     const client = await this.database.getPool().connect();
     try {
-      return await this.loadAccount(client, customerPartnerId);
+      await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+      const account = await this.loadAccount(client, customerPartnerId);
+      await client.query('COMMIT');
+      return account;
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
     } finally {
       client.release();
     }
@@ -255,6 +267,356 @@ export class FinanceCustomerAccountsService {
     );
   }
 
+  async collectPosBalance(
+    customerId: string,
+    saleId: string,
+    input: CreatePosAccountPaymentRequest,
+    key: string | undefined,
+    auth: AuthenticationContext,
+    metadata: RequestSecurityMetadata,
+  ): Promise<CustomerPaymentAccount> {
+    const normalized = {
+      amount: decimal(input.amount, true),
+      expectedOutstanding: decimal(input.expectedOutstanding, false),
+      paymentDate: input.paymentDate,
+      paymentMethod: input.paymentMethod,
+      ...(input.paymentReference?.trim()
+        ? { paymentReference: input.paymentReference.trim() }
+        : {}),
+    };
+    return this.command(
+      `finance.pos-account.collect:${customerId}:${saleId}`,
+      key,
+      normalized,
+      201,
+      async (client, commandKey) => {
+        const charge = await this.lockPosCharge(
+          client,
+          customerId,
+          saleId,
+          normalized.expectedOutstanding,
+        );
+        const today = await this.businessDate(client);
+        if (normalized.paymentDate > today || normalized.paymentDate < charge.sale_date)
+          throw new ApiErrorException(
+            'POS_ACCOUNT_PAYMENT_DATE_INVALID',
+            'Choose a payment date between the sale date and today.',
+            HttpStatus.BAD_REQUEST,
+          );
+        if (units(normalized.amount) > units(charge.balance))
+          throw new ApiErrorException(
+            'POS_ACCOUNT_PAYMENT_EXCEEDS_BALANCE',
+            'The payment exceeds the unpaid POS balance. Refresh and check the amount.',
+            HttpStatus.CONFLICT,
+          );
+        const id = randomUUID();
+        const number = await this.nextNumber(client, 'payment', 'PAY');
+        await client.query(
+          `INSERT INTO finance.payments(id,payment_number,customer_partner_id,payment_date,payment_method,
+        currency_code,amount,payment_reference,recorded_by,source_pos_sale_id)
+        VALUES($1,$2,$3,$4,$5,'EUR',$6,$7,$8,$9)`,
+          [
+            id,
+            number,
+            customerId,
+            normalized.paymentDate,
+            normalized.paymentMethod,
+            normalized.amount,
+            normalized.paymentReference ?? null,
+            auth.accountId,
+            saleId,
+          ],
+        );
+        await this.appendPosPaymentEntry(
+          client,
+          charge,
+          'payment',
+          id,
+          normalized.amount,
+          charge.id,
+          auth,
+          metadata,
+        );
+        await this.sideEffects(
+          client,
+          'payment',
+          id,
+          'finance.pos-account.payment-recorded',
+          { saleId, customerId, paymentId: id, number, ...normalized },
+          auth,
+          metadata,
+          commandKey,
+        );
+        return this.loadAccount(client, customerId);
+      },
+    );
+  }
+
+  async refundPosReturn(
+    customerId: string,
+    saleId: string,
+    returnId: string,
+    input: CreatePosAccountRefundRequest,
+    key: string | undefined,
+    auth: AuthenticationContext,
+    metadata: RequestSecurityMetadata,
+  ): Promise<CustomerPaymentAccount> {
+    const normalized = {
+      ...input,
+      amount: decimal(input.amount, true),
+      expectedRefundDue: decimal(input.expectedRefundDue, false),
+      paymentReference: input.paymentReference.trim(),
+    };
+    if (
+      !['cash', 'bank_transfer'].includes(input.paymentMethod) ||
+      normalized.paymentReference.length < 3 ||
+      normalized.paymentReference.length > 255
+    )
+      throw new ApiErrorException(
+        'POS_ACCOUNT_REFUND_REFERENCE_REQUIRED',
+        'Choose cash or bank transfer and enter the completed repayment reference.',
+        HttpStatus.BAD_REQUEST,
+      );
+    return this.command(
+      `finance.pos-account.refund:${customerId}:${saleId}:${returnId}`,
+      key,
+      normalized,
+      201,
+      async (client, commandKey) => {
+        const refund = await postPosAccountRefund(
+          client,
+          normalized,
+          {
+            customerId,
+            saleId,
+            returnId,
+            accountId: auth.accountId,
+            correlationId: metadata.correlationId,
+            timezone: this.environment.BUSINESS_TIMEZONE,
+          },
+          () => this.nextNumber(client, 'pos_account_refund', 'REF'),
+        );
+        await this.sideEffects(
+          client,
+          'pos_account_refund',
+          refund.id,
+          'finance.pos-account.refund-recorded',
+          refund,
+          auth,
+          metadata,
+          commandKey,
+        );
+        return this.loadAccount(client, customerId);
+      },
+    );
+  }
+
+  async reversePosPayment(
+    customerId: string,
+    saleId: string,
+    paymentId: string,
+    input: ReversePosAccountPaymentRequest,
+    key: string | undefined,
+    auth: AuthenticationContext,
+    metadata: RequestSecurityMetadata,
+  ): Promise<CustomerPaymentAccount> {
+    if (!/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/iu.test(paymentId))
+      throw new ApiErrorException(
+        'POS_ACCOUNT_PAYMENT_NOT_FOUND',
+        'Choose a valid POS account payment.',
+        HttpStatus.BAD_REQUEST,
+      );
+    const normalized = {
+      reason: input.reason.trim(),
+      expectedOutstanding: decimal(input.expectedOutstanding, false),
+    };
+    if (normalized.reason.length < 10 || normalized.reason.length > 1000)
+      throw new ApiErrorException(
+        'FINANCE_PAYMENT_REVERSAL_REASON_REQUIRED',
+        'Enter a reason of at least 10 characters.',
+        HttpStatus.BAD_REQUEST,
+      );
+    return this.command(
+      `finance.pos-account.reverse:${customerId}:${saleId}:${paymentId}`,
+      key,
+      normalized,
+      200,
+      async (client, commandKey) => {
+        const sourceSale = (
+          await client.query(
+            'SELECT id FROM pos.sales WHERE id=$1 AND customer_partner_id=$2 FOR UPDATE',
+            [saleId, customerId],
+          )
+        ).rowCount;
+        if (!sourceSale)
+          throw new ApiErrorException(
+            'POS_ACCOUNT_SOURCE_INVALID',
+            'Choose a POS sale belonging to this customer.',
+            HttpStatus.NOT_FOUND,
+          );
+        if (
+          (
+            await client.query(
+              `SELECT 1 FROM finance.pos_account_return_credits credit JOIN pos.returns returned
+          ON returned.id=credit.pos_return_id WHERE returned.original_sale_id=$1 LIMIT 1`,
+              [saleId],
+            )
+          ).rowCount
+        )
+          throw new ApiErrorException(
+            'POS_ACCOUNT_PAYMENT_RETURNED',
+            'This sale has a collected return. Use the linked refund instead of reversing its payment.',
+            HttpStatus.CONFLICT,
+          );
+        const charge = await this.lockPosCharge(
+          client,
+          customerId,
+          saleId,
+          normalized.expectedOutstanding,
+        );
+        const payment = (
+          await client.query<{ amount: string; entry_id: string }>(
+            `SELECT payment.amount::text,entry.id AS entry_id
+        FROM finance.payments payment JOIN finance.customer_account_entries entry
+          ON entry.payment_id=payment.id AND entry.entry_type='payment'
+        WHERE payment.id=$1 AND payment.source_pos_sale_id=$2 AND payment.customer_partner_id=$3 FOR UPDATE OF payment`,
+            [paymentId, saleId, customerId],
+          )
+        ).rows[0];
+        if (!payment)
+          throw new ApiErrorException(
+            'POS_ACCOUNT_PAYMENT_NOT_FOUND',
+            'This payment does not belong to the selected POS sale.',
+            HttpStatus.NOT_FOUND,
+          );
+        if (
+          (
+            await client.query('SELECT 1 FROM finance.payment_reversals WHERE payment_id=$1', [
+              paymentId,
+            ])
+          ).rowCount
+        )
+          throw new ApiErrorException(
+            'FINANCE_PAYMENT_ALREADY_REVERSED',
+            'This payment has already been reversed.',
+            HttpStatus.CONFLICT,
+          );
+        const number = await this.nextNumber(client, 'payment_reversal', 'PRV');
+        await client.query(
+          `INSERT INTO finance.payment_reversals(payment_id,reversal_number,reason,reversed_on,recorded_by)
+        VALUES($1,$2,$3,$4,$5)`,
+          [paymentId, number, normalized.reason, await this.businessDate(client), auth.accountId],
+        );
+        await this.appendPosPaymentEntry(
+          client,
+          charge,
+          'payment_reversal',
+          paymentId,
+          payment.amount,
+          payment.entry_id,
+          auth,
+          metadata,
+        );
+        await this.sideEffects(
+          client,
+          'payment',
+          paymentId,
+          'finance.pos-account.payment-reversed',
+          { saleId, customerId, paymentId, number, ...normalized },
+          auth,
+          metadata,
+          commandKey,
+        );
+        return this.loadAccount(client, customerId);
+      },
+    );
+  }
+
+  private async lockPosCharge(
+    client: PoolClient,
+    customerId: string,
+    saleId: string,
+    expected: string,
+  ) {
+    if (
+      ![customerId, saleId].every((id) =>
+        /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/iu.test(id),
+      )
+    )
+      throw new ApiErrorException(
+        'POS_ACCOUNT_SOURCE_INVALID',
+        'Choose a valid customer and POS sale.',
+        HttpStatus.BAD_REQUEST,
+      );
+    const sale = (
+      await client.query<{ customer_partner_id: string; status: string }>(
+        'SELECT customer_partner_id,status FROM pos.sales WHERE id=$1 FOR UPDATE',
+        [saleId],
+      )
+    ).rows[0];
+    if (!sale || sale.customer_partner_id !== customerId || sale.status !== 'completed')
+      throw new ApiErrorException(
+        'POS_ACCOUNT_SOURCE_INVALID',
+        'Choose a completed POS sale belonging to this customer.',
+        HttpStatus.CONFLICT,
+      );
+    await client.query(
+      'SELECT id FROM sales.customer_payment_terms WHERE customer_partner_id=$1 FOR UPDATE',
+      [customerId],
+    );
+    const charge = (
+      await client.query<PosCharge>(
+        `SELECT charge.id,charge.customer_partner_id,charge.payment_terms_id,
+      charge.due_on::text,charge.credit_limit_eur::text,charge.payment_terms_days,charge.pos_sale_id,
+      (sale.completed_at AT TIME ZONE $2)::date::text AS sale_date,
+      (SELECT coalesce(sum(CASE WHEN entry_type IN ('charge','payment_reversal') THEN amount ELSE -amount END),0)::text
+        FROM finance.customer_account_entries WHERE pos_sale_id=$1) AS balance
+      FROM finance.customer_account_entries charge JOIN pos.sales sale ON sale.id=charge.pos_sale_id
+      WHERE charge.pos_sale_id=$1 AND charge.entry_type='charge'`,
+        [saleId, this.environment.BUSINESS_TIMEZONE],
+      )
+    ).rows[0];
+    if (!charge || units(charge.balance) !== units(expected))
+      throw new ApiErrorException(
+        'POS_ACCOUNT_BALANCE_CHANGED',
+        'This POS balance changed. Refresh the account before continuing.',
+        HttpStatus.CONFLICT,
+      );
+    return charge;
+  }
+
+  private async appendPosPaymentEntry(
+    client: PoolClient,
+    charge: PosCharge,
+    type: 'payment' | 'payment_reversal',
+    paymentId: string,
+    amount: string,
+    sourceId: string,
+    auth: AuthenticationContext,
+    metadata: RequestSecurityMetadata,
+  ) {
+    await client.query(
+      `INSERT INTO finance.customer_account_entries(id,customer_partner_id,payment_terms_id,entry_type,
+      amount,due_on,credit_limit_eur,payment_terms_days,pos_sale_id,source_entry_id,payment_id,actor_account_id,correlation_id)
+      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+      [
+        randomUUID(),
+        charge.customer_partner_id,
+        charge.payment_terms_id,
+        type,
+        amount,
+        charge.due_on,
+        charge.credit_limit_eur,
+        charge.payment_terms_days,
+        charge.pos_sale_id,
+        sourceId,
+        paymentId,
+        auth.accountId,
+        metadata.correlationId,
+      ],
+    );
+  }
+
   private async loadAccount(
     client: Pick<PoolClient, 'query'>,
     customerPartnerId: string,
@@ -289,7 +651,7 @@ export class FinanceCustomerAccountsService {
     );
     const balance = await client.query<{ outstanding_balance: string }>(
       `SELECT COALESCE(sum(CASE entry.entry_type
-         WHEN 'charge' THEN entry.amount ELSE -entry.amount END), 0)::text
+         WHEN 'charge' THEN entry.amount WHEN 'payment_reversal' THEN entry.amount ELSE -entry.amount END), 0)::text
          AS outstanding_balance
        FROM finance.customer_account_entries entry
        WHERE entry.customer_partner_id = $1`,
@@ -298,17 +660,21 @@ export class FinanceCustomerAccountsService {
     const entries = await client.query<{
       amount: string;
       due_on: string;
-      entry_type: 'charge' | 'return_credit';
+      entry_type: CustomerPaymentAccount['entries'][number]['entryType'];
+      payment_number: string | null;
       id: string;
       occurred_at: string | Date;
       return_number: string | null;
       sale_number: string;
     }>(
       `SELECT entry.id, entry.entry_type, entry.amount::text, entry.due_on::text,
-         entry.occurred_at, sale.sale_number, pos_return.return_number
+         entry.occurred_at, sale.sale_number, pos_return.return_number,
+         coalesce(reversal.reversal_number,payment.payment_number) AS payment_number
        FROM finance.customer_account_entries entry
        JOIN pos.sales sale ON sale.id = entry.pos_sale_id
        LEFT JOIN pos.returns pos_return ON pos_return.id = entry.pos_return_id
+       LEFT JOIN finance.payments payment ON payment.id=entry.payment_id
+       LEFT JOIN finance.payment_reversals reversal ON reversal.payment_id=entry.payment_id AND entry.entry_type='payment_reversal'
        WHERE entry.customer_partner_id = $1
        ORDER BY entry.occurred_at DESC, entry.id DESC LIMIT 50`,
       [customerPartnerId],
@@ -324,14 +690,16 @@ export class FinanceCustomerAccountsService {
       total: string;
     }>(
       `SELECT document.id, document.document_number AS number,
-         source.invoice_number AS source_invoice_number,
-         document.total::text, document.allocated_total::text,
+         coalesce(financial.official_number, financial.draft_number, source.invoice_number, document.document_number) AS source_invoice_number,
+         document.adjusted_total::text AS total, document.allocated_total::text,
          document.outstanding_total::text, document.due_date::text,
          document.payment_status
        FROM finance.customer_documents document
-       JOIN sales.invoices source ON source.id = document.source_sales_invoice_id
+       LEFT JOIN sales.invoices source ON source.id = document.source_sales_invoice_id
+       LEFT JOIN finance.financial_documents financial ON financial.id = document.financial_document_id
        WHERE document.customer_partner_id = $1
          AND document.review_state = 'pending_finance_review'
+         AND document.currency_code = 'EUR'
          AND document.outstanding_total > 0
        ORDER BY document.due_date, document.document_date, document.id`,
       [customerPartnerId],
@@ -367,6 +735,7 @@ export class FinanceCustomerAccountsService {
         occurredAt: iso(entry.occurred_at),
         saleNumber: entry.sale_number,
         ...(entry.return_number ? { returnNumber: entry.return_number } : {}),
+        ...(entry.payment_number ? { paymentNumber: entry.payment_number } : {}),
       })),
       openReceivables: openReceivables.rows.map((receivable) => ({
         allocatedTotal: receivable.allocated_total,
@@ -379,6 +748,11 @@ export class FinanceCustomerAccountsService {
         total: receivable.total,
       })),
       outstandingBalance,
+      posReceivables: await loadPosAccountReceivables(
+        client,
+        customerPartnerId,
+        this.environment.BUSINESS_TIMEZONE,
+      ),
       ...(row.terms_id
         ? {
             terms: {
@@ -421,18 +795,20 @@ export class FinanceCustomerAccountsService {
       );
   }
 
-  private async nextNumber(client: PoolClient) {
+  private async nextNumber(client: PoolClient, type = 'customer_advance', prefix = 'ADV') {
     const businessDate = await this.businessDate(client);
     await client.query(
       `INSERT INTO finance.internal_document_sequences (document_type)
-       VALUES ('customer_advance') ON CONFLICT (document_type) DO NOTHING`,
+       VALUES ($1) ON CONFLICT (document_type) DO NOTHING`,
+      [type],
     );
     const result = await client.query<{ allocated: string }>(
       `UPDATE finance.internal_document_sequences SET next_value = next_value + 1
-       WHERE document_type = 'customer_advance'
+       WHERE document_type = $1
        RETURNING (next_value - 1)::text AS allocated`,
+      [type],
     );
-    return `ADV-${businessDate.slice(0, 4)}-${required(result.rows[0], 'Sequence failed').allocated.padStart(6, '0')}`;
+    return `${prefix}-${businessDate.slice(0, 4)}-${required(result.rows[0], 'Sequence failed').allocated.padStart(6, '0')}`;
   }
 
   private async businessDate(client: Pick<PoolClient, 'query'>) {
@@ -525,6 +901,18 @@ export class FinanceCustomerAccountsService {
   }
 }
 
+interface PosCharge {
+  id: string;
+  customer_partner_id: string;
+  payment_terms_id: string;
+  due_on: string;
+  credit_limit_eur: string;
+  payment_terms_days: number;
+  pos_sale_id: string;
+  balance: string;
+  sale_date: string;
+}
+
 function advanceQuery(where: string) {
   return `SELECT advance.id, advance.advance_number, advance.customer_partner_id,
       advance.amount::text, advance.received_on::text, advance.payment_method,
@@ -592,7 +980,7 @@ function normalizeAdvance(input: CreateCustomerAdvanceRequest) {
 
 function decimal(value: string, positive: boolean) {
   const normalized = value.trim();
-  if (!/^\d+(\.\d{1,4})?$/u.test(normalized))
+  if (!/^\d{1,14}(\.\d{1,4})?$/u.test(normalized))
     throw new ApiErrorException(
       'CUSTOMER_ACCOUNT_AMOUNT_INVALID',
       'Enter an amount with no more than four decimal places.',

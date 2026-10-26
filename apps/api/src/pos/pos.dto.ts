@@ -585,6 +585,7 @@ export class PosSaleLineDto implements PosSaleLine {
 }
 
 export class PosSalePaymentDto implements PosSalePayment {
+  @ApiPropertyOptional({ type: String }) collectedAmount?: string;
   @ApiPropertyOptional({ format: 'date', type: String }) accountDueOn?: string;
   @ApiProperty({ type: String }) adapter!: string;
   @ApiPropertyOptional({ format: 'uuid', type: String }) advanceId?: string;
@@ -604,7 +605,8 @@ class PosSaleInvoiceDocumentDto implements PosSaleInvoiceDocument {
   @ApiProperty({ format: 'uuid', type: String }) id!: string;
   @ApiProperty({ type: String }) number!: string;
   @ApiProperty({ type: String }) sourceFiscalReceiptNumber!: string;
-  @ApiProperty({ enum: ['cancelled', 'draft'] }) status!: PosSaleInvoiceDocument['status'];
+  @ApiProperty({ enum: ['cancelled', 'draft', 'issued'] })
+  status!: PosSaleInvoiceDocument['status'];
 }
 
 class PosWarrantyCardDocumentDto implements PosWarrantyCardDocument {

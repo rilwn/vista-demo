@@ -35,6 +35,11 @@ describe.skipIf(process.env['RUN_INFRASTRUCTURE_TESTS'] !== 'true')(
           '0076_financial_document_issuance',
           '0077_finance_income_outcome_exports',
           '0078_finance_proforma_conversion_link',
+          '0079_finance_collection_sources',
+          '0080_recurring_invoice_issuance',
+          '0081_financial_document_branding',
+          '0082_collection_corrections',
+          '0083_pos_account_collections',
         ];
         for (const migration of [...migrationRange].reverse()) {
           expect(await migrateDown(database, directory)).toBe(migration);

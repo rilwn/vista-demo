@@ -18,6 +18,8 @@ import type {
 } from '../auth/authentication.types.js';
 import { ApiErrorException } from '../common/api-error.exception.js';
 import { DatabaseService } from '../database/database.service.js';
+import type { AppEnvironment } from '@vista/config';
+import { APP_ENVIRONMENT } from '../config/config.module.js';
 
 interface ContractRow {
   active: boolean;
@@ -51,6 +53,7 @@ export class SalesSubscriptionsService {
   constructor(
     @Inject(DatabaseService) private readonly database: DatabaseService,
     @Inject(AuditService) private readonly audit: AuditService,
+    @Inject(APP_ENVIRONMENT) private readonly environment: AppEnvironment,
   ) {}
 
   async referenceData(): Promise<SalesSubscriptionReferenceData> {
@@ -242,7 +245,12 @@ export class SalesSubscriptionsService {
     const asOf =
       typeof suppliedDate === 'string'
         ? normalizeDate(suppliedDate)
-        : new Date().toISOString().slice(0, 10);
+        : new Intl.DateTimeFormat('en-CA', {
+            timeZone: this.environment.BUSINESS_TIMEZONE,
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+          }).format(new Date());
     const client = await this.database.getPool().connect();
     try {
       await client.query('BEGIN');
@@ -261,8 +269,9 @@ export class SalesSubscriptionsService {
          FROM sales.service_subscription_contracts
          WHERE active AND next_invoice_date <= $1
            AND (valid_to IS NULL OR next_invoice_date <= valid_to)
+           AND ($2::uuid IS NULL OR id=$2)
          ORDER BY next_invoice_date, id FOR UPDATE SKIP LOCKED`,
-        [asOf],
+        [asOf, context.payload['contractId'] ?? null],
       );
       const draftIds: string[] = [];
       for (const contract of due.rows) {
@@ -457,12 +466,18 @@ export class SalesSubscriptionsService {
       service_period_end: string;
       service_period_start: string;
       status: 'draft';
+      financial_document_id: string | null;
+      financial_document_number: string | null;
+      financial_document_status: 'draft' | 'issued' | null;
     }>(
-      `SELECT id, draft_number, billing_date::text, service_period_start::text,
-                service_period_end::text, currency_code, amount::text, status,
-                generated_at::text
-         FROM sales.subscription_invoice_drafts WHERE contract_id = $1
-         ORDER BY billing_date DESC, id DESC`,
+      `SELECT draft.id, draft.draft_number, draft.billing_date::text, draft.service_period_start::text,
+                draft.service_period_end::text, draft.currency_code, draft.amount::text, draft.status,
+                draft.generated_at::text, document.id AS financial_document_id,
+                coalesce(document.official_number,document.draft_number) AS financial_document_number,
+                document.status AS financial_document_status
+         FROM sales.subscription_invoice_drafts draft
+         LEFT JOIN finance.financial_documents document ON document.source_subscription_draft_id=draft.id AND document.status<>'cancelled'
+         WHERE draft.contract_id = $1 ORDER BY draft.billing_date DESC, draft.id DESC`,
       [row.id],
     );
     return {
@@ -635,6 +650,9 @@ function normalizeContract(input: CreateServiceSubscriptionRequest) {
 }
 
 function mapDraft(row: {
+  financial_document_id: string | null;
+  financial_document_number: string | null;
+  financial_document_status: 'draft' | 'issued' | null;
   amount: string;
   billing_date: string;
   currency_code: string;
@@ -646,6 +664,13 @@ function mapDraft(row: {
   status: 'draft';
 }): SubscriptionInvoiceDraft {
   return {
+    ...(row.financial_document_id ? { financialDocumentId: row.financial_document_id } : {}),
+    ...(row.financial_document_number
+      ? { financialDocumentNumber: row.financial_document_number }
+      : {}),
+    ...(row.financial_document_status
+      ? { financialDocumentStatus: row.financial_document_status }
+      : {}),
     amount: row.amount,
     billingDate: row.billing_date,
     currencyCode: row.currency_code,

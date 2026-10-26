@@ -1,5 +1,30 @@
 # Browser acceptance
 
+## Finance lifecycle extension
+
+The company-image journey uploads clearly marked sample images through Finance
+Document settings, issues a manual EUR invoice, downloads draft/issued PDFs and
+queues email. It checks the Bulgarian mobile drawer, changes current settings
+and reopens the old invoice without losing its images. Downloads, image fixtures
+and screenshots remain local test artifacts. API coverage also checks recurring
+and converted-invoice snapshots, invalid images, authorization, stale settings,
+storage corruption, frozen email retries and guarded migration reversal.
+
+Run the following sequentially after repository validation:
+
+```sh
+PLAYWRIGHT_EXECUTABLE_PATH=/usr/bin/chromium npm run test:e2e -- --all-integration --migration-rehearsal tests/e2e/qa-finance.spec.ts tests/e2e/trade.spec.ts tests/e2e/service.spec.ts tests/e2e/pos.spec.ts
+```
+
+The manual-proforma journey uses the Finance role, issues EUR 60 without Sales or
+stock prerequisites, opens its automatic collection, allocates EUR 20 and 40,
+checks the single official invoice and follows both conversion links. It checks
+BG labels, a phone-width drawer and the original collection after reopening.
+The API suite also checks manual/automatic bank settlement, cash, advances,
+offsets, replay, scope-range concurrency/renewal/exhaustion and guarded downgrade.
+Migration `0079` reverses/reapplies before disposable fixtures are created; it
+must refuse downgrade once non-Sales collections exist.
+
 ## Complete local regression
 
 Run `PLAYWRIGHT_EXECUTABLE_PATH=/usr/bin/chromium npm run test:acceptance` for
@@ -361,3 +386,38 @@ Verified on 10 September 2026: all 21 browser checks and 4 POS database
 integration tests passed with `-- --pos-integration`. The related 71 API unit
 tests and 31 Operations/POS component tests also passed. Generated PDF first
 and last pages were visually reviewed, including POS business-time display.
+Recurring Finance acceptance in `qa-finance.spec.ts` configures a new service
+subscription through the UI, issues its due period, rechecks without duplication,
+follows the official invoice to its collection, records full payment and disables
+future issuance. Bulgarian phone-width setup/preview and flush-footer checks run
+in the same isolated journey. The worker is accelerated only in the disposable
+browser environment; local/staging daily schedules are not changed.
+
+The same Finance browser suite issues a manual invoice, records a partial
+payment, applies credit/debit notes, follows note/original/collection links and
+settles the corrected amount. A later credit exposes customer credit without
+adding a third payment or automatic refund. English desktop and Bulgarian phone
+screens verify amounts, readable note rows, fixed header and local scrolling.
+API integration separately covers all settlement paths, reversal, concurrent
+postings and rollback. A disposable legacy-data migration test checks exact USD
+and EUR snapshots, unchanged payments, once-only backfill and guarded downgrade.
+
+`pos-finance.spec.ts` exercises checkout, invoice preparation, Finance issuance,
+issued invoice retention in POS, full return/refund and unchanged invoice totals.
+It then checks deferred credit, the customer-account round trip, Bulgarian phone
+layout, return-credit release and cash-shift balancing. It creates no additional
+Finance collection. Physical fiscal-device acceptance is outside this test.
+
+Recurring acceptance also deliberately returns one stale Waiting read after
+Run due invoice, then checks that the panel picks up the real issued record
+without reopening it or submitting another command.
+
+`pos-account.spec.ts` sells on account, issues the source invoice and collects
+part of its deferred balance. It deliberately drops the successful response and
+retries with the same key, proving one retained payment. An explicitly authorized
+test approver reverses the error without changing production/demo role defaults;
+Bulgarian mobile settlement verifies the flush footer, exact amount and unchanged
+POS cash drawer. API coverage also tests concurrent payments, excess/stale/date
+rejection, orphan/immutability guards, unpaid partial returns and paid-return
+blocking. Actual refund, bank/cash matching and fiscal hardware acceptance are
+not claimed by these tests.

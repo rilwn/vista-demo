@@ -6,6 +6,9 @@ import type {
   CustomerPaymentAccount,
   CustomerPaymentAccountReferenceData,
   UpsertCustomerPaymentTermsRequest,
+  PosAccountReceivable,
+  PosAccountPayment,
+  PosAccountReturnCredit,
 } from '@vista/contracts';
 import { type FormEvent, type ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
 
@@ -25,10 +28,25 @@ import {
   useLocalization,
 } from '../i18n/LocalizationProvider';
 import { FinanceTabs } from './FinanceBankPage';
+import { useRouter } from '../routing/Router';
+import { PosAccountBalances, PosAccountPaymentPanel } from './PosAccountBalances';
+import { PosAccountRefundPanel } from './PosAccountRefundPanel';
 
 type Panel =
+  | {
+      account: CustomerPaymentAccount;
+      mode: 'pos-refund';
+      sale: PosAccountReceivable;
+      credit: PosAccountReturnCredit;
+    }
   | { account: CustomerPaymentAccount; mode: 'allocate'; receivable: CustomerOpenReceivable }
   | { account: CustomerPaymentAccount; mode: 'preview' }
+  | {
+      account: CustomerPaymentAccount;
+      mode: 'pos-payment';
+      sale: PosAccountReceivable;
+      payment?: PosAccountPayment;
+    }
   | { account?: CustomerPaymentAccount; customerPartnerId?: string; mode: 'advance' }
   | { account?: CustomerPaymentAccount; customerPartnerId?: string; mode: 'terms' };
 
@@ -41,8 +59,23 @@ export function FinanceCustomerAccountsPage() {
   const data = useCustomerAccounts(token);
   const [panel, setPanel] = useState<Panel>();
   const [notice, setNotice] = useState('');
+  const [returnDocumentId, setReturnDocumentId] = useState<string>();
   const canCreate = hasPermission('erp.finance', 'create');
   const canEdit = hasPermission('erp.finance', 'edit');
+  const { location, navigate } = useRouter();
+  useEffect(() => {
+    if (data.loading || !location.state || typeof location.state !== 'object') return;
+    const id = (location.state as { customerPartnerId?: unknown }).customerPartnerId;
+    const returnId = (location.state as { returnToFinancialDocumentId?: unknown })
+      .returnToFinancialDocumentId;
+    setReturnDocumentId(typeof returnId === 'string' ? returnId : undefined);
+    const account =
+      typeof id === 'string'
+        ? data.accounts.find((item) => item.customerPartnerId === id)
+        : undefined;
+    if (account) setPanel({ account, mode: 'preview' });
+    navigate(location.pathname, { replace: true, state: null });
+  }, [data.loading, data.accounts, location.state, location.pathname, navigate]);
 
   if (data.loading) return <AccountsState title="Loading customer accounts" />;
   if (data.error)
@@ -88,7 +121,7 @@ export function FinanceCustomerAccountsPage() {
 
       <FinanceTabs />
 
-      {notice ? (
+      {notice && !panel ? (
         <Toast onDismiss={() => setNotice('')} tone="success">
           {notice}
         </Toast>
@@ -122,7 +155,13 @@ export function FinanceCustomerAccountsPage() {
               <AccountValue label="Advance" value={money(account.advanceBalance)} />
               <AccountValue label="Balance" value={money(account.outstandingBalance)} />
               <AccountValue label="Available credit" value={money(account.availableCredit)} />
-              <Button onClick={() => setPanel({ account, mode: 'preview' })} variant="quiet">
+              <Button
+                onClick={() => {
+                  setReturnDocumentId(undefined);
+                  setPanel({ account, mode: 'preview' });
+                }}
+                variant="quiet"
+              >
                 Preview
               </Button>
             </article>
@@ -137,13 +176,28 @@ export function FinanceCustomerAccountsPage() {
       {panel?.mode === 'preview' ? (
         <AccountPreview
           account={panel.account}
+          backLabel={returnDocumentId ? 'Back to invoice' : 'Back to customer accounts'}
           canCreate={canCreate}
           canEdit={canEdit}
+          canApprove={hasPermission('erp.finance', 'approve')}
+          onCollect={(sale) => setPanel({ account: panel.account, mode: 'pos-payment', sale })}
+          onReverse={(sale, payment) =>
+            setPanel({ account: panel.account, mode: 'pos-payment', sale, payment })
+          }
+          onRefund={(sale, credit) =>
+            setPanel({ account: panel.account, mode: 'pos-refund', sale, credit })
+          }
           onAllocate={(receivable) =>
             setPanel({ account: panel.account, mode: 'allocate', receivable })
           }
           onAdvance={() => setPanel({ account: panel.account, mode: 'advance' })}
-          onBack={() => setPanel(undefined)}
+          onBack={() =>
+            returnDocumentId
+              ? navigate('/modules/erp.finance/invoices', {
+                  state: { financialDocumentId: returnDocumentId },
+                })
+              : setPanel(undefined)
+          }
           onTerms={() => setPanel({ account: panel.account, mode: 'terms' })}
         />
       ) : panel?.mode === 'advance' ? (
@@ -167,6 +221,34 @@ export function FinanceCustomerAccountsPage() {
           receivable={panel.receivable}
           token={token}
         />
+      ) : panel?.mode === 'pos-refund' ? (
+        <PosAccountRefundPanel
+          account={panel.account}
+          sale={panel.sale}
+          credit={panel.credit}
+          token={token}
+          timezone={data.references.businessTimezone ?? 'Europe/Sofia'}
+          onBack={() => setPanel({ account: panel.account, mode: 'preview' })}
+          onSaved={(account, notice) => {
+            data.replace(account);
+            setPanel({ account, mode: 'preview' });
+            setNotice(notice);
+          }}
+        />
+      ) : panel?.mode === 'pos-payment' ? (
+        <PosAccountPaymentPanel
+          businessTimezone={data.references.businessTimezone ?? 'Europe/Sofia'}
+          account={panel.account}
+          sale={panel.sale}
+          {...(panel.payment ? { payment: panel.payment } : {})}
+          token={token}
+          onBack={() => setPanel({ account: panel.account, mode: 'preview' })}
+          onSaved={(account, notice) => {
+            data.replace(account);
+            setPanel({ account, mode: 'preview' });
+            setNotice(notice);
+          }}
+        />
       ) : panel?.mode === 'terms' ? (
         <TermsPanel
           accounts={data.accounts}
@@ -186,16 +268,26 @@ export function FinanceCustomerAccountsPage() {
 
 function AccountPreview({
   account,
+  backLabel,
   canCreate,
   canEdit,
+  canApprove,
+  onCollect,
+  onReverse,
+  onRefund,
   onAllocate,
   onAdvance,
   onBack,
   onTerms,
 }: {
   account: CustomerPaymentAccount;
+  backLabel: string;
   canCreate: boolean;
   canEdit: boolean;
+  canApprove: boolean;
+  onCollect: (sale: PosAccountReceivable) => void;
+  onReverse: (sale: PosAccountReceivable, payment: PosAccountPayment) => void;
+  onRefund: (sale: PosAccountReceivable, credit: PosAccountReturnCredit) => void;
   onAllocate: (receivable: CustomerOpenReceivable) => void;
   onAdvance: () => void;
   onBack: () => void;
@@ -203,6 +295,7 @@ function AccountPreview({
 }) {
   return (
     <AccountDrawer
+      backLabel={backLabel}
       onBack={onBack}
       subtitle={account.uic ? `UIC ${account.uic}` : 'Customer'}
       title={account.customerName}
@@ -224,6 +317,15 @@ function AccountPreview({
           </div>
         </section>
 
+        <PosAccountBalances
+          records={account.posReceivables ?? []}
+          canCollect={canCreate}
+          canReverse={canApprove}
+          onCollect={onCollect}
+          onReverse={onReverse}
+          customerId={account.customerPartnerId}
+          onRefund={onRefund}
+        />
         <section className="customer-account-section">
           <header>
             <div>
@@ -329,7 +431,7 @@ function AccountPreview({
           <header>
             <div>
               <h3>POS account activity</h3>
-              <p>Sales and linked returns remain together.</p>
+              <p>Sales, payments and returns stay together.</p>
             </div>
             <span>{account.entries.length}</span>
           </header>
@@ -337,11 +439,23 @@ function AccountPreview({
             <div className="customer-account-entry-list">
               {account.entries.map((entry) => (
                 <article key={entry.id}>
-                  <span className={entry.entryType === 'charge' ? 'is-charge' : 'is-credit'}>
-                    {entry.entryType === 'charge' ? 'Sale' : 'Return'}
+                  <span
+                    className={
+                      entry.entryType === 'charge' || entry.entryType === 'payment_reversal'
+                        ? 'is-charge'
+                        : 'is-credit'
+                    }
+                  >
+                    {entry.entryType === 'charge'
+                      ? 'Sale'
+                      : entry.entryType === 'payment'
+                        ? 'Payment'
+                        : entry.entryType === 'payment_reversal'
+                          ? 'Payment reversal'
+                          : 'Return'}
                   </span>
                   <div>
-                    <strong>{entry.returnNumber ?? entry.saleNumber}</strong>
+                    <strong>{entry.paymentNumber ?? entry.returnNumber ?? entry.saleNumber}</strong>
                     <small>
                       {entry.entryType === 'charge'
                         ? `Due ${date(entry.dueOn)}`
@@ -349,7 +463,9 @@ function AccountPreview({
                     </small>
                   </div>
                   <strong>
-                    {entry.entryType === 'charge' ? '' : '−'}
+                    {entry.entryType === 'charge' || entry.entryType === 'payment_reversal'
+                      ? ''
+                      : '−'}
                     {money(entry.amount)}
                   </strong>
                 </article>
@@ -783,12 +899,14 @@ function AdvancePanel({
 }
 
 function AccountDrawer({
+  backLabel = 'Back to customer accounts',
   busy = false,
   children,
   onBack,
   subtitle,
   title,
 }: {
+  backLabel?: string;
   busy?: boolean;
   children: ReactNode;
   onBack: () => void;
@@ -798,7 +916,7 @@ function AccountDrawer({
   return (
     <div className="security-drawer-layer" role="presentation">
       <button
-        aria-label="Back to customer accounts"
+        aria-label={backLabel}
         className="security-drawer-scrim"
         disabled={busy}
         onClick={onBack}
@@ -812,7 +930,7 @@ function AccountDrawer({
       >
         <header className="panel-drawer-header">
           <button
-            aria-label="Back to customer accounts"
+            aria-label={backLabel}
             className="panel-back-button"
             disabled={busy}
             onClick={onBack}
@@ -908,6 +1026,13 @@ function useCustomerAccounts(token: string) {
   const [error, setError] = useState(false);
   const [revision, setRevision] = useState(0);
   const reload = useCallback(() => setRevision((value) => value + 1), []);
+  const replace = useCallback(
+    (account: CustomerPaymentAccount) =>
+      setAccounts((current) =>
+        current.map((row) => (row.customerPartnerId === account.customerPartnerId ? account : row)),
+      ),
+    [],
+  );
   useEffect(() => {
     if (!token) return;
     let active = true;
@@ -930,8 +1055,8 @@ function useCustomerAccounts(token: string) {
     };
   }, [revision, token]);
   return useMemo(
-    () => ({ accounts, error, loading, references, reload }),
-    [accounts, error, loading, references, reload],
+    () => ({ accounts, error, loading, references, reload, replace }),
+    [accounts, error, loading, references, reload, replace],
   );
 }
 

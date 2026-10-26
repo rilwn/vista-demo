@@ -110,7 +110,7 @@ const operations: HelpTopic[] = [
     steps: [
       'Confirm that the customer location and covered devices already exist, then select New contract.',
       'Choose the location and devices, enter each included service, visit frequency, contract period, recurring amount and first billing date.',
-      'Save the contract and reopen it to verify coverage. Review prepared billing drafts in Finance on the next billing date.',
+      'Save and reopen the contract to verify coverage. A Finance user can enable automatic invoices in Finance → Recurring invoices; unconfigured contracts remain manual.',
     ],
     note: 'A device cannot be covered until it is registered at the selected customer location.',
   },
@@ -158,13 +158,49 @@ const operations: HelpTopic[] = [
     note: 'A prepared draft is not an officially issued invoice.',
   },
   {
+    id: 'finance-pos-invoice',
+    title: 'Review a POS invoice',
+    module: 'erp.finance',
+    contexts: ['/modules/erp.finance/invoices', '/modules/erp.finance/customer-accounts'],
+    steps: [
+      'In POS, complete the sale and choose Prepare invoice on its receipt. Note the draft reference.',
+      'In Operations choose Finance → Financial documents, find the draft and open Preview. Check POS payments, deferred credit and any linked refunds before issuing.',
+      'Choose Open customer account. Under POS account balances, find the original sale and Collect payment. Enter only money actually received, confirm the details and record it. Use Back to return to the invoice.',
+    ],
+    note: 'Do not record checkout money twice. Reversing an incorrect account payment requires Finance approval access and does not refund money. Returns of already-collected deferred amounts require a separate Finance refund review.',
+  },
+  {
+    id: 'finance-corrections',
+    title: 'Correct an issued invoice',
+    module: 'erp.finance',
+    contexts: ['/modules/erp.finance/invoices', '/modules/erp.finance/payments'],
+    steps: [
+      'Choose Finance → Financial documents → New financial document. Select Credit note or Debit note, the original invoice and the correction reason.',
+      'Review the copied lines and change only the quantities or amounts being corrected. Prepare the draft, check it, then issue the note.',
+      'Open Collections & payments from the issued note. Check the original amount, applied corrections, actual payments and remaining balance. Open any note to review its source.',
+    ],
+    note: 'Draft and cancelled notes do not change a balance. If a note leaves the customer overpaid, Finance must review that credit; no refund or advance is created automatically. POS settlements are reviewed separately.',
+  },
+  {
+    id: 'finance-document-images',
+    title: 'Invoice logo and signature',
+    module: 'erp.finance',
+    contexts: ['/modules/erp.finance/invoices'],
+    steps: [
+      'Choose Finance → Financial documents → Document settings, then select the issuing company.',
+      'Choose and upload the logo and authorized signature image. Enter the signer name, confirm permission to use the signature and select Save settings.',
+      'Open an invoice Preview and Download PDF. Drafts show the logo; issued documents also show the signature. To email an issued PDF, enter the recipient and select Send email.',
+    ],
+    note: 'Changes affect new issuances only. Signature images are not digital certificates. Editing settings requires Finance edit access.',
+  },
+  {
     id: 'finance',
     title: 'Payments and financial documents',
     module: 'erp.finance',
     steps: [
       'Choose Finance → Collections & payments. Add a prepared Sales invoice draft to collections, or open an existing collection to record payment.',
       'Use the remaining balance shown on the record. Review advances and offsets separately instead of recording the same money twice.',
-      'Choose Financial documents to prepare and preview a linked draft. Open Finance reports for operational journals, VAT review and balances.',
+      'Issue a reviewed invoice or proforma in Financial documents to open its collection automatically. Configure subscription issuance in Recurring invoices; review journals and VAT in Finance reports.',
     ],
     note: 'If no draft is available, ask Sales to finish the shipment and prepare its invoice draft. Check existing collections before adding another.',
   },
@@ -341,7 +377,7 @@ const bulgarianTopics: Readonly<Record<string, Omit<HelpTopic, 'id' | 'module'>>
     steps: [
       'Потвърдете, че обектът на клиента и включените устройства съществуват, след което изберете Нов договор.',
       'Изберете обекта и устройствата и въведете услугите, честотата, срока, периодичната сума и първата дата за фактуриране.',
-      'Запазете и отворете договора отново, за да проверите покритието. На следващата дата прегледайте черновата във Финанси.',
+      'Запазете и проверете покритието на договора. Служител от Финанси може да включи автоматичните фактури във Финанси → Периодични фактури; без настройка договорите остават за ръчно фактуриране.',
     ],
     note: 'Устройство не може да бъде включено, преди да е регистрирано в избрания клиентски обект.',
   },
@@ -422,12 +458,39 @@ const bulgarianTopics: Readonly<Record<string, Omit<HelpTopic, 'id' | 'module'>>
     ],
     note: 'Подготвената чернова не е официално издадена фактура.',
   },
+  'finance-pos-invoice': {
+    title: 'Преглед на фактура от POS',
+    steps: [
+      'В POS завършете продажбата и изберете Подготви фактура от касовата бележка. Запишете номера на черновата.',
+      'В Operations изберете Финанси → Финансови документи, намерете черновата и отворете Преглед. Проверете POS плащанията, отложената сума и свързаните възстановявания преди издаване.',
+      'Изберете Отвори клиентската сметка. В POS задължения намерете продажбата и изберете Запис на плащане. Въведете само действително получената сума, проверете данните и запазете. С Назад се върнете към фактурата.',
+    ],
+    note: 'Не записвайте повторно сумата от продажбата. Сторнирането на погрешно плащане изисква право за одобрение във Финанси и не връща пари. Връщанията по вече платени отложени суми изискват отделен преглед от Финанси.',
+  },
+  'finance-corrections': {
+    title: 'Корекция на издадена фактура',
+    steps: [
+      'Изберете Финанси → Финансови документи → Нов финансов документ. Изберете кредитно или дебитно известие, първоначалната фактура и основанието за корекцията.',
+      'Прегледайте копираните редове и променете само коригираните количества или суми. Подгответе проекта, проверете го и издайте известието.',
+      'От издаденото известие отворете Вземания и плащания. Проверете първоначалната сума, приложените корекции, действителните плащания и остатъка. Отворете известие, за да прегледате източника му.',
+    ],
+    note: 'Проектите и отказаните известия не променят салдото. При надплащане Финанси трябва да прегледа сумата; не се създава автоматично възстановяване или аванс. Плащанията от POS се преглеждат отделно.',
+  },
+  'finance-document-images': {
+    title: 'Лого и подпис във фактура',
+    steps: [
+      'Изберете Финанси → Финансови документи → Настройки на документите и фирмата издател.',
+      'Изберете и качете логото и разрешеното изображение на подпис. Въведете името, потвърдете разрешението за използване и запазете настройките.',
+      'Отворете Преглед на фактурата и Изтегляне на PDF. Черновата показва логото, а издаденият документ и подписа. За изпращане въведете получателя и изберете Изпращане по имейл.',
+    ],
+    note: 'Промените важат само за нови издавания. Изображението не е цифров сертификат. Нужни са права за промяна във Финанси.',
+  },
   finance: {
     title: 'Плащания и финансови документи',
     steps: [
       'Изберете Финанси → Вземания и плащания. Добавете подготвена чернова от Продажби или отворете съществуващо вземане, за да запишете плащане.',
       'Използвайте оставащото салдо от записа. Преглеждайте авансите и прихващанията отделно, за да не въведете една и съща сума два пъти.',
-      'Във Финансови документи подгответе и прегледайте свързана чернова. Използвайте Финансови отчети за дневници, ДДС и салда.',
+      'Издайте проверена фактура или проформа във Финансови документи, за да се създаде вземането автоматично. Настройте абонаментите в Периодични фактури; прегледайте дневниците и ДДС във Финансови отчети.',
     ],
     note: 'Ако няма налична чернова, Продажби трябва да завърши експедицията и да подготви фактурата. Проверете съществуващите вземания, преди да добавите ново.',
   },

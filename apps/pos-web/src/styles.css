@@ -832,6 +832,17 @@
   background: #eaf2f7;
 }
 
+.pos-return-policy-note {
+  margin: 0 0 1rem;
+  padding: 0.75rem;
+  border-left: 3px solid var(--vista-accent);
+  border-radius: 0.35rem;
+  background: var(--vista-surface-muted);
+  color: var(--vista-ink-soft);
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
 .pos-catalog-toolbar > div {
   display: grid;
   gap: 0.15rem;

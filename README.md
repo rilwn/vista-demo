@@ -37,6 +37,16 @@ acceptance criteria, dependencies, and unresolved decisions are maintained in
    applications. No separate seed command is needed for normal local browser
    testing.
 
+If startup reports a migration checksum error, see
+[migration troubleshooting](infrastructure/deployment/README.md#recovery-and-troubleshooting).
+Do not reset the database or delete its migration history.
+
+A BNB refresh warning does not prevent EUR work. If BNB returns an HTML
+access-error page instead of XML, existing rates remain unchanged and the queued
+job retries through the normal job lifecycle. Check **System activity** for failed
+work and retry after provider access is restored. Live foreign-currency rate
+retrieval must still be verified from the deployment host; no rate is guessed.
+
 Default development endpoints:
 
 - API: `http://localhost:3000/api/v1`

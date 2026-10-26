@@ -77,6 +77,13 @@ const reports = (
 ) => page('reports', 'chart', slug, title, description, action, sections);
 
 export const workflowPages: WorkflowPageDefinition[] = [
+  finance(
+    'recurring-invoices',
+    'Recurring invoices',
+    'Set up automatic invoicing for service subscriptions and review each billing period.',
+    'Review subscriptions',
+    [],
+  ),
   ...(['procurement', 'warehouse', 'sales', 'logistics'] as const).map((scope) =>
     page(
       `erp.${scope}`,
@@ -91,7 +98,7 @@ export const workflowPages: WorkflowPageDefinition[] = [
   finance(
     'invoices',
     'Financial documents',
-    'Prepare structured invoice, proforma, credit-note, and debit-note drafts without assigning an official number.',
+    'Manage invoices, proformas and linked credit or debit notes.',
     'New financial document',
     [
       {
@@ -1061,6 +1068,12 @@ const bulgarianWorkflowMeta: Record<string, WorkflowMeta> = {
     title: 'Финансови документи',
     description: 'Подготвяйте фактури, проформи, кредитни и дебитни известия.',
     action: 'Нов финансов документ',
+  },
+  'erp.finance/recurring-invoices': {
+    title: 'Периодични фактури',
+    description:
+      'Настройвайте автоматичното фактуриране на абонаменти и преглеждайте всеки период.',
+    action: 'Преглед на абонаментите',
   },
   'erp.finance/payments': {
     title: 'Вземания и плащания',

@@ -1,6 +1,7 @@
 import 'reflect-metadata';
 
 import { randomUUID } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 
 import type { INestApplication } from '@nestjs/common';
@@ -10,6 +11,7 @@ import type {
   ErpReportDefinition,
   ErpReportPreview,
   CustomerPriceGroup,
+  CustomerOperationalOverview,
   PriceList,
   PromotionalCampaign,
   SalesPricingReferenceData,
@@ -66,16 +68,23 @@ import type {
   CrmTicketReferenceData,
   CustomerAdvance,
   CustomerPaymentAccount,
+  RecurringInvoiceContract,
+  RecurringInvoiceProfileInput,
+  FinancialBrandingSettings,
 } from '@vista/contracts';
 import { Pool } from 'pg';
 import request from 'supertest';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { AppModule } from '../src/app.module.js';
 import { PasswordService } from '../src/auth/password.service.js';
 import { configureHttpApplication } from '../src/common/http-application.js';
 import { APP_ENVIRONMENT } from '../src/config/config.module.js';
 import { migrateDown, migrateUp } from '../src/database/migration-runner.js';
+import { allocateOfficialNumber } from '../src/finance/official-numbering.js';
+import { FinancialDocumentsService } from '../src/finance/financial-documents.service.js';
+import { SalesSubscriptionsService } from '../src/sales/sales-subscriptions.service.js';
+import { ApiErrorException } from '../src/common/api-error.exception.js';
 import { JobHandlerRegistry } from '../src/jobs/job-handler-registry.service.js';
 import { ReportingHubService } from '../src/jobs/reporting-hub.service.js';
 import { NotificationDispatcherService } from '../src/notifications/notification-dispatcher.service.js';
@@ -133,6 +142,13 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
       new URL('../src/database/migrations', import.meta.url),
     );
     await migrateUp(database, migrationDirectory);
+    expect(await migrateDown(database, migrationDirectory)).toBe('0083_pos_account_collections');
+    expect(await migrateDown(database, migrationDirectory)).toBe('0082_collection_corrections');
+    expect(await migrateDown(database, migrationDirectory)).toBe(
+      '0081_financial_document_branding',
+    );
+    expect(await migrateDown(database, migrationDirectory)).toBe('0080_recurring_invoice_issuance');
+    expect(await migrateDown(database, migrationDirectory)).toBe('0079_finance_collection_sources');
     expect(await migrateDown(database, migrationDirectory)).toBe(
       '0078_finance_proforma_conversion_link',
     );
@@ -2996,6 +3012,462 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
     expect(issuedIncomeCsv.text).not.toContain(registerScopedInvoice.number);
   });
 
+  it('collects a standalone proforma and converts it once after partial bank settlements', async () => {
+    const date = (
+      await database.query<{ date: string }>(
+        "SELECT (now() AT TIME ZONE 'Europe/Sofia')::date::text AS date",
+      )
+    ).rows[0]!.date;
+    const refs = (
+      await request(application.getHttpServer())
+        .get('/api/v1/finance/financial-documents/reference-data')
+        .set('authorization', `Bearer ${token}`)
+        .expect(200)
+    ).body as FinancialDocumentReferenceData;
+    const scope = refs.scopes[0]!;
+    const draft = (
+      await request(application.getHttpServer())
+        .post('/api/v1/finance/financial-documents')
+        .set('authorization', `Bearer ${token}`)
+        .set('idempotency-key', `standalone-proforma-${runId}`)
+        .send({
+          businessLocationId: scope.locationId,
+          legalEntityId: scope.legalEntityId,
+          customerPartnerId: customerId,
+          documentType: 'proforma',
+          currencyCode: 'EUR',
+          issueDate: date,
+          taxEventDate: date,
+          dueDate: date,
+          rateDate: date,
+          exchangeRate: '1',
+          rateSource: 'internal_eur',
+          lines: [
+            {
+              description: 'Standalone service fee',
+              unitCode: 'SERVICE',
+              quantity: '1',
+              unitPrice: '20',
+              discountPercent: '0',
+              vatTreatment: 'standard_20',
+            },
+          ],
+        })
+        .expect(201)
+    ).body as FinancialDocument;
+    const issued = (
+      await request(application.getHttpServer())
+        .post(`/api/v1/finance/financial-documents/${draft.id}/issue`)
+        .set('authorization', `Bearer ${token}`)
+        .set('idempotency-key', `standalone-issue-${runId}`)
+        .send({ expectedVersion: 1 })
+        .expect(200)
+    ).body as FinancialDocument;
+    expect(issued.collection?.id).toBeTruthy();
+    const collectionId = issued.collection!.id;
+    const readCollection = async () =>
+      (
+        await request(application.getHttpServer())
+          .get(`/api/v1/finance/documents/${collectionId}`)
+          .set('authorization', `Bearer ${token}`)
+          .expect(200)
+      ).body as FinanceCustomerDocument;
+    expect(await readCollection()).toMatchObject({
+      total: '24.0000',
+      paymentStatus: 'unpaid',
+      sourceInvoiceNumber: issued.number,
+      financialDocument: { id: issued.id },
+    });
+    expect(await readCollection()).not.toHaveProperty('sourceSalesInvoiceId');
+    const staleLink = await request(application.getHttpServer())
+      .post(`/api/v1/finance/financial-documents/${draft.id}/collection`)
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', `standalone-stale-${runId}`)
+      .send({ expectedVersion: issued.version + 1 })
+      .expect(409);
+    expect(staleLink.body.error.code).toBe('FINANCE_DOCUMENT_VERSION_CONFLICT');
+    await assertGuardedDowngrade(
+      database,
+      '0079_finance_collection_sources',
+      'Cannot downgrade Finance while non-Sales collection records exist',
+    );
+    await request(application.getHttpServer())
+      .post(`/api/v1/finance/financial-documents/${draft.id}/collection`)
+      .set('authorization', `Bearer ${viewerToken}`)
+      .set('idempotency-key', `standalone-denied-${runId}`)
+      .send({ expectedVersion: issued.version })
+      .expect(403);
+    for (const [index, amount] of ['10', '14'].entries()) {
+      const key = `standalone-bank-${index}-${runId}`;
+      const input = {
+        accountIban: 'BG76DEMO00000000000000',
+        bankName: 'Finance test bank',
+        openingBalance: '0',
+        closingBalance: amount,
+        currencyCode: 'EUR',
+        statementDate: date,
+        statementReference: key,
+        lines: [
+          {
+            amount,
+            counterpartyName: 'Finance test customer',
+            direction: 'incoming',
+            paymentReference: issued.number,
+            transactionDate: date,
+            valueDate: date,
+          },
+        ],
+      };
+      const statement = (
+        await request(application.getHttpServer())
+          .post('/api/v1/finance/bank-statements')
+          .set('authorization', `Bearer ${token}`)
+          .set('idempotency-key', key)
+          .send(input)
+          .expect(201)
+      ).body as FinanceBankStatement;
+      expect(statement.transactions[0]?.matchStatus).toBe('matched');
+      await request(application.getHttpServer())
+        .post('/api/v1/finance/bank-statements')
+        .set('authorization', `Bearer ${token}`)
+        .set('idempotency-key', key)
+        .send(input)
+        .expect(201);
+      expect((await readCollection()).paymentStatus).toBe(index === 0 ? 'partially_paid' : 'paid');
+    }
+    const paid = await readCollection();
+    expect(paid).toMatchObject({
+      outstandingTotal: '0.0000',
+      payments: [expect.anything(), expect.anything()],
+      financialDocument: { type: 'invoice', status: 'issued' },
+    });
+    const converted = (
+      await database.query<{ count: number }>(
+        'SELECT count(*)::integer AS count FROM finance.financial_documents WHERE converted_from_document_id = $1',
+        [issued.id],
+      )
+    ).rows[0];
+    expect(converted?.count).toBe(1);
+    const opened = (
+      await request(application.getHttpServer())
+        .get(`/api/v1/finance/financial-documents/${paid.financialDocument!.id}`)
+        .set('authorization', `Bearer ${token}`)
+        .expect(200)
+    ).body as FinancialDocument;
+    expect(opened.collection?.id).toBe(collectionId);
+    const reopened = (
+      await request(application.getHttpServer())
+        .post(`/api/v1/finance/financial-documents/${issued.id}/collection`)
+        .set('authorization', `Bearer ${token}`)
+        .set('idempotency-key', `paid-proforma-reopen-${runId}`)
+        .send({ expectedVersion: issued.version })
+        .expect(200)
+    ).body as FinancialDocument;
+    expect(reopened.collection?.id).toBe(collectionId);
+    const accounts = await request(application.getHttpServer())
+      .get(`/api/v1/finance/customer-accounts/${customerId}`)
+      .set('authorization', `Bearer ${token}`);
+    expect(accounts.status).toBe(200);
+  });
+
+  it('allocates separate official number ranges per register/operator scope without duplicates', async () => {
+    const date = (
+      await database.query<{ date: string }>(
+        "SELECT (now() AT TIME ZONE 'Europe/Sofia')::date::text AS date",
+      )
+    ).rows[0]!.date;
+    const refs = (
+      await request(application.getHttpServer())
+        .get('/api/v1/finance/financial-documents/reference-data')
+        .set('authorization', `Bearer ${token}`)
+        .expect(200)
+    ).body as FinancialDocumentReferenceData;
+    const scope = refs.scopes[0]!;
+    const drafts = await Promise.all(
+      [false, false, true, true].map(
+        async (register, index) =>
+          (
+            await request(application.getHttpServer())
+              .post('/api/v1/finance/financial-documents')
+              .set('authorization', `Bearer ${token}`)
+              .set('idempotency-key', `range-draft-${index}-${runId}`)
+              .send({
+                businessLocationId: scope.locationId,
+                legalEntityId: scope.legalEntityId,
+                ...(register ? { cashRegisterId, operatorId: cashOperatorId } : {}),
+                customerPartnerId: customerId,
+                documentType: 'invoice',
+                currencyCode: 'EUR',
+                issueDate: date,
+                taxEventDate: date,
+                dueDate: date,
+                rateDate: date,
+                exchangeRate: '1',
+                rateSource: 'internal_eur',
+                lines: [
+                  {
+                    description: 'Range test',
+                    unitCode: 'SERVICE',
+                    quantity: '1',
+                    unitPrice: '10',
+                    discountPercent: '0',
+                    vatTreatment: 'standard_20',
+                  },
+                ],
+              })
+              .expect(201)
+          ).body as FinancialDocument,
+      ),
+    );
+    const issued = await Promise.all(
+      drafts.map(
+        async (draft, index) =>
+          (
+            await request(application.getHttpServer())
+              .post(`/api/v1/finance/financial-documents/${draft.id}/issue`)
+              .set('authorization', `Bearer ${token}`)
+              .set('idempotency-key', `range-issue-${index}-${runId}`)
+              .send({ expectedVersion: 1 })
+              .expect(200)
+          ).body as FinancialDocument,
+      ),
+    );
+    expect(new Set(issued.map((doc) => doc.officialNumber)).size).toBe(4);
+    for (const pair of [issued.slice(0, 2), issued.slice(2)]) {
+      const values = pair.map((doc) => Number(doc.officialNumber)).sort((a, b) => a - b);
+      expect(values[1]! - values[0]!).toBe(1);
+    }
+    expect(
+      Math.abs(Number(issued[0]!.officialNumber) - Number(issued[2]!.officialNumber)),
+    ).toBeGreaterThan(1);
+    expect(issued.every((doc) => Boolean(doc.collection))).toBe(true);
+    const series = (
+      await database.query<{ count: number }>(
+        `SELECT count(DISTINCT official_number_series_id)::integer AS count
+       FROM finance.financial_documents WHERE id = ANY($1::uuid[])`,
+        [issued.map((doc) => doc.id)],
+      )
+    ).rows[0];
+    expect(series?.count).toBe(2);
+  });
+
+  it('renews exhausted number ranges above the legacy watermark and stops at ten digits', async () => {
+    const scope = (
+      await database.query<{ legal_entity_id: string; business_location_id: string }>(
+        'SELECT legal_entity_id, business_location_id FROM finance.official_number_series LIMIT 1',
+      )
+    ).rows[0]!;
+    const client = await database.connect();
+    try {
+      await client.query('BEGIN');
+      const watermark = (
+        await client.query<{ next_value: string }>(
+          'SELECT next_value::text FROM finance.official_document_sequences WHERE legal_entity_id = $1',
+          [scope.legal_entity_id],
+        )
+      ).rows[0]!;
+      await client.query(
+        `UPDATE finance.official_number_series SET next_value = range_end + 1
+        WHERE legal_entity_id = $1`,
+        [scope.legal_entity_id],
+      );
+      const input = {
+        legalEntityId: scope.legal_entity_id,
+        businessLocationId: scope.business_location_id,
+      };
+      const next = await allocateOfficialNumber(client, input, 2);
+      expect(BigInt(next.number)).toBe(BigInt(watermark.next_value));
+      const second = await allocateOfficialNumber(client, input, 2);
+      expect(BigInt(second.number)).toBe(BigInt(next.number) + 1n);
+      const renewed = await allocateOfficialNumber(client, input, 2);
+      expect(BigInt(renewed.number)).toBe(BigInt(next.number) + 2n);
+      await client.query(
+        'UPDATE finance.official_number_series SET next_value = range_end + 1 WHERE id = $1',
+        [next.seriesId],
+      );
+      await client.query(
+        'UPDATE finance.official_document_sequences SET next_value = 9999999999 WHERE legal_entity_id = $1',
+        [scope.legal_entity_id],
+      );
+      expect((await allocateOfficialNumber(client, input, 1000)).number).toBe('9999999999');
+      await expect(allocateOfficialNumber(client, input, 1000)).rejects.toThrow(
+        'The document number range is exhausted.',
+      );
+    } finally {
+      await client.query('ROLLBACK');
+      client.release();
+    }
+  });
+
+  it.each(['cash', 'advance', 'offset'] as const)(
+    'converts a fully settled manual proforma through %s exactly once',
+    async (method) => {
+      const date = (
+        await database.query<{ date: string }>(
+          "SELECT (now() AT TIME ZONE 'Europe/Sofia')::date::text AS date",
+        )
+      ).rows[0]!.date;
+      const scope = (
+        await request(application.getHttpServer())
+          .get('/api/v1/finance/financial-documents/reference-data')
+          .set('authorization', `Bearer ${token}`)
+          .expect(200)
+      ).body.scopes[0] as FinancialDocumentReferenceData['scopes'][number];
+      const draft = (
+        await request(application.getHttpServer())
+          .post('/api/v1/finance/financial-documents')
+          .set('authorization', `Bearer ${token}`)
+          .set('idempotency-key', `settlement-draft-${method}-${runId}`)
+          .send({
+            businessLocationId: scope.locationId,
+            legalEntityId: scope.legalEntityId,
+            customerPartnerId: customerId,
+            documentType: 'proforma',
+            currencyCode: 'EUR',
+            issueDate: date,
+            taxEventDate: date,
+            dueDate: date,
+            rateDate: date,
+            exchangeRate: '1',
+            rateSource: 'internal_eur',
+            lines: [
+              {
+                description: 'Service charge',
+                unitCode: 'SERVICE',
+                quantity: '1',
+                unitPrice: '20',
+                discountPercent: '0',
+                vatTreatment: 'standard_20',
+              },
+            ],
+          })
+          .expect(201)
+      ).body as FinancialDocument;
+      // Emulate an older issued proforma without a collection, then repair it
+      // using the same guarded endpoint available from its preview.
+      const issuePath = method === 'advance' ? 'collection' : 'issue';
+      if (method === 'advance')
+        await database.query(
+          `UPDATE finance.financial_documents SET status = 'issued', issued_at = now(),
+        issued_by = $2, version = 2 WHERE id = $1`,
+          [draft.id, creatorAccountId],
+        );
+      const issueInput = { expectedVersion: method === 'advance' ? 2 : 1 };
+      const issue = () =>
+        request(application.getHttpServer())
+          .post(`/api/v1/finance/financial-documents/${draft.id}/${issuePath}`)
+          .set('authorization', `Bearer ${token}`)
+          .set('idempotency-key', `settlement-issue-${method}-${runId}`)
+          .send(issueInput)
+          .expect(200);
+      const issued = (await issue()).body as FinancialDocument;
+      expect(((await issue()).body as FinancialDocument).collection?.id).toBe(
+        issued.collection?.id,
+      );
+      const id = issued.collection!.id;
+      const before = (
+        await request(application.getHttpServer())
+          .get(`/api/v1/finance/documents/${id}`)
+          .set('authorization', `Bearer ${token}`)
+          .expect(200)
+      ).body as FinanceCustomerDocument;
+      const cancelled = await request(application.getHttpServer())
+        .post(`/api/v1/finance/documents/${id}/cancel`)
+        .set('authorization', `Bearer ${token}`)
+        .set('idempotency-key', `settlement-cancel-${method}-${runId}`)
+        .send({
+          expectedVersion: before.version,
+          cancellationReason: 'Must not detach an issued document',
+        })
+        .expect(409);
+      expect(cancelled.body.error.code).toBe('FINANCE_ISSUED_COLLECTION_CANNOT_CANCEL');
+      let path: string;
+      let input: object;
+      if (method === 'cash') {
+        path = '/api/v1/finance/cash/vouchers';
+        input = {
+          amount: '24',
+          cashRegisterId,
+          customerDocumentId: id,
+          direction: 'receipt',
+          operatorId: cashOperatorId,
+          purpose: 'Proforma settlement',
+          voucherDate: date,
+        };
+      } else if (method === 'advance') {
+        const advance = (
+          await request(application.getHttpServer())
+            .post('/api/v1/finance/customer-accounts/advances')
+            .set('authorization', `Bearer ${token}`)
+            .set('idempotency-key', `settlement-advance-${runId}`)
+            .send({
+              amount: '24',
+              customerPartnerId: customerId,
+              paymentMethod: 'bank_transfer',
+              receivedOn: date,
+            })
+            .expect(201)
+        ).body as CustomerAdvance;
+        path = `/api/v1/finance/documents/${id}/advance-allocations`;
+        input = { amount: '24', customerAdvanceId: advance.id };
+      } else {
+        const supplierInvoiceId = await seedSupplierInvoiceEvidence(
+          database,
+          creatorAccountId,
+          customerId,
+          warehouseId,
+          productId,
+          date,
+          `${runId}-offset-proforma`,
+        );
+        const payable = (
+          await request(application.getHttpServer())
+            .post('/api/v1/finance/supplier-payables')
+            .set('authorization', `Bearer ${token}`)
+            .set('idempotency-key', `settlement-payable-${runId}`)
+            .send({ dueDate: date, supplierInvoiceId })
+            .expect(201)
+        ).body as FinanceSupplierPayable;
+        path = '/api/v1/finance/supplier-offsets';
+        input = {
+          amount: '24',
+          customerDocumentId: id,
+          expectedCustomerDocumentVersion: before.version,
+          expectedSupplierPayableVersion: payable.version,
+          offsetDate: date,
+          reason: 'Bilateral proforma settlement',
+          supplierPayableId: payable.id,
+        };
+      }
+      const send = () =>
+        request(application.getHttpServer())
+          .post(path)
+          .set('authorization', `Bearer ${token}`)
+          .set('idempotency-key', `settlement-pay-${method}-${runId}`)
+          .send(input)
+          .expect(201);
+      await send();
+      await send();
+      const paid = (
+        await request(application.getHttpServer())
+          .get(`/api/v1/finance/documents/${id}`)
+          .set('authorization', `Bearer ${token}`)
+          .expect(200)
+      ).body as FinanceCustomerDocument;
+      expect(paid).toMatchObject({
+        paymentStatus: 'paid',
+        outstandingTotal: '0.0000',
+        financialDocument: { status: 'issued', type: 'invoice' },
+      });
+      expect(paid.payments).toHaveLength(1);
+      const invoices = await database.query(
+        'SELECT id FROM finance.financial_documents WHERE converted_from_document_id = $1',
+        [draft.id],
+      );
+      expect(invoices.rowCount).toBe(1);
+    },
+  );
+
   it('applies dated BNB rates to foreign-currency Finance drafts and payables', async () => {
     const rateDate = (
       await database.query<{ date: string }>(
@@ -3070,6 +3542,31 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
       rateDate,
       rateSource: 'BNB',
     });
+
+    const customerOverview = async () =>
+      (
+        await request(application.getHttpServer())
+          .get(`/api/v1/master-data/partners/${customerId}/customer-overview`)
+          .set('authorization', `Bearer ${token}`)
+          .expect(200)
+      ).body as CustomerOperationalOverview;
+    const beforeForeignIssue = await customerOverview();
+    await request(application.getHttpServer())
+      .post(
+        `/api/v1/finance/financial-documents/${(financialDraft.body as FinancialDocument).id}/issue`,
+      )
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', `foreign-overview-issue-${runId}`)
+      .send({ expectedVersion: (financialDraft.body as FinancialDocument).version })
+      .expect(200);
+    const afterForeignIssue = await customerOverview();
+    expect(
+      Number(afterForeignIssue.summary.outstandingEur) -
+        Number(beforeForeignIssue.summary.outstandingEur),
+    ).toBeCloseTo(13.2, 4);
+    expect(afterForeignIssue.summary.openReceivables).toBe(
+      beforeForeignIssue.summary.openReceivables + 1,
+    );
 
     const supplierInvoiceId = await seedSupplierInvoiceEvidence(
       database,
@@ -3564,7 +4061,7 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
       grossTotal: '162.0000',
     });
     const register = await request(application.getHttpServer())
-      .get('/api/v1/finance/financial-documents')
+      .get(`/api/v1/finance/financial-documents?search=${encodeURIComponent(preparedDraft.number)}`)
       .set('authorization', `Bearer ${token}`)
       .expect(200);
     expect(register.body.items).toContainEqual(expect.objectContaining({ id: preparedDraft.id }));
@@ -4483,17 +4980,15 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
       stops: [expect.objectContaining({ serviceWorkOrderId: assigned.workOrderId })],
     });
 
-    const currentBusinessDate = await database.query<{ date: string }>(
-      "SELECT to_char(now() AT TIME ZONE 'Europe/Sofia', 'YYYY-MM-DD') AS date",
-    );
-    const overdueDate = currentBusinessDate.rows[0]!.date;
-    await database.query(
+    const overdueAppointment = await database.query<{ date: string }>(
       `UPDATE service.work_orders
        SET scheduled_start = now() - interval '2 hours',
            scheduled_end = now() - interval '1 hour'
-       WHERE id = $1`,
+       WHERE id = $1
+       RETURNING to_char(scheduled_start AT TIME ZONE 'Europe/Sofia', 'YYYY-MM-DD') AS date`,
       [assigned.workOrderId],
     );
+    const overdueDate = overdueAppointment.rows[0]!.date;
     const overdueRequestPageResponse = await request(application.getHttpServer())
       .get('/api/v1/service/requests?page=1&pageSize=100')
       .set('authorization', `Bearer ${token}`)
@@ -6743,7 +7238,1161 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
     );
     expect(anchors.rows[0]).toMatchObject({ feb: '2027-02-28', mar: '2027-03-31' });
   });
+  async function recurringFixture(label: string) {
+    const today = (
+      await database.query<{ date: string }>(
+        "SELECT (now() AT TIME ZONE 'Europe/Sofia')::date::text AS date",
+      )
+    ).rows[0]!.date;
+    const ownerEmail = `recurring-${label}-${runId}@example.invalid`;
+    const ownerId = await createAccount(
+      database,
+      ownerEmail,
+      await application.get(PasswordService).hash(password),
+    );
+    await grantFinancePermissions(database, ownerId, ['view', 'create', 'edit']);
+    const ownerToken = await login(application, ownerEmail);
+    const contract = (
+      await request(application.getHttpServer())
+        .post('/api/v1/sales/subscriptions')
+        .set('authorization', `Bearer ${token}`)
+        .set('idempotency-key', `recurring-contract-${label}-${runId}`)
+        .send({
+          ...subscriptionInput(),
+          validFrom: today,
+          nextInvoiceDate: today,
+          billingAmount: '50',
+        })
+        .expect(201)
+    ).body as ServiceSubscriptionContract;
+    const refs = (
+      await request(application.getHttpServer())
+        .get('/api/v1/finance/financial-documents/reference-data')
+        .set('authorization', `Bearer ${ownerToken}`)
+        .expect(200)
+    ).body as FinancialDocumentReferenceData;
+    const scope = refs.scopes[0]!;
+    const input: RecurringInvoiceProfileInput = {
+      enabled: true,
+      legalEntityId: scope.legalEntityId,
+      businessLocationId: scope.locationId,
+      firstBillingDate: today,
+      paymentTermsDays: 14,
+      vatTreatment: 'standard_20',
+      contractVersion: contract.version,
+    };
+    const context = {
+      attemptNumber: 1,
+      correlationId: randomUUID(),
+      enqueuedAt: new Date().toISOString(),
+      idempotencyKey: `recurring-job-${label}-${runId}`,
+      jobId: randomUUID(),
+      maxAttempts: 5,
+      name: 'sales.subscription-invoice.generate',
+      payload: { asOf: today, contractId: contract.id },
+      retryAllowed: true,
+    } as const;
+    const save = (body: RecurringInvoiceProfileInput, key: string) =>
+      request(application.getHttpServer())
+        .put(`/api/v1/finance/recurring-invoices/${contract.id}`)
+        .set('authorization', `Bearer ${ownerToken}`)
+        .set('idempotency-key', key)
+        .send(body);
+    const read = async () =>
+      (
+        await request(application.getHttpServer())
+          .get(`/api/v1/finance/recurring-invoices/${contract.id}`)
+          .set('authorization', `Bearer ${ownerToken}`)
+          .expect(200)
+      ).body as RecurringInvoiceContract;
+    return { today, ownerId, ownerToken, contract, input, context, save, read };
+  }
+
+  async function correctionFixture(label: string) {
+    const fixture = await recurringFixture(`correction-${label}`);
+    const server = application.getHttpServer() as Parameters<typeof request>[0];
+    const auth = { authorization: `Bearer ${fixture.ownerToken}` };
+    const refs = (
+      await request(server)
+        .get('/api/v1/finance/financial-documents/reference-data')
+        .set(auth)
+        .expect(200)
+    ).body as FinancialDocumentReferenceData;
+    const line = {
+      description: 'Collection correction test',
+      productId,
+      unitCode: refs.products.find((item) => item.id === productId)!.unitCode,
+      quantity: '10',
+      unitPrice: '10',
+      discountPercent: '0',
+      vatTreatment: 'standard_20',
+    };
+    const input = {
+      legalEntityId: fixture.input.legalEntityId,
+      businessLocationId: fixture.input.businessLocationId,
+      customerPartnerId: customerId,
+      documentType: 'invoice',
+      issueDate: fixture.today,
+      taxEventDate: fixture.today,
+      dueDate: fixture.today,
+      currencyCode: 'EUR',
+      exchangeRate: '1',
+      rateDate: fixture.today,
+      rateSource: 'internal_eur',
+      lines: [line],
+    };
+    const create = async (body: object) =>
+      (
+        await request(server)
+          .post('/api/v1/finance/financial-documents')
+          .set(auth)
+          .set('idempotency-key', randomUUID())
+          .send(body)
+          .expect(201)
+      ).body as FinancialDocument;
+    const issue = (document: FinancialDocument, key = randomUUID()) =>
+      request(server)
+        .post(`/api/v1/finance/financial-documents/${document.id}/issue`)
+        .set(auth)
+        .set('idempotency-key', key)
+        .send({ expectedVersion: document.version });
+    const draft = await create(input);
+    const original = (await issue(draft).expect(200)).body as FinancialDocument;
+    const collectionId = original.collection!.id;
+    const read = async () =>
+      (await request(server).get(`/api/v1/finance/documents/${collectionId}`).set(auth).expect(200))
+        .body as FinanceCustomerDocument;
+    const note = (type: 'credit_note' | 'debit_note', quantity: string) =>
+      create({
+        ...input,
+        documentType: type,
+        dueDate: undefined,
+        correctionOfDocumentId: original.id,
+        correctionReason: `${type} for ${quantity} items`,
+        lines: [{ ...line, quantity }],
+      });
+    const pay = (amount: string, version: number) =>
+      request(server)
+        .post(`/api/v1/finance/documents/${collectionId}/payments`)
+        .set(auth)
+        .set('idempotency-key', randomUUID())
+        .send({
+          amount,
+          expectedDocumentVersion: version,
+          paymentMethod: 'bank_transfer',
+          paymentDate: fixture.today,
+          paymentReference: `Correction test ${randomUUID()}`,
+        });
+    return {
+      ...fixture,
+      server,
+      auth,
+      create,
+      issue,
+      input,
+      original,
+      collectionId,
+      read,
+      note,
+      pay,
+    };
+  }
+
+  it('applies only issued notes, preserves original payments and exposes customer credit without inventing a refund', async () => {
+    const f = await correctionFixture('balances');
+    const advancesBefore = (
+      await database.query(
+        'SELECT id FROM finance.customer_advances WHERE customer_partner_id=$1',
+        [customerId],
+      )
+    ).rowCount;
+    const originalBefore = (
+      await database.query<Record<string, unknown>>(
+        'SELECT gross_total,eur_gross_total,exchange_rate,version FROM finance.financial_documents WHERE id=$1',
+        [f.original.id],
+      )
+    ).rows[0];
+    expect(
+      (
+        await request(f.server)
+          .get('/api/v1/finance/financial-documents/reference-data')
+          .set(f.auth)
+          .expect(200)
+      ).body.correctionDocuments,
+    ).toContainEqual(
+      expect.objectContaining({ id: f.original.id, number: f.original.officialNumber }),
+    );
+    let collection = await f.read();
+    collection = (await f.pay('60', collection.version).expect(201))
+      .body as FinanceCustomerDocument;
+    const first = await f.note('credit_note', '2');
+    const turnover = async () =>
+      (
+        await request(f.server)
+          .get(
+            `/api/v1/finance/reports/turnover?kind=customer&dateFrom=${f.today}&dateTo=${f.today}`,
+          )
+          .set(f.auth)
+          .expect(200)
+      ).body as FinanceTurnoverReport;
+    const turnoverBefore = (await turnover()).items.find(
+      (row) => row.partnerId === customerId,
+    )!.grossEurTotal;
+    expect(await f.read()).toMatchObject({
+      total: '120.0000',
+      allocatedTotal: '60.0000',
+      outstandingTotal: '60.0000',
+      creditTotal: '0.0000',
+      corrections: [],
+    });
+    await request(f.server)
+      .post(`/api/v1/finance/financial-documents/${first.id}/issue`)
+      .set('authorization', `Bearer ${viewerToken}`)
+      .set('idempotency-key', randomUUID())
+      .send({ expectedVersion: first.version })
+      .expect(403);
+    const issueKey = randomUUID();
+    const issued = (await f.issue(first, issueKey).expect(200)).body as FinancialDocument;
+    expect(issued.collection?.id).toBe(f.collectionId);
+    await f.issue(first, issueKey).expect(200);
+    await f.issue(first).expect(409);
+    await f.issue(issued).expect(200);
+    collection = await f.read();
+    expect(collection).toMatchObject({
+      total: '120.0000',
+      creditTotal: '24.0000',
+      debitTotal: '0.0000',
+      adjustedTotal: '96.0000',
+      allocatedTotal: '60.0000',
+      outstandingTotal: '36.0000',
+      overpaidTotal: '0.0000',
+      paymentStatus: 'partially_paid',
+    });
+    expect(collection.corrections).toHaveLength(1);
+    expect(
+      Number((await turnover()).items.find((row) => row.partnerId === customerId)!.grossEurTotal) -
+        Number(turnoverBefore),
+    ).toBe(-24);
+    expect(collection.corrections![0]).toMatchObject({
+      documentId: first.id,
+      number: issued.officialNumber,
+      amount: '24.0000',
+      eurAmount: '24.0000',
+    });
+    const cancelled = await f.note('credit_note', '1');
+    await request(f.server)
+      .post(`/api/v1/finance/financial-documents/${cancelled.id}/cancel`)
+      .set(f.auth)
+      .set('idempotency-key', randomUUID())
+      .send({ expectedVersion: 1, cancellationReason: 'No longer needed' })
+      .expect(200);
+    expect((await f.read()).creditTotal).toBe('24.0000');
+    const debit = await f.note('debit_note', '1');
+    await f.issue(debit).expect(200);
+    collection = await f.read();
+    expect(collection).toMatchObject({
+      adjustedTotal: '108.0000',
+      outstandingTotal: '48.0000',
+      debitTotal: '12.0000',
+    });
+    const excess = await f.pay('49', collection.version).expect(409);
+    expect(excess.body.error.code).toBe('FINANCE_ALLOCATION_EXCEEDS_BALANCE');
+    collection = (await f.pay('48', collection.version).expect(201))
+      .body as FinanceCustomerDocument;
+    const lateCredit = await f.note('credit_note', '1');
+    await f.issue(lateCredit).expect(200);
+    collection = await f.read();
+    expect(collection).toMatchObject({
+      total: '120.0000',
+      adjustedTotal: '96.0000',
+      creditTotal: '36.0000',
+      allocatedTotal: '108.0000',
+      outstandingTotal: '0.0000',
+      overpaidTotal: '12.0000',
+      paymentStatus: 'paid',
+    });
+    expect(collection.payments.map((payment) => payment.amount)).toEqual(
+      expect.arrayContaining(['60.0000', '48.0000']),
+    );
+    expect(collection.payments).toHaveLength(2);
+    expect(
+      (
+        await database.query(
+          'SELECT gross_total,eur_gross_total,exchange_rate,version FROM finance.financial_documents WHERE id=$1',
+          [f.original.id],
+        )
+      ).rows[0],
+    ).toEqual(originalBefore);
+    for (const command of [
+      'UPDATE finance.collection_corrections SET amount=1 WHERE correction_document_id=$1',
+      'DELETE FROM finance.collection_corrections WHERE correction_document_id=$1',
+    ])
+      await expect(database.query(command, [first.id])).rejects.toThrow('append-only');
+    expect(
+      (
+        await database.query(
+          'SELECT id FROM finance.customer_advances WHERE customer_partner_id=$1',
+          [customerId],
+        )
+      ).rowCount,
+    ).toBe(advancesBefore);
+    const extraDebit = await f.note('debit_note', '2');
+    await f.issue(extraDebit).expect(200);
+    collection = await f.read();
+    expect(collection).toMatchObject({
+      adjustedTotal: '120.0000',
+      allocatedTotal: '108.0000',
+      outstandingTotal: '12.0000',
+      overpaidTotal: '0.0000',
+      paymentStatus: 'partially_paid',
+    });
+    await grantFinancePermissions(database, f.ownerId, ['approve']);
+    const payment = collection.payments.find((item) => item.amount === '48.0000')!;
+    const reversed = (
+      await request(f.server)
+        .post(`/api/v1/finance/documents/${f.collectionId}/payments/${payment.id}/reverse`)
+        .set(f.auth)
+        .set('idempotency-key', randomUUID())
+        .send({
+          expectedDocumentVersion: collection.version,
+          reason: 'Incorrect transfer reference',
+        })
+        .expect(200)
+    ).body as FinanceCustomerDocument;
+    expect(reversed).toMatchObject({
+      allocatedTotal: '60.0000',
+      outstandingTotal: '60.0000',
+      creditTotal: '36.0000',
+      debitTotal: '36.0000',
+    });
+    await assertGuardedDowngrade(
+      database,
+      '0082_collection_corrections',
+      'Cannot downgrade collection corrections',
+    );
+  });
+
+  it('serializes correction issues and payments, and rolls back a failed balance posting with its legal number', async () => {
+    const f = await correctionFixture('retry');
+    const a = await f.note('credit_note', '2');
+    const b = await f.note('credit_note', '1');
+    await Promise.all([f.issue(a).expect(200), f.issue(b).expect(200)]);
+    let collection = await f.read();
+    expect(collection).toMatchObject({
+      creditTotal: '36.0000',
+      adjustedTotal: '84.0000',
+      outstandingTotal: '84.0000',
+    });
+    expect(collection.corrections).toHaveLength(2);
+    const c = await f.note('credit_note', '1');
+    const [payment, credit] = await Promise.all([f.pay('60', collection.version), f.issue(c)]);
+    expect(credit.status).toBe(200);
+    expect([201, 409]).toContain(payment.status);
+    collection = await f.read();
+    if (payment.status === 409)
+      collection = (await f.pay('60', collection.version).expect(201))
+        .body as FinanceCustomerDocument;
+    expect(collection).toMatchObject({
+      creditTotal: '48.0000',
+      adjustedTotal: '72.0000',
+      allocatedTotal: '60.0000',
+      outstandingTotal: '12.0000',
+    });
+    const retry = await f.note('debit_note', '1');
+    const numbering = () =>
+      database.query<{ id: string; next_value: string }>(
+        'SELECT id,next_value::text FROM finance.official_number_series WHERE legal_entity_id=$1 ORDER BY id',
+        [f.input.legalEntityId],
+      );
+    const numbersBefore = (await numbering()).rows;
+    await database.query(
+      `CREATE FUNCTION finance.fail_test_correction() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.correction_document_id='${retry.id}'::uuid THEN RAISE EXCEPTION 'test correction unavailable'; END IF; RETURN NEW; END $$; CREATE TRIGGER fail_test_correction BEFORE INSERT ON finance.collection_corrections FOR EACH ROW EXECUTE FUNCTION finance.fail_test_correction()`,
+    );
+    try {
+      await f.issue(retry).expect(500);
+    } finally {
+      await database.query(
+        'DROP TRIGGER fail_test_correction ON finance.collection_corrections; DROP FUNCTION finance.fail_test_correction()',
+      );
+    }
+    expect(
+      (
+        await database.query(
+          'SELECT status,official_number FROM finance.financial_documents WHERE id=$1',
+          [retry.id],
+        )
+      ).rows[0],
+    ).toEqual({ status: 'draft', official_number: null });
+    expect((await numbering()).rows).toEqual(numbersBefore);
+    expect((await f.read()).outstandingTotal).toBe('12.0000');
+    await f.issue(retry).expect(200);
+    expect(await f.read()).toMatchObject({
+      debitTotal: '12.0000',
+      adjustedTotal: '84.0000',
+      outstandingTotal: '24.0000',
+    });
+    expect(
+      (
+        await database.query(
+          "SELECT id FROM integration.outbox_events WHERE event_type='finance.collection.corrected' AND aggregate_id=$1",
+          [f.collectionId],
+        )
+      ).rowCount,
+    ).toBe(4);
+  });
+
+  it.each(['cash', 'advance', 'offset', 'bank'] as const)(
+    'settles only the corrected balance through %s without duplicate allocations',
+    async (method) => {
+      const f = await correctionFixture(method);
+      await f.issue(await f.note('credit_note', '2')).expect(200);
+      const before = await f.read();
+      let path: string;
+      let input: object;
+      if (method === 'cash') {
+        path = '/api/v1/finance/cash/vouchers';
+        input = {
+          amount: '96',
+          cashRegisterId,
+          customerDocumentId: f.collectionId,
+          direction: 'receipt',
+          operatorId: cashOperatorId,
+          purpose: 'Corrected invoice settlement',
+          voucherDate: f.today,
+        };
+      } else if (method === 'advance') {
+        const advance = (
+          await request(f.server)
+            .post('/api/v1/finance/customer-accounts/advances')
+            .set(f.auth)
+            .set('idempotency-key', randomUUID())
+            .send({
+              amount: '96',
+              customerPartnerId: customerId,
+              paymentMethod: 'bank_transfer',
+              receivedOn: f.today,
+            })
+            .expect(201)
+        ).body as CustomerAdvance;
+        path = `/api/v1/finance/documents/${f.collectionId}/advance-allocations`;
+        input = { amount: '96', customerAdvanceId: advance.id };
+      } else if (method === 'offset') {
+        const supplierInvoiceId = await seedSupplierInvoiceEvidence(
+          database,
+          f.ownerId,
+          customerId,
+          warehouseId,
+          productId,
+          f.today,
+          `${runId}-corrected-offset`,
+        );
+        const payable = (
+          await request(f.server)
+            .post('/api/v1/finance/supplier-payables')
+            .set(f.auth)
+            .set('idempotency-key', randomUUID())
+            .send({ dueDate: f.today, supplierInvoiceId })
+            .expect(201)
+        ).body as FinanceSupplierPayable;
+        path = '/api/v1/finance/supplier-offsets';
+        input = {
+          amount: '96',
+          customerDocumentId: f.collectionId,
+          expectedCustomerDocumentVersion: before.version,
+          expectedSupplierPayableVersion: payable.version,
+          offsetDate: f.today,
+          reason: 'Bilateral corrected invoice settlement',
+          supplierPayableId: payable.id,
+        };
+      } else {
+        path = '/api/v1/finance/bank-statements';
+        input = {
+          accountIban: 'BG76DEMO00000000000000',
+          bankName: 'Correction test bank',
+          openingBalance: '0',
+          closingBalance: '96',
+          currencyCode: 'EUR',
+          statementDate: f.today,
+          statementReference: `CORRECTION-${runId}`,
+          lines: [
+            {
+              amount: '96',
+              counterpartyName: 'Correction test customer',
+              direction: 'incoming',
+              paymentReference: f.original.officialNumber,
+              transactionDate: f.today,
+              valueDate: f.today,
+            },
+          ],
+        };
+      }
+      const key = randomUUID();
+      const send = () =>
+        request(f.server)
+          .post(path)
+          .set(f.auth)
+          .set('idempotency-key', key)
+          .send(input)
+          .expect(201);
+      await send();
+      await send();
+      const paid = await f.read();
+      expect(paid).toMatchObject({
+        total: '120.0000',
+        creditTotal: '24.0000',
+        adjustedTotal: '96.0000',
+        allocatedTotal: '96.0000',
+        outstandingTotal: '0.0000',
+        overpaidTotal: '0.0000',
+        paymentStatus: 'paid',
+      });
+      expect(paid.payments).toHaveLength(1);
+    },
+  );
+
+  it('issues approved recurring periods once through the scheduler with scoped numbering and collections', async () => {
+    const fixture = await recurringFixture('scheduled');
+    const { contract, ownerToken, input, context } = fixture;
+    const registry = application.get(JobHandlerRegistry);
+    await registry.execute(context);
+    expect((await fixture.read()).periods[0]).toMatchObject({
+      status: 'waiting',
+      amount: '50.0000',
+    });
+    await request(application.getHttpServer())
+      .put(`/api/v1/finance/recurring-invoices/${contract.id}`)
+      .set('authorization', `Bearer ${viewerToken}`)
+      .set('idempotency-key', `recurring-denied-${runId}`)
+      .send(input)
+      .expect(403);
+    const saved = (await fixture.save(input, `recurring-save-${runId}`).expect(200))
+      .body as RecurringInvoiceContract;
+    expect(saved.profile).toMatchObject({
+      enabled: true,
+      contractVersion: contract.version,
+      version: 1,
+    });
+    expect(
+      (
+        (await fixture.save(input, `recurring-save-${runId}`).expect(200))
+          .body as RecurringInvoiceContract
+      ).profile?.version,
+    ).toBe(1);
+    const execute = (suffix: string) =>
+      registry.execute({
+        ...context,
+        idempotencyKey: `${context.idempotencyKey}:${suffix}`,
+        jobId: randomUUID(),
+      });
+    await Promise.all([execute('a'), execute('b')]);
+    const complete = await fixture.read();
+    expect(complete.periods).toHaveLength(1);
+    expect(complete.periods[0]?.status).toBe('issued');
+    expect(complete.periods[0]?.document?.number).toMatch(/^\d{10}$/u);
+    const documentId = complete.periods[0]!.document!.id;
+    const document = (
+      await request(application.getHttpServer())
+        .get(`/api/v1/finance/financial-documents/${documentId}`)
+        .set('authorization', `Bearer ${ownerToken}`)
+        .expect(200)
+    ).body as FinancialDocument;
+    expect(document).toMatchObject({
+      status: 'issued',
+      netTotal: '50.0000',
+      vatTotal: '10.0000',
+      grossTotal: '60.0000',
+      sourceSubscriptionDraftId: complete.periods[0]!.id,
+      issueDate: fixture.today,
+      taxEventDate: fixture.today,
+    });
+    expect(document.collection?.id).toBeTruthy();
+    const collection = (
+      await request(application.getHttpServer())
+        .get(`/api/v1/finance/documents/${document.collection!.id}`)
+        .set('authorization', `Bearer ${ownerToken}`)
+        .expect(200)
+    ).body as FinanceCustomerDocument;
+    expect(collection).toMatchObject({
+      total: '60.0000',
+      outstandingTotal: '60.0000',
+      paymentStatus: 'unpaid',
+      financialDocument: { id: documentId },
+    });
+    expect(collection.dueDate).toBe(
+      (
+        await database.query<{ date: string }>('SELECT ($1::date+14)::text AS date', [
+          fixture.today,
+        ])
+      ).rows[0]!.date,
+    );
+    await execute('replay');
+    expect(
+      (
+        await database.query(
+          'SELECT id FROM finance.financial_documents WHERE source_subscription_draft_id=$1',
+          [complete.periods[0]!.id],
+        )
+      ).rowCount,
+    ).toBe(1);
+    await assertGuardedDowngrade(
+      database,
+      '0080_recurring_invoice_issuance',
+      'Cannot downgrade recurring invoicing while approved profiles or issuance history exist',
+    );
+    const stale = await fixture
+      .save({ ...input, expectedVersion: 9 }, `recurring-stale-${runId}`)
+      .expect(409);
+    expect(stale.body.error.code).toBe('RECURRING_VERSION_CONFLICT');
+    await fixture
+      .save({ ...input, enabled: false, expectedVersion: 1 }, `recurring-disable-${runId}`)
+      .expect(200);
+  });
+
+  it('retains failed billing periods, rolls back all invoice effects and recovers on a worker retry', async () => {
+    const fixture = await recurringFixture('retry');
+    await fixture.save(fixture.input, `recurring-retry-save-${runId}`).expect(200);
+    const issue = vi
+      .spyOn(application.get(FinancialDocumentsService), 'issue')
+      .mockRejectedValueOnce(
+        new ApiErrorException('RECURRING_TEST_UNAVAILABLE', 'Temporary test outage.', 503),
+      );
+    try {
+      await expect(application.get(JobHandlerRegistry).execute(fixture.context)).rejects.toThrow(
+        'Recurring invoice processing needs a retry',
+      );
+    } finally {
+      issue.mockRestore();
+    }
+    const pending = await fixture.read();
+    expect(pending.periods[0]).toMatchObject({
+      status: 'retry',
+      errorCode: 'RECURRING_TEST_UNAVAILABLE',
+    });
+    expect(
+      (
+        await database.query(
+          'SELECT id FROM finance.financial_documents WHERE source_subscription_draft_id=$1',
+          [pending.periods[0]!.id],
+        )
+      ).rowCount,
+    ).toBe(0);
+    await application.get(JobHandlerRegistry).execute({ ...fixture.context, attemptNumber: 2 });
+    const recovered = await fixture.read();
+    expect(recovered.periods[0]?.status).toBe('issued');
+    expect(
+      (
+        await database.query<{ attempt_count: number }>(
+          'SELECT attempt_count FROM finance.recurring_invoice_runs WHERE billing_draft_id=$1',
+          [pending.periods[0]!.id],
+        )
+      ).rows[0]?.attempt_count,
+    ).toBe(2);
+    await fixture
+      .save(
+        { ...fixture.input, enabled: false, expectedVersion: 1 },
+        `recurring-retry-disable-${runId}`,
+      )
+      .expect(200);
+  });
+
+  it('requires review after contract or access changes and leaves manually prepared periods untouched', async () => {
+    const fixture = await recurringFixture('review');
+    await fixture.save(fixture.input, `recurring-review-save-${runId}`).expect(200);
+    await application.get(SalesSubscriptionsService).generateDueInvoiceDrafts(fixture.context);
+    const draftId = (await fixture.read()).periods[0]!.id;
+    const manual = (
+      await request(application.getHttpServer())
+        .post('/api/v1/finance/financial-documents')
+        .set('authorization', `Bearer ${fixture.ownerToken}`)
+        .set('idempotency-key', `recurring-manual-${runId}`)
+        .send({
+          businessLocationId: fixture.input.businessLocationId,
+          legalEntityId: fixture.input.legalEntityId,
+          customerPartnerId: customerId,
+          documentType: 'invoice',
+          sourceSubscriptionDraftId: draftId,
+          currencyCode: 'EUR',
+          issueDate: fixture.today,
+          dueDate: fixture.today,
+          taxEventDate: fixture.today,
+          rateDate: fixture.today,
+          exchangeRate: '1',
+          rateSource: 'internal_eur',
+          lines: [
+            {
+              description: 'Reviewed charge',
+              quantity: '1',
+              unitCode: 'SERVICE',
+              unitPrice: '50',
+              discountPercent: '0',
+              vatTreatment: 'standard_20',
+            },
+          ],
+        })
+        .expect(201)
+    ).body as FinancialDocument;
+    const registry = application.get(JobHandlerRegistry);
+    await registry.execute(fixture.context);
+    expect((await fixture.read()).periods[0]).toMatchObject({
+      status: 'manual_review',
+      errorCode: 'FINANCE_RECURRING_MANUAL_DRAFT',
+      document: { id: manual.id },
+    });
+    await database.query(
+      'UPDATE sales.service_subscription_contracts SET version=version+1 WHERE id=$1',
+      [fixture.contract.id],
+    );
+    await registry.execute({
+      ...fixture.context,
+      idempotencyKey: `${fixture.context.idempotencyKey}:changed`,
+    });
+    expect((await fixture.read()).periods[0]?.errorCode).toBe('RECURRING_CONTRACT_CHANGED');
+    await fixture
+      .save(
+        { ...fixture.input, contractVersion: 2, expectedVersion: 1 },
+        `recurring-review-renew-${runId}`,
+      )
+      .expect(200);
+    await database.query(
+      `DELETE FROM iam.role_permissions selected USING iam.permissions permission,iam.account_roles role
+      WHERE selected.permission_id=permission.id AND selected.role_id=role.role_id AND role.account_id=$1 AND permission.module='erp.finance' AND permission.action='edit'`,
+      [fixture.ownerId],
+    );
+    await registry.execute({
+      ...fixture.context,
+      idempotencyKey: `${fixture.context.idempotencyKey}:revoked`,
+    });
+    expect((await fixture.read()).periods[0]?.errorCode).toBe('RECURRING_ACCESS_CHANGED');
+    const stillDraft = (
+      await request(application.getHttpServer())
+        .get(`/api/v1/finance/financial-documents/${manual.id}`)
+        .set('authorization', `Bearer ${fixture.ownerToken}`)
+        .expect(200)
+    ).body as FinancialDocument;
+    expect(stillDraft.status).toBe('draft');
+    expect(stillDraft.officialNumber).toBeUndefined();
+  });
+
+  it('stops automatic retries after five failed attempts and lets Finance recover the same period explicitly', async () => {
+    const fixture = await recurringFixture('retry-limit');
+    await fixture.save(fixture.input, `recurring-limit-save-${runId}`).expect(200);
+    const registry = application.get(JobHandlerRegistry);
+    const issue = vi
+      .spyOn(application.get(FinancialDocumentsService), 'issue')
+      .mockRejectedValue(
+        new ApiErrorException('RECURRING_TEST_UNAVAILABLE', 'Temporary test outage.', 503),
+      );
+    try {
+      for (let attempt = 1; attempt <= 5; attempt++) {
+        const run = registry.execute({ ...fixture.context, attemptNumber: attempt });
+        if (attempt < 5)
+          await expect(run).rejects.toThrow('Recurring invoice processing needs a retry');
+        else await expect(run).resolves.toMatchObject({ reviewCount: 1, retryCount: 0 });
+      }
+      await registry.execute({
+        ...fixture.context,
+        idempotencyKey: `${fixture.context.idempotencyKey}:next-day`,
+      });
+      expect(issue).toHaveBeenCalledTimes(5);
+      expect((await fixture.read()).periods[0]).toMatchObject({
+        status: 'needs_review',
+        errorCode: 'RECURRING_TEST_UNAVAILABLE',
+      });
+    } finally {
+      issue.mockRestore();
+    }
+    const run = () =>
+      request(application.getHttpServer())
+        .post(`/api/v1/finance/recurring-invoices/${fixture.contract.id}/run`)
+        .set('authorization', `Bearer ${fixture.ownerToken}`)
+        .set('idempotency-key', `recurring-limit-recover-${runId}`)
+        .send();
+    const recovered = await run().expect(200);
+    expect(recovered.body).toMatchObject({ issuedCount: 1, retryCount: 0 });
+    expect((await run().expect(200)).body).toEqual(recovered.body);
+    const period = (await fixture.read()).periods[0]!;
+    expect(period.status).toBe('issued');
+    expect(
+      (
+        await database.query(
+          'SELECT id FROM finance.financial_documents WHERE source_subscription_draft_id=$1',
+          [period.id],
+        )
+      ).rowCount,
+    ).toBe(1);
+    await fixture
+      .save(
+        { ...fixture.input, enabled: false, expectedVersion: 1 },
+        `recurring-limit-disable-${runId}`,
+      )
+      .expect(200);
+    // An acknowledged request can be replayed after settings change without generating new source periods.
+    expect((await run().expect(200)).body).toEqual(recovered.body);
+  });
+
+  it('keeps an earlier period manual when a newly approved contract has a different billing cycle', async () => {
+    const fixture = await recurringFixture('cycle-change');
+    await fixture.save(fixture.input, `recurring-cycle-save-${runId}`).expect(200);
+    await application.get(SalesSubscriptionsService).generateDueInvoiceDrafts(fixture.context);
+    await database.query(
+      'UPDATE sales.service_subscription_contracts SET billing_frequency_months=billing_frequency_months+1,version=version+1 WHERE id=$1',
+      [fixture.contract.id],
+    );
+    await fixture
+      .save(
+        { ...fixture.input, contractVersion: 2, expectedVersion: 1 },
+        `recurring-cycle-renew-${runId}`,
+      )
+      .expect(200);
+    await application.get(JobHandlerRegistry).execute(fixture.context);
+    const period = (await fixture.read()).periods[0]!;
+    expect(period).toMatchObject({
+      status: 'needs_review',
+      errorCode: 'RECURRING_BILLING_CHANGED',
+    });
+    expect(
+      (
+        await database.query(
+          'SELECT id FROM finance.financial_documents WHERE source_subscription_draft_id=$1',
+          [period.id],
+        )
+      ).rowCount,
+    ).toBe(0);
+  });
+
+  it('secures company images, freezes issued branding and retries the same emailed PDF after settings change', async () => {
+    const fixture = await recurringFixture('branding');
+    const server = application.getHttpServer() as Parameters<typeof request>[0];
+    const auth = { authorization: `Bearer ${fixture.ownerToken}` };
+    const companyId = fixture.input.legalEntityId;
+    const endpoint = `/api/v1/finance/document-branding/${companyId}`;
+    expect((await request(server).get(endpoint).set(auth).expect(200)).body).toMatchObject({
+      version: 0,
+      legalEntityId: companyId,
+    });
+    await request(server).get(endpoint).set('authorization', `Bearer ${token}`).expect(200);
+    await request(server)
+      .put(endpoint)
+      .set('authorization', `Bearer ${viewerToken}`)
+      .set('idempotency-key', `branding-denied-${runId}`)
+      .send({ expectedVersion: 0 })
+      .expect(403);
+    await request(server).put(endpoint).set(auth).send({ expectedVersion: 0 }).expect(400);
+    const brandingPng = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGMQt9D/DwACZgF+JMBukQAAAABJRU5ErkJggg==',
+      'base64',
+    );
+    const upload = (name: string, parentId = companyId, bytes = brandingPng) =>
+      request(server)
+        .post('/api/v1/files')
+        .set(auth)
+        .set('idempotency-key', `branding-upload-${name}-${runId}`)
+        .field('parentType', 'financial_branding')
+        .field('parentId', parentId)
+        .attach('file', bytes, { filename: `${name}.png`, contentType: 'image/png' });
+    const logo = (await upload('logo').expect(201)).body as ManagedFile;
+    const signature = (await upload('signature').expect(201)).body as ManagedFile;
+    const invalidImage = await upload('invalid', companyId, Buffer.from('not a PNG')).expect(400);
+    expect(invalidImage.body.error.code).toBe('FILE_CONTENT_TYPE_MISMATCH');
+    const saveBody = {
+      expectedVersion: 0,
+      logoFileId: logo.id,
+      signatureFileId: signature.id,
+      signatoryName: 'QA sample signer',
+      signatureConfirmed: true,
+    };
+    await request(server)
+      .put(endpoint)
+      .set(auth)
+      .set('idempotency-key', `branding-unconfirmed-${runId}`)
+      .send({ ...saveBody, signatureConfirmed: false })
+      .expect(400);
+    const saveKey = `branding-save-${runId}`;
+    const saved = (
+      await request(server)
+        .put(endpoint)
+        .set(auth)
+        .set('idempotency-key', saveKey)
+        .send(saveBody)
+        .expect(200)
+    ).body as FinancialBrandingSettings;
+    expect(saved).toMatchObject({
+      version: 1,
+      logo: { id: logo.id, checksumSha256: logo.checksumSha256 },
+      signature: { id: signature.id },
+      signatoryName: 'QA sample signer',
+    });
+    expect(
+      (
+        await request(server)
+          .put(endpoint)
+          .set(auth)
+          .set('idempotency-key', saveKey)
+          .send(saveBody)
+          .expect(200)
+      ).body,
+    ).toEqual(saved);
+    const stale = await request(server)
+      .put(endpoint)
+      .set(auth)
+      .set('idempotency-key', `branding-stale-${runId}`)
+      .send(saveBody)
+      .expect(409);
+    expect(stale.body.error.code).toBe('FINANCE_BRANDING_VERSION_CONFLICT');
+    const anotherCompany = randomUUID();
+    await database.query(
+      'INSERT INTO organization.legal_entities (id,code,name,created_by,updated_by) VALUES ($1,$2,$3,$4,$4)',
+      [anotherCompany, `BRAND-${runId.slice(0, 20)}`, 'Other branding company', fixture.ownerId],
+    );
+    const wrongParent = await request(server)
+      .put(`/api/v1/finance/document-branding/${anotherCompany}`)
+      .set(auth)
+      .set('idempotency-key', `branding-wrong-parent-${runId}`)
+      .send({ expectedVersion: 0, logoFileId: logo.id })
+      .expect(400);
+    expect(wrongParent.body.error.code).toBe('FINANCE_BRANDING_FILE_INVALID');
+
+    const refs = (
+      await request(server)
+        .get('/api/v1/finance/financial-documents/reference-data')
+        .set(auth)
+        .expect(200)
+    ).body as FinancialDocumentReferenceData;
+    const unitCode = refs.products.find((item) => item.id === productId)!.unitCode;
+    const draftInput = {
+      businessLocationId: fixture.input.businessLocationId,
+      legalEntityId: companyId,
+      customerPartnerId: customerId,
+      documentType: 'invoice',
+      issueDate: fixture.today,
+      taxEventDate: fixture.today,
+      dueDate: fixture.today,
+      currencyCode: 'EUR',
+      rateDate: fixture.today,
+      rateSource: 'internal_eur',
+      exchangeRate: '1',
+      lines: [
+        {
+          description: 'Branding test / Проверка на оформлението',
+          productId,
+          unitCode,
+          quantity: '1',
+          unitPrice: '50',
+          discountPercent: '0',
+          vatTreatment: 'standard_20',
+        },
+      ],
+    };
+    const draft = (
+      await request(server)
+        .post('/api/v1/finance/financial-documents')
+        .set(auth)
+        .set('idempotency-key', `branding-draft-${runId}`)
+        .send(draftInput)
+        .expect(201)
+    ).body as FinancialDocument;
+    expect(draft.branding).toEqual({
+      version: 1,
+      logo: saved.logo,
+      signature: saved.signature,
+      signatoryName: saved.signatoryName,
+    });
+    const draftPdf = await request(server)
+      .get(`/api/v1/finance/financial-documents/${draft.id}/pdf`)
+      .set(auth)
+      .expect(200);
+    const draftBytes = draftPdf.body as Buffer;
+    expect(draftBytes.subarray(0, 4).toString()).toBe('%PDF');
+    const staleIssue = await request(server)
+      .post(`/api/v1/finance/financial-documents/${draft.id}/issue`)
+      .set(auth)
+      .set('idempotency-key', `branding-issue-stale-${runId}`)
+      .send({ expectedVersion: 1, expectedBrandingVersion: 0 })
+      .expect(409);
+    expect(staleIssue.body.error.code).toBe('FINANCE_BRANDING_VERSION_CONFLICT');
+    const issued = (
+      await request(server)
+        .post(`/api/v1/finance/financial-documents/${draft.id}/issue`)
+        .set(auth)
+        .set('idempotency-key', `branding-issue-${runId}`)
+        .send({ expectedVersion: 1, expectedBrandingVersion: 1 })
+        .expect(200)
+    ).body as FinancialDocument;
+    expect(issued.branding).toEqual(draft.branding);
+    const issuedPdf = await request(server)
+      .get(`/api/v1/finance/financial-documents/${draft.id}/pdf`)
+      .set(auth)
+      .expect(200);
+    const issuedBytes = issuedPdf.body as Buffer;
+    expect(
+      (issuedBytes.toString('latin1').match(/\/Subtype \/Image/g) ?? []).length,
+    ).toBeGreaterThan((draftBytes.toString('latin1').match(/\/Subtype \/Image/g) ?? []).length);
+    await expect(
+      database.query(
+        "UPDATE finance.financial_documents SET branding_snapshot='{}'::jsonb WHERE id=$1",
+        [draft.id],
+      ),
+    ).rejects.toThrow('Issued document branding cannot be changed');
+
+    await fixture.save(fixture.input, `branding-recurring-profile-${runId}`).expect(200);
+    await application.get(JobHandlerRegistry).execute(fixture.context);
+    const recurringId = (await fixture.read()).periods[0]!.document!.id;
+    const recurringDocument = (
+      await request(server)
+        .get(`/api/v1/finance/financial-documents/${recurringId}`)
+        .set(auth)
+        .expect(200)
+    ).body as FinancialDocument;
+    expect(recurringDocument.branding).toEqual(issued.branding);
+    const proformaDraft = (
+      await request(server)
+        .post('/api/v1/finance/financial-documents')
+        .set(auth)
+        .set('idempotency-key', `branding-proforma-${runId}`)
+        .send({ ...draftInput, documentType: 'proforma' })
+        .expect(201)
+    ).body as FinancialDocument;
+    const proforma = (
+      await request(server)
+        .post(`/api/v1/finance/financial-documents/${proformaDraft.id}/issue`)
+        .set(auth)
+        .set('idempotency-key', `branding-proforma-issue-${runId}`)
+        .send({ expectedVersion: 1, expectedBrandingVersion: 1 })
+        .expect(200)
+    ).body as FinancialDocument;
+    const collection = (
+      await request(server)
+        .get(`/api/v1/finance/documents/${proforma.collection!.id}`)
+        .set(auth)
+        .expect(200)
+    ).body as FinanceCustomerDocument;
+    await request(server)
+      .post(`/api/v1/finance/documents/${collection.id}/payments`)
+      .set(auth)
+      .set('idempotency-key', `branding-proforma-payment-${runId}`)
+      .send({
+        amount: '60',
+        paymentMethod: 'bank_transfer',
+        paymentDate: fixture.today,
+      })
+      .expect(201);
+    const paidProforma = (
+      await request(server)
+        .get(`/api/v1/finance/financial-documents/${proforma.id}`)
+        .set(auth)
+        .expect(200)
+    ).body as FinancialDocument;
+    const converted = (
+      await request(server)
+        .get(`/api/v1/finance/financial-documents/${paidProforma.convertedToDocumentId!}`)
+        .set(auth)
+        .expect(200)
+    ).body as FinancialDocument;
+    expect(converted.branding).toEqual(issued.branding);
+
+    const recipient = `branding-${runId}@example.invalid`;
+    const emailKey = `branding-email-${runId}`;
+    const emailBody = { expectedVersion: issued.version, recipientEmail: recipient };
+    await request(server)
+      .post(`/api/v1/finance/financial-documents/${draft.id}/email`)
+      .set(auth)
+      .set('idempotency-key', emailKey)
+      .send(emailBody)
+      .expect(202);
+    const mail = (
+      await database.query<{ id: string; payload: { attachment: { contentBase64: string } } }>(
+        "SELECT id,payload FROM notifications.messages WHERE channel='email' AND payload->>'to'=$1",
+        [recipient],
+      )
+    ).rows[0]!;
+    const queuedBytes = Buffer.from(mail.payload.attachment.contentBase64, 'base64');
+    expect(
+      (queuedBytes.toString('latin1').match(/\/Subtype \/Image/g) ?? []).length,
+    ).toBeGreaterThan(1);
+    // A quarantined asset must not prevent Finance from opening settings to remove its binding.
+    await database.query("UPDATE files.objects SET status='quarantined' WHERE id=$1", [logo.id]);
+    await request(server).get(endpoint).set(auth).expect(200);
+    await request(server)
+      .put(endpoint)
+      .set(auth)
+      .set('idempotency-key', `branding-clear-${runId}`)
+      .send({ expectedVersion: 1 })
+      .expect(200);
+    await database.query("UPDATE files.objects SET status='available' WHERE id=$1", [logo.id]);
+    const afterChange = (
+      await request(server)
+        .get(`/api/v1/finance/financial-documents/${draft.id}`)
+        .set(auth)
+        .expect(200)
+    ).body as FinancialDocument;
+    expect(afterChange.branding).toEqual(issued.branding);
+    const newDraft = (
+      await request(server)
+        .post('/api/v1/finance/financial-documents')
+        .set(auth)
+        .set('idempotency-key', `branding-unbranded-${runId}`)
+        .send(draftInput)
+        .expect(201)
+    ).body as FinancialDocument;
+    expect(newDraft.branding).toEqual({ version: 2 });
+    // Idempotent replay does not render with changed settings or enqueue a second email.
+    await request(server)
+      .post(`/api/v1/finance/financial-documents/${draft.id}/email`)
+      .set(auth)
+      .set('idempotency-key', emailKey)
+      .send(emailBody)
+      .expect(202);
+    failNextEmailDelivery = true;
+    const dispatcher = application.get(NotificationDispatcherService);
+    await expect(dispatcher.dispatch(mail.id, true)).rejects.toThrow('Temporary SMTP outage');
+    const deliveredBefore = deliveredEmails.length;
+    await dispatcher.dispatch(mail.id, true);
+    await dispatcher.dispatch(mail.id, true);
+    expect(deliveredEmails).toHaveLength(deliveredBefore + 1);
+    expect(deliveredEmails.at(-1)?.attachment?.content).toEqual(queuedBytes);
+    // Storage corruption must never silently remove a required saved image.
+    const key = (
+      await database.query<{ storage_key: string }>(
+        'SELECT storage_key FROM files.objects WHERE id=$1',
+        [logo.id],
+      )
+    ).rows[0]!.storage_key;
+    const original = storedObjects.get(key)!;
+    storedObjects.set(key, Buffer.from('tampered'));
+    try {
+      await request(server)
+        .get(`/api/v1/finance/financial-documents/${draft.id}/pdf`)
+        .set(auth)
+        .expect(503);
+    } finally {
+      storedObjects.set(key, original);
+    }
+    await request(server)
+      .get(`/api/v1/finance/financial-documents/${draft.id}/pdf`)
+      .set(auth)
+      .expect(200);
+    await assertGuardedDowngrade(
+      database,
+      '0081_financial_document_branding',
+      'Cannot downgrade document branding while settings, assets or document snapshots exist',
+    );
+  });
 });
+
+async function assertGuardedDowngrade(pool: Pool, migration: string, message: string) {
+  const sql = await readFile(
+    new URL(`../src/database/migrations/${migration}.down.sql`, import.meta.url),
+    'utf8',
+  );
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await expect(client.query(sql)).rejects.toThrow(message);
+  } finally {
+    await client.query('ROLLBACK');
+    client.release();
+  }
+}
 
 async function createAccount(pool: Pool, email: string, passwordHash: string) {
   const employeeId = randomUUID();

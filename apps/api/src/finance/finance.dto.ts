@@ -171,7 +171,25 @@ class FinancePaymentStatusHistoryEntryDto {
   @ApiProperty({ type: String }) reason!: string;
 }
 
+class FinanceCollectionCorrectionDto {
+  @ApiProperty({ format: 'uuid', type: String }) id!: string;
+  @ApiProperty({ format: 'uuid', type: String }) documentId!: string;
+  @ApiProperty({ type: String }) number!: string;
+  @ApiProperty({ enum: ['credit_note', 'debit_note'] }) documentType!: 'credit_note' | 'debit_note';
+  @ApiProperty({ format: 'date', type: String }) documentDate!: string;
+  @ApiProperty({ type: String }) amount!: string;
+  @ApiProperty({ type: String }) eurAmount!: string;
+  @ApiProperty({ format: 'date-time', type: String }) appliedAt!: string;
+  @ApiProperty({ type: String }) reason!: string;
+}
+
 export class FinanceCustomerDocumentDto implements FinanceCustomerDocument {
+  @ApiPropertyOptional({ type: String }) creditTotal?: string;
+  @ApiPropertyOptional({ type: String }) debitTotal?: string;
+  @ApiPropertyOptional({ type: String }) adjustedTotal?: string;
+  @ApiPropertyOptional({ type: String }) overpaidTotal?: string;
+  @ApiPropertyOptional({ isArray: true, type: FinanceCollectionCorrectionDto })
+  corrections?: FinanceCollectionCorrectionDto[];
   @ApiProperty({ type: String }) allocatedTotal!: string;
   @ApiProperty({ type: String }) eurTotal!: string;
   @ApiProperty({ format: 'date-time', type: String }) createdAt!: string;
@@ -194,7 +212,7 @@ export class FinanceCustomerDocumentDto implements FinanceCustomerDocument {
   @ApiProperty({ enum: ['pending_finance_review', 'cancelled'] })
   reviewState!: FinanceCustomerDocument['reviewState'];
   @ApiProperty({ type: String }) sourceInvoiceNumber!: string;
-  @ApiProperty({ format: 'uuid', type: String }) sourceSalesInvoiceId!: string;
+  @ApiPropertyOptional({ format: 'uuid', type: String }) sourceSalesInvoiceId?: string;
   @ApiProperty({ isArray: true, type: FinancePaymentStatusHistoryEntryDto })
   statusHistory!: FinancePaymentStatusHistoryEntry[];
   @ApiProperty({ type: String }) total!: string;

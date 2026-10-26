@@ -1,5 +1,165 @@
 # API Documentation
 
+## Current Finance lifecycle
+
+- `POST /api/v1/finance/financial-documents/:id/issue` atomically issues the
+  document and creates/links its collection for positive-value, non-POS invoices
+  and proformas. Manual, Sales, completed Service and subscription sources use the
+  same collection/payment model. Draft preparation alone creates no receivable.
+- `POST /api/v1/finance/financial-documents/:id/collection` links an older issued
+  invoice/proforma on demand. It requires Finance Create, `Idempotency-Key` and
+  `{ expectedVersion }`; stale, cancelled, zero-value, correction and POS sources
+  are rejected. Responses include `collection: { id, number }` when applicable.
+- Finance documents expose `convertedFromDocumentId/Number` and
+  `convertedToDocumentId/Number` so both directions of a proforma conversion can
+  be opened. Collections expose an optional Sales source and a linked Finance
+  document. All readers, bank matching and source references support non-Sales
+  collections without assuming a Sales draft exists.
+- Manual payments, bank matching, cash receipts, customer advances and supplier
+  offsets all convert a fully paid issued proforma once, in their allocation
+  transaction. Replays retain one invoice and one set of payments. Partial
+  settlement does not convert. Conversion retains original customer/source/line
+  snapshots and creates a separate official invoice with its dated EUR rate.
+- Issued invoices/corrections use independent location/register/operator number
+  series, backed by disjoint ranges from the legal-entity high watermark. A
+  collection belonging to an issued document cannot be cancelled separately.
+  Existing POS settlement records are not duplicated into Collections.
+
+### POS receipt invoice reconciliation
+
+POS-sourced documents expose optional `posSettlement` from the original sale,
+payments, returns/refunds and customer-account entries. One read statement
+returns checkout payments, deferred credit, refunds, released credit, net paid,
+net sale and outstanding amounts, due date, payment rows and the latest 50
+returns. Aggregate amounts include every return. No duplicate Finance payment,
+collection, account charge or stock movement is created by reading or issuing.
+
+Status is paid, partially paid, unpaid, overdue (business-date based) or
+needs review. Return state is separate: zero account debt does not erase the
+original invoice or mean that a return has legally corrected it. Saved document
+amounts and currency snapshots remain unchanged; linked refunds stay visible.
+Deferred POS amounts can be collected through Customer accounts. These are new
+received payments, not a second recording of the original checkout money.
+
+`POST /api/v1/finance/customer-accounts/:customerPartnerId/pos-sales/:saleId/payments`
+requires Finance Create, `Idempotency-Key`, `amount`, `expectedOutstanding`,
+`paymentDate`, `paymentMethod` (cash, bank_transfer, card, pos_terminal) and an
+optional `paymentReference`. It records already-received money, not a card charge,
+cash voucher, POS-shift cash movement or fiscal receipt. Dates must be between
+the source sale's business date and today. It atomically creates one ordinary
+Finance payment and one account-ledger reduction, without a collection or stock
+entry. Sale and customer-credit locks serialize collection, return and new credit.
+Stale balances and excess amounts fail with 409. Equal idempotent retries return
+the original account response. No approval right is granted to demo roles.
+
+`POST .../payments/:paymentId/reverse` requires Finance Approve and a reason
+of 10–1000 characters plus `expectedOutstanding`. It retains the original payment,
+appends its Finance reversal and ledger counter-entry, and reopens the debt.
+It corrects erroneous evidence; it does not refund valid customer payments.
+Original invoice amounts and snapshots stay fixed. `posReceivables` on customer
+accounts exposes original deferred amounts, returns, net collected money,
+remaining debt, due/status, invoice link and payment/reversal history. Invoice
+`posSettlement` adds `collectedTotal` and `accountPayments`.
+
+The shared customer overview includes deferred POS debt in its outstanding
+summary, without duplicating it as a collection. Payment history retains received
+payments and exposes `reversalNumber` for reversed records instead of presenting
+them as current receipts. Foreign-currency collection balances use their stored
+exchange-rate snapshots, rounded per record to four decimals, in the EUR summary.
+
+POS returns release the unpaid deferred portion and track any already-collected
+portion as a separate repayment due to the customer. The POS return keeps its
+original receipt, stock, serial and fiscal-reversal links. It does not create
+negative account debt. If an issued POS invoice exists, Finance must issue a
+credit note linked to that exact return before recording the repayment.
+
+`POST /api/v1/finance/financial-documents/from-pos-return/:returnId` requires
+Finance Create and an `Idempotency-Key`. It prepares one credit-note draft using
+the POS return's saved net, VAT and gross amounts and links it to the issued
+original POS invoice. Issue it through the normal financial-document review.
+
+`POST /api/v1/finance/customer-accounts/:customerPartnerId/pos-sales/:saleId/returns/:returnId/refunds`
+requires Finance Approve and an `Idempotency-Key`. The request includes
+`amount`, `expectedRefundDue`, `refundedOn`, `paymentMethod` (`cash` or
+`bank_transfer`) and a required `paymentReference`. Finance records a repayment
+that has already been made outside Vista. The transaction allocates it to the
+original unreversed POS collections, prevents excess or duplicate repayment and
+returns the updated account with repayment history. It does not make a transfer,
+create a POS payment, or change shift cash. Use this workflow instead of reversing
+an original POS collection after a collected return.
+
+An invoice draft linked to a sale that has already been returned cannot be
+issued; cancel the draft instead. An issued return credit note with repayment
+evidence cannot be cancelled or detached from its return.
+
+Customer accounts and invoice settlement expose released debt, refund due,
+repayment history, original collection allocations, and the linked credit note.
+The original invoice and its snapshots never change. Automatic bank/cash matching,
+advance/offset allocation to this ledger, scalable registers and accounting/VAT
+acceptance remain pending.
+
+Unbalanced payment/refund/account evidence blocks issuance with HTTP 409
+`FINANCE_POS_SETTLEMENT_NEEDS_REVIEW` before committing an official number.
+Ordinary collection creation still rejects POS sources. Existing Finance View
+and Approve permissions apply. POS receipt history retains draft and issued
+invoice links, using the official number once issued. Preparation retries reuse
+the same document. Source sale locking avoids reverse document-lock ordering
+when preparation races issuance.
+
+### Issued credit/debit notes and collection balances
+
+Issuing a note appends its effect to the original non-POS invoice's collection
+in the issuance transaction. It never creates a second collection or changes
+the original invoice, rate snapshot or payment entries. The original company,
+customer and currency must match; draft/cancelled notes do not affect balances.
+
+Collection responses add `creditTotal`, `debitTotal`, `adjustedTotal`,
+`overpaidTotal` and `corrections[]` (note ID/number/type/date, source amount,
+saved EUR amount, application time and reason). `total`/`eurTotal` remain the
+original snapshots. `adjustedTotal = total - creditTotal + debitTotal`;
+`outstandingTotal = max(adjustedTotal - allocatedTotal, 0)`;
+`overpaidTotal = max(allocatedTotal - adjustedTotal, 0)`. Zero outstanding is
+Paid; a later debit can reopen the balance. No refund or advance is fabricated.
+Payment reversal recalculates against the same corrected amount.
+
+Manual payments, bank matching, cash receipts, advance allocation and offsets
+all respect the corrected outstanding amount under the collection lock. Stale
+versions or excess allocations fail without posting. Issuance retries cannot
+append the same note twice. One audit/outbox effect records each applied batch.
+Notes expose the original collection link so Finance readers can follow both
+directions in the UI. POS fiscal/settlement reconciliation remains separate.
+
+Customer turnover retains its existing invoice-cohort period: collection
+`documentDate` selects the cohort; signed correction EUR snapshots adjust its
+gross amount, while paid/open comparisons use the original collection rate.
+This is not an FX gain/loss calculation or accounting-period posting. Sales/VAT
+journals continue using each issued note's own date and immutable tax snapshot.
+
+### Company images on financial documents
+
+- `GET/PUT /api/v1/finance/document-branding/:legalEntityId` reads/updates the
+  issuing company's optional logo, signature image and signatory name. Reads
+  require Finance View; writes also require Edit, `Idempotency-Key` and
+  `expectedVersion`. A signature requires `signatureConfirmed: true`.
+- Upload PNG/JPEG through the existing Files API with
+  `parentType: financial_branding`, `parentId: legalEntityId`. Each image is
+  limited to 512 KiB, 2048 pixels per side and two megapixels; PNG must be
+  non-interlaced. Parent authorization, inspection and checksum checks apply.
+- Drafts expose the current optional `branding` profile. Issue accepts optional
+  `expectedBrandingVersion` and freezes exact file-version IDs/checksums and the
+  signer name. Issued and legacy documents never adopt later company settings.
+  Paid-proforma conversion and approved recurring issuance use the same snapshots.
+- Draft PDFs show the logo but not the signature image. Issued PDFs/email show
+  both configured images. The image is a visual signature, not certificate-based
+  electronic signing. Email queues retain rendered bytes across delivery retries.
+
+Amounts stay in each document's currency, with frozen EUR accounting snapshots;
+summary balances convert to EUR. Bank/cash matching, advance/offset allocation,
+scalable all-source status registers and statutory/accounting acceptance remain
+in `IMPLEMENTATION_PLAN.md`.
+Earlier sections below describe the incremental API history; this current
+section supersedes earlier draft-only, Sales-only or BGN-default limitations.
+
 The NestJS application exposes versioned routes below `/api/v1` and interactive
 OpenAPI at `/api/docs`. The raw document is served at `/api/docs-json`.
 
@@ -577,7 +737,7 @@ The protected `/api/v1/finance/financial-documents` surface provides:
 - version-checked, reasoned `POST /:id/cancel` for an unissued draft.
 
 Each draft snapshots the issuer, customer, line prices and discounts, VAT
-treatment, currency rate/date/source, BGN equivalent, source Sales record, and
+treatment, currency rate/date/source, EUR equivalent, source Sales record, and
 correction link. Fixed-point domain calculation supports 20%, 9%, 0%, exempt,
 and explicitly rated intra-community acquisition lines. Internal `DINV`, `DPRO`,
 `DCN`, and `DDN` references are allocated transactionally per issuing location,
@@ -585,17 +745,17 @@ optional register/operator, document type, and year; concurrent requests cannot
 receive the same reference. Commands are permission-protected, idempotent,
 audited, and outbox-backed.
 
-These records remain drafts. `officialNumber` is not assigned, and the API does
-not perform legal issuance, proforma conversion, accounting/VAT posting,
-automatic BNB retrieval, fiscal/POS linkage, PDF/signature generation, or email
-delivery until FIN-001, FIN-002, BUS-002, and DOC-001 are approved.
+Preparation creates a draft without an official number. Issuance, current BNB
+rates, proforma conversion, POS source linkage, PDF images and queued email are
+documented in **Current Finance lifecycle** above. Accounting-period controls,
+statutory export acceptance and real fiscal-device acceptance remain pending.
 
 ## Finance collection records
 
-The current Finance slice provides an auditable BGN collection workflow, not a
-legal, fiscal, or accounting-document workflow:
+Collections track balances and payments linked to Sales drafts or issued
+Finance documents. They do not themselves issue legal or fiscal documents:
 
-- `GET /api/v1/finance/reference-data` returns eligible positive-value BGN Sales
+- `GET /api/v1/finance/reference-data` returns eligible positive-value non-BGN Sales
   invoice drafts not already added to collections. A direct attempt to add a
   zero-value draft is rejected because it has no balance to collect.
 - `GET /api/v1/finance/documents`, `/documents/:id`, and `/summary` return the
@@ -1001,3 +1161,25 @@ Sales users maintain quantity and bundle rules through
 priority, discount type/value, and qualifying products/quantities. A quantity
 rule has one product; a bundle has at least two. One automatic rule can claim a
 product per basket, so higher priority wins and results remain reproducible.
+
+## Automatic subscription invoices
+
+- `GET /api/v1/finance/recurring-invoices?page=1&pageSize=20&search=…` and
+  `GET /:id` expose subscriptions and their latest 12 billing periods to Finance
+  readers. Business references, not UUIDs, are displayed in the UI.
+- `PUT /:id` requires Finance create/edit, an idempotency key, current contract
+  revision and (for existing settings) `expectedVersion`. It records explicit
+  approval of the issuing scope, first automatic billing date, VAT and payment
+  terms. Existing contracts are not enrolled implicitly.
+- `POST /:id/run` requires the same permissions and an idempotency key. It checks
+  one due period immediately; it does not advance the clock or issue future work.
+- The existing daily `sales.subscription-invoice.generate` handler prepares
+  immutable billing periods, then drains due, enabled profiles in small batches.
+  Each period commits its invoice, scoped official number, collection, audit,
+  outbox and outcome together. Failed attempts roll back financial effects;
+  transient failures use the queue's retry lifecycle. After five failed attempts,
+  the period needs review. Successful periods are not repeated.
+- Contract changes and lost issuance access pause processing for review. Existing
+  manually prepared Finance drafts are never automatically finalized. Earlier
+  periods before the configured start remain manual. Changed terms do not
+  recalculate an issued invoice; disabling a profile leaves issued records intact.

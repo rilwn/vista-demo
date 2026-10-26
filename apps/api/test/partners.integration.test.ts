@@ -318,7 +318,7 @@ describe.skipIf(!runInfrastructureTests)('partner master-data vertical slice', (
       [...expectedNames, 'integration.event.consume', 'notification.dispatch'].sort(),
     );
     const bnbFixture =
-      '<RATES><ROW><CODE>USD</CODE><REVERSERATE>0.92000000</REVERSERATE><CURR_DATE>10.08.2026</CURR_DATE></ROW></RATES>';
+      '<ROWSET><ROW><CODE>USD</CODE><REVERSERATE>0.92000000</REVERSERATE><CURR_DATE>10.08.2026</CURR_DATE></ROW></ROWSET>';
     const fetchMock = vi
       .spyOn(globalThis, 'fetch')
       .mockImplementation(() => Promise.resolve(new Response(bnbFixture, { status: 200 })));

@@ -1779,6 +1779,7 @@ describe('ERP and CRM authenticated workspace', () => {
           paymentDate: '2026-08-26',
           paymentMethod: 'bank_transfer',
           paymentReference: 'FIN-REV-2026-000001',
+          reversalNumber: 'PRV-2026-000001',
           recordedAt: '2026-08-26T09:00:00.000Z',
         },
       ],
@@ -1851,7 +1852,8 @@ describe('ERP and CRM authenticated workspace', () => {
 
     const dialog = await screen.findByRole('dialog', { name: 'Customer overview' });
     expect(within(dialog).getByRole('heading', { name: partner.displayName })).toBeTruthy();
-    expect(within(dialog).getByText('FIN-REV-2026-000001')).toBeTruthy();
+    expect(within(dialog).getByText('FIN-REV-2026-000001', { selector: 'strong' })).toBeTruthy();
+    expect(within(dialog).getByText('Reversed · PRV-2026-000001')).toBeTruthy();
     expect(within(dialog).getByText('DEV-INV-DRAFT-0001')).toBeTruthy();
     expect(within(dialog).getAllByText('Demo Fiscal Register X1').length).toBeGreaterThan(0);
     expect(within(dialog).getByText('DEMO-FR-ALFA-01')).toBeTruthy();
@@ -3592,7 +3594,7 @@ describe('ERP and CRM authenticated workspace', () => {
     expect(await screen.findByText('Role access updated.')).toBeTruthy();
     const addedRole = screen.getByRole('button', { name: 'Add role' });
     fireEvent.click(addedRole);
-    const addRoleDialog = screen.getByRole('dialog', { name: 'Add role' });
+    const addRoleDialog = await screen.findByRole('dialog', { name: 'Add role' });
     fireEvent.change(within(addRoleDialog).getByLabelText('Role name'), {
       target: { value: 'Service viewer' },
     });
@@ -6158,7 +6160,9 @@ describe('ERP and CRM authenticated workspace', () => {
     expect(within(reloadedPreview).getByRole('button', { name: 'Replace' })).toBeTruthy();
     fireEvent.click(within(reloadedPreview).getByRole('checkbox'));
     fireEvent.click(within(reloadedPreview).getByRole('button', { name: 'Issue document' }));
-    expect(await within(reloadedPreview).findByText('0000000123')).toBeTruthy();
+    expect(
+      await within(reloadedPreview).findByRole('heading', { name: '0000000123', level: 2 }),
+    ).toBeTruthy();
     fireEvent.change(within(reloadedPreview).getByLabelText('Recipient email'), {
       target: { value: 'client@example.com' },
     });
@@ -6185,7 +6189,7 @@ describe('ERP and CRM authenticated workspace', () => {
     storeAuthenticatedSession(financeContext);
     renderApplication(['/modules/erp.finance/invoices']);
     fireEvent.click(await screen.findByRole('button', { name: 'Preview' }));
-    const readOnlyPreview = await screen.findByRole('dialog', { name: document.number });
+    const readOnlyPreview = await screen.findByRole('dialog', { name: '0000000123' });
     expect(await within(readOnlyPreview).findByText('support.pdf')).toBeTruthy();
     expect(within(readOnlyPreview).queryByRole('button', { name: 'Add attachment' })).toBeNull();
     expect(within(readOnlyPreview).queryByRole('button', { name: 'Replace' })).toBeNull();

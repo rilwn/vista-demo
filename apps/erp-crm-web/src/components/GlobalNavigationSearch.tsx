@@ -29,6 +29,7 @@ export function GlobalNavigationSearch() {
   const { location, navigate } = useRouter();
   const rootRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const previousPath = useRef(location.pathname);
   const [activeIndex, setActiveIndex] = useState(0);
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -226,6 +227,10 @@ export function GlobalNavigationSearch() {
   );
 
   useEffect(() => {
+    // Opening search during the first workspace render must not be undone by
+    // this navigation reset. Only an actual route change closes the results.
+    if (previousPath.current === location.pathname) return;
+    previousPath.current = location.pathname;
     setOpen(false);
     setQuery('');
   }, [location.pathname]);

@@ -161,6 +161,7 @@ export interface PosWarrantyCardContent {
 }
 
 interface SalePaymentRow {
+  collected_amount: string;
   account_due_on: string | null;
   adapter: string;
   advance_number: string | null;
@@ -653,7 +654,7 @@ export class PosService {
       `WITH account_balance AS (
          SELECT entry.customer_partner_id,
            COALESCE(sum(CASE entry.entry_type
-             WHEN 'charge' THEN entry.amount ELSE -entry.amount END), 0) AS outstanding
+             WHEN 'charge' THEN entry.amount WHEN 'payment_reversal' THEN entry.amount ELSE -entry.amount END), 0) AS outstanding
          FROM finance.customer_account_entries entry
          WHERE entry.customer_partner_id = $1
          GROUP BY entry.customer_partner_id
@@ -1990,27 +1991,34 @@ export class PosService {
               [original.id],
             );
             const charge = required(source.rows[0], 'Customer account charge is missing');
-            await client.query(
-              `INSERT INTO finance.customer_account_entries (
+            if (units(refund.releasedAmount) > 0n)
+              await client.query(
+                `INSERT INTO finance.customer_account_entries (
                  id, customer_partner_id, payment_terms_id, entry_type, amount,
                  due_on, credit_limit_eur, payment_terms_days, pos_sale_id,
                  pos_return_id, source_entry_id, actor_account_id, correlation_id
                ) VALUES ($1,$2,$3,'return_credit',$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
-              [
-                randomUUID(),
-                original.customer_partner_id,
-                charge.payment_terms_id,
-                refund.amount,
-                charge.due_on,
-                charge.credit_limit_eur,
-                charge.payment_terms_days,
-                original.id,
-                returnId,
-                charge.id,
-                authentication.accountId,
-                metadata.correlationId,
-              ],
-            );
+                [
+                  randomUUID(),
+                  original.customer_partner_id,
+                  charge.payment_terms_id,
+                  refund.releasedAmount,
+                  charge.due_on,
+                  charge.credit_limit_eur,
+                  charge.payment_terms_days,
+                  original.id,
+                  returnId,
+                  charge.id,
+                  authentication.accountId,
+                  metadata.correlationId,
+                ],
+              );
+            if (units(refund.collectedRefundAmount) > 0n)
+              await client.query(
+                `INSERT INTO finance.pos_account_return_credits(pos_return_id,charge_entry_id,released_amount,refund_amount)
+               VALUES($1,$2,$3,$4)`,
+                [returnId, charge.id, refund.releasedAmount, refund.collectedRefundAmount],
+              );
           }
         }
 
@@ -3127,12 +3135,12 @@ const saleHeaderSql = `
     sale.fiscal_receipt_number, sale.fiscal_adapter, sale.completed_at,
     (SELECT json_build_object(
        'id', document.id,
-       'number', document.draft_number,
+       'number', coalesce(document.official_number,document.draft_number),
        'sourceFiscalReceiptNumber', document.source_fiscal_receipt_number,
        'status', document.status
      )
      FROM finance.financial_documents document
-     WHERE document.source_pos_sale_id = sale.id AND document.status = 'draft'
+     WHERE document.source_pos_sale_id = sale.id AND document.status IN ('draft','issued')
      ORDER BY document.created_at DESC, document.id DESC LIMIT 1) AS invoice_document,
     COALESCE((SELECT json_agg(json_build_object(
        'id', card.id,
@@ -3193,6 +3201,10 @@ const saleLinesSql = `
 const salePaymentsSql = `
   SELECT payment.id, payment.sale_id, payment.payment_method,
     payment.customer_advance_id, advance.advance_number,
+    (CASE WHEN payment.payment_method='on_account' THEN coalesce((SELECT sum(collection.amount)
+      FROM finance.payments collection WHERE collection.source_pos_sale_id=payment.sale_id
+        AND NOT EXISTS(SELECT 1 FROM finance.payment_reversals reversal WHERE reversal.payment_id=collection.id)),0)
+      ELSE 0 END)::numeric(18,4)::text AS collected_amount,
     payment.account_due_on::text,
     payment.amount::text, COALESCE(payment.tendered_amount, payment.amount)::text
       AS tendered_amount,
@@ -3305,6 +3317,12 @@ function normalizeBasket(input: PricePosBasketRequest) {
 }
 
 function normalizeReturn(input: CreatePosReturnRequest) {
+  if (!Array.isArray(input.refunds) || input.refunds.length === 0)
+    throw new ApiErrorException(
+      'POS_RETURN_REFUNDS_REQUIRED',
+      'Choose the original payment and refund amount for this return.',
+      HttpStatus.BAD_REQUEST,
+    );
   const lineIds = input.lines.map((line) => line.originalSaleLineId);
   if (new Set(lineIds).size !== lineIds.length)
     throw new ApiErrorException(
@@ -3387,6 +3405,27 @@ async function prepareReturnRefunds(
       'One or more original payments were not found on this sale',
       HttpStatus.CONFLICT,
     );
+  const deferredRefund = sum(
+    refunds.filter((refund) => refund.method === 'on_account').map((refund) => refund.amount),
+  );
+  let releasedAmount = '0.0000';
+  let collectedRefundAmount = '0.0000';
+  if (units(deferredRefund) > 0n) {
+    await client.query(
+      `SELECT terms.id FROM sales.customer_payment_terms terms JOIN pos.sales sale
+      ON sale.customer_partner_id=terms.customer_partner_id WHERE sale.id=$1 FOR UPDATE OF terms`,
+      [saleId],
+    );
+    const balance = (
+      await client.query<{ amount: string }>(
+        `SELECT coalesce(sum(CASE WHEN entry_type IN ('charge','payment_reversal')
+      THEN amount ELSE -amount END),0)::text AS amount FROM finance.customer_account_entries WHERE pos_sale_id=$1`,
+        [saleId],
+      )
+    ).rows[0]!.amount;
+    releasedAmount = units(deferredRefund) < units(balance) ? deferredRefund : balance;
+    collectedRefundAmount = subtract(deferredRefund, releasedAmount);
+  }
   // Read already-posted refunds only after the payment locks are held. This
   // gives a waiting concurrent return a fresh snapshot and prevents the same
   // original payment from being refunded twice.
@@ -3447,6 +3486,8 @@ async function prepareReturnRefunds(
       };
     if (refund.method === 'on_account')
       return {
+        releasedAmount,
+        collectedRefundAmount,
         accountDueOn: required(remaining.account_due_on, 'Customer account due date is missing'),
         adapter: 'customer-account',
         amount: refund.amount,
@@ -3620,7 +3661,7 @@ async function prepareSalePayments(
         `SELECT terms.id, terms.credit_limit_eur::text, terms.payment_terms_days,
            ((now() AT TIME ZONE $2)::date + terms.payment_terms_days)::text AS due_on,
            COALESCE((SELECT sum(CASE entry.entry_type
-             WHEN 'charge' THEN entry.amount ELSE -entry.amount END)
+             WHEN 'charge' THEN entry.amount WHEN 'payment_reversal' THEN entry.amount ELSE -entry.amount END)
              FROM finance.customer_account_entries entry
              WHERE entry.customer_partner_id = terms.customer_partner_id), 0)::text
              AS outstanding_balance
@@ -3803,6 +3844,7 @@ function mapSaleLine(row: SaleLineRow): PosSaleLine {
 
 function mapSalePayment(row: SalePaymentRow): PosSalePayment {
   return {
+    ...(row.payment_method === 'on_account' ? { collectedAmount: row.collected_amount } : {}),
     ...(row.account_due_on ? { accountDueOn: row.account_due_on } : {}),
     adapter: row.adapter,
     ...(row.customer_advance_id ? { advanceId: row.customer_advance_id } : {}),

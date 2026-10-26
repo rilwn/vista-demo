@@ -22,6 +22,12 @@ import type {
   CustomerPaymentAccountReferenceData,
   CustomerPaymentTerms,
   UpsertCustomerPaymentTermsRequest,
+  CreatePosAccountPaymentRequest,
+  ReversePosAccountPaymentRequest,
+  PosAccountReceivable,
+  PosAccountPayment,
+  PosAccountReturnCredit,
+  CreatePosAccountRefundRequest,
 } from '@vista/contracts';
 
 const amountPattern = /^\d+(\.\d{1,4})?$/u;
@@ -112,15 +118,120 @@ export class CustomerAdvanceDto implements CustomerAdvance {
   @ApiProperty({ format: 'date', type: String }) receivedOn!: string;
 }
 
+export class CreatePosAccountPaymentDto implements CreatePosAccountPaymentRequest {
+  @ApiProperty({ type: String }) @IsString() @Matches(amountPattern) amount!: string;
+  @ApiProperty({ type: String }) @IsString() @Matches(amountPattern) expectedOutstanding!: string;
+  @ApiProperty({ format: 'date', type: String })
+  @IsDateString({ strict: true })
+  @Matches(/^\d{4}-\d{2}-\d{2}$/u)
+  paymentDate!: string;
+  @ApiProperty({ enum: ['cash', 'bank_transfer', 'card', 'pos_terminal'] })
+  @IsIn(['cash', 'bank_transfer', 'card', 'pos_terminal'])
+  paymentMethod!: CreatePosAccountPaymentRequest['paymentMethod'];
+  @ApiPropertyOptional({ type: String, maxLength: 255 })
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  paymentReference?: string;
+}
+export class ReversePosAccountPaymentDto implements ReversePosAccountPaymentRequest {
+  @ApiProperty({ type: String, minLength: 10, maxLength: 1000 })
+  @IsString()
+  @MaxLength(1000)
+  reason!: string;
+  @ApiProperty({ type: String }) @IsString() @Matches(amountPattern) expectedOutstanding!: string;
+}
+class PosAccountInvoiceDto {
+  @ApiProperty({ type: String, format: 'uuid' }) id!: string;
+  @ApiProperty({ type: String }) number!: string;
+}
+export class CreatePosAccountRefundDto implements CreatePosAccountRefundRequest {
+  @ApiProperty({ type: String }) @IsString() @Matches(amountPattern) amount!: string;
+  @ApiProperty({ type: String }) @IsString() @Matches(amountPattern) expectedRefundDue!: string;
+  @ApiProperty({ type: String, format: 'date' }) @IsDateString() refundedOn!: string;
+  @ApiProperty({ enum: ['cash', 'bank_transfer'] })
+  @IsIn(['cash', 'bank_transfer'])
+  paymentMethod!: 'cash' | 'bank_transfer';
+  @ApiProperty({ type: String, minLength: 3, maxLength: 255 })
+  @IsString()
+  @MaxLength(255)
+  paymentReference!: string;
+}
+class PosRefundPaymentAllocationDto {
+  @ApiProperty({ type: String }) number!: string;
+  @ApiProperty({ type: String }) amount!: string;
+}
+class PosAccountRefundDto {
+  @ApiProperty({ type: String }) number!: string;
+  @ApiProperty({ type: String }) amount!: string;
+  @ApiProperty({ type: String, format: 'date' }) refundedOn!: string;
+  @ApiProperty({ enum: ['cash', 'bank_transfer'] }) paymentMethod!: 'cash' | 'bank_transfer';
+  @ApiProperty({ type: String }) paymentReference!: string;
+  @ApiProperty({ type: PosRefundPaymentAllocationDto, isArray: true })
+  payments!: PosRefundPaymentAllocationDto[];
+}
+class PosReturnCreditNoteDto {
+  @ApiProperty({ type: String, format: 'uuid' }) id!: string;
+  @ApiProperty({ type: String }) number!: string;
+  @ApiProperty({ enum: ['draft', 'issued'] }) status!: 'draft' | 'issued';
+}
+class PosAccountReturnCreditDto implements PosAccountReturnCredit {
+  @ApiProperty({ type: String, format: 'uuid' }) returnId!: string;
+  @ApiProperty({ type: String }) returnNumber!: string;
+  @ApiProperty({ type: String, format: 'date' }) returnedOn!: string;
+  @ApiProperty({ type: String }) returnTotal!: string;
+  @ApiProperty({ type: String }) releasedTotal!: string;
+  @ApiProperty({ type: String }) refundableTotal!: string;
+  @ApiProperty({ type: String }) refundedTotal!: string;
+  @ApiProperty({ type: String }) refundDue!: string;
+  @ApiPropertyOptional({ type: PosAccountInvoiceDto }) invoice?: PosAccountInvoiceDto;
+  @ApiPropertyOptional({ type: PosReturnCreditNoteDto }) creditNote?: PosReturnCreditNoteDto;
+  @ApiProperty({ type: PosAccountRefundDto, isArray: true }) refunds!: PosAccountRefundDto[];
+}
+class PosAccountReversalDto {
+  @ApiProperty({ type: String }) number!: string;
+  @ApiProperty({ type: String }) reason!: string;
+  @ApiProperty({ type: String, format: 'date' }) reversedOn!: string;
+}
+export class PosAccountPaymentDto implements PosAccountPayment {
+  @ApiProperty({ type: String, format: 'uuid' }) id!: string;
+  @ApiProperty({ type: String }) number!: string;
+  @ApiProperty({ type: String }) amount!: string;
+  @ApiProperty({ enum: ['cash', 'bank_transfer', 'card', 'pos_terminal'] })
+  paymentMethod!: PosAccountPayment['paymentMethod'];
+  @ApiProperty({ type: String, format: 'date' }) paymentDate!: string;
+  @ApiPropertyOptional({ type: String }) paymentReference?: string;
+  @ApiPropertyOptional({ type: PosAccountReversalDto }) reversal?: PosAccountReversalDto;
+}
+class PosAccountReceivableDto implements PosAccountReceivable {
+  @ApiPropertyOptional({ type: PosAccountReturnCreditDto, isArray: true })
+  returnCredits?: PosAccountReturnCreditDto[];
+  @ApiPropertyOptional({ type: String }) refundDue?: string;
+  @ApiPropertyOptional({ type: String }) refundedTotal?: string;
+  @ApiProperty({ type: String, format: 'uuid' }) saleId!: string;
+  @ApiProperty({ type: String }) saleNumber!: string;
+  @ApiProperty({ type: String }) receiptNumber!: string;
+  @ApiPropertyOptional({ type: PosAccountInvoiceDto }) invoice?: PosAccountInvoiceDto;
+  @ApiProperty({ type: String, format: 'date' }) dueOn!: string;
+  @ApiProperty({ type: String }) originalTotal!: string;
+  @ApiProperty({ type: String }) returnCredit!: string;
+  @ApiProperty({ type: String }) paidTotal!: string;
+  @ApiProperty({ type: String }) outstandingTotal!: string;
+  @ApiProperty({ enum: ['unpaid', 'partially_paid', 'paid', 'overdue'] })
+  status!: PosAccountReceivable['status'];
+  @ApiProperty({ type: PosAccountPaymentDto, isArray: true }) payments!: PosAccountPaymentDto[];
+}
+
 export class CustomerAccountEntryDto implements CustomerAccountEntry {
   @ApiProperty({ type: String }) amount!: string;
   @ApiProperty({ format: 'date', type: String }) dueOn!: string;
-  @ApiProperty({ enum: ['charge', 'return_credit'] })
+  @ApiProperty({ enum: ['charge', 'return_credit', 'payment', 'payment_reversal'] })
   entryType!: CustomerAccountEntry['entryType'];
   @ApiProperty({ format: 'uuid', type: String }) id!: string;
   @ApiProperty({ format: 'date-time', type: String }) occurredAt!: string;
   @ApiProperty({ type: String }) saleNumber!: string;
   @ApiPropertyOptional({ type: String }) returnNumber?: string;
+  @ApiPropertyOptional({ type: String }) paymentNumber?: string;
 }
 
 class CustomerOpenReceivableDto implements CustomerOpenReceivable {
@@ -142,6 +253,8 @@ export class CustomerPaymentAccountDto implements CustomerPaymentAccount {
   @ApiProperty({ type: String }) customerName!: string;
   @ApiProperty({ format: 'uuid', type: String }) customerPartnerId!: string;
   @ApiProperty({ isArray: true, type: CustomerAccountEntryDto }) entries!: CustomerAccountEntry[];
+  @ApiPropertyOptional({ type: PosAccountReceivableDto, isArray: true })
+  posReceivables?: PosAccountReceivableDto[];
   @ApiProperty({ isArray: true, type: CustomerOpenReceivableDto })
   openReceivables!: CustomerOpenReceivable[];
   @ApiProperty({ type: String }) outstandingBalance!: string;
@@ -156,6 +269,7 @@ class CustomerPaymentAccountCustomerDto {
 }
 
 export class CustomerPaymentAccountReferenceDataDto implements CustomerPaymentAccountReferenceData {
+  @ApiPropertyOptional({ type: String }) businessTimezone?: string;
   @ApiProperty({ isArray: true, type: CustomerPaymentAccountCustomerDto })
   customers!: CustomerPaymentAccountReferenceData['customers'];
 }

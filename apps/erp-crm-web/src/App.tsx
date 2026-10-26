@@ -22,6 +22,7 @@ import { FinanceBankPage } from './pages/FinanceBankPage';
 import { FinanceCashPage } from './pages/FinanceCashPage';
 import { FinancePayablesPage } from './pages/FinancePayablesPage';
 import { FinanceReportsPage } from './pages/FinanceReportsPage';
+import { RecurringInvoicesPage } from './pages/RecurringInvoicesPage';
 import { HomePage } from './pages/HomePage';
 import {
   type LogisticsOperationsView,
@@ -128,6 +129,9 @@ function pageForPath(
   }
   if (pathname === '/modules/erp.finance/cash-bank') {
     return hasPermission('erp.finance') ? <FinanceBankPage /> : <NotFoundPage />;
+  }
+  if (pathname === '/modules/erp.finance/recurring-invoices') {
+    return hasPermission('erp.finance') ? <RecurringInvoicesPage /> : <NotFoundPage />;
   }
   if (pathname === '/modules/erp.finance/customer-accounts') {
     return hasPermission('erp.finance') ? <FinanceCustomerAccountsPage /> : <NotFoundPage />;

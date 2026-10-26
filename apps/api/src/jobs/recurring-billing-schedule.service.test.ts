@@ -1,7 +1,7 @@
 import type { AppEnvironment } from '@vista/config';
 import { describe, expect, it, vi } from 'vitest';
 
-import type { JobQueueService } from './job-queue.service.js';
+import type { EnqueueJobInput, JobQueueService } from './job-queue.service.js';
 import {
   crmSlaScheduleId,
   financePaymentStatusScheduleId,
@@ -30,8 +30,12 @@ describe('RecurringBillingScheduleService', () => {
         id: input.id,
         name: input.name,
       }));
+    const enqueue = vi
+      .fn<(input: EnqueueJobInput) => Promise<{ jobId: string; deduplicated: boolean }>>()
+      .mockResolvedValue({ jobId: 'bnb-startup-job', deduplicated: false });
     const jobs = {
       upsertSchedule,
+      enqueue,
     } as unknown as JobQueueService;
     const logger = { event: vi.fn() };
     const service = new RecurringBillingScheduleService(
@@ -50,6 +54,12 @@ describe('RecurringBillingScheduleService', () => {
     );
 
     await service.onApplicationBootstrap();
+
+    expect(enqueue).toHaveBeenCalledOnce();
+    const startup = enqueue.mock.calls[0]![0];
+    expect(startup.name).toBe('finance.currency-rates.refresh');
+    expect(startup.idempotencyKey).toMatch(/^bnb-startup:\d{4}-\d{2}-\d{2}$/u);
+    expect(startup.payload).toEqual({ responsibility: 'startup-bnb-currency-rates' });
 
     expect(upsertSchedule).toHaveBeenCalledWith({
       id: recurringBillingScheduleId,
@@ -107,7 +117,8 @@ describe('RecurringBillingScheduleService', () => {
 
   it('does not install production schedules in unit-test applications', async () => {
     const upsertSchedule = vi.fn();
-    const jobs = { upsertSchedule } as unknown as JobQueueService;
+    const enqueue = vi.fn();
+    const jobs = { upsertSchedule, enqueue } as unknown as JobQueueService;
     const service = new RecurringBillingScheduleService(
       { NODE_ENV: 'test' } as unknown as AppEnvironment,
       jobs,
@@ -117,5 +128,6 @@ describe('RecurringBillingScheduleService', () => {
     await service.onApplicationBootstrap();
 
     expect(upsertSchedule).not.toHaveBeenCalled();
+    expect(enqueue).not.toHaveBeenCalled();
   });
 });

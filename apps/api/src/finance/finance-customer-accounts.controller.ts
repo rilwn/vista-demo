@@ -7,6 +7,7 @@ import {
   HttpStatus,
   Inject,
   Param,
+  ParseUUIDPipe,
   Post,
   Put,
   Req,
@@ -31,6 +32,9 @@ import {
   CustomerPaymentAccountDto,
   CustomerPaymentAccountReferenceDataDto,
   UpsertCustomerPaymentTermsDto,
+  CreatePosAccountPaymentDto,
+  ReversePosAccountPaymentDto,
+  CreatePosAccountRefundDto,
 } from './finance-customer-accounts.dto.js';
 import { FinanceCustomerAccountsService } from './finance-customer-accounts.service.js';
 
@@ -104,6 +108,88 @@ export class FinanceCustomerAccountsController {
     @Req() request: AuthenticatedRequest,
   ): Promise<CustomerAdvanceDto> {
     return this.accounts.createAdvance(input, key, request.authentication, metadata(request));
+  }
+
+  @Post(':customerPartnerId/pos-sales/:saleId/payments')
+  @HttpCode(HttpStatus.CREATED)
+  @RequirePermissions({ action: 'create', module: 'erp.finance' })
+  @ApiBody({ type: CreatePosAccountPaymentDto })
+  @ApiCreatedResponse({ type: CustomerPaymentAccountDto })
+  @ApiHeader({ name: 'Idempotency-Key', required: true })
+  @ApiParam({ name: 'customerPartnerId', format: 'uuid' })
+  @ApiParam({ name: 'saleId', format: 'uuid' })
+  collect(
+    @Param('customerPartnerId') customerId: string,
+    @Param('saleId') saleId: string,
+    @Body() input: CreatePosAccountPaymentDto,
+    @Headers('idempotency-key') key: string | undefined,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<CustomerPaymentAccountDto> {
+    return this.accounts.collectPosBalance(
+      customerId,
+      saleId,
+      input,
+      key,
+      request.authentication,
+      metadata(request),
+    );
+  }
+
+  @Post(':customerPartnerId/pos-sales/:saleId/returns/:returnId/refunds')
+  @HttpCode(HttpStatus.CREATED)
+  @RateLimitPolicy('sensitive')
+  @RequirePermissions({ action: 'approve', module: 'erp.finance' })
+  @ApiBody({ type: CreatePosAccountRefundDto })
+  @ApiCreatedResponse({ type: CustomerPaymentAccountDto })
+  @ApiHeader({ name: 'Idempotency-Key', required: true })
+  @ApiParam({ name: 'customerPartnerId', format: 'uuid' })
+  @ApiParam({ name: 'saleId', format: 'uuid' })
+  @ApiParam({ name: 'returnId', format: 'uuid' })
+  refund(
+    @Param('customerPartnerId', new ParseUUIDPipe()) customerId: string,
+    @Param('saleId', new ParseUUIDPipe()) saleId: string,
+    @Param('returnId', new ParseUUIDPipe()) returnId: string,
+    @Body() input: CreatePosAccountRefundDto,
+    @Headers('idempotency-key') key: string | undefined,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<CustomerPaymentAccountDto> {
+    return this.accounts.refundPosReturn(
+      customerId,
+      saleId,
+      returnId,
+      input,
+      key,
+      request.authentication,
+      metadata(request),
+    );
+  }
+
+  @Post(':customerPartnerId/pos-sales/:saleId/payments/:paymentId/reverse')
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissions({ action: 'approve', module: 'erp.finance' })
+  @ApiBody({ type: ReversePosAccountPaymentDto })
+  @ApiOkResponse({ type: CustomerPaymentAccountDto })
+  @ApiHeader({ name: 'Idempotency-Key', required: true })
+  @ApiParam({ name: 'customerPartnerId', format: 'uuid' })
+  @ApiParam({ name: 'saleId', format: 'uuid' })
+  @ApiParam({ name: 'paymentId', format: 'uuid' })
+  reverse(
+    @Param('customerPartnerId') customerId: string,
+    @Param('saleId') saleId: string,
+    @Param('paymentId') paymentId: string,
+    @Body() input: ReversePosAccountPaymentDto,
+    @Headers('idempotency-key') key: string | undefined,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<CustomerPaymentAccountDto> {
+    return this.accounts.reversePosPayment(
+      customerId,
+      saleId,
+      paymentId,
+      input,
+      key,
+      request.authentication,
+      metadata(request),
+    );
   }
 }
 

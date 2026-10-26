@@ -26,6 +26,7 @@ import {
 import { ApiClientError } from '../api/client';
 import {
   cancelFinancialDocument,
+  collectFinancialDocument,
   createFinancialDocument,
   downloadFinancialDocumentPdf,
   getFinancialDocument,
@@ -42,11 +43,17 @@ import { financialDocumentMessages as copy } from '../i18n/legacyMessages';
 import {
   formatOperationsCurrency,
   formatOperationsDate,
+  getOperationsLocale,
   useLocalization,
 } from '../i18n/LocalizationProvider';
 import { useRouter } from '../routing/Router';
 import { FinanceTabs } from './FinanceBankPage';
+import { collectionCorrectionsMessages } from './collection-corrections.messages';
+import { DocumentDrawer } from './FinancialDocumentDrawer';
+import { FinancialBrandingPanel } from './FinancialBrandingPanel';
+import { financialBrandingMessages } from './financial-branding.messages';
 import { ManagedFilesPanel } from './PartnerDocumentsPanel';
+import { PosInvoiceSettlementPanel } from './PosInvoiceSettlementPanel';
 
 const emptyReferences: FinancialDocumentReferenceData = {
   businessTimezone: 'UTC',
@@ -65,16 +72,19 @@ interface DraftLine extends CreateFinancialDocumentLineRequest {
 }
 
 export function FinancialDocumentsPage() {
-  useLocalization();
+  const { locale } = useLocalization();
   const { hasPermission, session } = useAuth();
   const { location, navigate } = useRouter();
   const token = session?.sessionToken ?? '';
   const data = useFinancialDocuments(token);
   const [creating, setCreating] = useState(false);
+  const [brandingOpen, setBrandingOpen] = useState(false);
   const [serviceWorkOrderId, setServiceWorkOrderId] = useState<string | undefined>();
   const [subscriptionDraftId, setSubscriptionDraftId] = useState<string | undefined>();
   const [selected, setSelected] = useState<FinancialDocument | null>(null);
+  const [returnAccountId, setReturnAccountId] = useState<string>();
   const [notice, setNotice] = useState<string | null>(null);
+  useEffect(() => setNotice(null), [locale]);
   const [typeFilter, setTypeFilter] = useState<'all' | FinancialDocumentType>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | FinancialDocument['status']>('all');
   const canCreate = hasPermission('erp.finance', 'create');
@@ -90,6 +100,7 @@ export function FinancialDocumentsPage() {
     if (data.loading) return;
     const handoff = financialDocumentRouteState(location.state);
     if (!handoff) return;
+    if (handoff.returnToCustomerAccountId) setReturnAccountId(handoff.returnToCustomerAccountId);
     if (handoff.financialDocumentId) {
       const document = data.documents.find((item) => item.id === handoff.financialDocumentId);
       if (document) setSelected(document);
@@ -127,7 +138,7 @@ export function FinancialDocumentsPage() {
     token,
   ]);
 
-  if (data.loading) return <DocumentState title={copy.loading} />;
+  if (data.loading && !brandingOpen) return <DocumentState title={copy.loading} />;
   if (data.error)
     return (
       <DocumentState title={copy.loadError}>
@@ -145,18 +156,29 @@ export function FinancialDocumentsPage() {
           <h1>{copy.title}</h1>
           <p>{copy.subtitle}</p>
         </div>
-        {canCreate ? (
+        <div className="financial-document-header-actions">
           <Button
+            variant="secondary"
             onClick={() => {
               setNotice(null);
-              setServiceWorkOrderId(undefined);
-              setSubscriptionDraftId(undefined);
-              setCreating(true);
+              setBrandingOpen(true);
             }}
           >
-            <Icon name="plus" size={16} /> {copy.addDocument}
+            {financialBrandingMessages(locale).title}
           </Button>
-        ) : null}
+          {canCreate ? (
+            <Button
+              onClick={() => {
+                setNotice(null);
+                setServiceWorkOrderId(undefined);
+                setSubscriptionDraftId(undefined);
+                setCreating(true);
+              }}
+            >
+              <Icon name="plus" size={16} /> {copy.addDocument}
+            </Button>
+          ) : null}
+        </div>
       </header>
 
       <FinanceTabs />
@@ -196,7 +218,10 @@ export function FinancialDocumentsPage() {
           <header className="financial-document-toolbar">
             <div>
               <h2>Subscription billing</h2>
-              <p>Review each billing period before preparing its invoice.</p>
+              <p>
+                Review manual billing periods here, or enable automatic invoicing in Recurring
+                invoices.
+              </p>
             </div>
           </header>
           {data.references.subscriptionDrafts.map((draft) => (
@@ -252,7 +277,7 @@ export function FinancialDocumentsPage() {
         <header className="financial-document-toolbar">
           <div>
             <h2>Document register</h2>
-            <p>{data.documents.length} prepared records</p>
+            <p>{copy.recordCount(data.documents.length)}</p>
           </div>
           <div className="financial-document-filters">
             <label>
@@ -298,7 +323,7 @@ export function FinancialDocumentsPage() {
                 <div className="financial-document-identity">
                   <span>{typeMark(document.documentType)}</span>
                   <div>
-                    <strong>{document.number}</strong>
+                    <strong>{document.officialNumber ?? document.number}</strong>
                     <small>{typeLabel(document.documentType)}</small>
                   </div>
                 </div>
@@ -328,6 +353,14 @@ export function FinancialDocumentsPage() {
         )}
       </section>
 
+      {brandingOpen ? (
+        <FinancialBrandingPanel
+          references={data.references}
+          token={token}
+          onBack={() => setBrandingOpen(false)}
+          onSaved={data.reload}
+        />
+      ) : null}
       {creating ? (
         <CreateDocumentDrawer
           onBack={() => setCreating(false)}
@@ -358,10 +391,20 @@ export function FinancialDocumentsPage() {
                   }),
               }
             : {})}
-          onBack={() => setSelected(null)}
+          onBack={() =>
+            returnAccountId
+              ? navigate('/modules/erp.finance/customer-accounts', {
+                  state: { customerPartnerId: returnAccountId },
+                })
+              : setSelected(null)
+          }
           onSaved={(document) => {
             setSelected(document);
-            setNotice(`${document.number} was cancelled.`);
+            setNotice(
+              document.status === 'issued'
+                ? copy.issuedNotice(document.officialNumber ?? document.number)
+                : `${document.number} was cancelled.`,
+            );
             data.reload();
           }}
           token={token}
@@ -544,6 +587,9 @@ function CreateDocumentDrawer({
     void getFinancialDocument(token, correctionId)
       .then((original) => {
         if (!active) return;
+        setScopeId(original.businessLocationId);
+        setCashRegisterId('');
+        setOperatorId('');
         setLines(
           original.lines.map((line) => ({
             key: crypto.randomUUID(),
@@ -553,6 +599,8 @@ function CreateDocumentDrawer({
             quantity: line.quantity,
             unitCode: line.unitCode,
             unitPrice: line.unitPrice,
+            manualPrice: true,
+            ...(line.vatRate ? { vatRate: line.vatRate } : {}),
             vatTreatment: line.vatTreatment,
           })),
         );
@@ -1286,6 +1334,11 @@ function DocumentPreviewDrawer({
   onSaved: (document: FinancialDocument) => void;
   token: string;
 }) {
+  const { navigate } = useRouter();
+  const { locale } = useLocalization();
+  const correctionCopy = collectionCorrectionsMessages(locale);
+  const { hasPermission } = useAuth();
+  const canOpenCollection = Boolean(document.collection) || hasPermission('erp.finance', 'create');
   const [cancelling, setCancelling] = useState(false);
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
@@ -1293,12 +1346,32 @@ function DocumentPreviewDrawer({
   const [issueConfirmed, setIssueConfirmed] = useState(false);
   const [recipientEmail, setRecipientEmail] = useState('');
   const [emailNotice, setEmailNotice] = useState<string | null>(null);
+  async function openCollection() {
+    setBusy(true);
+    setError(null);
+    try {
+      const linked = document.collection
+        ? document
+        : await collectFinancialDocument(token, document.id, crypto.randomUUID(), {
+            expectedVersion: document.version,
+          });
+      if (linked.collection)
+        navigate('/modules/erp.finance/payments', {
+          state: { financeCollectionDocumentId: linked.collection.id },
+        });
+    } catch (caught) {
+      setError(errorText(caught, copy.collectionOpenError));
+    } finally {
+      setBusy(false);
+    }
+  }
   async function issue() {
     setBusy(true);
     setError(null);
     try {
       const issued = await issueFinancialDocument(token, document.id, crypto.randomUUID(), {
         expectedVersion: document.version,
+        ...(document.branding ? { expectedBrandingVersion: document.branding.version } : {}),
       });
       onSaved(issued);
     } catch (caught) {
@@ -1363,7 +1436,7 @@ function DocumentPreviewDrawer({
       busy={busy}
       onBack={onBack}
       subtitle={typeLabel(document.documentType)}
-      title={document.number}
+      title={document.officialNumber ?? document.number}
     >
       <div className="financial-document-preview">
         {error ? <InlineAlert tone="error">{error}</InlineAlert> : null}
@@ -1385,6 +1458,31 @@ function DocumentPreviewDrawer({
             </strong>
           </div>
         </section>
+        {document.convertedFromDocumentId || document.convertedToDocumentId ? (
+          <section className="financial-document-preview-section">
+            <header>
+              <h3>{copy.relatedDocument}</h3>
+            </header>
+            <p>{document.convertedToDocumentId ? copy.proformaPaid : copy.invoiceFromProforma}</p>
+            <Button
+              className="financial-document-related-link"
+              variant="secondary"
+              onClick={() =>
+                navigate('/modules/erp.finance/invoices', {
+                  state: {
+                    financialDocumentId:
+                      document.convertedToDocumentId ?? document.convertedFromDocumentId,
+                  },
+                })
+              }
+            >
+              <span>
+                {document.convertedToDocumentNumber ?? document.convertedFromDocumentNumber}
+              </span>
+              <Icon name="arrow" size={15} />
+            </Button>
+          </section>
+        ) : null}
         <section className="financial-document-preview-section financial-document-delivery">
           <header>
             <h3>{copy.emailDocument}</h3>
@@ -1509,11 +1607,16 @@ function DocumentPreviewDrawer({
             <Info label="Net in EUR" value={formatMoney(document.eurNetTotal, 'EUR')} />
             <Info label="VAT in EUR" value={formatMoney(document.eurVatTotal, 'EUR')} />
             <Info label="Total in EUR" value={formatMoney(document.eurGrossTotal, 'EUR')} />
-            <Info label="Rate source" value={document.rateSource} />
+            <Info
+              label="Rate source"
+              value={
+                document.rateSource === 'internal_eur' ? copy.eurReference : document.rateSource
+              }
+            />
           </dl>
         </section>
         {document.sourceSalesInvoiceNumber ||
-        document.sourcePosSaleNumber ||
+        (document.sourcePosSaleNumber && !document.posSettlement) ||
         document.sourceServiceWorkOrderNumber ||
         document.sourceSubscriptionDraftNumber ||
         document.correctionOf ? (
@@ -1539,7 +1642,7 @@ function DocumentPreviewDrawer({
                 <strong>{document.sourceSubscriptionDraftNumber}</strong>
               </p>
             ) : null}
-            {document.sourcePosSaleNumber ? (
+            {document.sourcePosSaleNumber && !document.posSettlement ? (
               <p>
                 Prepared from POS sale <strong>{document.sourcePosSaleNumber}</strong>
                 {document.sourceFiscalReceiptNumber ? (
@@ -1558,12 +1661,32 @@ function DocumentPreviewDrawer({
               </p>
             ) : null}
             {document.correctionOf ? (
-              <p>
-                Corrects invoice draft <strong>{document.correctionOf.number}</strong>:{' '}
-                {document.correctionReason}
-              </p>
+              <div className="financial-correction-source">
+                <p>
+                  {correctionCopy.originalInvoice}: <strong>{document.correctionOf.number}</strong>
+                </p>
+                <p>{document.correctionReason}</p>
+                <Button
+                  variant="secondary"
+                  onClick={() =>
+                    navigate('/modules/erp.finance/invoices', {
+                      state: { financialDocumentId: document.correctionOf!.id },
+                    })
+                  }
+                >
+                  {correctionCopy.openOriginal}
+                </Button>
+                {document.status === 'draft' ? <p>{correctionCopy.draftHelp}</p> : null}
+              </div>
             ) : null}
           </section>
+        ) : null}
+        {document.posSettlement ? (
+          <PosInvoiceSettlementPanel
+            settlement={document.posSettlement}
+            customerId={document.customerPartnerId}
+            documentId={document.id}
+          />
         ) : null}
         {document.notes ? (
           <section className="financial-document-preview-section">
@@ -1583,6 +1706,17 @@ function DocumentPreviewDrawer({
         />
         {document.cancellationReason ? (
           <InlineAlert tone="warning">Cancelled: {document.cancellationReason}</InlineAlert>
+        ) : null}
+        {canOpenCollection &&
+        document.status === 'issued' &&
+        !document.sourcePosSaleId &&
+        Number(document.grossTotal) > 0 &&
+        (['invoice', 'proforma'].includes(document.documentType) || document.collection) ? (
+          <section className="financial-document-preview-section">
+            <Button busy={busy} onClick={() => void openCollection()} variant="secondary">
+              {copy.collections}
+            </Button>
+          </section>
         ) : null}
         {canEdit && document.status === 'draft' ? (
           <section className="financial-document-cancel">
@@ -1631,64 +1765,6 @@ function DocumentPreviewDrawer({
         ) : null}
       </div>
     </DocumentDrawer>
-  );
-}
-
-function DocumentDrawer({
-  busy,
-  children,
-  onBack,
-  subtitle,
-  title,
-}: {
-  busy: boolean;
-  children: ReactNode;
-  onBack: () => void;
-  subtitle: string;
-  title: string;
-}) {
-  return (
-    <div className="security-drawer-layer">
-      <button
-        aria-label={copy.back}
-        className="security-drawer-scrim"
-        disabled={busy}
-        onClick={onBack}
-        type="button"
-      />
-      <aside
-        aria-label={title}
-        aria-modal="true"
-        className="security-drawer is-wide financial-document-drawer"
-        role="dialog"
-      >
-        <header className="panel-drawer-header financial-document-drawer-header">
-          <button
-            aria-label={copy.back}
-            className="panel-back-button"
-            disabled={busy}
-            onClick={onBack}
-            type="button"
-          >
-            <Icon name="arrow" size={17} /> Back
-          </button>
-          <button
-            aria-label={copy.close}
-            className="panel-close-button"
-            disabled={busy}
-            onClick={onBack}
-            type="button"
-          >
-            <Icon name="close" />
-          </button>
-          <div>
-            <h2>{title}</h2>
-            <p>{subtitle}</p>
-          </div>
-        </header>
-        <div className="security-drawer-body">{children}</div>
-      </aside>
-    </div>
   );
 }
 
@@ -1893,10 +1969,13 @@ function draftLines(
   return lines.map((line, index) => ({ ...line, key: `${prefix}-${index}` }));
 }
 
-function financialDocumentRouteState(
-  state: unknown,
-):
-  | { financialDocumentId?: string; serviceWorkOrderId?: string; subscriptionDraftId?: string }
+function financialDocumentRouteState(state: unknown):
+  | {
+      financialDocumentId?: string;
+      serviceWorkOrderId?: string;
+      subscriptionDraftId?: string;
+      returnToCustomerAccountId?: string;
+    }
   | undefined {
   if (!state || typeof state !== 'object') return undefined;
   const candidate = state as Record<string, unknown>;
@@ -1909,6 +1988,9 @@ function financialDocumentRouteState(
   return financialDocumentId || serviceWorkOrderId || subscriptionDraftId
     ? {
         ...(financialDocumentId ? { financialDocumentId } : {}),
+        ...(typeof candidate.returnToCustomerAccountId === 'string'
+          ? { returnToCustomerAccountId: candidate.returnToCustomerAccountId }
+          : {}),
         ...(serviceWorkOrderId ? { serviceWorkOrderId } : {}),
         ...(subscriptionDraftId ? { subscriptionDraftId } : {}),
       }
@@ -1965,6 +2047,23 @@ function formatMoney(value: string, currencyCode: string) {
 }
 function errorText(error: unknown, fallback: string) {
   if (!(error instanceof ApiClientError)) return fallback;
+  if (error.code === 'FINANCE_POS_INVOICE_AFTER_RETURN')
+    return getOperationsLocale() === 'bg'
+      ? 'Продажбата е върната преди издаването на фактурата. Отменете черновата, вместо да издавате фактура за върнатите стоки.'
+      : 'This sale was returned before its invoice was issued. Cancel the draft instead of issuing an invoice for returned goods.';
+  if (error.code === 'FINANCE_BRANDING_VERSION_CONFLICT')
+    return financialBrandingMessages(getOperationsLocale()).stale;
+  if (
+    [
+      'FINANCE_BRANDING_IMAGE_INVALID',
+      'FINANCE_BRANDING_FILE_INVALID',
+      'FINANCE_BRANDING_INTEGRITY_FAILED',
+      'FILE_CONTENT_INTEGRITY_FAILED',
+      'FILE_CONTENT_UNAVAILABLE',
+      'FILE_NOT_AVAILABLE',
+    ].includes(error.code)
+  )
+    return financialBrandingMessages(getOperationsLocale()).imageError;
   const detail = error.details[0]?.message;
   return detail ? friendlyValidationDetail(detail) : error.message;
 }

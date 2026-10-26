@@ -126,7 +126,7 @@ export class CustomerFinancialDocumentSummaryDto implements CustomerFinancialDoc
   @ApiPropertyOptional({ format: 'uuid', type: String })
   sourceSalesInvoiceId?: string;
 
-  @ApiProperty({ enum: ['draft', 'cancelled'] })
+  @ApiProperty({ enum: ['draft', 'issued', 'cancelled'] })
   status!: CustomerFinancialDocumentSummary['status'];
 }
 
@@ -158,8 +158,8 @@ export class CustomerReceivableSummaryDto implements CustomerReceivableSummary {
   @ApiProperty({ enum: ['unpaid', 'partially_paid', 'paid', 'overdue', 'cancelled'] })
   paymentStatus!: FinancePaymentStatus;
 
-  @ApiProperty({ format: 'uuid', type: String })
-  sourceSalesInvoiceId!: string;
+  @ApiPropertyOptional({ format: 'uuid', type: String })
+  sourceSalesInvoiceId?: string;
 
   @ApiProperty({ example: '60.0000', type: String })
   total!: string;
@@ -189,6 +189,9 @@ export class CustomerPaymentSummaryDto implements CustomerPaymentSummary {
 
   @ApiProperty({ format: 'date-time', type: String })
   recordedAt!: string;
+
+  @ApiPropertyOptional({ type: String })
+  reversalNumber?: string;
 }
 
 export class CustomerOperationalOverviewDto implements CustomerOperationalOverview {

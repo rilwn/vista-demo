@@ -168,6 +168,11 @@ export const bgText: Readonly<Record<string, string>> = {
   'Prepared from this receipt with the same customer, VAT, and totals.':
     'Подготвена от тази касова бележка със същия клиент, ДДС и суми.',
   Ready: 'Готово',
+  Issued: 'Издадена',
+  'This return includes collected account payments. Finance must review the refund before this portion can be returned.':
+    'Връщането включва получени отложени плащания. Финанси трябва да прегледа възстановяването, преди тази част да бъде върната.',
+  'Choose the original payment and refund amount for this return.':
+    'Изберете първоначалното плащане и сумата за възстановяване по това връщане.',
   'Finance document': 'Финансов документ',
   'Linked to': 'Свързано с',
   'Select a customer before completing a sale when an invoice is required.':
@@ -224,6 +229,9 @@ export const bgText: Readonly<Record<string, string>> = {
   'Reason for return': 'Причина за връщане',
   refund: 'възстановяване',
   'Total refund': 'Общо за възстановяване',
+  'On-account return': 'Връщане по отложено плащане',
+  'Unpaid account amounts are released. Finance records any repayment of money already collected separately.':
+    'Неплатените задължения се намаляват. Финанси записва отделно възстановяването на вече получените суми.',
   'Return complete': 'Връщането е завършено',
   'Reversal recorded': 'Сторнирането е записано',
   'Original sale': 'Първоначална продажба',

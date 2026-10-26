@@ -47,7 +47,7 @@ interface ReceivableRow {
   document_number: string;
   outstanding_total: string;
   payment_status: FinancePaymentStatus;
-  source_sales_invoice_id: string;
+  source_sales_invoice_id: string | null;
   total: string;
 }
 
@@ -60,6 +60,7 @@ interface PaymentRow {
   payment_number: string;
   payment_reference: string | null;
   recorded_at: Date | string;
+  reversal_number: string | null;
 }
 
 interface PurchaseRow {
@@ -147,6 +148,12 @@ export class CustomerOverviewService {
 }
 
 const overviewCountsSql = `
+  WITH pos_accounts AS (
+    SELECT pos_sale_id, sum(CASE WHEN entry_type IN ('charge','payment_reversal')
+      THEN amount ELSE -amount END) AS outstanding
+    FROM finance.customer_account_entries WHERE customer_partner_id=$1
+    GROUP BY pos_sale_id
+  )
   SELECT
     (SELECT count(*)::text
        FROM finance.financial_documents document
@@ -163,15 +170,17 @@ const overviewCountsSql = `
        SELECT sale.completed_at FROM pos.sales sale
         WHERE sale.customer_partner_id = $1 AND sale.status = 'completed'
      ) purchase) AS last_purchase_at,
-    (SELECT count(*)::text
+    ((SELECT count(*)
        FROM finance.customer_documents document
       WHERE document.customer_partner_id = $1
         AND document.review_state = 'pending_finance_review'
-        AND document.outstanding_total > 0) AS open_receivables,
-    (SELECT coalesce(sum(document.outstanding_total), 0)::text
+        AND document.outstanding_total > 0)
+      + (SELECT count(*) FROM pos_accounts WHERE outstanding>0))::text AS open_receivables,
+    ((SELECT coalesce(sum(round(document.outstanding_total * document.exchange_rate,4)), 0)
        FROM finance.customer_documents document
       WHERE document.customer_partner_id = $1
-        AND document.review_state = 'pending_finance_review') AS outstanding_eur,
+        AND document.review_state = 'pending_finance_review')
+      + (SELECT coalesce(sum(outstanding),0) FROM pos_accounts))::text AS outstanding_eur,
     (SELECT count(*)::text
        FROM finance.payments payment
       WHERE payment.customer_partner_id = $1) AS payments`;
@@ -199,8 +208,9 @@ const receivablesSql = `
 const paymentsSql = `
   SELECT payment.id, payment.payment_number, payment.payment_date::text,
     payment.payment_method, payment.currency_code, payment.amount::text,
-    payment.payment_reference, payment.recorded_at
+    payment.payment_reference, payment.recorded_at, reversal.reversal_number
   FROM finance.payments payment
+  LEFT JOIN finance.payment_reversals reversal ON reversal.payment_id=payment.id
   WHERE payment.customer_partner_id = $1
   ORDER BY payment.payment_date DESC, payment.recorded_at DESC, payment.id DESC
   LIMIT $2`;
@@ -271,7 +281,7 @@ function mapReceivable(row: ReceivableRow): CustomerReceivableSummary {
     number: row.document_number,
     outstandingTotal: row.outstanding_total,
     paymentStatus: row.payment_status,
-    sourceSalesInvoiceId: row.source_sales_invoice_id,
+    ...(row.source_sales_invoice_id ? { sourceSalesInvoiceId: row.source_sales_invoice_id } : {}),
     total: row.total,
   };
 }
@@ -286,6 +296,7 @@ function mapPayment(row: PaymentRow): CustomerPaymentSummary {
     paymentMethod: row.payment_method,
     ...(row.payment_reference ? { paymentReference: row.payment_reference } : {}),
     recordedAt: asIso(row.recorded_at),
+    ...(row.reversal_number ? { reversalNumber: row.reversal_number } : {}),
   };
 }
 

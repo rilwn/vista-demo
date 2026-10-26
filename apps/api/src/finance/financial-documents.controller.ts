@@ -7,6 +7,7 @@ import {
   HttpStatus,
   Inject,
   Param,
+  ParseUUIDPipe,
   Post,
   Query,
   Req,
@@ -56,6 +57,25 @@ export class FinancialDocumentsController {
     @Inject(FinancialDocumentsService) private readonly documents: FinancialDocumentsService,
     @Inject(SalesPricingService) private readonly pricing: SalesPricingService,
   ) {}
+
+  @Post('from-pos-return/:returnId')
+  @HttpCode(HttpStatus.CREATED)
+  @RequirePermissions({ action: 'create', module: 'erp.finance' })
+  @ApiParam({ name: 'returnId', format: 'uuid' })
+  @ApiHeader({ name: 'Idempotency-Key', required: true })
+  @ApiCreatedResponse({ type: FinancialDocumentDto })
+  fromPosReturn(
+    @Param('returnId', new ParseUUIDPipe()) returnId: string,
+    @Headers('idempotency-key') key: string | undefined,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<FinancialDocumentDto> {
+    return this.documents.createFromPosReturn(
+      returnId,
+      key,
+      request.authentication,
+      metadata(request),
+    );
+  }
 
   @Get('reference-data')
   @RateLimitPolicy('read')
@@ -137,8 +157,12 @@ export class FinancialDocumentsController {
     content: { 'application/pdf': { schema: { format: 'binary', type: 'string' } } },
     description: 'Printable financial document. Drafts are marked as drafts.',
   })
-  async pdf(@Param('id') id: string, @Res() response: Response): Promise<void> {
-    const content = await this.documents.pdf(id);
+  async pdf(
+    @Param('id') id: string,
+    @Req() request: AuthenticatedRequest,
+    @Res() response: Response,
+  ): Promise<void> {
+    const content = await this.documents.pdf(id, request.authentication);
     response.setHeader('Cache-Control', 'private, no-store');
     response.setHeader(
       'Content-Disposition',
@@ -164,6 +188,28 @@ export class FinancialDocumentsController {
     @Req() request: AuthenticatedRequest,
   ): Promise<QueuedEmailReceiptDto> {
     return this.documents.email(id, input, key, request.authentication, metadata(request));
+  }
+
+  @Post(':id/collection')
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissions({ action: 'create', module: 'erp.finance' })
+  @ApiBody({ type: IssueFinancialDocumentDto })
+  @ApiOkResponse({ type: FinancialDocumentDto })
+  @ApiHeader({ name: 'Idempotency-Key', required: true })
+  @ApiParam({ format: 'uuid', name: 'id' })
+  collection(
+    @Param('id') id: string,
+    @Body() input: IssueFinancialDocumentDto,
+    @Headers('idempotency-key') key: string | undefined,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<FinancialDocumentDto> {
+    return this.documents.addToCollections(
+      id,
+      input,
+      key,
+      request.authentication,
+      metadata(request),
+    );
   }
 
   @Post(':id/issue')

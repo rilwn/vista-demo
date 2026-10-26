@@ -7,6 +7,7 @@ import type {
   CreateFinanceCustomerDocumentRequest,
   CreateFinancePaymentRequest,
   FinanceCustomerDocument,
+  FinanceCollectionCorrection,
   FinancePayment,
   FinancePaymentMethod,
   FinancePaymentStatus,
@@ -18,6 +19,7 @@ import type {
   ReverseFinancePaymentRequest,
 } from '@vista/contracts';
 import type { AppEnvironment } from '@vista/config';
+import { calculateReceivableBalance } from '@vista/domain';
 import type { PoolClient } from 'pg';
 
 import { AuditService } from '../audit/audit.service.js';
@@ -33,6 +35,10 @@ import { FinancialDocumentsService } from './financial-documents.service.js';
 import type { BackgroundJobContext } from '../jobs/job-handler-registry.service.js';
 
 interface DocumentRow {
+  credit_total: string;
+  debit_total: string;
+  adjusted_total: string;
+  overpaid_total: string;
   allocated_total: string;
   eur_total: string;
   created_at: string | Date;
@@ -54,7 +60,7 @@ interface DocumentRow {
   rate_source: string;
   review_state: FinanceCustomerDocument['reviewState'];
   source_invoice_number: string;
-  source_sales_invoice_id: string;
+  source_sales_invoice_id: string | null;
   total: string;
   version: number;
 }
@@ -130,10 +136,13 @@ export class FinanceService {
     const result = await this.database.getPool().query<{ id: string }>(
       `SELECT document.id
        FROM finance.customer_documents document
-       JOIN sales.invoices source ON source.id = document.source_sales_invoice_id
+       LEFT JOIN sales.invoices source ON source.id = document.source_sales_invoice_id
+       LEFT JOIN finance.financial_documents financial ON financial.id = document.financial_document_id
        JOIN master_data.partners customer ON customer.id = document.customer_partner_id
        WHERE document.document_number ILIKE $1 ESCAPE E'\\\\'
           OR source.invoice_number ILIKE $1 ESCAPE E'\\\\'
+          OR financial.official_number ILIKE $1 ESCAPE E'\\\\'
+          OR financial.draft_number ILIKE $1 ESCAPE E'\\\\'
           OR customer.display_name ILIKE $1 ESCAPE E'\\\\'
        ORDER BY document.created_at DESC, document.id DESC
        LIMIT 8`,
@@ -160,8 +169,8 @@ export class FinanceService {
     }>(
       `SELECT count(*) FILTER (WHERE review_state = 'pending_finance_review')::text AS active_documents,
               count(*) FILTER (WHERE payment_status = 'paid')::text AS paid_documents,
-              coalesce(sum(outstanding_total) FILTER (WHERE review_state = 'pending_finance_review'), 0)::text AS total_outstanding,
-              coalesce(sum(outstanding_total) FILTER (WHERE payment_status = 'overdue'), 0)::text AS overdue_outstanding
+              coalesce(sum(round(outstanding_total * exchange_rate, 4)) FILTER (WHERE review_state = 'pending_finance_review'), 0)::text AS total_outstanding,
+              coalesce(sum(round(outstanding_total * exchange_rate, 4)) FILTER (WHERE payment_status = 'overdue'), 0)::text AS overdue_outstanding
        FROM finance.customer_documents`,
     );
     const row = required(result.rows[0], 'Finance summary query failed');
@@ -189,6 +198,14 @@ export class FinanceService {
       normalized,
       201,
       async (client, commandKey) => {
+        const linked = await client.query<{ id: string }>(
+          `SELECT collection.id FROM finance.customer_documents collection
+           JOIN finance.financial_documents financial ON financial.id = collection.financial_document_id
+           WHERE collection.source_sales_invoice_id = $1 AND financial.status = 'issued'
+             AND collection.review_state <> 'cancelled'`,
+          [normalized.salesInvoiceId],
+        );
+        if (linked.rows[0]) return this.loadDocument(client, linked.rows[0].id);
         const source = await client.query<{
           currency_code: string;
           customer_partner_id: string;
@@ -438,10 +455,19 @@ export class FinanceService {
           allocations.rows[0],
           'Payment balance could not be recalculated',
         ).allocated_total;
-        const outstandingTotal = decimalString(
-          decimalUnits(before.total) - decimalUnits(allocatedTotal),
+        const balance = calculateReceivableBalance(
+          before.total,
+          allocatedTotal,
+          before.creditTotal,
+          before.debitTotal,
         );
-        const paymentStatus = statusFor(before.total, allocatedTotal, before.dueDate, businessDate);
+        const outstandingTotal = balance.outstandingTotal;
+        const paymentStatus = statusFor(
+          balance.adjustedTotal,
+          allocatedTotal,
+          before.dueDate,
+          businessDate,
+        );
         await client.query(
           `UPDATE finance.customer_documents
            SET allocated_total = $2, outstanding_total = $3, payment_status = $4,
@@ -663,11 +689,15 @@ export class FinanceService {
     const allocatedTotal = decimalString(
       decimalUnits(before.allocatedTotal) + decimalUnits(paymentInput.amount),
     );
-    const outstandingTotal = decimalString(
-      decimalUnits(before.total) - decimalUnits(allocatedTotal),
-    );
-    const paymentStatus = statusFor(
+    const balance = calculateReceivableBalance(
       before.total,
+      allocatedTotal,
+      before.creditTotal,
+      before.debitTotal,
+    );
+    const outstandingTotal = balance.outstandingTotal;
+    const paymentStatus = statusFor(
+      balance.adjustedTotal,
       allocatedTotal,
       before.dueDate,
       await this.businessDate(client),
@@ -681,9 +711,8 @@ export class FinanceService {
     );
     const convertedInvoice =
       paymentStatus === 'paid'
-        ? await this.financialDocuments.convertPaidProforma(
+        ? await this.settlePaidProforma(
             client,
-            before.sourceSalesInvoiceId,
             paymentInput.paymentDate,
             id,
             auth,
@@ -721,6 +750,24 @@ export class FinanceService {
     return document;
   }
 
+  settlePaidProforma(
+    client: PoolClient,
+    settlementDate: string,
+    collectionId: string,
+    auth: AuthenticationContext,
+    metadata: RequestSecurityMetadata,
+    key: string,
+  ) {
+    return this.financialDocuments.convertPaidProforma(
+      client,
+      settlementDate,
+      collectionId,
+      auth,
+      metadata,
+      key,
+    );
+  }
+
   async cancelDocument(
     id: string,
     input: CancelFinanceCustomerDocumentRequest,
@@ -749,6 +796,12 @@ export class FinanceService {
             HttpStatus.CONFLICT,
           );
         if (before.reviewState === 'cancelled') return before;
+        if (before.financialDocument?.status === 'issued')
+          throw new ApiErrorException(
+            'FINANCE_ISSUED_COLLECTION_CANNOT_CANCEL',
+            'This collection belongs to an issued document. Use a linked correction instead of cancelling the collection.',
+            HttpStatus.CONFLICT,
+          );
         if (decimalUnits(before.allocatedTotal) > 0n)
           throw new ApiErrorException(
             'FINANCE_DOCUMENT_HAS_PAYMENTS',
@@ -943,7 +996,7 @@ export class FinanceService {
     ]);
     const row = result.rows[0];
     if (!row) throw documentNotFound();
-    const [payments, history] = await Promise.all([
+    const [payments, history, corrections] = await Promise.all([
       client.query<PaymentRow>(
         `SELECT payment.id, payment.payment_number, payment.payment_date::text,
                 payment.payment_method, payment.amount::text, payment.payment_reference,
@@ -970,8 +1023,22 @@ export class FinanceService {
          ORDER BY history.changed_at DESC, history.id DESC`,
         [id],
       ),
+      client.query<Omit<FinanceCollectionCorrection, 'appliedAt'> & { appliedAt: string | Date }>(
+        `SELECT correction.id, note.id AS "documentId",note.official_number AS number,
+          correction.document_type AS "documentType",correction.document_date::text AS "documentDate",
+          correction.amount::text,correction.eur_amount::text AS "eurAmount",correction.applied_at AS "appliedAt",
+          note.correction_reason AS reason
+         FROM finance.collection_corrections correction JOIN finance.financial_documents note ON note.id=correction.correction_document_id
+         WHERE correction.customer_document_id=$1 ORDER BY correction.applied_at,correction.id`,
+        [id],
+      ),
     ]);
-    return mapDocument(row, payments.rows.map(mapPayment), history.rows.map(mapHistory));
+    return mapDocument(
+      row,
+      payments.rows.map(mapPayment),
+      history.rows.map(mapHistory),
+      corrections.rows.map((item) => ({ ...item, appliedAt: asIso(item.appliedAt) })),
+    );
   }
 
   private async lockDocument(client: PoolClient, id: string): Promise<FinanceCustomerDocument> {
@@ -1200,7 +1267,7 @@ interface HistoryRow {
 
 function documentQuery() {
   return `SELECT document.id, document.document_number, document.source_sales_invoice_id,
-                 source.invoice_number AS source_invoice_number,
+                 coalesce(financial.official_number, financial.draft_number, source.invoice_number, document.document_number) AS source_invoice_number,
                  document.customer_partner_id, customer.display_name AS customer_name,
                  financial.id AS financial_document_id,
                  coalesce(financial.official_number, financial.draft_number) AS financial_document_number,
@@ -1209,11 +1276,12 @@ function documentQuery() {
                  document.document_date::text, document.due_date::text, document.currency_code,
                  document.exchange_rate::text, document.rate_date::text, document.rate_source,
                  document.total::text, document.allocated_total::text,
+                 document.credit_total::text,document.debit_total::text,document.adjusted_total::text,document.overpaid_total::text,
                  document.outstanding_total::text, document.eur_total::text,
                  document.payment_status, document.review_state, document.version,
                  document.created_at
           FROM finance.customer_documents document
-          JOIN sales.invoices source ON source.id = document.source_sales_invoice_id
+          LEFT JOIN sales.invoices source ON source.id = document.source_sales_invoice_id
           JOIN master_data.partners customer ON customer.id = document.customer_partner_id
           LEFT JOIN finance.financial_documents financial
             ON financial.id = document.financial_document_id`;
@@ -1227,8 +1295,14 @@ function mapDocument(
   row: DocumentRow,
   payments: FinancePayment[],
   statusHistory: FinancePaymentStatusHistoryEntry[],
+  corrections: FinanceCollectionCorrection[] = [],
 ): FinanceCustomerDocument {
   return {
+    creditTotal: row.credit_total,
+    debitTotal: row.debit_total,
+    adjustedTotal: row.adjusted_total,
+    overpaidTotal: row.overpaid_total,
+    corrections,
     allocatedTotal: row.allocated_total,
     eurTotal: row.eur_total,
     createdAt: asIso(row.created_at),
@@ -1260,7 +1334,7 @@ function mapDocument(
     rateSource: row.rate_source,
     reviewState: row.review_state,
     sourceInvoiceNumber: row.source_invoice_number,
-    sourceSalesInvoiceId: row.source_sales_invoice_id,
+    ...(row.source_sales_invoice_id ? { sourceSalesInvoiceId: row.source_sales_invoice_id } : {}),
     statusHistory,
     total: row.total,
     version: row.version,
@@ -1324,7 +1398,7 @@ function statusFor(
   asOf: string,
 ): FinancePaymentStatus {
   const outstanding = decimalUnits(total) - decimalUnits(allocated);
-  if (outstanding === 0n) return 'paid';
+  if (outstanding <= 0n) return 'paid';
   if (dueDate < asOf) return 'overdue';
   return decimalUnits(allocated) === 0n ? 'unpaid' : 'partially_paid';
 }

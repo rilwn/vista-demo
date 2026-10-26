@@ -1,4 +1,7 @@
 import { Module } from '@nestjs/common';
+import { FilesModule } from '../files/files.module.js';
+import { FinancialBrandingController } from './financial-branding.controller.js';
+import { FinancialBrandingService } from './financial-branding.service.js';
 import { OperationsOverviewController } from './operations-overview.controller.js';
 import { OperationsOverviewService } from './operations-overview.service.js';
 
@@ -20,9 +23,13 @@ import { FinanceService } from './finance.service.js';
 import { FinancialDocumentsController } from './financial-documents.controller.js';
 import { FinancialDocumentsService } from './financial-documents.service.js';
 import { BnbCurrencyRatesService } from './bnb-currency-rates.service.js';
+import { RecurringInvoicesController } from './recurring-invoices.controller.js';
+import { RecurringInvoicesService } from './recurring-invoices.service.js';
 
 @Module({
   controllers: [
+    FinancialBrandingController,
+    RecurringInvoicesController,
     OperationsOverviewController,
     FinanceBankController,
     FinanceCashController,
@@ -33,6 +40,7 @@ import { BnbCurrencyRatesService } from './bnb-currency-rates.service.js';
     FinancialDocumentsController,
   ],
   exports: [
+    RecurringInvoicesService,
     FinanceBankService,
     FinanceCashService,
     FinanceCustomerAccountsService,
@@ -42,8 +50,10 @@ import { BnbCurrencyRatesService } from './bnb-currency-rates.service.js';
     FinancialDocumentsService,
     BnbCurrencyRatesService,
   ],
-  imports: [AuditModule, DatabaseModule, SalesModule],
+  imports: [AuditModule, DatabaseModule, SalesModule, FilesModule],
   providers: [
+    FinancialBrandingService,
+    RecurringInvoicesService,
     OperationsOverviewService,
     FinanceBankService,
     FinanceCashService,

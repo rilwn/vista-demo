@@ -188,7 +188,8 @@ describe('POS application', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Edit shortcuts' }));
 
     expect(await screen.findByRole('heading', { name: 'Quick-access products' })).toBeTruthy();
-    expect(screen.getByText('1 / 12 selected')).toBeTruthy();
+    // The panel heading appears before its saved shortcuts have loaded.
+    expect(await screen.findByText('1 / 12 selected')).toBeTruthy();
     fireEvent.click(screen.getByRole('checkbox', { name: /Demo 12 V Power Adapter/u }));
     expect(screen.getByText('0 / 12 selected')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Save shortcuts' }));

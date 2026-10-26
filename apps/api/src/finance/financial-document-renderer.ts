@@ -2,6 +2,7 @@ import { createRequire } from 'node:module';
 
 import type { FinancialDocument, VatTreatment } from '@vista/contracts';
 import PDFDocument from 'pdfkit';
+import { pdfTextLine, pdfTextWidth, pdfWrappedLines } from './financial-pdf-text.js';
 
 const require = createRequire(import.meta.url);
 const latinRegular = require.resolve('@fontsource/noto-sans/files/noto-sans-latin-400-normal.woff');
@@ -15,8 +16,11 @@ const pageLeft = 42;
 const pageRight = 553;
 const contentWidth = pageRight - pageLeft;
 
-export async function renderFinancialDocument(documentData: FinancialDocument): Promise<Buffer> {
-  const pdf = new PDFDocument({ margin: pageLeft, size: 'A4' });
+export async function renderFinancialDocument(
+  documentData: FinancialDocument,
+  images: { logo?: Buffer; signature?: Buffer } = {},
+): Promise<Buffer> {
+  const pdf = new PDFDocument({ margin: pageLeft, size: 'A4', bufferPages: true });
   pdf.info.Author = documentData.issuerSnapshot.name;
   pdf.info.Creator = 'Vista Operations';
   pdf.info.Title = `${documentLabel(documentData.documentType)} ${documentData.officialNumber ?? documentData.number}`;
@@ -32,8 +36,7 @@ export async function renderFinancialDocument(documentData: FinancialDocument): 
     pdf.on('error', reject);
   });
 
-  drawHeader(pdf, documentData);
-  let y = 145;
+  let y = drawHeader(pdf, documentData, images.logo);
   if (documentData.status !== 'issued') {
     pdf.roundedRect(pageLeft, y, contentWidth, 28, 6).fill('#fff3d9');
     drawText(pdf, 'DRAFT / ПРОЕКТ', pageLeft + 12, y + 8, 9, '#815b0b', true);
@@ -60,12 +63,12 @@ export async function renderFinancialDocument(documentData: FinancialDocument): 
     y = ensureSpace(pdf, y, 58);
     drawText(pdf, 'Notes / Бележки', pageLeft, y, 8, '#60736a', true);
     y += 14;
-    pdf
-      .font(fontFor(documentData.notes))
-      .fontSize(8)
-      .fillColor('#24382f')
-      .text(documentData.notes, pageLeft, y, { width: contentWidth, lineGap: 2 });
-    y = pdf.y + 14;
+    for (const line of pdfWrappedLines(pdf, documentData.notes, contentWidth, 8)) {
+      y = ensureSpace(pdf, y, 13);
+      drawText(pdf, line, pageLeft, y, 8, '#24382f');
+      y += 13;
+    }
+    y += 14;
   }
   if (documentData.exchangeRate !== '1.00000000') {
     y = ensureSpace(pdf, y + 6, 32);
@@ -88,12 +91,43 @@ export async function renderFinancialDocument(documentData: FinancialDocument): 
       true,
     );
   }
-  drawSignature(pdf, documentData, Math.max(y + 22, pdf.page.height - 92));
+  drawSignature(pdf, documentData, Math.max(y + 22, pdf.page.height - 170), images.signature);
+  const pages = pdf.bufferedPageRange();
+  for (let index = pages.start; index < pages.start + pages.count; index++) {
+    pdf.switchToPage(index);
+    const bottom = pdf.page.margins.bottom;
+    pdf.page.margins.bottom = 15;
+    drawText(
+      pdf,
+      documentData.officialNumber ?? documentData.number,
+      pageLeft,
+      pdf.page.height - 28,
+      6,
+      '#60736a',
+    );
+    pdf
+      .font('VistaLatin')
+      .fontSize(6)
+      .fillColor('#60736a')
+      .text(`${index + 1} / ${pages.count}`, pageRight - 55, pdf.page.height - 28, {
+        width: 55,
+        align: 'right',
+        lineBreak: false,
+      });
+    pdf.page.margins.bottom = bottom;
+  }
   pdf.end();
   return finished;
 }
 
-function drawHeader(pdf: PDFKit.PDFDocument, data: FinancialDocument): void {
+function drawHeader(pdf: PDFKit.PDFDocument, data: FinancialDocument, logo?: Buffer): number {
+  let offset = 0;
+  if (logo) {
+    pdf.image(logo, pageLeft, 36, { fit: [140, 48], valign: 'center' });
+    offset = 60;
+  }
+  pdf.save();
+  pdf.translate(0, offset);
   pdf.roundedRect(pageLeft, 42, contentWidth, 87, 10).fill('#17382f');
   drawText(pdf, data.issuerSnapshot.name.toUpperCase(), pageLeft + 18, 55, 9, '#d5e9dd', true);
   drawText(
@@ -113,11 +147,9 @@ function drawHeader(pdf: PDFKit.PDFDocument, data: FinancialDocument): void {
       : data.status === 'cancelled'
         ? 'CANCELLED / АНУЛИРАН'
         : 'DRAFT / ПРОЕКТ';
-  pdf
-    .font(fontFor(state, true))
-    .fontSize(7)
-    .fillColor('#ffffff')
-    .text(state, pageRight - 160, 107, { width: 142, align: 'right', lineBreak: false });
+  drawText(pdf, state, pageRight - 18 - pdfTextWidth(pdf, state, 7, true), 107, 7, '#ffffff', true);
+  pdf.restore();
+  return 145 + offset;
 }
 
 function drawParties(pdf: PDFKit.PDFDocument, data: FinancialDocument, y: number): number {
@@ -138,12 +170,11 @@ function drawParty(
   y: number,
   width: number,
 ): number {
-  pdf
-    .font(fontFor(party.name, true))
-    .fontSize(9)
-    .fillColor('#24382f')
-    .text(party.name, x, y, { width, lineGap: 1 });
-  y = pdf.y + 3;
+  for (const line of pdfWrappedLines(pdf, party.name, width, 9, true)) {
+    drawText(pdf, line, x, y, 9, '#24382f', true);
+    y += 14;
+  }
+  y += 3;
   const identifiers = [
     party.uic ? `UIC / ЕИК: ${party.uic}` : '',
     party.vatNumber ? `VAT / ДДС: ${party.vatNumber}` : '',
@@ -151,26 +182,24 @@ function drawParty(
     .filter(Boolean)
     .join(' · ');
   if (identifiers) {
-    pdf
-      .font(fontFor(identifiers))
-      .fontSize(7)
-      .fillColor('#60736a')
-      .text(identifiers, x, y, { width, lineGap: 1 });
-    y = pdf.y + 3;
+    for (const line of pdfWrappedLines(pdf, identifiers, width, 7)) {
+      drawText(pdf, line, x, y, 7, '#60736a');
+      y += 11;
+    }
+    y += 3;
   }
-  pdf
-    .font(fontFor(party.address))
-    .fontSize(7)
-    .fillColor('#465950')
-    .text(party.address, x, y, { width, lineGap: 1 });
-  return pdf.y + 5;
+  for (const line of pdfWrappedLines(pdf, party.address, width, 7)) {
+    drawText(pdf, line, x, y, 7, '#465950');
+    y += 11;
+  }
+  return y + 5;
 }
 
 function drawDates(pdf: PDFKit.PDFDocument, data: FinancialDocument, y: number): number {
   const columns = [
     ['Document date / Дата', formatDate(data.issueDate)],
     ['Tax event / Данъчно събитие', formatDate(data.taxEventDate)],
-    ['Due date / Падеж', data.dueDate ? formatDate(data.dueDate) : '—'],
+    ['Due date / Падеж', data.dueDate ? formatDate(data.dueDate) : '-'],
   ];
   const columnWidth = contentWidth / columns.length;
   columns.forEach(([label, value], index) => {
@@ -183,12 +212,11 @@ function drawDates(pdf: PDFKit.PDFDocument, data: FinancialDocument, y: number):
 
 function drawDetail(pdf: PDFKit.PDFDocument, label: string, value: string, y: number): number {
   drawText(pdf, label, pageLeft, y, 7, '#60736a');
-  pdf
-    .font(fontFor(value))
-    .fontSize(8)
-    .fillColor('#24382f')
-    .text(value, pageLeft + 180, y - 1, { width: contentWidth - 180, lineGap: 1 });
-  return Math.max(y + 16, pdf.y + 3);
+  const lines = pdfWrappedLines(pdf, value, contentWidth - 180, 8);
+  lines.forEach((line, index) =>
+    drawText(pdf, line, pageLeft + 180, y - 1 + index * 12, 8, '#24382f'),
+  );
+  return y + Math.max(16, lines.length * 12 + 3);
 }
 
 function drawLineTable(pdf: PDFKit.PDFDocument, data: FinancialDocument, y: number): number {
@@ -204,36 +232,13 @@ function drawLineTable(pdf: PDFKit.PDFDocument, data: FinancialDocument, y: numb
   pdf.rect(pageLeft, y, contentWidth, 27).fill('#edf3ef');
   let x = pageLeft;
   for (const column of columns) {
-    pdf
-      .font(fontFor(column.label, true))
-      .fontSize(6.4)
-      .fillColor('#465850')
-      .text(column.label, x + 4, y + 9, { width: column.width - 8, lineBreak: false });
+    pdfWrappedLines(pdf, column.label, column.width - 8, 6.4, true).forEach((line, index) =>
+      drawText(pdf, line, x + 4, y + 5 + index * 9, 6.4, '#465850', true),
+    );
     x += column.width;
   }
   y += 27;
   data.lines.forEach((line, index) => {
-    const descriptionHeight = pdf
-      .font(fontFor(line.description))
-      .fontSize(7)
-      .heightOfString(line.description, { width: columns[0]!.width - 10 });
-    const rowHeight = Math.max(28, descriptionHeight + 12);
-    if (y + rowHeight > pdf.page.height - 115) {
-      pdf.addPage({ margin: pageLeft, size: 'A4' });
-      y = 46;
-      pdf.rect(pageLeft, y, contentWidth, 27).fill('#edf3ef');
-      let headerX = pageLeft;
-      for (const column of columns) {
-        pdf
-          .font(fontFor(column.label, true))
-          .fontSize(6.4)
-          .fillColor('#465850')
-          .text(column.label, headerX + 4, y + 9, { width: column.width - 8, lineBreak: false });
-        headerX += column.width;
-      }
-      y += 27;
-    }
-    if (index % 2 === 0) pdf.rect(pageLeft, y, contentWidth, rowHeight).fill('#fafcfb');
     const values = [
       line.description,
       line.quantity,
@@ -243,18 +248,40 @@ function drawLineTable(pdf: PDFKit.PDFDocument, data: FinancialDocument, y: numb
       money(line.vatAmount, data.currencyCode),
       money(line.grossTotal, data.currencyCode),
     ];
+    const cellLines = values.map((value, index) =>
+      pdfWrappedLines(pdf, value, columns[index]!.width - 8, 6.8, index === 6),
+    );
+    const rowHeight = Math.max(28, ...cellLines.map((lines) => lines.length * 10 + 14));
+    if (y + rowHeight > pdf.page.height - 115) {
+      pdf.addPage({ margin: pageLeft, size: 'A4' });
+      y = 46;
+      pdf.rect(pageLeft, y, contentWidth, 27).fill('#edf3ef');
+      let headerX = pageLeft;
+      for (const column of columns) {
+        pdfWrappedLines(pdf, column.label, column.width - 8, 6.4, true).forEach((line, index) =>
+          drawText(pdf, line, headerX + 4, y + 5 + index * 9, 6.4, '#465850', true),
+        );
+        headerX += column.width;
+      }
+      y += 27;
+    }
+    if (index % 2 === 0) pdf.rect(pageLeft, y, contentWidth, rowHeight).fill('#fafcfb');
     let cellX = pageLeft;
-    values.forEach((value, cellIndex) => {
+    cellLines.forEach((lines, cellIndex) => {
       const column = columns[cellIndex]!;
-      pdf
-        .font(fontFor(value, cellIndex === 6))
-        .fontSize(6.8)
-        .fillColor(cellIndex === 6 ? '#17382f' : '#24382f')
-        .text(value, cellX + 4, y + 7, {
-          width: column.width - 8,
-          lineGap: 1,
-          align: cellIndex >= 3 ? 'right' : 'left',
-        });
+      lines.forEach((line, index) =>
+        drawText(
+          pdf,
+          line,
+          cellIndex >= 3
+            ? cellX + column.width - 4 - pdfTextWidth(pdf, line, 6.8, cellIndex === 6)
+            : cellX + 4,
+          y + 7 + index * 10,
+          6.8,
+          cellIndex === 6 ? '#17382f' : '#24382f',
+          cellIndex === 6,
+        ),
+      );
       cellX += column.width;
     });
     pdf
@@ -270,8 +297,8 @@ function drawLineTable(pdf: PDFKit.PDFDocument, data: FinancialDocument, y: numb
 
 function drawTotals(pdf: PDFKit.PDFDocument, data: FinancialDocument, y: number): number {
   y = ensureSpace(pdf, y, 100);
-  const labelX = pageLeft + 300;
-  const amountX = pageLeft + 398;
+  const labelX = pageLeft + 245;
+  const amountX = pageLeft + 393;
   const width = pageRight - amountX;
   const rows = [
     ['Net / Данъчна основа', money(data.netTotal, data.currencyCode)],
@@ -279,32 +306,45 @@ function drawTotals(pdf: PDFKit.PDFDocument, data: FinancialDocument, y: number)
   ];
   rows.forEach(([label, amount], index) => {
     drawText(pdf, label!, labelX, y + index * 20, 8, '#60736a');
-    pdf
-      .font(fontFor(amount!, true))
-      .fontSize(8)
-      .fillColor('#24382f')
-      .text(amount!, amountX, y + index * 20, { width, align: 'right', lineBreak: false });
+    drawText(
+      pdf,
+      amount!,
+      amountX + width - pdfTextWidth(pdf, amount!, 8, true),
+      y + index * 20,
+      8,
+      '#24382f',
+      true,
+    );
   });
   y += 45;
   pdf.roundedRect(labelX - 8, y, pageRight - labelX + 8, 34, 6).fillAndStroke('#e9f1ec', '#cfddd4');
   drawText(pdf, 'TOTAL / ОБЩО', labelX + 4, y + 11, 9, '#17382f', true);
-  pdf
-    .font(fontFor(data.grossTotal, true))
-    .fontSize(10)
-    .fillColor('#17382f')
-    .text(money(data.grossTotal, data.currencyCode), amountX, y + 10, {
-      width,
-      align: 'right',
-      lineBreak: false,
-    });
+  const total = money(data.grossTotal, data.currencyCode);
+  drawText(
+    pdf,
+    total,
+    amountX + width - pdfTextWidth(pdf, total, 10, true),
+    y + 10,
+    10,
+    '#17382f',
+    true,
+  );
   return y + 34;
 }
 
-function drawSignature(pdf: PDFKit.PDFDocument, data: FinancialDocument, y: number): void {
-  if (y > pdf.page.height - 86) {
+function drawSignature(
+  pdf: PDFKit.PDFDocument,
+  data: FinancialDocument,
+  y: number,
+  signature?: Buffer,
+): void {
+  if (y > pdf.page.height - 170) {
     pdf.addPage({ margin: pageLeft, size: 'A4' });
-    y = pdf.page.height - 86;
+    y = 72;
   }
+  if (signature && data.status === 'issued')
+    pdf.image(signature, pageLeft, y, { fit: [160, 45], valign: 'center' });
+  y += signature && data.status === 'issued' ? 52 : 25;
   pdf
     .moveTo(pageLeft, y)
     .lineTo(pageLeft + 205, y)
@@ -318,8 +358,23 @@ function drawSignature(pdf: PDFKit.PDFDocument, data: FinancialDocument, y: numb
     .lineWidth(0.7)
     .stroke();
   drawText(pdf, 'Issued by / Издал', pageLeft, y + 8, 7, '#60736a');
-  if (data.issuedByName) drawText(pdf, data.issuedByName, pageLeft, y + 21, 8, '#24382f', true);
+  const name =
+    signature && data.status === 'issued' ? data.branding?.signatoryName : data.issuedByName;
+  const nameSize = name && pdfWrappedLines(pdf, name, 205, 8, true).length > 2 ? 6 : 8;
+  const nameLines = name ? pdfWrappedLines(pdf, name, 205, nameSize, true) : [];
+  nameLines.forEach((line, index) =>
+    drawText(pdf, line, pageLeft, y + 21 + index * (nameSize + 3), nameSize, '#24382f', true),
+  );
   drawText(pdf, 'Customer / Получател', pageRight - 205, y + 8, 7, '#60736a');
+  if (signature && data.status === 'issued')
+    drawText(
+      pdf,
+      'Signature image / Изображение на подпис',
+      pageLeft,
+      y + 27 + nameLines.length * (nameSize + 3),
+      6,
+      '#60736a',
+    );
 }
 
 function ensureSpace(pdf: PDFKit.PDFDocument, y: number, height: number): number {
@@ -376,17 +431,6 @@ function money(value: string, currency: string): string {
   return `${whole.toString()}.${minor.toString().padStart(2, '0')} ${currency}`;
 }
 
-function fontFor(value: string, bold = false): string {
-  const cyrillic = /[\u0400-\u04ff]/u.test(value);
-  return cyrillic
-    ? bold
-      ? 'VistaCyrillicBold'
-      : 'VistaCyrillic'
-    : bold
-      ? 'VistaLatinBold'
-      : 'VistaLatin';
-}
-
 function drawText(
   pdf: PDFKit.PDFDocument,
   value: string,
@@ -396,12 +440,5 @@ function drawText(
   color: string,
   bold = false,
 ): void {
-  pdf
-    .font(fontFor(value, bold))
-    .fontSize(size)
-    .fillColor(color)
-    .text(value, x, y, {
-      width: Math.max(10, pageRight - x),
-      lineBreak: false,
-    });
+  pdfTextLine(pdf, value, x, y, size, color, bold);
 }

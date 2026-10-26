@@ -630,6 +630,20 @@ export const jobMonitorMessages = {
 };
 
 export const financialDocumentMessages = {
+  recordCount: (count: number) => `${count} ${count === 1 ? 'record' : 'records'}`,
+  eurReference: 'EUR, no conversion',
+  collections: 'Collections & payments',
+  collectionOpenError: 'The collection record could not be opened.',
+  relatedDocument: 'Related document',
+  proformaPaid: 'The proforma is paid and its invoice has been issued.',
+  invoiceFromProforma: 'This invoice was issued after the proforma was paid in full.',
+  openFinancialDocument: 'Open financial document',
+  collectionSource: 'The balance and payments stay linked to this document.',
+  collectionCurrency: (currency: string) => `Amounts are in ${currency}.`,
+  paymentAmount: (currency: string) => `Amount (${currency})`,
+  noSalesDraftWaiting: 'No Sales draft is waiting',
+  collectionAutomaticHint:
+    'Issued invoices and proformas appear in Collections automatically. For an older issued document, open its preview and select Collections & payments.',
   attachments: {
     ...messages.partners.documents,
     add: 'Add attachment',
@@ -655,7 +669,7 @@ export const financialDocumentMessages = {
   close: 'Close',
   configurationBoundary:
     'Check the customer, dates, VAT and totals before issue. Issued documents are fixed; use a linked correction note if a change is needed.',
-  correctionLink: 'Original invoice draft',
+  correctionLink: 'Original invoice',
   correctionReason: 'Correction reason',
   create: 'Prepare draft',
   createError: 'The financial document could not be prepared.',

@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { Inject, Injectable, type OnApplicationBootstrap } from '@nestjs/common';
 import type { AppEnvironment } from '@vista/config';
 
@@ -56,6 +57,28 @@ export class RecurringBillingScheduleService implements OnApplicationBootstrap {
       nextRunAt: currencyRatesSchedule.nextRunAt,
       scheduleId: currencyRatesSchedule.id,
     });
+    const businessDate = new Intl.DateTimeFormat('en-CA', {
+      timeZone: this.environment.BUSINESS_TIMEZONE,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(new Date());
+    const rateRefresh = await this.jobs.enqueue({
+      name: 'finance.currency-rates.refresh',
+      correlationId: randomUUID(),
+      idempotencyKey: `bnb-startup:${businessDate}`,
+      payload: { responsibility: 'startup-bnb-currency-rates' },
+    });
+    this.logger.event(
+      'info',
+      rateRefresh.deduplicated
+        ? 'finance.bnb-rates.startup-refresh.deduplicated'
+        : 'finance.bnb-rates.startup-refresh.queued',
+      {
+        jobId: rateRefresh.jobId,
+        deduplicated: rateRefresh.deduplicated,
+      },
+    );
     const serviceSchedules = [
       {
         id: serviceInspectionReminderScheduleId,

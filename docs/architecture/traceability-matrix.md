@@ -1,5 +1,117 @@
 # Requirement Traceability Matrix
 
+EUR migration compatibility, 26 October 2026 (AGENTS §§4.3–4.4, 15.2, 16,
+19): the migration runner recognizes only the exact original/corrected `0069`
+checksum pair. It verifies completed conversion and normalized EUR rates before
+reconciling metadata, retains the original applied timestamp and appends one
+event through the existing tamper-resistant audit chain transactionally. It
+never reruns the lossy conversion. Canonical and fresh databases retain ordinary
+behavior; all unknown drift still fails before reconciliation. Regression tests
+cover both releases, source pinning, invalid state, unrelated drift, rollback,
+replay and audit immutability. The local backup was restored and compared across
+185 tables; the compiled migration entrypoint and pending Finance upgrade were
+rehearsed before the approved local repair. A pre-existing local audit warning
+is preserved and tracked for investigation, not silently rewritten. Hosted
+deployment remains a separate acceptance gate.
+
+Verification: workspace checks/builds and the audit writer's unchanged canonical
+format pass. All 313 API tests without skips, migration rollback/reapply and 12
+selected Finance/POS browser journeys pass. `npm run dev` completed locally;
+the API readiness endpoint, three browser applications and three API proxies
+returned HTTP 200. The compiled production migration command, with database-only
+configuration, upgraded the restored historical database and replayed as a no-op.
+No hosted database or deployment was changed. The private pre-repair backup and
+restore/upgrade evidence remain outside Git under `.data/`.
+
+POS collected-account return reconciliation, 26 October 2026 (AGENTS §§4.3–4.5,
+6.1, 8.3–8.4, 11, 15–17): migration `0084` separates released unpaid debt from
+repayment due for previously collected amounts. Finance can prepare and issue an
+exact linked POS-return credit note, then record a completed cash/bank repayment
+against the original collections. Append-only database guards, sale locks,
+idempotent retries, partial/concurrent allocations, reversal blocking, rollback
+and migration rehearsal pass. Both application and database guards prevent
+issuing an invoice after a sale return or cancelling a repaid return credit note.
+Six POS integration tests and three connected English/Bulgarian desktop/phone
+browser journeys pass; screenshots were reviewed.
+The app does not send funds or claim certified fiscal-device acceptance. Bank/
+cash matching, advance/offset allocation, scalable registers and accounting/VAT
+acceptance remain open.
+
+Deferred POS collections, 25 October 2026 (AGENTS §§4.1–4.4, 6.1, 8.3–8.4,
+11, 15–17; comparison F09): migration `0083` adds the original-sale link to
+Finance payments and append-only account payment/reversal entries. The account,
+invoice and POS credit views reflect actual received money without adding a
+collection or repeating checkout payments. Original invoices and POS stock/shift
+amounts remain fixed. Source/snapshot guards, deferred no-orphan checks,
+immutability and sale/customer locking protect the postings. Finance Create
+records receipt evidence; Finance Approve reverses an error with a retained
+reason. Demo permissions are unchanged. The connected EN/BG desktop/mobile
+journey covers a lost successful response, stable-key replay, partial collection,
+reversal, final settlement and a flush footer. All 304 API tests without skips,
+`0083` rollback/reapply and 15 selected Finance/Sales/Service/POS browser journeys
+pass locally. Desktop and Bulgarian phone collection/history screenshots were
+reviewed. Customer overview debt, frozen-rate EUR totals and reversed-payment history are covered;
+migration regressions and a midnight-sensitive Service test were corrected.
+Workspace validation passes generated-contract, formatting, lint, type, unit-test
+and production-build checks. The existing Operations bundle-size warning remains.
+Paid-account refunds, automatic bank/cash
+matching, advance/offset allocation, scalable registers and accounting/reporting
+acceptance remain pending. A collected portion is blocked from return before
+fiscal/stock posting rather than converted to an invented refund or negative debt.
+
+POS invoice reconciliation, 25 October 2026 (AGENTS §§4.1–4.4, 6.1, 8.3–8.4,
+11, 15.3; comparison F06/F09): the Finance document reads original POS payments,
+returns/refunds and account charges. It distinguishes received money from
+deferred debt and blocks issuance when the source does not reconcile. Original
+invoice snapshots remain unchanged; no extra payment, collection or stock entry
+is posted. POS history retains issued invoice numbers and source links.
+The focused five-test POS integration suite passes cash, split cash/card, advance, deferred,
+partial/full return, replay, concurrency, permission and overdue checks.
+Connected EN/BG desktop/mobile browser acceptance passes. Deferred POS collection,
+all-source register scalability and accounting acceptance remain pending.
+Verification: workspace validation, all 303 API tests without skips, empty-schema
+`0082` rollback/reapply and all 14 selected Finance/Sales/Service/POS browser
+journeys pass. Desktop and Bulgarian phone screenshots were inspected. The
+regression run also exposed and fixed an open recurring-invoice panel retaining
+a stale Waiting state after a concurrent worker run. A delayed-read browser check
+now verifies automatic refresh without another issuance command. This is local
+evidence, not hosted or physical-device acceptance.
+
+Collection corrections, 25 October 2026 (AGENTS §§4.3–4.4, 6.1, 11, 17;
+comparison F03/F09): migration `0082` links each issued non-POS credit/debit note
+once to its original invoice collection. Original invoice/rate/payment snapshots
+stay unchanged; corrected totals, outstanding and customer credit are explicit.
+Cash, bank matching, manual payments, advances, offsets and reversal use the
+corrected balance. Database ledger validation/immutability, partial/full payment,
+concurrent issuance/allocation, retry, rollback and legacy backfill have isolated
+coverage. EN/BG previews link original, note and collection; concise steps are in
+`TESTME.md`. Workspace validation, all 302 API tests without skips, migration
+rollback/reapply and 13 Finance/Sales/Service/POS browser journeys pass locally.
+Screenshot review also corrected header/body spacing; BG mobile balance/credit
+and scrolled note views are verified. POS settlement, universal scalable status
+registers and accounting/FX acceptance remain open. No hosted data was changed.
+
+Financial document images, 23 October 2026 (AGENTS §§4.3, 4.5, 6.1, 10–11;
+comparison F05): `0081` stores per-company image profiles and immutable issued
+snapshots. The Finance API/UI configures protected logos and explicitly authorized
+visual signatures. Drafts omit signature images; issuance, automatic recurring
+invoices and paid-proforma conversions freeze exact versions. PDF/email use
+integrity-checked assets, and queued mail retries retain identical attachments.
+English/Bulgarian font runs preserve mixed-script labels and numeric party IDs;
+multi-page rows, notes and signature placement are covered by renderer tests.
+Authorization, stale settings, idempotency, file-parent mismatch, malformed images,
+storage corruption and guarded downgrade have isolated regression coverage.
+Browser acceptance covers image upload, issue, PDF download, email queueing,
+settings changes and a scrollable BG mobile panel with a full-width footer.
+This does not claim hosted email or certificate-based digital signing.
+
+Verification: `npm run validate` passed all checks/builds and 409 enabled
+workspace tests. The disposable acceptance run passed all 295 API tests without
+skips, `0081` rollback/reapply and 12 Finance/Sales/Service/POS browser journeys.
+Desktop/BG mobile screenshots and all pages of draft, issued, unchanged-after-edit
+and four-page bilingual PDF samples were visually checked. The existing Operations
+bundle-size warning remains; no hosted data/configuration was changed.
+
 Operations QA CRM/POS follow-up, 9 October 2026 (AGENTS §§7.3, 8.7, 11–13):
 CRM-08 telephone format validation and CRM-09 quotation-stage prerequisites
 are covered by shared-domain/API/browser regressions. POS-01 verifies the
@@ -623,3 +735,101 @@ and CRM-10 are verified locally against their QA scope. Older phase notes in
 this matrix describe the earlier implementation state. This does not substitute
 for wider statutory/production acceptance, a hosted retest, DATECS hardware
 verification, or the witnessed backup restore, which remain explicit gates.
+
+## Finance lifecycle extension, 23 October 2026
+
+AGENTS §§4.4, 6.1 and 11; specification-comparison F02, F04 and the non-POS
+portion of F09:
+
+- Migration `0079_finance_collection_sources` permits non-Sales collections and
+  records independent location/register/operator official-number series. The
+  allocator preserves existing numbers, reserves non-overlapping ranges and
+  fails safely at ten-digit exhaustion.
+- Issuing a positive-value manual, Sales, completed Service or subscription
+  invoice/proforma creates or links one collection. Older issued documents have
+  a version-checked, permission-protected collection-link command. Issued-source
+  collections cannot be cancelled independently; POS receipt invoices are
+  excluded from automatic collection to avoid double settlement.
+- Manual payment, bank matching, cash voucher, advance application and supplier
+  offset use the same transactional paid-proforma conversion. The invoice keeps
+  source/party/line links, its own dated EUR snapshot and the existing payment
+  allocations. Preview navigation follows both conversion directions and the
+  collection, with Bulgarian labels and phone-width layouts.
+- Evidence: `apps/api/test/sales.integration.test.ts` covers concurrent scoped
+  issuance, range renewal/exhaustion, partial bank payments, settlement replay,
+  older-document linking, authorization, stale versions and downgrade refusal.
+  `tests/e2e/qa-finance.spec.ts` follows manual proforma → issue → two payments →
+  official invoice → original proforma → same collection, plus BG/mobile checks.
+  Existing trade, technician-Service and POS journeys remain regression coverage.
+
+Company-logo/signature handling, correction balances,
+all-source register scalability, POS payment reconciliation and statutory/export
+acceptance are still pending. This extension is not full Finance or project
+acceptance and does not change external hardware/restore gates.
+
+Local verification: `npm run validate` passed, including all workspace checks,
+tests and builds. The isolated full API run passed 283 tests with no skips;
+ten connected Finance/Sales/Service/POS browser journeys passed. After the final
+translation and migration-guard corrections, all 32 Sales/Finance integration
+tests and seven Finance browser journeys passed again. Migration `0079`
+rollback/reapply and refusal to discard non-Sales collections both passed.
+
+## Recurring issuance extension, 23 October 2026
+
+AGENTS §§4.4, 6.4, 11–12; specification-comparison S05:
+
+- Migration `0080` retains explicit Finance approval per subscription revision,
+  scope, first date, tax treatment and payment term, plus per-period issuance
+  outcomes. Existing contracts and manual Finance drafts are not auto-issued.
+- The existing billing worker now issues enabled due periods, atomically linking
+  official invoice, number, collection, audit and outbox. Live approver permissions
+  and contract snapshots are checked again on execution. Failed financial effects
+  roll back; retries, concurrent workers and changed approvals cannot duplicate an
+  invoice. A bounded failure count moves persistent errors to visible review.
+- Finance → Recurring invoices provides searchable pagination, setup, immediate
+  due-period processing and recent history with links to Finance/collections.
+  Sales history displays the issued number. New screens, errors and help text
+  support English/Bulgarian and narrow viewports.
+- Evidence: Sales/Finance integration scenarios cover authorization, replay,
+  concurrent workers, transient failure rollback/retry, manual-draft preservation,
+  stale versions, contract/access and billing-cycle changes, retry exhaustion and
+  downgrade protection. The connected
+  Finance browser journey covers setup → issued invoice → collection → payment →
+  disable, with Bulgarian phone-width panel checks.
+
+Branding/signatures, correction balance effects, POS settlement reconciliation,
+all-source register scalability and statutory/export acceptance remain pending.
+
+Final local verification: `npm run validate` passed. The isolated acceptance run
+passed all 288 API tests without skips, migration `0080` rollback/reapply and all
+11 connected Finance/Sales/Service/POS browser journeys. EN/BG screenshots were
+reviewed, including scrollable phone-width forms with fixed full-width actions.
+Only disposable test databases/containers were used; no hosted deployment or
+physical-device/restore acceptance was performed.
+
+## Startup rate import and audit serialization, 26 October 2026
+
+AGENTS §§4.3–4.4, 4.7, 10–12:
+
+- BNB startup imports now use the shared retryable queue, deduplicated by business
+  date, alongside the existing weekday schedule. The bounded official XML adapter
+  rejects HTML access errors and invalid/inconsistent feeds before database writes.
+  Cache writes are transactional and identical replays are no-ops; issued document
+  snapshots stay unchanged. Evidence: `bnb-rate-feed.test.ts`,
+  `bnb-currency-rates.refresh.test.ts`, `bnb-currency-rates.integration.test.ts` and
+  the recurring-schedule tests. Live XML access is still blocked from this local
+  host and must be verified on the deployment host.
+- Generated repeat-job timestamps remain readable in the structured `jobId` field
+  only. Secret/card redaction elsewhere is unchanged and has explicit regression
+  tests in `structured-logger.service.test.ts`.
+- New audit events hash the same JSON representation stored in PostgreSQL,
+  including nested dates and omitted undefined properties. The canonical hash
+  format and historical events remain unchanged. Real database round-trip and
+  integrity coverage is in `audit-serialization.integration.test.ts`. The existing
+  local historical warning remains visible and requires review, not rehashing.
+
+Local verification: repository validation passed, all 330 API tests passed with
+infrastructure enabled, and all 12 selected Finance/Sales/POS browser journeys
+passed using installed Chromium. Migration `0083` rollback/reapply passed in the
+disposable database. The final incomplete-feed guards also passed their targeted
+tests and lint check. No hosted deployment or successful live BNB import is claimed.

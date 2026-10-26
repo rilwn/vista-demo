@@ -4,10 +4,39 @@ import {
   asEntityId,
   businessIdentifierIssues,
   calculateFinancialDocument,
+  calculateReceivableBalance,
   isValidBulgarianUic,
   isValidEuVatNumber,
   isValidTelephoneNumber,
 } from './index';
+
+describe('corrected receivable balance', () => {
+  it('retains original payments, applies notes and exposes excess paid funds', () => {
+    expect(calculateReceivableBalance('120', '60', '24', '12')).toEqual({
+      adjustedTotal: '108.0000',
+      outstandingTotal: '48.0000',
+      overpaidTotal: '0.0000',
+    });
+    expect(calculateReceivableBalance('120', '108', '36', '12')).toEqual({
+      adjustedTotal: '96.0000',
+      outstandingTotal: '0.0000',
+      overpaidTotal: '12.0000',
+    });
+    expect(calculateReceivableBalance('120', '108', '36', '36')).toEqual({
+      adjustedTotal: '120.0000',
+      outstandingTotal: '12.0000',
+      overpaidTotal: '0.0000',
+    });
+  });
+  it('uses exact decimal arithmetic and rejects invalid negative balances', () => {
+    expect(calculateReceivableBalance('999999999999.9999', '999999999999.9998', '0.0001')).toEqual({
+      adjustedTotal: '999999999999.9998',
+      outstandingTotal: '0.0000',
+      overpaidTotal: '0.0000',
+    });
+    expect(() => calculateReceivableBalance('1', '0', '2')).toThrow();
+  });
+});
 
 describe('asEntityId', () => {
   it('accepts an immutable UUID identifier', () => {

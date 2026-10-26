@@ -3,6 +3,10 @@ import { readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 
 import type { Pool, PoolClient } from 'pg';
+import {
+  isKnownEquivalentMigration,
+  reconcileKnownEquivalentMigration,
+} from './migration-checksum-reconciliation.js';
 
 const migrationPattern = /^(?<id>\d{4}_[a-z0-9_]+)\.(?<direction>up|down)\.sql$/;
 const lockKey = 1_324_001;
@@ -26,7 +30,15 @@ export async function migrateUp(pool: Pool, directory: string): Promise<string[]
 
     const available = await readMigrations(directory, 'up');
     const applied = await readAppliedMigrations(client);
-    validateAppliedMigrations(available, applied);
+    const reconciliations = validateAppliedMigrations(available, applied);
+    for (const migration of reconciliations) {
+      await reconcileKnownEquivalentMigration(
+        client,
+        migration.id,
+        migration.checksum,
+        migration.sourceChecksum,
+      );
+    }
     const appliedIds = new Set(applied.map((migration) => migration.id));
     const pending = available.filter((migration) => !appliedIds.has(migration.id));
 
@@ -130,8 +142,9 @@ async function readAppliedMigrations(client: PoolClient): Promise<AppliedMigrati
 function validateAppliedMigrations(
   available: readonly MigrationFile[],
   applied: readonly AppliedMigration[],
-): void {
+): (AppliedMigration & { sourceChecksum: string })[] {
   const availableById = new Map(available.map((migration) => [migration.id, migration]));
+  const reconciliations: (AppliedMigration & { sourceChecksum: string })[] = [];
 
   for (const migration of applied) {
     const source = availableById.get(migration.id);
@@ -139,7 +152,10 @@ function validateAppliedMigrations(
       throw new Error(`Applied migration ${migration.id} is missing from source control`);
     }
     if (source.checksum !== migration.checksum) {
-      throw new Error(`Applied migration ${migration.id} has been modified`);
+      if (!isKnownEquivalentMigration(migration.id, migration.checksum, source.checksum))
+        throw new Error(`Applied migration ${migration.id} has been modified`);
+      reconciliations.push({ ...migration, sourceChecksum: source.checksum });
     }
   }
+  return reconciliations;
 }

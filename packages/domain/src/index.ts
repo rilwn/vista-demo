@@ -54,6 +54,23 @@ const rateScale = 100_000_000n;
 const percentScale = 10_000n;
 const oneHundredPercent = 100n * percentScale;
 
+/** Original documents and real payment allocations remain immutable inputs. */
+export function calculateReceivableBalance(
+  original: string,
+  allocated: string,
+  credit = '0',
+  debit = '0',
+) {
+  const adjusted = decimalUnits(original, 4) - decimalUnits(credit, 4) + decimalUnits(debit, 4);
+  if (adjusted < 0n) throw new Error('Corrections cannot make the invoice amount negative');
+  const remaining = adjusted - decimalUnits(allocated, 4);
+  return {
+    adjustedTotal: formatUnits(adjusted, 4),
+    outstandingTotal: formatUnits(remaining > 0n ? remaining : 0n, 4),
+    overpaidTotal: formatUnits(remaining < 0n ? -remaining : 0n, 4),
+  };
+}
+
 export type BusinessIdentifierField = 'uic' | 'vatNumber';
 
 export interface BusinessIdentifierIssue {
@@ -243,7 +260,7 @@ function requiredVatRate(line: FinancialCalculationLine): string {
   return formatUnits(decimalUnits(line.vatRate, 4), 4);
 }
 
-function decimalUnits(value: string, scale: number): bigint {
+export function decimalUnits(value: string, scale: number): bigint {
   if (!/^\d+(\.\d+)?$/u.test(value)) throw new Error('Enter a non-negative decimal value');
   const [whole, fraction = ''] = value.split('.');
   if (fraction.length > scale) throw new Error(`Enter no more than ${scale} decimal places`);
@@ -254,7 +271,7 @@ function divideHalfUp(numerator: bigint, denominator: bigint): bigint {
   return (numerator + denominator / 2n) / denominator;
 }
 
-function formatUnits(value: bigint, scale: number): string {
+export function formatUnits(value: bigint, scale: number): string {
   const raw = value.toString().padStart(scale + 1, '0');
   return `${raw.slice(0, -scale)}.${raw.slice(-scale)}`;
 }

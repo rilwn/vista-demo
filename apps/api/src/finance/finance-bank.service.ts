@@ -23,6 +23,7 @@ import { ApiErrorException } from '../common/api-error.exception.js';
 import { APP_ENVIRONMENT } from '../config/config.module.js';
 import { DatabaseService } from '../database/database.service.js';
 import type { FinanceBankStatementListQueryDto } from './finance-bank.dto.js';
+import { FinanceService } from './finance.service.js';
 
 interface StatementSummaryRow {
   account_iban: string;
@@ -80,6 +81,7 @@ export class FinanceBankService {
     @Inject(AuditService) private readonly audit: AuditService,
     @Inject(DatabaseService) private readonly database: DatabaseService,
     @Inject(APP_ENVIRONMENT) private readonly environment: AppEnvironment,
+    @Inject(FinanceService) private readonly finance: FinanceService,
   ) {}
 
   async statements(query: FinanceBankStatementListQueryDto): Promise<FinanceBankStatementPage> {
@@ -144,12 +146,15 @@ export class FinanceBankService {
       source_invoice_number: string;
     }>(
       `SELECT document.id AS customer_document_id, document.document_number,
-              source.invoice_number AS source_invoice_number, customer.display_name AS customer_name,
+              coalesce(financial.official_number, financial.draft_number, source.invoice_number, document.document_number) AS source_invoice_number, customer.display_name AS customer_name,
               document.due_date::text, document.outstanding_total::text,
-              ($1 ILIKE ('%' || document.document_number || '%')
-                OR $1 ILIKE ('%' || source.invoice_number || '%')) AS reference_matched
+              coalesce(($1 ILIKE ('%' || document.document_number || '%')
+                OR $1 ILIKE ('%' || source.invoice_number || '%')
+                OR $1 ILIKE ('%' || financial.official_number || '%')
+                OR $1 ILIKE ('%' || financial.draft_number || '%')), false) AS reference_matched
        FROM finance.customer_documents document
-       JOIN sales.invoices source ON source.id = document.source_sales_invoice_id
+       LEFT JOIN sales.invoices source ON source.id = document.source_sales_invoice_id
+       LEFT JOIN finance.financial_documents financial ON financial.id = document.financial_document_id
        JOIN master_data.partners customer ON customer.id = document.customer_partner_id
        WHERE document.review_state = 'pending_finance_review'
          AND document.currency_code = 'EUR'
@@ -383,7 +388,7 @@ export class FinanceBankService {
       review_state: string;
       total: string;
     }>(
-      `SELECT customer_partner_id, total::text, allocated_total::text, outstanding_total::text,
+      `SELECT customer_partner_id, adjusted_total::text AS total, allocated_total::text, outstanding_total::text,
               due_date::text, payment_status, review_state
        FROM finance.customer_documents WHERE id = $1 FOR UPDATE`,
       [customerDocumentId],
@@ -459,6 +464,15 @@ export class FinanceBankService {
        WHERE id = $1`,
       [transactionId, method, customerDocumentId, paymentId, auth.accountId],
     );
+    if (paymentStatus === 'paid')
+      await this.finance.settlePaidProforma(
+        client,
+        transaction.value_date,
+        customerDocumentId,
+        auth,
+        metadata,
+        `${commandKey}:${transactionId}`,
+      );
     await client.query(
       `UPDATE finance.bank_statements SET version = version + 1, updated_at = now() WHERE id = $1`,
       [transaction.bank_statement_id],
@@ -651,12 +665,15 @@ async function exactReferenceCandidates(client: PoolClient, reference: string, a
   const result = await client.query<{ id: string }>(
     `SELECT document.id
      FROM finance.customer_documents document
-     JOIN sales.invoices source ON source.id = document.source_sales_invoice_id
+     LEFT JOIN sales.invoices source ON source.id = document.source_sales_invoice_id
+     LEFT JOIN finance.financial_documents financial ON financial.id = document.financial_document_id
      WHERE document.review_state = 'pending_finance_review'
        AND document.currency_code = 'EUR'
        AND document.outstanding_total >= $2::numeric
        AND ($1 ILIKE ('%' || document.document_number || '%')
-         OR $1 ILIKE ('%' || source.invoice_number || '%'))
+         OR $1 ILIKE ('%' || source.invoice_number || '%')
+         OR $1 ILIKE ('%' || financial.official_number || '%')
+         OR $1 ILIKE ('%' || financial.draft_number || '%'))
      ORDER BY document.id
      LIMIT 2`,
     [reference, amount],

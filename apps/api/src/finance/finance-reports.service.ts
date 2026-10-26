@@ -468,9 +468,11 @@ export class FinanceReportsService {
              JOIN finance.payment_allocations allocation
                ON allocation.customer_document_id = receivable.id
              JOIN finance.payments payment ON payment.id = allocation.payment_id
-             WHERE receivable.source_sales_invoice_id = coalesce(
+             WHERE (receivable.financial_document_id = document.id
+               OR receivable.financial_document_id = original.id
+               OR receivable.source_sales_invoice_id = coalesce(
                document.source_sales_invoice_id, original.source_sales_invoice_id
-             )
+             ))
                AND receivable.review_state <> 'cancelled'
                AND NOT EXISTS (
                  SELECT 1 FROM finance.payment_reversals reversal
@@ -889,7 +891,7 @@ function vatTreatmentLabel(value: VatTreatment): string {
 function agingSource(kind: FinanceAgingReport['kind']): string {
   if (kind === 'receivable') {
     return `SELECT document.id, document.document_number AS number,
-                   invoice.invoice_number AS source_number,
+                   coalesce(financial.official_number, financial.draft_number, invoice.invoice_number, document.document_number) AS source_number,
                    document.customer_partner_id AS partner_id,
                    partner.display_name AS partner_name,
                    document.document_date::text, document.due_date::text,
@@ -898,7 +900,8 @@ function agingSource(kind: FinanceAgingReport['kind']): string {
                    round(document.outstanding_total * document.exchange_rate, 4) AS outstanding_eur_total,
                    GREATEST($1::date - document.due_date, 0)::integer AS days_overdue
             FROM finance.customer_documents document
-            JOIN sales.invoices invoice ON invoice.id = document.source_sales_invoice_id
+            LEFT JOIN sales.invoices invoice ON invoice.id = document.source_sales_invoice_id
+            LEFT JOIN finance.financial_documents financial ON financial.id = document.financial_document_id
             JOIN master_data.partners partner ON partner.id = document.customer_partner_id
             WHERE document.review_state = 'pending_finance_review'
               AND document.outstanding_total > 0`;
@@ -923,11 +926,15 @@ function turnoverSource(kind: FinanceTurnoverReport['kind']): string {
     return `SELECT document.customer_partner_id AS partner_id,
                    partner.display_name AS partner_name,
                    count(*)::integer AS document_count,
-                   sum(document.eur_total) AS gross_eur_total,
+                   sum(document.eur_total+coalesce(correction.eur_change,0)) AS gross_eur_total,
                    sum(round(document.allocated_total * document.exchange_rate, 4)) AS allocated_eur_total,
                    sum(round(document.outstanding_total * document.exchange_rate, 4)) AS outstanding_eur_total
             FROM finance.customer_documents document
             JOIN master_data.partners partner ON partner.id = document.customer_partner_id
+            LEFT JOIN LATERAL (
+              SELECT sum(CASE WHEN note.document_type='credit_note' THEN -note.eur_amount ELSE note.eur_amount END) AS eur_change
+              FROM finance.collection_corrections note WHERE note.customer_document_id=document.id
+            ) correction ON true
             WHERE document.review_state = 'pending_finance_review'
               AND document.document_date BETWEEN $1 AND $2
             GROUP BY document.customer_partner_id, partner.display_name`;

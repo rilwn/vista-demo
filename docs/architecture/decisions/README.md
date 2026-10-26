@@ -6,6 +6,22 @@ decisions blocking the current implementation.
 
 ## Decisions in use
 
+POS receipt invoices display existing checkout payments, account charges and
+refund evidence rather than posting the same money into Finance again.
+On-account credit remains a debt, not a received payment. Returns release the
+unpaid part of that debt and track any previously collected part as a separate
+amount owed back to the customer. If an issued POS invoice exists, issue a linked
+credit note from the exact return amounts before recording the repayment. A
+Finance approver records the repayment only after it has actually been made,
+allocating it to the original collections. Vista does not send the money or
+change the POS drawer. Original invoices and payments stay unchanged; the return,
+credit note, repayment and allocations are append-only and retry-safe. Payment
+reversal is blocked once a collected return exists, directing Finance to the
+linked repayment workflow. Demo-role approval is not broadened.
+
+Bank/cash matching, advance/offset allocation to deferred POS balances, scalable
+all-source registers and accounting/report acceptance remain pending.
+
 | Record                            | Adopted choice                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | ADR-0001 · Architecture           | TypeScript npm-workspaces monorepo; modular NestJS API; separate Operations, POS and Recovery React/Vite apps; PostgreSQL, Redis, S3-compatible storage, versioned API contracts, migrations, Docker Compose for local infrastructure and portable CI. Keep framework-independent domain/contracts separate.                                                                                                                       |
@@ -19,6 +35,13 @@ decisions blocking the current implementation.
 
 ## Remaining acceptance and deferred integrations
 
+Official Finance number series reserve 1,000-number ranges by location, optional
+register and operator. The legal-entity high watermark prevents overlaps with
+existing numbers; exhausted series reserve another range. This setting is
+configurable through `FINANCE_OFFICIAL_NUMBER_BLOCK_SIZE`. Issued non-POS
+invoices/proformas enter Collections automatically; receipt-backed POS invoices
+are excluded to avoid collecting an already-settled sale twice.
+
 - **Fiscal device:** Verify the exact DATECS unit's H-18 registration and
   protocol, then test a real receipt and reversal on the target terminal. The
   simulator does not establish certification.
@@ -30,10 +53,32 @@ decisions blocking the current implementation.
 - **Hosted rollout:** Complete hosted migration/restore rehearsal, provider
   configuration, security checks and QA retests before production acceptance.
 
+Financial document images are configured per issuing legal entity by a Finance
+editor. Use optional PNG/JPEG logos and explicitly authorized signature images;
+do not invent a client logo or signature or claim certificate-based signing.
+Drafts show only the logo. Issuance freezes exact image versions/checksums and
+signer name. Later changes affect new issuances, not existing documents. Email
+delivery retries retain the already-rendered PDF attachment.
+
 These are evidence, infrastructure or provider-integration tasks, not pending
 choices about the defaults above.
 
+Issued credit/debit notes adjust the original non-POS collection through a
+separate append-only ledger. Keep the original invoice and actual payments
+unchanged. A credit after settlement may leave an explicit customer credit;
+do not automatically create a refund or advance. A later debit can reopen the
+remaining balance. POS fiscal/settlement reconciliation stays a separate step.
+
 ## History
+
+Recurring subscription invoices use explicit Finance approval per contract
+revision, issuer, VAT and payment terms. The default payment term is 14 days and
+VAT is 20%; both are editable before approval. Existing contracts remain manual
+until enabled, and earlier billing periods are not issued retroactively by that
+approval. The existing daily billing worker issues enabled due periods and opens
+their collections transactionally. Contract changes or lost approver access stop
+further issuance. Manually prepared drafts still require manual review. Issued
+records retain their snapshots when a profile is edited or disabled.
 
 - **ADR-0001** recorded the initial modular TypeScript monorepo baseline.
 - **ADR-0002** recorded Hostinger/Coolify as the staging target.

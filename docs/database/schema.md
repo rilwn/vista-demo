@@ -1,5 +1,136 @@
 # Database Schema Baseline
 
+## Audit JSON representation
+
+New audit events normalize before/after/metadata to their stored JSON
+representation before calculating the existing canonical hash. Nested Date
+objects become ISO strings and undefined object properties are omitted, matching
+PostgreSQL JSONB round trips. The hash format and verification rules are unchanged;
+no historical event or hash is rewritten. A pre-existing local warning remains
+visible pending historical review. Disposable-database tests verify date-bearing
+events and subsequent chain links, and reject unserializable input atomically.
+
+## BNB rate cache
+
+The official BNB XML download is bounded to one megabyte and validated completely
+before any cache write. HTML access-error responses, malformed rows, mixed dates,
+duplicate currencies, invalid rates and pre-2026 publications are rejected. EUR
+accounting uses `REVERSERATE` (EUR per one foreign-currency unit); BGN is excluded.
+Validated rates commit in one transaction; identical replay does not rewrite rows.
+Issued financial-document snapshots are never recalculated. EUR itself needs no
+external rate; missing foreign rates fail explicitly and cached rates retain their
+actual publication date.
+
+Startup refresh is queued once per business date through the existing retryable
+job lifecycle. The weekday 18:00 business-timezone schedule remains separate.
+Failed jobs remain observable and can use the existing authorized retry action.
+This host currently receives HTTP 200 HTML from BNB, so successful live XML
+retrieval still needs verification on the deployment host. No substitute provider
+or guessed rate is used.
+
+## Current Finance extension
+
+Migration `0081_financial_document_branding` adds one optimistic-versioned
+`finance.document_branding` profile per issuing legal entity, referencing exact
+managed-file rows for its optional logo/signature. Signature bindings require a
+nonblank signatory name. `financial_documents.branding_snapshot` stores image
+IDs, names, media types, sizes, checksums and profile revision on issuance. A
+trigger prevents changing an issued snapshot. Drafts use current settings;
+legacy issued rows stay unbranded. Paid-proforma conversion and automatic
+subscription issuance snapshot their own issuance settings.
+
+The `financial_branding` file parent inherits Finance View/Edit authorization
+and must identify an existing legal entity. Uploads are bounded, decoded and
+integrity-checked before use. Downgrade refuses to discard profiles, branding
+files or nonempty document snapshots; an empty disposable schema and explicit
+unbranded version-zero snapshots can be reversed/reapplied safely.
+
+Migration `0079_finance_collection_sources` permits collection records without a
+Sales draft while requiring a Sales or Finance source. The existing unique
+source links prevent duplicate receivables. Issuing a positive-value non-POS
+invoice/proforma creates or links its collection in the same transaction;
+corrections and POS receipt invoices do not create a second balance. Older issued
+documents can be linked explicitly. Paid-proforma conversion preserves the
+collection and allocations, links the official invoice and adopts that invoice's
+EUR rate snapshot; the proforma snapshot remains unchanged.
+
+`finance.official_number_series` holds location/register/operator sequences.
+Each series reserves a disjoint block from the existing legal-entity high
+watermark, then increments under a row lock. `official_number_series_id` on the
+issued invoice/correction records its series. Existing official numbers are not
+changed or reused. `FINANCE_OFFICIAL_NUMBER_BLOCK_SIZE` defaults to 1,000; the
+last block is capped at ten digits and exhaustion fails without issuance.
+
+The down migration refuses to run once non-Sales collections exist. It never
+deletes those records to make a downgrade possible and never rewinds the global
+number watermark. Reversal/reapplication is tested on an empty disposable schema.
+
+## Collection corrections
+
+Migration `0082_collection_corrections` adds append-only
+`finance.collection_corrections`, uniquely keyed by issued correction document.
+It records the original invoice/collection, source-currency and EUR amounts,
+issuer actor, correlation, application time and migration/issuance provenance.
+A trigger rejects mismatched or unissued notes and all updates/deletes.
+
+Collections retain original `total`/`eur_total` and actual `allocated_total`.
+Credit/debit counters produce stored generated `adjusted_total` and
+`overpaid_total`; outstanding is clamped at zero. A locked refresh updates
+balance/status/version and records changed statuses. Excess paid funds stay
+visible as customer credit; no payment, refund or advance is invented.
+
+The migration backfills eligible issued notes against existing non-POS invoice
+collections and refuses invalid context. Draft/cancelled notes, cancelled
+collections, POS settlements and invoices without a collection are not silently
+posted elsewhere. Later explicit linking applies eligible notes once. Source
+documents, rate snapshots and allocations remain unchanged. Empty-schema
+down/up is supported; downgrade refuses to discard applied corrections or credit.
+
+## POS invoice settlement
+
+Migration `0083_pos_account_collections` links new `finance.payments` to the POS
+sale and extends the append-only account ledger with payment/reversal entries.
+Each payment targets its original charge; each reversal targets its original
+payment entry. Original customer, terms, date, limit and source snapshots must
+match. Sale-row locks and database guards reject excess debt reductions.
+Deferred constraints require a matching ledger entry before a POS payment or
+reversal commits. POS Finance payments cannot be allocated to another collection,
+updated or deleted; their reversals also cannot be changed or deleted. Existing
+non-POS payments keep their existing behavior. No old money is rewritten or
+backfilled. The down migration refuses to discard posted POS collections.
+
+Outstanding debt is `charges + payment reversals - return credits - payments`.
+POS credit eligibility and both Finance read models use the same sign rules.
+At migration `0083`, returns could release only unpaid deferred debt. Migration
+`0084_pos_account_return_refunds` supersedes that limit without allowing negative
+debt: a return splits the unpaid release from the amount owed back for previously
+collected POS account money.
+
+Migration `0084_pos_account_return_refunds` adds a return-credit liability,
+append-only repayments and allocations to the original unreversed POS Finance
+payments. A unique optional return link on a Finance credit note preserves the
+exact return/tax source and requires the issued original POS invoice when one
+exists. If an original invoice is issued, an issued linked credit note is
+required before recording any repayment. Row locks and database constraints
+prevent over-refunds, cross-sale allocations, duplicate source notes, payment
+reversal after a collected return, incomplete repayment allocations and edits
+to posted evidence. The database also blocks issuance of a POS invoice after a
+return and cancellation of an issued return credit note with recorded repayment.
+Finance records a repayment that has already been made outside Vista; this
+endpoint does not transfer money or move POS drawer cash.
+Rollback is refused after return, note or repayment evidence has been recorded.
+
+POS invoice reconciliation reads existing `pos.sales`, `pos.payments`,
+`pos.returns`, `pos.return_refunds` and `finance.customer_account_entries`.
+The reconciliation itself adds no table or backfill. Monetary arithmetic stays numeric;
+cash/card/advance payments are distinct from deferred account charges. Refunds
+reduce net paid or release deferred credit according to their original method.
+Mismatched sources, excess refunds, unbalanced totals and account-ledger
+discrepancies require review before invoice issuance. Original issued amounts,
+rate snapshots and source payment entries are never rewritten by this view.
+
+## Earlier migration notes
+
 Migration `0063_erp_operational_reports` registers ten controlled Procurement,
 Warehouse, Sales and Logistics report definitions and adds
 `reporting.saved_erp_reports`. Each saved view has an immutable UUID, account,
@@ -41,6 +172,27 @@ drops only this saved-options table, not Service records or generated exports.
 PostgreSQL migrations live in `apps/api/src/database/migrations`. Applied
 migrations are checksummed in `platform.schema_migrations` and serialized with a
 PostgreSQL advisory lock.
+
+The runner recognizes exactly one released checksum compatibility case:
+`0069_eur_transition` originally had SHA-256 `a29f4111…`; the corrected source
+has SHA-256 `0d68a49b…` (release `53374fb`). The only SQL difference normalizes
+EUR document rates. Reconciliation requires the completed statutory transition,
+the validated EUR-rate constraint, no remaining BGN financial documents and
+already-normalized EUR rates, so that SQL correction would change no rates.
+All applied migrations are checked first; any other drift still stops startup.
+
+An accepted reconciliation updates only that recorded checksum, preserving its
+original application timestamp, and appends
+`database.migration.checksum_reconciled` to the existing hash-chained audit log
+in the same transaction. The event includes old/new checksums, migration ID,
+database user, application and reason. It does not rerun currency conversion,
+change amounts, reset accounts or introduce an unversioned business table.
+Canonical databases do nothing; retries cannot add another event. Existing audit
+warnings are not repaired by rewriting history. The same compiled runner is used
+by local development and Coolify's migration service.
+The shared audit writer has no NestJS configuration/decorator dependency, so the
+source migration command also works from the repository root. The existing
+AuditService export and canonical hash format remain unchanged.
 
 The Phase 1 baseline creates these schemas:
 
@@ -544,3 +696,16 @@ hidden-card keys and revisions by account and module. No business transaction or
 KPI source is duplicated. Rollback drops this scheduling/preference metadata and
 the union view; existing saved views, export jobs and audit evidence remain.
 Back up schedule configuration before any rollback.
+
+## Approved recurring invoice issuance
+
+Migration `0080_recurring_invoice_issuance` adds one versioned Finance approval
+profile per Sales subscription and one issuance outcome per immutable billing
+period. Profiles retain issuer/location/register/operator, first automatic date,
+VAT, payment terms, approving account and approved contract revision. Runs retain
+attempt count, outcome, stable error code and issued-document link. No contract
+is enrolled by migration. A failed period cannot retain a partially issued
+invoice or consume its official number: savepoints roll those effects back
+before recording the retry/review outcome. Invoice, collection, numbering, audit
+and run commit together on success. A populated-profile downgrade is refused so
+configuration and evidence cannot disappear silently.

@@ -271,7 +271,9 @@ function SubscriptionPreview({
         <header>
           <div>
             <h3>Recurring billing</h3>
-            <p>Drafts are prepared automatically for review in Finance.</p>
+            <p>
+              Finance can issue each billing period automatically after its settings are approved.
+            </p>
           </div>
           <strong>{formatMoney(contract.billingAmount, contract.currencyCode)}</strong>
         </header>
@@ -290,7 +292,10 @@ function SubscriptionPreview({
             {contract.invoiceDrafts.map((draft) => (
               <div key={draft.id}>
                 <div>
-                  <strong>{draft.number}</strong>
+                  <strong>{draft.financialDocumentNumber ?? draft.number}</strong>
+                  {draft.financialDocumentStatus === 'issued' ? (
+                    <span className="recurring-status is-enabled">Issued</span>
+                  ) : null}
                   <span>
                     Service period {formatDate(draft.servicePeriodStart)} –{' '}
                     {formatDate(draft.servicePeriodEnd)}

@@ -5,6 +5,10 @@ import tseslint from 'typescript-eslint';
 export default tseslint.config(
   {
     ignores: [
+      '.agents/**',
+      '.aws/**',
+      '.codex/**',
+      '.data/**',
       '**/coverage/**',
       '**/dist/**',
       '**/node_modules/**',

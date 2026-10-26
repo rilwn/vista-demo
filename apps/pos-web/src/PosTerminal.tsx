@@ -2122,7 +2122,7 @@ function ReceiptDialog({
         ...sale,
         invoiceDocument: {
           id: document.id,
-          number: document.number,
+          number: document.officialNumber ?? document.number,
           sourceFiscalReceiptNumber: document.sourceFiscalReceiptNumber ?? sale.fiscalReceiptNumber,
           status: document.status,
         },
@@ -2220,7 +2220,11 @@ function ReceiptDialog({
                 <strong>Invoice</strong>
                 <small>Prepared from this receipt with the same customer, VAT, and totals.</small>
               </div>
-              {sale.invoiceDocument ? <span className="is-ready">Ready</span> : null}
+              {sale.invoiceDocument ? (
+                <span className="is-ready">
+                  {sale.invoiceDocument.status === 'issued' ? 'Issued' : 'Ready'}
+                </span>
+              ) : null}
             </header>
             {sale.invoiceDocument ? (
               <div className="pos-receipt-document-ready">
@@ -2911,6 +2915,12 @@ function ReturnDialog({
                 <p>The refund follows the payment methods used on the original receipt.</p>
               </div>
             </div>
+            {sale.payments.some((payment) => Number(payment.collectedAmount ?? '0') > 0) ? (
+              <p className="pos-return-policy-note" role="note">
+                Unpaid account amounts are released. Finance records any repayment of money already
+                collected separately.
+              </p>
+            ) : null}
             <label className="pos-return-reason">
               <span>Reason for return</span>
               <textarea
@@ -2923,7 +2933,11 @@ function ReturnDialog({
             <div className="pos-refund-summary">
               {refunds.map((refund) => (
                 <div key={refund.originalPaymentId}>
-                  <span>{paymentLabel(refund.method)} refund</span>
+                  <span>
+                    {refund.method === 'on_account'
+                      ? 'On-account return'
+                      : `${paymentLabel(refund.method)} refund`}
+                  </span>
                   <strong>{money(refund.amount)}</strong>
                 </div>
               ))}
@@ -2982,7 +2996,11 @@ function ReturnReceiptDialog({ item, onClose }: { item: PosReturn; onClose: () =
             </div>
             {item.refunds.map((refund) => (
               <div key={refund.id}>
-                <dt>{paymentLabel(refund.method)} refund</dt>
+                <dt>
+                  {refund.method === 'on_account'
+                    ? 'On-account return'
+                    : `${paymentLabel(refund.method)} refund`}
+                </dt>
                 <dd>{money(Number(refund.amount))}</dd>
               </div>
             ))}

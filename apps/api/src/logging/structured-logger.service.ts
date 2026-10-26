@@ -122,10 +122,26 @@ function sanitizeValue(value: unknown, seen = new WeakSet<object>()): unknown {
   seen.add(value);
   const sanitized: Record<string, unknown> = {};
   for (const [key, entry] of Object.entries(value)) {
-    sanitized[key] = sensitiveKey.test(key) ? '[REDACTED]' : sanitizeValue(entry, seen);
+    const scheduledJobId = key === 'jobId' ? scheduledJobLogId(entry) : undefined;
+    sanitized[key] = sensitiveKey.test(key)
+      ? '[REDACTED]'
+      : (scheduledJobId ?? sanitizeValue(entry, seen));
   }
   seen.delete(value);
   return sanitized;
+}
+
+function scheduledJobLogId(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  // Only BullMQ's generated repeat identifier, never arbitrary messages or
+  // numeric IDs. A nearby epoch must not become an exception for card data.
+  const match = /^(repeat:[a-z][a-z0-9.-]{1,127}):(\d{13})$/u.exec(value);
+  if (!match) return undefined;
+  const scheduledAt = Number(match[2]);
+  const year = 366 * 24 * 60 * 60 * 1000;
+  return Math.abs(scheduledAt - Date.now()) <= year
+    ? `${sanitizeText(match[1]!)}:${match[2]}`
+    : undefined;
 }
 
 function sanitizeText(value: string): string {

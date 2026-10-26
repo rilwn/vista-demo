@@ -1,5 +1,50 @@
 /** Reviewed translations for workflow pages that still contain legacy inline copy. */
 export const legacyBulgarianText: Readonly<Record<string, string>> = {
+  Settled: 'Погасено',
+  'Payment reversal': 'Сторниране на плащане',
+  'Past due': 'Просрочено',
+  'Manage invoices, proformas and linked credit or debit notes.':
+    'Управлявайте фактури, проформи и свързани кредитни или дебитни известия.',
+  'Review the POS receipt payments and refunds before issuing this invoice.':
+    'Прегледайте плащанията и възстановяванията по POS бона, преди да издадете тази фактура.',
+  'Recurring invoices': 'Периодични фактури',
+  'Review manual billing periods here, or enable automatic invoicing in Recurring invoices.':
+    'Преглеждайте ръчните периоди тук или включете автоматичното фактуриране в Периодични фактури.',
+  'Finance can issue each billing period automatically after its settings are approved.':
+    'Финанси може да издава фактурите автоматично след одобряване на настройките.',
+  'Document register': 'Регистър на документите',
+  'Document context': 'Данни за документа',
+  'Draft reference': 'Референция на документа',
+  'Proforma issued without an invoice number': 'Издадена проформа без номер на фактура',
+  Type: 'Вид',
+  'Tax event': 'Данъчно събитие',
+  'Issuing location': 'Обект на издаване',
+  'Register / operator': 'Каса / оператор',
+  'Not assigned': 'Не е зададен',
+  'Not applicable': 'Не е приложимо',
+  'Not recorded': 'Няма данни',
+  UIC: 'ЕИК',
+  'VAT number': 'Номер по ДДС',
+  'VAT summary': 'Обобщение на ДДС',
+  'Net in EUR': 'Нетна сума в EUR',
+  'VAT in EUR': 'ДДС в EUR',
+  'Total in EUR': 'Общо в EUR',
+  'Rate source': 'Източник на курса',
+  'Keep draft': 'Запази черновата',
+  'Prepared from Sales draft': 'Подготвен от чернова в Продажби',
+  'Prepared from POS sale': 'Подготвен от POS продажба',
+  'Prepared from completed Service work': 'Подготвен от завършена сервизна работа',
+  'Corrects invoice draft': 'Коригира фактура',
+  'Issue an invoice or proforma in Financial documents to add its balance here automatically.':
+    'Издайте фактура или проформа във Финансови документи, за да добавите автоматично баланса ѝ тук.',
+  'Added from an issued financial document': 'Добавено от издаден финансов документ',
+  'Add a note if needed.': 'При нужда добавете бележка.',
+  'This collection belongs to an issued document. Use a linked correction instead of cancelling the collection.':
+    'Вземането е по издаден документ. Използвайте свързано известие, вместо да анулирате вземането.',
+  'Choose an issued invoice or proforma with a customer balance.':
+    'Изберете издадена фактура или проформа с клиентски баланс.',
+  'The existing collection has a different balance or document. Review it before issuing this invoice.':
+    'Съществуващото вземане има различен баланс или документ. Проверете го, преди да издадете фактурата.',
   // Shared workflow language
   'Open receivables': 'Отворени вземания',
   'Apply an available advance to reduce an outstanding balance.':
@@ -71,6 +116,11 @@ export const legacyBulgarianText: Readonly<Record<string, string>> = {
     'Клиенти с издадена фактура и в двата периода, разделени на клиентите с издадена фактура в предишния период.',
   'The original invoice could not be loaded. Try again.':
     'Оригиналната фактура не може да бъде заредена. Опитайте отново.',
+  'A correction must use the original invoice company, customer and currency.':
+    'Известието трябва да е за същата фирма издател, клиент и валута като първоначалната фактура.',
+  'Select an active original invoice.': 'Изберете действаща първоначална фактура.',
+  'Issue the original invoice first. A correction must refer to that issued invoice and customer.':
+    'Първо издайте първоначалната фактура. Известието трябва да се отнася за тази издадена фактура и същия клиент.',
   'Enter the exchange rate and its source for the selected currency.':
     'Въведете обменния курс и неговия източник за избраната валута.',
   'The credit exceeds the amount remaining on the original invoice. Review earlier credit notes.':
@@ -353,8 +403,8 @@ export const legacyBulgarianText: Readonly<Record<string, string>> = {
   'Only unused amounts appear at checkout.': 'При плащане се показват само неизползваните суми.',
   'No unused advance is available.': 'Няма наличен неизползван аванс.',
   'POS account activity': 'Движения по POS сметката',
-  'Sales and linked returns remain together.':
-    'Продажбите и свързаните връщания се показват заедно.',
+  'Sales, payments and returns stay together.':
+    'Продажбите, плащанията и връщанията остават свързани.',
   'No POS account activity has been recorded.': 'Няма записани движения по POS сметката.',
   'Terms are kept against the shared ERP customer record.':
     'Условията се пазят към общия клиентски профил в ERP.',
@@ -374,6 +424,7 @@ export const legacyBulgarianText: Readonly<Record<string, string>> = {
   'Card payment': 'Плащане с карта',
   'Bank or receipt reference': 'Банково основание или номер на разписка',
   'Back to customer accounts': 'Назад към клиентските сметки',
+  'Back to invoice': 'Назад към фактурата',
 
   // Finance payables, cash, bank and registers
   'Loading supplier balances': 'Зареждане на задълженията към доставчици',

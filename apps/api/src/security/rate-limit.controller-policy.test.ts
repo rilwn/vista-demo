@@ -14,7 +14,10 @@ import { CustomerAssetsController } from '../partners/customer-assets.controller
 import { PartnersController } from '../partners/partners.controller.js';
 import { ProductCategoriesController } from '../product-categories/product-categories.controller.js';
 import { ProcurementController } from '../procurement/procurement.controller.js';
+import { FinanceCustomerAccountsController } from '../finance/finance-customer-accounts.controller.js';
 import { FinancialDocumentsController } from '../finance/financial-documents.controller.js';
+import { RecurringInvoicesController } from '../finance/recurring-invoices.controller.js';
+import { FinancialBrandingController } from '../finance/financial-branding.controller.js';
 import { RootController } from '../root.controller.js';
 import { SalesController } from '../sales/sales.controller.js';
 import { SecurityAdministrationController } from '../security-administration/security-administration.controller.js';
@@ -24,7 +27,10 @@ const controllers = [
   AuthController,
   CatalogController,
   FilesController,
+  FinanceCustomerAccountsController,
   FinancialDocumentsController,
+  RecurringInvoicesController,
+  FinancialBrandingController,
   InventoryController,
   IntegrationOperationsController,
   JobsController,
@@ -53,10 +59,20 @@ describe('HTTP rate-limit coverage', () => {
       })),
     );
 
-    expect(assignments).toHaveLength(163);
+    expect(assignments).toHaveLength(179);
     expect(assignments.filter(({ policy }) => policy === undefined)).toEqual([]);
     expect(assignments).toEqual(
       expect.arrayContaining([
+        expect.objectContaining({
+          controller: 'FinancialDocumentsController',
+          name: 'collection',
+          policy: 'write',
+        }),
+        expect.objectContaining({
+          controller: 'FinanceCustomerAccountsController',
+          name: 'refund',
+          policy: 'sensitive',
+        }),
         expect.objectContaining({ controller: 'AuthController', name: 'login', policy: 'public' }),
         expect.objectContaining({
           controller: 'JobsController',
@@ -206,6 +222,12 @@ function expectedPolicy(assignment: {
     return 'sensitive';
   }
   if (assignment.controller === 'InventoryController' && assignment.name === 'completeStocktake') {
+    return 'sensitive';
+  }
+  if (
+    assignment.controller === 'FinanceCustomerAccountsController' &&
+    assignment.name === 'refund'
+  ) {
     return 'sensitive';
   }
   return assignment.method === RequestMethod.GET ? 'read' : 'write';

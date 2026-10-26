@@ -6,6 +6,7 @@ import type { FinanceService } from '../finance/finance.service.js';
 import type { BnbCurrencyRatesService } from '../finance/bnb-currency-rates.service.js';
 import type { StructuredLogger } from '../logging/structured-logger.service.js';
 import type { SalesSubscriptionsService } from '../sales/sales-subscriptions.service.js';
+import type { RecurringInvoicesService } from '../finance/recurring-invoices.service.js';
 import type { ServiceCareService } from '../service/service-care.service.js';
 import { JobHandlerRegistry } from './job-handler-registry.service.js';
 import type { FinanceReportExportsService } from './finance-report-exports.service.js';
@@ -260,6 +261,11 @@ function createSubject(
       reportExports,
       serviceCare,
       crmTickets,
+      {
+        issueDue: vi
+          .fn()
+          .mockResolvedValue({ issuedCount: 0, reviewCount: 0, retryCount: 0, skippedCount: 0 }),
+      } as unknown as RecurringInvoicesService,
     ),
   };
 }

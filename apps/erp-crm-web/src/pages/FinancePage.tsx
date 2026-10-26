@@ -22,6 +22,7 @@ import {
 } from '../api/finance';
 import { useAuth } from '../auth/AuthProvider';
 import { Icon } from '../components/Icon';
+import { financialDocumentMessages as copy } from '../i18n/legacyMessages';
 import {
   formatOperationsCurrency,
   formatOperationsDate,
@@ -29,6 +30,7 @@ import {
 } from '../i18n/LocalizationProvider';
 import { Link, useRouter } from '../routing/Router';
 import { FinanceTabs } from './FinanceBankPage';
+import { collectionCorrectionsMessages } from './collection-corrections.messages';
 import { FinancialDocumentsPage } from './FinancialDocumentsPage';
 
 export type FinanceView = 'invoices' | 'payments';
@@ -128,11 +130,6 @@ function FinanceCollectionsPage({ view }: { view: FinanceView }) {
 
       <FinanceTabs />
 
-      <InlineAlert tone="info">
-        Collection records are in EUR. Legal invoice issue, tax posting, automatic BNB rates, and
-        bank-specific file imports require the approved finance configuration.
-      </InlineAlert>
-
       <FinanceSummaryCards summary={data.summary} />
       {notice ? (
         <Toast onDismiss={() => setNotice(null)} tone="success">
@@ -161,7 +158,7 @@ function FinanceCollectionsPage({ view }: { view: FinanceView }) {
           canCreate={canCreate}
           canEdit={canEdit}
           document={selected}
-          {...(canViewSales
+          {...(canViewSales && selected.sourceSalesInvoiceId
             ? {
                 onOpenSalesSource: () =>
                   navigate('/modules/erp.sales/shipments', {
@@ -216,13 +213,15 @@ function FinanceRegister({
   documents: FinanceCustomerDocument[];
   onPreview: (document: FinanceCustomerDocument) => void;
 }) {
+  const { locale } = useLocalization();
+  const correctionCopy = collectionCorrectionsMessages(locale);
   if (!documents.length)
     return (
       <FinanceState title="No collection records yet">
         <p>
-          Complete a sales shipment and prepare its positive-value invoice draft before adding it to
-          collections.
+          Issue an invoice or proforma in Financial documents to add its balance here automatically.
         </p>
+        <Link to="/modules/erp.finance/invoices">Financial documents</Link>
       </FinanceState>
     );
 
@@ -250,11 +249,17 @@ function FinanceRegister({
             <span>{dueLabel(document)}</span>
           </div>
           <div className="finance-register-value">
-            <strong>{formatMoney(document.outstandingTotal)}</strong>
+            <strong>{formatMoney(document.outstandingTotal, document.currencyCode)}</strong>
             <span>
-              of {formatMoney(document.total)} · {document.payments.length}{' '}
-              {document.payments.length === 1 ? 'payment' : 'payments'}
+              of {formatMoney(document.adjustedTotal ?? document.total, document.currencyCode)} ·{' '}
+              {document.payments.length} {document.payments.length === 1 ? 'payment' : 'payments'}
             </span>
+            {Number(document.overpaidTotal ?? '0') > 0 ? (
+              <small className="finance-customer-credit">
+                {correctionCopy.customerCredit}:{' '}
+                {formatMoney(document.overpaidTotal!, document.currencyCode)}
+              </small>
+            ) : null}
           </div>
           <PaymentStatus status={document.paymentStatus} />
           <Button onClick={() => onPreview(document)} variant="quiet">
@@ -283,6 +288,7 @@ function FinanceDocumentDrawer({
   references: FinanceReferenceData;
   token: string;
 }) {
+  useLocalization();
   const [salesInvoiceId, setSalesInvoiceId] = useState(references.invoiceDrafts[0]?.id ?? '');
   const [dueDate, setDueDate] = useState(daysFromToday(14));
   const [busy, setBusy] = useState(false);
@@ -316,18 +322,17 @@ function FinanceDocumentDrawer({
           <InlineAlert tone="warning">
             <div className="finance-prerequisite">
               <div>
-                <strong>No Sales invoice draft is ready</strong>
-                <span>
-                  Complete a shipment and prepare its invoice draft before adding it to collections.
-                </span>
+                <strong>{copy.noSalesDraftWaiting}</strong>
+                <span>{copy.collectionAutomaticHint}</span>
               </div>
+              <Link to="/modules/erp.finance/invoices">
+                {copy.title} <Icon name="arrow" size={15} />
+              </Link>
               {canPrepareSales ? (
                 <Link to="/modules/erp.sales/quotations">
                   Prepare Sales invoice draft <Icon name="arrow" size={15} />
                 </Link>
-              ) : (
-                <small>Ask a Sales user to prepare the invoice draft, then return here.</small>
-              )}
+              ) : null}
             </div>
           </InlineAlert>
         ) : (
@@ -348,7 +353,8 @@ function FinanceDocumentDrawer({
                 >
                   {references.invoiceDrafts.map((invoice) => (
                     <option key={invoice.id} value={invoice.id}>
-                      {invoice.number} · {invoice.customerName} · {formatMoney(invoice.total)}
+                      {invoice.number} · {invoice.customerName} ·{' '}
+                      {formatMoney(invoice.total, invoice.currencyCode)}
                     </option>
                   ))}
                 </select>
@@ -358,7 +364,7 @@ function FinanceDocumentDrawer({
                   <span>Customer</span>
                   <strong>{selected.customerName}</strong>
                   <span>Collection amount</span>
-                  <strong>{formatMoney(selected.total)}</strong>
+                  <strong>{formatMoney(selected.total, selected.currencyCode)}</strong>
                 </div>
               ) : null}
             </section>
@@ -415,6 +421,9 @@ function FinancePreviewDrawer({
   onSaved: (document: FinanceCustomerDocument, message: string) => void;
   token: string;
 }) {
+  const { locale } = useLocalization();
+  const correctionCopy = collectionCorrectionsMessages(locale);
+  const { navigate } = useRouter();
   const [mode, setMode] = useState<'details' | 'payment' | 'cancel' | 'reverse'>('details');
   const [paymentToReverse, setPaymentToReverse] = useState<FinancePayment | null>(null);
   const [busy, setBusy] = useState(false);
@@ -425,7 +434,10 @@ function FinancePreviewDrawer({
     document.reviewState === 'pending_finance_review' &&
     document.paymentStatus !== 'paid';
   const canCancel =
-    canEdit && document.reviewState === 'pending_finance_review' && document.payments.length === 0;
+    canEdit &&
+    document.financialDocument?.status !== 'issued' &&
+    document.reviewState === 'pending_finance_review' &&
+    document.payments.length === 0;
 
   if (mode === 'reverse' && paymentToReverse)
     return (
@@ -499,7 +511,7 @@ function FinancePreviewDrawer({
         <section className="finance-preview-hero">
           <div>
             <PaymentStatus status={document.paymentStatus} />
-            <h3>{formatMoney(document.outstandingTotal)} remaining</h3>
+            <h3>{formatMoney(document.outstandingTotal, document.currencyCode)} remaining</h3>
             <p>
               Due {formatDate(document.dueDate)} · {dueLabel(document)}
             </p>
@@ -515,40 +527,122 @@ function FinancePreviewDrawer({
           <header>
             <div>
               <h3>Balance</h3>
-              <p>Amounts remain in EUR for this collection record.</p>
+              <p>{copy.collectionCurrency(document.currencyCode)}</p>
             </div>
           </header>
           <dl className="finance-balance-grid">
             <div>
-              <dt>Total</dt>
-              <dd>{formatMoney(document.total)}</dd>
+              <dt>{document.corrections?.length ? correctionCopy.original : 'Total'}</dt>
+              <dd>{formatMoney(document.total, document.currencyCode)}</dd>
             </div>
             <div>
               <dt>Allocated</dt>
-              <dd>{formatMoney(document.allocatedTotal)}</dd>
+              <dd>{formatMoney(document.allocatedTotal, document.currencyCode)}</dd>
             </div>
             <div>
               <dt>Outstanding</dt>
-              <dd>{formatMoney(document.outstandingTotal)}</dd>
+              <dd>{formatMoney(document.outstandingTotal, document.currencyCode)}</dd>
             </div>
           </dl>
+          {document.corrections?.length ? (
+            <dl className="finance-balance-grid finance-correction-totals">
+              <div>
+                <dt>{correctionCopy.credits}</dt>
+                <dd>{formatMoney(document.creditTotal ?? '0', document.currencyCode)}</dd>
+              </div>
+              <div>
+                <dt>{correctionCopy.debits}</dt>
+                <dd>{formatMoney(document.debitTotal ?? '0', document.currencyCode)}</dd>
+              </div>
+              <div>
+                <dt>{correctionCopy.adjusted}</dt>
+                <dd>
+                  {formatMoney(document.adjustedTotal ?? document.total, document.currencyCode)}
+                </dd>
+              </div>
+            </dl>
+          ) : null}
+          {Number(document.overpaidTotal ?? '0') > 0 ? (
+            <InlineAlert tone="warning">
+              <strong>
+                {correctionCopy.customerCredit}:{' '}
+                {formatMoney(document.overpaidTotal!, document.currencyCode)}
+              </strong>
+              <p>{correctionCopy.overpaidHelp}</p>
+            </InlineAlert>
+          ) : null}
         </section>
+
+        {document.corrections?.length ? (
+          <section className="finance-preview-section">
+            <header>
+              <h3>{correctionCopy.corrections}</h3>
+            </header>
+            <div className="finance-correction-list">
+              {document.corrections.map((note) => (
+                <article key={note.id}>
+                  <div>
+                    <strong>{note.number}</strong>
+                    <small>
+                      {note.documentType === 'credit_note'
+                        ? correctionCopy.creditNote
+                        : correctionCopy.debitNote}{' '}
+                      · {formatDate(note.documentDate)}
+                    </small>
+                    <p>{note.reason}</p>
+                  </div>
+                  <strong>
+                    {note.documentType === 'credit_note' ? '−' : '+'}
+                    {formatMoney(note.amount, document.currencyCode)}
+                  </strong>
+                  <Button
+                    variant="quiet"
+                    onClick={() =>
+                      navigate('/modules/erp.finance/invoices', {
+                        state: { financialDocumentId: note.documentId },
+                      })
+                    }
+                  >
+                    {correctionCopy.openNote}
+                  </Button>
+                </article>
+              ))}
+            </div>
+          </section>
+        ) : null}
 
         <section className="finance-preview-section">
           <header>
             <div>
               <h3>Source</h3>
-              <p>The collection record is linked to the prepared sales invoice draft.</p>
+              <p>
+                {document.financialDocument
+                  ? copy.collectionSource
+                  : 'The collection record is linked to the prepared sales invoice draft.'}
+              </p>
             </div>
           </header>
           <div className="finance-source-row">
-            <span className="finance-document-mark">S</span>
+            <span className="finance-document-mark">{document.financialDocument ? 'FI' : 'S'}</span>
             <div>
               <strong>{document.sourceInvoiceNumber}</strong>
               <span>Added to collections {formatDate(document.documentDate)}</span>
             </div>
-            <strong>{formatMoney(document.total)}</strong>
+            <strong>{formatMoney(document.total, document.currencyCode)}</strong>
           </div>
+          {document.financialDocument ? (
+            <Button
+              className="finance-source-open"
+              variant="quiet"
+              onClick={() =>
+                navigate('/modules/erp.finance/invoices', {
+                  state: { financialDocumentId: document.financialDocument!.id },
+                })
+              }
+            >
+              {copy.openFinancialDocument}
+            </Button>
+          ) : null}
           {onOpenSalesSource ? (
             <Button className="finance-source-open" onClick={onOpenSalesSource} variant="quiet">
               Open in Sales
@@ -588,7 +682,7 @@ function FinancePreviewDrawer({
                     ) : null}
                     {payment.reversal ? <small>{payment.reversal.reason}</small> : null}
                   </div>
-                  <strong>{formatMoney(payment.amount)}</strong>
+                  <strong>{formatMoney(payment.amount, document.currencyCode)}</strong>
                   {canApprove && !payment.reversal ? (
                     <Button
                       onClick={() => {
@@ -621,7 +715,13 @@ function FinancePreviewDrawer({
                 <span />
                 <div>
                   <strong>{paymentStatusLabel(entry.nextStatus)}</strong>
-                  <p>{historyLabel(entry.reason)}</p>
+                  <p>
+                    {entry.reason === 'financial_correction_issued'
+                      ? correctionCopy.history
+                      : entry.reason === 'correction_migration'
+                        ? correctionCopy.migratedHistory
+                        : historyLabel(entry.reason)}
+                  </p>
                   <small>
                     {formatDateTime(entry.changedAt)}
                     {entry.changedByName ? ` · ${entry.changedByName}` : ''}
@@ -681,6 +781,7 @@ function FinancePaymentDrawer({
   onSaved: (document: FinanceCustomerDocument) => void;
   token: string;
 }) {
+  useLocalization();
   const [amount, setAmount] = useState(document.outstandingTotal);
   const [paymentDate, setPaymentDate] = useState(today());
   const [paymentMethod, setPaymentMethod] = useState<FinancePaymentMethod>('bank_transfer');
@@ -713,7 +814,7 @@ function FinancePaymentDrawer({
     <FinanceDrawer
       busy={busy}
       onBack={onBack}
-      subtitle={`${document.number} · ${formatMoney(document.outstandingTotal)} remaining`}
+      subtitle={`${document.number} · ${formatMoney(document.outstandingTotal, document.currencyCode)} remaining`}
       title="Record payment"
     >
       <form className="finance-form" onSubmit={(event) => void submit(event)}>
@@ -727,7 +828,7 @@ function FinancePaymentDrawer({
             </div>
           </header>
           <div className="finance-form-grid">
-            <FinanceField label="Amount (EUR)">
+            <FinanceField label={copy.paymentAmount(document.currencyCode)}>
               <input
                 max={document.outstandingTotal}
                 min="0.0001"
@@ -772,7 +873,7 @@ function FinancePaymentDrawer({
             <span>2</span>
             <div>
               <h3>Note</h3>
-              <p>Add only a concise operational note where it helps the collection review.</p>
+              <p>Add a note if needed.</p>
             </div>
           </header>
           <FinanceField label="Payment note (optional)">
@@ -845,7 +946,7 @@ function FinancePaymentReversalDrawer({
     <FinanceDrawer
       busy={busy}
       onBack={onBack}
-      subtitle={`${payment.number} · ${formatMoney(payment.amount)}`}
+      subtitle={`${payment.number} · ${formatMoney(payment.amount, document.currencyCode)}`}
       title="Reverse payment"
     >
       <form className="finance-form" onSubmit={(event) => void submit(event)}>
@@ -860,7 +961,8 @@ function FinancePaymentReversalDrawer({
             <div>
               <h3>Confirm the correction</h3>
               <p>
-                {document.number} · {payment.number} · {formatMoney(payment.amount)}
+                {document.number} · {payment.number} ·{' '}
+                {formatMoney(payment.amount, document.currencyCode)}
               </p>
             </div>
           </header>
@@ -1037,6 +1139,7 @@ function historyLabel(reason: string) {
     {
       document_cancelled: 'Collection record cancelled',
       document_imported: 'Added from a sales invoice draft',
+      financial_document_issued: 'Added from an issued financial document',
       payment_recorded: 'Payment allocated',
       scheduled_due_date_check: 'Due date passed with a remaining balance',
     }[reason] ?? 'Status updated'
@@ -1068,8 +1171,8 @@ function formatDateTime(value: string) {
   return formatOperationsDate(new Date(value), { dateStyle: 'medium', timeStyle: 'short' });
 }
 
-function formatMoney(value: string) {
-  return formatOperationsCurrency(value, 'EUR');
+function formatMoney(value: string, currencyCode = 'EUR') {
+  return formatOperationsCurrency(value, currencyCode);
 }
 
 function errorText(error: unknown, fallback: string) {
