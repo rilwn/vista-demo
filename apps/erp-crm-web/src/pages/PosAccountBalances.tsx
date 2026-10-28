@@ -33,6 +33,7 @@ export function PosAccountBalances({
   canCollect,
   canReverse,
   onCollect,
+  onAllocateAdvance,
   onReverse,
   customerId,
   onRefund,
@@ -41,6 +42,7 @@ export function PosAccountBalances({
   canCollect: boolean;
   canReverse: boolean;
   onCollect: (sale: PosAccountReceivable) => void;
+  onAllocateAdvance?: (sale: PosAccountReceivable) => void;
   onReverse: (sale: PosAccountReceivable, payment: PosAccountPayment) => void;
   customerId: string;
   onRefund: (sale: PosAccountReceivable, credit: PosAccountReturnCredit) => void;
@@ -88,6 +90,11 @@ export function PosAccountBalances({
             <div className="pos-account-sale-actions">
               {canCollect && Number(sale.outstandingTotal) > 0 ? (
                 <Button onClick={() => onCollect(sale)}>{copy.collect}</Button>
+              ) : null}
+              {canCollect && onAllocateAdvance && Number(sale.outstandingTotal) > 0 ? (
+                <Button onClick={() => onAllocateAdvance(sale)} variant="secondary">
+                  {copy.applyAdvance}
+                </Button>
               ) : null}
               {sale.invoice ? (
                 <Button

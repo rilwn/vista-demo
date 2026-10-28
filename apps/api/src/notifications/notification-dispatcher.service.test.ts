@@ -6,6 +6,7 @@ import { JobHandlerRegistry } from '../jobs/job-handler-registry.service.js';
 import type { JobQueueService } from '../jobs/job-queue.service.js';
 import type { StructuredLogger } from '../logging/structured-logger.service.js';
 import { NotificationDispatcherService } from './notification-dispatcher.service.js';
+import type { SmsGatewayService } from './sms-gateway.service.js';
 
 describe('NotificationDispatcherService', () => {
   it('records a rolled-back attempt and stops retrying after the final attempt', async () => {
@@ -74,9 +75,37 @@ describe('NotificationDispatcherService', () => {
     dispatcher.onApplicationShutdown();
     expect(jobs.retryFailed).toHaveBeenCalledWith('job');
   });
+
+  it('dispatches SMS notifications through the configured gateway', async () => {
+    const send = vi.fn().mockResolvedValue(undefined);
+    const { dispatcher, transactionQuery } = subject({ send });
+    transactionQuery.mockImplementation((sql: string) =>
+      Promise.resolve({
+        rows: sql.includes('RETURNING id, channel')
+          ? [
+              {
+                channel: 'sms',
+                id: 'notification',
+                payload: { body: 'Backup verified', to: '+359888123456' },
+                recipient_account_id: null,
+                template_key: 'backup.alert.sms',
+              },
+            ]
+          : [],
+      }),
+    );
+
+    await dispatcher.dispatch('notification', true);
+
+    expect(send).toHaveBeenCalledWith({ body: 'Backup verified', to: '+359888123456' });
+  });
 });
 
-function subject() {
+function subject(
+  sms: { send: ReturnType<typeof vi.fn> } = {
+    send: vi.fn().mockRejectedValue(new UnrecoverableError('SMS is disabled')),
+  },
+) {
   const transactionQuery = vi.fn().mockResolvedValue({ rows: [] });
   const poolQuery = vi.fn().mockResolvedValue({ rows: [], rowCount: 1 });
   const pool = {
@@ -110,6 +139,7 @@ function subject() {
     jobs as unknown as JobQueueService,
     { event: vi.fn() } as unknown as StructuredLogger,
     { send: vi.fn().mockResolvedValue(undefined) } as never,
+    sms as unknown as SmsGatewayService,
   );
-  return { dispatcher, transactionQuery, poolQuery, jobs };
+  return { dispatcher, transactionQuery, poolQuery, jobs, sms };
 }

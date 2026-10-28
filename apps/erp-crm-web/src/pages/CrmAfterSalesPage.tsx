@@ -5,7 +5,9 @@ import type {
   CrmCustomerSurvey,
   CrmReferral,
   CrmWarrantyCard,
-  CrmWarrantyOfferStatus,
+  CrmWarrantyCoverageOffer,
+  CrmWarrantyCoverageOfferStatus,
+  CreateCrmWarrantyCoverageOfferRequest,
   ManagedFile,
   TransitionWarrantyClaimRequest,
   WarrantyClaim,
@@ -14,19 +16,21 @@ import { type FormEvent, type ReactNode, useEffect, useRef, useState } from 'rea
 
 import {
   createCrmReferral,
+  createCrmWarrantyCoverageOffer,
   createCrmWarrantyClaim,
   getCrmAfterSalesOverview,
   reconcileCrmWarrantyCards,
   recordCrmSurveyResponse,
   sendCrmSurvey,
   transitionCrmWarrantyClaim,
-  updateCrmWarrantyOffer,
+  transitionCrmWarrantyCoverageOffer,
 } from '../api/crm-after-sales';
 import { ApiClientError } from '../api/client';
 import { downloadManagedFile, uploadManagedFile } from '../api/files';
 import { useAuth } from '../auth/AuthProvider';
 import { Icon } from '../components/Icon';
 import {
+  formatOperationsCurrency,
   formatOperationsDate,
   formatOperationsNumber,
   useLocalization,
@@ -37,6 +41,7 @@ import { CrmTabs } from './CrmTicketsPage';
 type CareTab = 'warranties' | 'feedback' | 'referrals';
 type Drawer =
   | { card: CrmWarrantyCard; type: 'card' }
+  | { card: CrmWarrantyCard; type: 'new_coverage_offer' }
   | { card?: CrmWarrantyCard; type: 'new_claim' }
   | { claim: WarrantyClaim; type: 'claim' }
   | { sourceKey?: string; type: 'new_survey' }
@@ -181,11 +186,51 @@ export function CrmAfterSalesPage() {
       {drawer?.type === 'card' ? (
         <WarrantyCardDrawer
           canEdit={canEdit}
+          canCreate={canCreate}
           card={drawer.card}
           claims={overview?.claims ?? []}
+          offers={
+            overview?.coverageOffers.filter((offer) => offer.warrantyCardId === drawer.card.id) ??
+            []
+          }
           onBack={() => setDrawer(null)}
           onClaim={(card) => setDrawer({ card, type: 'new_claim' })}
-          onSaved={(card) => refresh(`${card.number} was updated.`)}
+          onCreateOffer={(card) => setDrawer({ card, type: 'new_coverage_offer' })}
+          onOfferChanged={(offer) => {
+            setNotice(t('crm.warranty.offerStatusSaved', { number: offer.number }));
+            setOverview((current) =>
+              current
+                ? {
+                    ...current,
+                    coverageOffers: current.coverageOffers.map((item) =>
+                      item.id === offer.id ? offer : item,
+                    ),
+                  }
+                : current,
+            );
+            setRevision((current) => current + 1);
+          }}
+          token={token}
+          timezone={overview?.businessTimezone ?? 'Europe/Sofia'}
+        />
+      ) : null}
+      {drawer?.type === 'new_coverage_offer' ? (
+        <NewCoverageOfferDrawer
+          card={drawer.card}
+          onBack={() => setDrawer({ card: drawer.card, type: 'card' })}
+          onSaved={(offer) => {
+            setNotice(t('crm.warranty.offerCreated', { number: offer.number }));
+            setOverview((current) =>
+              current
+                ? {
+                    ...current,
+                    coverageOffers: [offer, ...current.coverageOffers],
+                  }
+                : current,
+            );
+            setDrawer({ card: drawer.card, type: 'card' });
+            setRevision((current) => current + 1);
+          }}
           token={token}
           timezone={overview?.businessTimezone ?? 'Europe/Sofia'}
         />
@@ -400,6 +445,7 @@ function FeedbackView({
   overview: CrmAfterSalesOverview;
   onOpen: (drawer: Drawer) => void;
 }) {
+  const { t } = useLocalization();
   return (
     <div className="crm-care-view">
       <section className="crm-nps-panel">
@@ -459,9 +505,16 @@ function FeedbackView({
                   <span>
                     <strong>{source.customerName}</strong>
                     <small>{source.label}</small>
+                    {!source.recipientEmails.length ? (
+                      <small className="crm-care-email-warning">{t('survey.noEmail')}</small>
+                    ) : null}
                   </span>
                   {canCreate ? (
-                    <Button onClick={openSurvey} type="button">
+                    <Button
+                      disabled={!source.recipientEmails.length}
+                      onClick={openSurvey}
+                      type="button"
+                    >
                       Prepare survey
                     </Button>
                   ) : null}
@@ -475,12 +528,12 @@ function FeedbackView({
         <header className="crm-care-register-head">
           <div>
             <h2>Customer surveys</h2>
-            <p>Record invitations shared with customers and enter their responses here.</p>
+            <p>Send a survey after completed work and review customer responses here.</p>
           </div>
           <span className="crm-care-count">{overview.surveys.length}</span>
         </header>
         {!overview.surveys.length ? (
-          <CareEmpty title="No survey invitations have been recorded." />
+          <CareEmpty title="No customer surveys have been sent." />
         ) : (
           <div className="crm-care-survey-list">
             {overview.surveys.map((survey) => (
@@ -492,6 +545,10 @@ function FeedbackView({
                 <span>
                   <strong>{survey.number}</strong>
                   <small>{survey.customerName}</small>
+                  {survey.recipientEmail ? <small>{survey.recipientEmail}</small> : null}
+                  {survey.deliveryStatus ? (
+                    <small>{t(surveyDeliveryTranslationKey[survey.deliveryStatus])}</small>
+                  ) : null}
                 </span>
                 <span>
                   <strong>{survey.sourceLabel}</strong>
@@ -578,35 +635,57 @@ function ReferralView({ overview }: { overview: CrmAfterSalesOverview }) {
 }
 
 function WarrantyCardDrawer({
+  canCreate,
   canEdit,
   card,
   claims,
+  offers,
   onBack,
   onClaim,
-  onSaved,
+  onCreateOffer,
+  onOfferChanged,
   token,
   timezone,
 }: {
+  canCreate: boolean;
   canEdit: boolean;
   card: CrmWarrantyCard;
   claims: WarrantyClaim[];
+  offers: CrmWarrantyCoverageOffer[];
   onBack: () => void;
   onClaim: (card: CrmWarrantyCard) => void;
-  onSaved: (card: CrmWarrantyCard) => void;
+  onCreateOffer: (card: CrmWarrantyCard) => void;
+  onOfferChanged: (offer: CrmWarrantyCoverageOffer) => void;
   token: string;
   timezone: string;
 }) {
-  const [offerStatus, setOfferStatus] = useState(card.offerStatus);
+  const { t } = useLocalization();
+  const [coverageOffers, setCoverageOffers] = useState(offers);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const related = claims.filter((claim) => claim.customerEquipmentId === card.customerEquipmentId);
-  async function save() {
+  useEffect(() => setCoverageOffers(offers), [offers]);
+  async function changeOfferStatus(
+    offer: CrmWarrantyCoverageOffer,
+    nextStatus: Exclude<CrmWarrantyCoverageOfferStatus, 'draft' | 'expired'>,
+  ) {
     setBusy(true);
     setError(null);
     try {
-      onSaved(await updateCrmWarrantyOffer(token, card.id, crypto.randomUUID(), { offerStatus }));
+      const updated = await transitionCrmWarrantyCoverageOffer(
+        token,
+        offer.id,
+        crypto.randomUUID(),
+        {
+          nextStatus,
+        },
+      );
+      setCoverageOffers((current) =>
+        current.map((item) => (item.id === updated.id ? updated : item)),
+      );
+      onOfferChanged(updated);
     } catch (caught) {
-      setError(errorText(caught, 'The follow-up status could not be saved.'));
+      setError(errorText(caught, t('crm.warranty.offerStatusError')));
     } finally {
       setBusy(false);
     }
@@ -652,40 +731,102 @@ function WarrantyCardDrawer({
         <section className="crm-care-panel">
           <header>
             <div>
-              <h3>Customer follow-up</h3>
-              <p>Record whether extended coverage or a Service plan has been discussed.</p>
+              <h3>{t('crm.warranty.coverageOffers')}</h3>
+              <p>{t('crm.warranty.coverageOffersHint')}</p>
             </div>
-          </header>
-          <label className="crm-care-field">
-            <span>Follow-up status</span>
-            <select
-              disabled={!canEdit}
-              onChange={(event) => setOfferStatus(event.target.value as CrmWarrantyOfferStatus)}
-              value={offerStatus}
-            >
-              <option value="not_offered">Not discussed</option>
-              <option value="offered">Offer presented</option>
-              <option value="interested">Customer interested</option>
-              <option value="declined">Customer declined</option>
-            </select>
-          </label>
-          {canEdit ? (
-            <div className="crm-care-inline-actions">
-              <Button
-                busy={busy}
-                disabled={offerStatus === card.offerStatus}
-                onClick={() => void save()}
-              >
-                Save status
+            {canCreate && card.status === 'active' ? (
+              <Button onClick={() => onCreateOffer(card)} variant="secondary">
+                <Icon name="plus" size={15} /> {t('crm.warranty.newCoverageOffer')}
               </Button>
-              <Link
-                className="vista-button vista-button--secondary"
-                to="/modules/erp.sales/subscriptions"
-              >
-                Open Service plans
-              </Link>
+            ) : null}
+          </header>
+          {coverageOffers.length ? (
+            <div className="crm-care-coverage-offers">
+              {coverageOffers.map((offer) => (
+                <article className="crm-care-coverage-offer" key={offer.id}>
+                  <header>
+                    <div>
+                      <small>
+                        {offer.number} ·{' '}
+                        {t(
+                          offer.offerType === 'extended_warranty'
+                            ? 'crm.warranty.extendedWarranty'
+                            : 'crm.warranty.servicePlan',
+                        )}
+                      </small>
+                      <strong>
+                        {formatOperationsCurrency(offer.quotedAmount, offer.currencyCode)}
+                      </strong>
+                    </div>
+                    <span className={`crm-care-status is-${offer.status}`}>
+                      {t(coverageOfferStatusLabel(offer.status))}
+                    </span>
+                  </header>
+                  <dl>
+                    <div>
+                      <dt>{t('crm.warranty.coverageStarts')}</dt>
+                      <dd>{formatDate(offer.coverageStartsOn, timezone)}</dd>
+                    </div>
+                    <div>
+                      <dt>{t('crm.warranty.durationMonths')}</dt>
+                      <dd>{monthText(offer.durationMonths, t)}</dd>
+                    </div>
+                    {offer.visitFrequencyMonths ? (
+                      <div>
+                        <dt>{t('crm.warranty.visitFrequencyMonths')}</dt>
+                        <dd>
+                          {offer.visitFrequencyMonths === 1
+                            ? t('crm.warranty.everyMonth')
+                            : t('crm.warranty.everyMonths', { count: offer.visitFrequencyMonths })}
+                        </dd>
+                      </div>
+                    ) : null}
+                    <div>
+                      <dt>{t('crm.warranty.offerValidUntil')}</dt>
+                      <dd>{formatDate(offer.validUntil, timezone)}</dd>
+                    </div>
+                  </dl>
+                  <p>{offer.terms}</p>
+                  <div className="crm-care-inline-actions">
+                    <Button
+                      disabled={busy}
+                      onClick={() => {
+                        if (!printCoverageOffer(offer, t, timezone))
+                          setError(t('crm.warranty.printBlocked'));
+                      }}
+                      variant="secondary"
+                    >
+                      {t('crm.warranty.printOffer')}
+                    </Button>
+                    {canEdit && offer.status === 'draft' ? (
+                      <Button busy={busy} onClick={() => void changeOfferStatus(offer, 'offered')}>
+                        {t('crm.warranty.markShared')}
+                      </Button>
+                    ) : null}
+                    {canEdit && offer.status === 'offered' ? (
+                      <>
+                        <Button
+                          busy={busy}
+                          onClick={() => void changeOfferStatus(offer, 'accepted')}
+                        >
+                          {t('crm.warranty.recordAcceptance')}
+                        </Button>
+                        <Button
+                          busy={busy}
+                          onClick={() => void changeOfferStatus(offer, 'declined')}
+                          variant="secondary"
+                        >
+                          {t('crm.warranty.recordDecline')}
+                        </Button>
+                      </>
+                    ) : null}
+                  </div>
+                </article>
+              ))}
             </div>
-          ) : null}
+          ) : (
+            <CareEmpty title={t('crm.warranty.noCoverageOffers')} />
+          )}
         </section>
         <section className="crm-care-panel">
           <header>
@@ -705,6 +846,211 @@ function WarrantyCardDrawer({
           </header>
         </section>
       </div>
+    </CareDrawer>
+  );
+}
+
+function NewCoverageOfferDrawer({
+  card,
+  onBack,
+  onSaved,
+  token,
+  timezone,
+}: {
+  card: CrmWarrantyCard;
+  onBack: () => void;
+  onSaved: (offer: CrmWarrantyCoverageOffer) => void;
+  token: string;
+  timezone: string;
+}) {
+  const { t } = useLocalization();
+  const [offerType, setOfferType] =
+    useState<CreateCrmWarrantyCoverageOfferRequest['offerType']>('extended_warranty');
+  const [quotedAmount, setQuotedAmount] = useState('');
+  const [durationMonths, setDurationMonths] = useState('12');
+  const [visitFrequencyMonths, setVisitFrequencyMonths] = useState('3');
+  const [coverageStartsOn, setCoverageStartsOn] = useState(addCalendarDays(card.warrantyEndsOn, 1));
+  const [validUntil, setValidUntil] = useState(addCalendarDays(businessToday(timezone), 30));
+  const [terms, setTerms] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const duration = Number(durationMonths);
+    const frequency = Number(visitFrequencyMonths);
+    if (
+      !/^[0-9]{1,12}\.[0-9]{2}$/u.test(quotedAmount) ||
+      BigInt(quotedAmount.replace('.', '') || '0') <= 0n
+    ) {
+      setError(t('crm.warranty.error.amount'));
+      return;
+    }
+    if (!Number.isInteger(duration) || duration < 1 || duration > 120) {
+      setError(t('crm.warranty.error.duration'));
+      return;
+    }
+    if (
+      offerType === 'service_plan' &&
+      (!Number.isInteger(frequency) || frequency < 1 || frequency > duration)
+    ) {
+      setError(t('crm.warranty.error.frequency'));
+      return;
+    }
+    if (offerType === 'extended_warranty' && coverageStartsOn <= card.warrantyEndsOn) {
+      setError(t('crm.warranty.error.start'));
+      return;
+    }
+    if (coverageStartsOn < businessToday(timezone) || validUntil < businessToday(timezone)) {
+      setError(t('crm.warranty.error.dates'));
+      return;
+    }
+    if (terms.trim().length < 10) {
+      setError(t('crm.warranty.error.terms'));
+      return;
+    }
+
+    setBusy(true);
+    setError(null);
+    try {
+      const input: CreateCrmWarrantyCoverageOfferRequest = {
+        coverageStartsOn,
+        durationMonths: duration,
+        offerType,
+        quotedAmount,
+        terms: terms.trim(),
+        validUntil,
+        ...(offerType === 'service_plan' ? { visitFrequencyMonths: frequency } : {}),
+      };
+      const offer = await createCrmWarrantyCoverageOffer(
+        token,
+        card.id,
+        crypto.randomUUID(),
+        input,
+      );
+      onSaved(offer);
+    } catch (caught) {
+      setError(errorText(caught, t('crm.warranty.offerCreateError')));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <CareDrawer
+      busy={busy}
+      onBack={onBack}
+      subtitle={`${card.number} · ${card.customerName} · ${card.serialNumber}`}
+      title={t('crm.warranty.newCoverageOffer')}
+    >
+      <form className="crm-care-form" onSubmit={(event) => void submit(event)}>
+        {error ? <InlineAlert tone="error">{error}</InlineAlert> : null}
+        <div className="crm-care-selection">
+          <Icon name="shield" size={19} />
+          <span>
+            <strong>{card.deviceName}</strong>
+            <small>
+              {card.customerName} · {card.serialNumber}
+            </small>
+          </span>
+        </div>
+        <FormSection index="1" title={t('crm.warranty.offerDetails')}>
+          <label className="crm-care-field">
+            <span>{t('crm.warranty.offerType')}</span>
+            <select
+              onChange={(event) =>
+                setOfferType(
+                  event.target.value as CreateCrmWarrantyCoverageOfferRequest['offerType'],
+                )
+              }
+              value={offerType}
+            >
+              <option value="extended_warranty">{t('crm.warranty.extendedWarranty')}</option>
+              <option value="service_plan">{t('crm.warranty.servicePlan')}</option>
+            </select>
+          </label>
+          <div className="crm-care-form-grid">
+            <label className="crm-care-field">
+              <span>{t('crm.warranty.quotedTotal')}</span>
+              <input
+                autoComplete="off"
+                inputMode="decimal"
+                onChange={(event) => setQuotedAmount(event.target.value)}
+                placeholder="0.00"
+                required
+                value={quotedAmount}
+              />
+            </label>
+            <label className="crm-care-field">
+              <span>{t('crm.warranty.durationMonths')}</span>
+              <input
+                max="120"
+                min="1"
+                onChange={(event) => setDurationMonths(event.target.value)}
+                required
+                type="number"
+                value={durationMonths}
+              />
+            </label>
+            {offerType === 'service_plan' ? (
+              <label className="crm-care-field">
+                <span>{t('crm.warranty.visitFrequencyMonths')}</span>
+                <input
+                  max={durationMonths || '120'}
+                  min="1"
+                  onChange={(event) => setVisitFrequencyMonths(event.target.value)}
+                  required
+                  type="number"
+                  value={visitFrequencyMonths}
+                />
+              </label>
+            ) : null}
+            <label className="crm-care-field">
+              <span>{t('crm.warranty.coverageStarts')}</span>
+              <input
+                onChange={(event) => setCoverageStartsOn(event.target.value)}
+                required
+                type="date"
+                value={coverageStartsOn}
+              />
+            </label>
+            <label className="crm-care-field">
+              <span>{t('crm.warranty.offerValidUntil')}</span>
+              <input
+                onChange={(event) => setValidUntil(event.target.value)}
+                required
+                type="date"
+                value={validUntil}
+              />
+            </label>
+          </div>
+          <label className="crm-care-field">
+            <span>{t('crm.warranty.offerTerms')}</span>
+            <textarea
+              maxLength={2000}
+              minLength={10}
+              onChange={(event) => setTerms(event.target.value)}
+              placeholder={t('crm.warranty.offerTermsHint')}
+              required
+              rows={4}
+              value={terms}
+            />
+          </label>
+        </FormSection>
+        <div className="crm-care-form-note">
+          <Icon name="shield" size={17} />
+          <span>
+            <strong>{t('crm.warranty.offerOnly')}</strong>
+            <small>{t('crm.warranty.offerOnlyHint')}</small>
+          </span>
+        </div>
+        <DrawerActions
+          busy={busy}
+          disabled={!quotedAmount || terms.trim().length < 10}
+          onBack={onBack}
+          submit={t('crm.warranty.saveOffer')}
+        />
+      </form>
     </CareDrawer>
   );
 }
@@ -1025,12 +1371,17 @@ function NewSurveyDrawer({
   sources: CrmAfterSalesOverview['surveySources'];
   token: string;
 }) {
+  const { t } = useLocalization();
   const [sourceKey, setSourceKey] = useState(
     initialSourceKey ?? (sources[0] ? `${sources[0].sourceKind}:${sources[0].id}` : ''),
   );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const selected = sources.find((item) => `${item.sourceKind}:${item.id}` === sourceKey);
+  const [recipientEmail, setRecipientEmail] = useState(selected?.recipientEmails[0] ?? '');
+  useEffect(() => {
+    setRecipientEmail(selected?.recipientEmails[0] ?? '');
+  }, [selected?.id]);
   async function submit(event: FormEvent) {
     event.preventDefault();
     if (!selected) return;
@@ -1039,6 +1390,7 @@ function NewSurveyDrawer({
     try {
       onSaved(
         await sendCrmSurvey(token, crypto.randomUUID(), {
+          recipientEmail,
           sourceId: selected.id,
           sourceKind: selected.sourceKind,
         }),
@@ -1058,7 +1410,7 @@ function NewSurveyDrawer({
     >
       <form className="crm-care-form" onSubmit={(event) => void submit(event)}>
         {error ? <InlineAlert tone="error">{error}</InlineAlert> : null}
-        <FormSection index="1" title="Choose completed work">
+        <FormSection index="1" title="Choose recipient and completed work">
           {!sources.length ? (
             <CareEmpty title="No completed work is waiting for a survey." />
           ) : (
@@ -1080,6 +1432,24 @@ function NewSurveyDrawer({
               </select>
             </label>
           )}
+          {selected?.recipientEmails.length ? (
+            <label className="crm-care-field">
+              <span>{t('survey.emailRecipient')}</span>
+              <select
+                onChange={(event) => setRecipientEmail(event.target.value)}
+                required
+                value={recipientEmail}
+              >
+                {selected.recipientEmails.map((email) => (
+                  <option key={email} value={email}>
+                    {email}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : selected ? (
+            <InlineAlert tone="warning">{t('survey.noEmail')}</InlineAlert>
+          ) : null}
           {selected ? (
             <div className="crm-care-selection">
               <Icon name={selected.sourceKind === 'service' ? 'service' : 'logistics'} size={18} />
@@ -1096,8 +1466,7 @@ function NewSurveyDrawer({
         </FormSection>
         <FormSection index="2" title="Survey question">
           <p className="crm-survey-instructions">
-            Share this question with the customer using your usual contact method, then record the
-            invitation.
+            The customer will receive an email with a private link to rate the completed work.
           </p>
           <div className="crm-survey-question">
             <strong>How likely are you to recommend Vista Service?</strong>
@@ -1107,14 +1476,22 @@ function NewSurveyDrawer({
         </FormSection>
         <DrawerActions
           busy={busy}
-          disabled={!selected}
+          disabled={!selected || !recipientEmail}
           onBack={onBack}
-          submit="Record invitation shared"
+          submit="Send survey"
         />
       </form>
     </CareDrawer>
   );
 }
+
+const surveyDeliveryTranslationKey = {
+  cancelled: 'survey.delivery.cancelled',
+  delivered: 'survey.delivery.delivered',
+  failed: 'survey.delivery.failed',
+  pending: 'survey.delivery.pending',
+  processing: 'survey.delivery.processing',
+} as const;
 
 function SurveyDrawer({
   canEdit,
@@ -1551,6 +1928,124 @@ function coverageText(card: CrmWarrantyCard) {
   if (card.remainingDays < 0) return `Ended ${Math.abs(card.remainingDays)} days ago`;
   if (card.remainingDays === 0) return 'Ends today';
   return `${card.remainingDays} days remaining`;
+}
+function businessToday(timezone: string) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    day: '2-digit',
+    month: '2-digit',
+    timeZone: timezone,
+    year: 'numeric',
+  }).formatToParts(new Date());
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values['year']}-${values['month']}-${values['day']}`;
+}
+function addCalendarDays(value: string, days: number) {
+  const date = new Date(`${value}T00:00:00.000Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+function monthText(count: number, t: ReturnType<typeof useLocalization>['t']) {
+  return count === 1 ? t('crm.warranty.oneMonth') : t('crm.warranty.months', { count });
+}
+function coverageOfferStatusLabel(status: CrmWarrantyCoverageOfferStatus) {
+  switch (status) {
+    case 'draft':
+      return 'crm.warranty.status.draft';
+    case 'offered':
+      return 'crm.warranty.status.offered';
+    case 'accepted':
+      return 'crm.warranty.status.accepted';
+    case 'declined':
+      return 'crm.warranty.status.declined';
+    case 'expired':
+      return 'crm.warranty.status.expired';
+  }
+  return 'crm.warranty.status.draft';
+}
+function printCoverageOffer(
+  offer: CrmWarrantyCoverageOffer,
+  t: ReturnType<typeof useLocalization>['t'],
+  timezone: string,
+) {
+  const target = window.open('', '_blank');
+  if (!target) return false;
+  const document = target.document;
+  document.documentElement.lang = window.document.documentElement.lang;
+  document.title = `${offer.number} · Vista Service`;
+  const style = document.createElement('style');
+  style.textContent = `
+    @page { size: A4; margin: 18mm; }
+    * { box-sizing: border-box; }
+    body { margin: 0; color: #20352b; font: 14px/1.5 Arial, sans-serif; }
+    main { max-width: 760px; margin: 0 auto; }
+    header { display: flex; justify-content: space-between; gap: 24px; padding-bottom: 22px; border-bottom: 2px solid #2b6545; }
+    h1 { margin: 24px 0 4px; font-size: 27px; }
+    h2 { margin: 0; color: #2b6545; font-size: 18px; }
+    p { margin: 8px 0; }
+    dl { display: grid; grid-template-columns: 1fr 1fr; margin: 22px 0; border: 1px solid #d5dfd8; border-radius: 10px; overflow: hidden; }
+    dl div { padding: 12px 14px; border-bottom: 1px solid #e4eae6; }
+    dt { color: #64736a; font-size: 11px; }
+    dd { margin: 4px 0 0; font-weight: 700; }
+    .price { font-size: 22px; font-weight: 700; text-align: right; }
+    .terms { margin-top: 22px; padding: 18px; border: 1px solid #d5dfd8; border-radius: 10px; white-space: pre-wrap; }
+    .foot { margin-top: 28px; color: #64736a; font-size: 11px; }
+    @media print { body { print-color-adjust: exact; } }
+  `;
+  document.head.replaceChildren(style);
+  const main = document.createElement('main');
+  const header = document.createElement('header');
+  const brand = document.createElement('div');
+  const brandTitle = document.createElement('h2');
+  brandTitle.textContent = 'Vista Service';
+  const brandSub = document.createElement('p');
+  brandSub.textContent = t('crm.warranty.coverageOffers');
+  brand.append(brandTitle, brandSub);
+  const amount = document.createElement('div');
+  amount.className = 'price';
+  amount.textContent = formatOperationsCurrency(offer.quotedAmount, offer.currencyCode);
+  header.append(brand, amount);
+  const heading = document.createElement('h1');
+  heading.textContent = `${offer.number} · ${t(offer.offerType === 'extended_warranty' ? 'crm.warranty.extendedWarranty' : 'crm.warranty.servicePlan')}`;
+  const summary = document.createElement('p');
+  summary.textContent = `${offer.customerName} · ${offer.deviceName} · ${offer.serialNumber}`;
+  const facts = document.createElement('dl');
+  const entries: Array<[string, string]> = [
+    [t('crm.warranty.coverageStarts'), formatDate(offer.coverageStartsOn, timezone)],
+    [t('crm.warranty.durationMonths'), monthText(offer.durationMonths, t)],
+    [t('crm.warranty.offerValidUntil'), formatDate(offer.validUntil, timezone)],
+    [t('crm.warranty.currentCoverageEnds'), formatDate(offer.warrantyEndsOn, timezone)],
+  ];
+  if (offer.visitFrequencyMonths)
+    entries.push([
+      t('crm.warranty.visitFrequencyMonths'),
+      offer.visitFrequencyMonths === 1
+        ? t('crm.warranty.everyMonth')
+        : t('crm.warranty.everyMonths', { count: offer.visitFrequencyMonths }),
+    ]);
+  for (const [label, value] of entries) {
+    const item = document.createElement('div');
+    const term = document.createElement('dt');
+    term.textContent = label;
+    const detail = document.createElement('dd');
+    detail.textContent = value;
+    item.append(term, detail);
+    facts.append(item);
+  }
+  const terms = document.createElement('section');
+  terms.className = 'terms';
+  const termsHeading = document.createElement('strong');
+  termsHeading.textContent = t('crm.warranty.offerTerms');
+  const termsContent = document.createElement('p');
+  termsContent.textContent = offer.terms;
+  terms.append(termsHeading, termsContent);
+  const footer = document.createElement('p');
+  footer.className = 'foot';
+  footer.textContent = t('crm.warranty.offerOnlyHint');
+  main.append(header, heading, summary, facts, terms, footer);
+  document.body.replaceChildren(main);
+  target.focus();
+  window.setTimeout(() => target.print(), 250);
+  return true;
 }
 function npsGroup(score: number) {
   return score >= 9 ? 'Promoter' : score >= 7 ? 'Passive' : 'Detractor';

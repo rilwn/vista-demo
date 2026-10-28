@@ -11,8 +11,35 @@ infrastructure or witnessed evidence; **Deferred** = accepted as outside the
 current rollout, still required by the SRS. Local verification is not hosted,
 statutory or hardware acceptance.
 
-Current: **49 locally verified** (hosted retest pending), **2 external acceptance**,
-**1 deferred** (52 findings total).
+Current: **50 locally verified** (hosted retest pending), **0 in progress**,
+**2 external acceptance** (BCK-01 and ORG-03), **0 pending** (52 findings
+total). BCK-01's local software scope is implemented. It supports encrypted,
+verified PostgreSQL and MySQL/MariaDB snapshots; IMAP email; WebDAV cloud
+folders; S3-compatible storage; and read-only mounted file, server, workstation
+and mobile-device snapshots. Email, WebDAV, S3 and mounted-folder sources
+support full, incremental and differential runs. Exported server/workstation
+images restore as isolated files. A selected email message restores as `.eml`,
+and an individual database row exports as audited JSON from an isolated
+PostgreSQL or MySQL/MariaDB restore. All restores are separately approved and
+isolated. BCK-01 remains external for Vista's real source inventory and
+credentials, physical backup storage/tape, independent-site isolation, and a
+witnessed replacement-hardware/site restore. Local completion does not replace
+hosted, provider, statutory, hardware or witnessed acceptance.
+
+POS hardware progress, 27 October 2026: DATECS FP-2000 checkout, X/Z reports,
+and linked return/storno software are implemented. The current POS browser/unit
+suite has 124 passing tests. The restricted offline DATECS cash-receipt path
+stores multi-line receipt intent before printing, supports saved customer and
+location details plus untracked, batch-tracked and serial-tracked products,
+reserves stock locally, and queues safe, idempotent sync after reconnect.
+Retry/conflict history is retained locally and copied idempotently to the server
+audit journal. This is specification work, not an additional Manager QA finding.
+Return recovery checks the
+printer journal without repeating a storno command; confirmation is idempotent
+and applies stock/payment effects once. All 8 isolated POS API integration tests,
+the fiscal adapter tests, and the focused DATECS lease integration test pass.
+Exact-unit H-18
+registration and physical-device acceptance remain external.
 
 Current implementation update, 14 October 2026: FIN-01, FIN-02, FIN-07, FIN-12,
 FIN-13, SEC-02, WH-01, WH-04, SAL-02, SRV-02, SRV-03 and CRM-10 are now
@@ -28,8 +55,7 @@ rejected a new BGN balance, and completed rollback/reapply on its disposable
 database. The migration regression, full API suite, and browser suite passed;
 `npm run validate` had also passed on this code before the migration-test-only
 addition. Hosted retests remain open. ORG-03 fiscal-device acceptance and
-BCK-01 witnessed backup/restore acceptance remain external evidence gates;
-LOG-01 remains deferred for this rollout.
+BCK-01 witnessed backup/restore acceptance remain external evidence gates.
 
 ## 1. Platform processing
 
@@ -59,14 +85,14 @@ LOG-01 remains deferred for this rollout.
 
 ## 3. Administration
 
-| Finding | Remaining work / verification                                                                                                                                                                                                                                                                    | Status              |
-| ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------- |
-| ORG-01  | Bulgarian UIC 9/13-digit checksums and EU VAT formats are validated in Business Structure, Partners, and CRM lead conversion. VAT registration is not checked. Hosted retest remains.                                                                                                            | Verified locally    |
-| ORG-02  | Version-checked edits and reversible deactivation for entities, branches, locations, operators and registers. Delete permission deactivates; Edit permission restores. Dependency guards prevent cascades; audit/outbox retain history. Hosted retest pending.                                   | Verified locally    |
-| ORG-03  | Adopt the reported DATECS FP-2000, connected through a local USB adapter; keep the protocol behind the fiscal-device interface and use the simulator in development. Exact-unit H-18 registration and a real receipt/reversal on the target POS remain hardware acceptance, not a code decision. | External acceptance |
-| SEC-01  | Admin role creation/editing, distinct role descriptions, five-action permission matrix, no-View warning, and Manager POS view without cashier privileges verified locally. Hosted retest pending.                                                                                                | Verified locally    |
-| SEC-02  | Backend-enforced verified TOTP is mandatory for administrators and optional for other roles. Enrollment, login enforcement, recovery, authorization and audit regressions pass locally. Hosted role/account retest remains.                                                                      | Verified locally    |
-| SEC-03  | Actual assigned role names, explicitly labelled active-session count and failed sign-in target display verified in API/browser. Hosted retest remains.                                                                                                                                           | Verified locally    |
+| Finding | Remaining work / verification                                                                                                                                                                                                                                                                                                                                                                                                                                                   | Status              |
+| ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------- |
+| ORG-01  | Bulgarian UIC 9/13-digit checksums and EU VAT formats are validated in Business Structure, Partners, and CRM lead conversion. VAT registration is not checked. Hosted retest remains.                                                                                                                                                                                                                                                                                           | Verified locally    |
+| ORG-02  | Version-checked edits and reversible deactivation for entities, branches, locations, operators and registers. Delete permission deactivates; Edit permission restores. Dependency guards prevent cascades; audit/outbox retain history. Hosted retest pending.                                                                                                                                                                                                                  | Verified locally    |
+| ORG-03  | DATECS FP-2000 checkout, X/Z reports and linked return/storno now use server-controlled, audited lifecycles. Printer uncertainty is recovered through read-only journal inspection; no blind retry is allowed. A confirmed storno applies payment and stock effects once. Adapter, all 8 isolated POS API integration tests, and the POS browser/unit suite pass locally. Exact-unit H-18 registration and physical receipt/reversal acceptance remain hardware evidence gates. | External acceptance |
+| SEC-01  | Admin role creation/editing, distinct role descriptions, five-action permission matrix, no-View warning, and Manager POS view without cashier privileges verified locally. Hosted retest pending.                                                                                                                                                                                                                                                                               | Verified locally    |
+| SEC-02  | Backend-enforced verified TOTP is mandatory for administrators and optional for other roles. Enrollment, login enforcement, recovery, authorization and audit regressions pass locally. Hosted role/account retest remains.                                                                                                                                                                                                                                                     | Verified locally    |
+| SEC-03  | Actual assigned role names, explicitly labelled active-session count and failed sign-in target display verified in API/browser. Hosted retest remains.                                                                                                                                                                                                                                                                                                                          | Verified locally    |
 
 ## 4. Warehouse
 
@@ -97,26 +123,26 @@ LOG-01 remains deferred for this rollout.
 
 ## 7. CRM
 
-| Finding | Remaining work / verification                                                                                                                                                                                                                                                                                                                                                         | Status           |
-| ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------- |
-| CRM-01  | Response/resolution at-risk and breach events, escalation recipients, delivered notifications and replay deduplication pass locally. Hosted retest pending.                                                                                                                                                                                                                           | Verified locally |
-| CRM-02  | Search customers, review shared locations/equipment, and open the selected serial's Service history. Local UI/type checks passed; hosted retest pending.                                                                                                                                                                                                                              | Verified locally |
-| CRM-03  | Service start/completion synchronizes equipment status; CRM cannot change/deactivate a device with open Service work. Retired devices stay visible in history but cannot receive new work. Locally tested; hosted retest pending.                                                                                                                                                     | Verified locally |
-| CRM-04  | Completing linked Service work resolves its still-open CRM ticket once, retaining the stable correlation ID and writing one history, audit, and outbox record. Isolated API verification passed; hosted retest pending.                                                                                                                                                               | Verified locally |
-| CRM-05  | Customer timeline combines CRM interactions/tasks, tickets, Service requests, Sales quotations and Finance payments in date order. Source records respect module access; payment values stay private. Local API and UI regressions passed; hosted retest pending.                                                                                                                     | Verified locally |
-| CRM-06  | Sales handover now links legacy equipment with a missing catalog-product link before card generation. CRM counts eligible sold serials and edit-authorized reconciliation creates only cards backed by accepted handovers or completed POS sales, with audit/outbox and retry protection. Locally verified; hosted retest pending.                                                    | Verified locally |
-| CRM-07  | Feedback & NPS lists completed Service jobs and accepted deliveries awaiting a survey; staff can open the preselected one-question survey, share it using their usual contact method, record the invitation and later save the customer's score. Duplicate attempts conflict; API/browser coverage passes locally. Automatic email remains subject to INT-001. Hosted retest pending. | Verified locally |
-| CRM-08  | Lead telephone values accept common local/international notation with 7–15 digits, without forcing a country. The form shows a bilingual field error and blocks invalid submission; API responds with a telephone-specific validation detail. Domain, CRM API, component, and browser checks pass locally. Hosted retest pending.                                                     | Verified locally |
-| CRM-09  | The pipeline now opens an unquoted opportunity when staff try to move it to Quotation sent, explains that a Sales quotation must be linked, and keeps the move disabled until linked. The API rejects direct attempts without changing stage/version; linking then moving passes locally. Hosted retest pending.                                                                      | Verified locally |
-| CRM-10  | Configurable Sofia weekday hours; response/resolution timers start on ticket creation and stop when the corresponding event is recorded; 4-business-hour response, 2-business-day resolution, 75% at-risk alerts and overdue notices to the assignee and CRM manager are implemented and locally tested. Public holidays are excluded initially.                                      | Verified locally |
+| Finding | Remaining work / verification                                                                                                                                                                                                                                                                                                                                                                                       | Status           |
+| ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------- |
+| CRM-01  | Response/resolution at-risk and breach events, escalation recipients, delivered notifications and replay deduplication pass locally. Hosted retest pending.                                                                                                                                                                                                                                                         | Verified locally |
+| CRM-02  | Search customers, review shared locations/equipment, and open the selected serial's Service history. Local UI/type checks passed; hosted retest pending.                                                                                                                                                                                                                                                            | Verified locally |
+| CRM-03  | Service start/completion synchronizes equipment status; CRM cannot change/deactivate a device with open Service work. Retired devices stay visible in history but cannot receive new work. Locally tested; hosted retest pending.                                                                                                                                                                                   | Verified locally |
+| CRM-04  | Completing linked Service work resolves its still-open CRM ticket once, retaining the stable correlation ID and writing one history, audit, and outbox record. Isolated API verification passed; hosted retest pending.                                                                                                                                                                                             | Verified locally |
+| CRM-05  | Customer timeline combines CRM interactions/tasks, tickets, Service requests, Sales quotations and Finance payments in date order. Source records respect module access; payment values stay private. Local API and UI regressions passed; hosted retest pending.                                                                                                                                                   | Verified locally |
+| CRM-06  | Sales handover now links legacy equipment with a missing catalog-product link before card generation. CRM counts eligible sold serials and edit-authorized reconciliation creates only cards backed by accepted handovers or completed POS sales, with audit/outbox and retry protection. Locally verified; hosted retest pending.                                                                                  | Verified locally |
+| CRM-07  | Feedback & NPS lists completed Service jobs and accepted deliveries awaiting a survey. Staff select an active customer email; the bilingual invitation is queued with a private 90-day response link. The customer can submit once without signing in; score/source, audit and NPS update are linked, and the email retry is safe. PostgreSQL/API and EN/BG browser tests pass locally. Hosted SMTP retest pending. | Verified locally |
+| CRM-08  | Lead telephone values accept common local/international notation with 7–15 digits, without forcing a country. The form shows a bilingual field error and blocks invalid submission; API responds with a telephone-specific validation detail. Domain, CRM API, component, and browser checks pass locally. Hosted retest pending.                                                                                   | Verified locally |
+| CRM-09  | The pipeline now opens an unquoted opportunity when staff try to move it to Quotation sent, explains that a Sales quotation must be linked, and keeps the move disabled until linked. The API rejects direct attempts without changing stage/version; linking then moving passes locally. Hosted retest pending.                                                                                                    | Verified locally |
+| CRM-10  | Configurable Sofia weekday hours; response/resolution timers start on ticket creation and stop when the corresponding event is recorded; 4-business-hour response, 2-business-day resolution, 75% at-risk alerts and overdue notices to the assignee and CRM manager are implemented and locally tested. Public holidays are excluded initially.                                                                    | Verified locally |
 
 ## 8. Logistics, POS and Recovery
 
-| Finding | Remaining work / verification                                                                                                                                                                                                                                                                                                                     | Status              |
-| ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------- |
-| LOG-01  | Courier adapters are deferred for the current rollout; Econt/Speedy remain in the SRS and require vendor details and acceptance before activation.                                                                                                                                                                                                | Deferred            |
-| POS-01  | Operations opens POS Reports at the configured public URL. Manager can review all views without export/write access; POS Operator can create exports. Isolated API/browser checks and frontend build pass locally. Hosted retest pending.                                                                                                         | Verified locally    |
-| BCK-01  | Use the ADR-0004 baseline: deployed Vista database/object storage first, hourly critical database recovery points, daily full backups, 1h/4h critical RPO/RTO, encrypted independent copy and separated backup roles. Remaining evidence is the actual asset/hardware inventory and witnessed restore; production destructive actions stay gated. | External acceptance |
+| Finding | Remaining work / verification                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | Status              |
+| ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------- |
+| LOG-01  | Econt and Speedy adapters, booking, parcel tracking, saved event history, duplicate-safe retry and manual reconciliation are implemented. Adapter tests and an isolated API/database journey pass; live booking remains gated on provider credentials and hosted retest.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | Verified locally    |
+| POS-01  | Operations opens POS Reports at the configured public URL. Manager can review all views without export/write access; POS Operator can create exports. Isolated API/browser checks and frontend build pass locally. Hosted retest pending.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | Verified locally    |
+| BCK-01  | Recovery supports protected-source inventory and policies; encrypted, verified PostgreSQL/MySQL/MariaDB snapshots; IMAP email; WebDAV cloud folders; S3-compatible storage; mounted file/server/workstation/mobile-device snapshots; full/incremental/differential file, email and cloud runs; exported system-image recovery; single-message `.eml` and database-record JSON recovery; independent approval, audit and isolated restore. The API Backup integration suite passes 13/13, Backup unit tests 56/56, Recovery UI tests 36/36, and a disposable MariaDB engine test passed dump/restore/record export. Local software work is complete. Real source inventory and credentials, physical backup storage/tape, independent-site isolation and witnessed replacement-hardware/site restore remain external. | External acceptance |
 
 ## 9. Shared interface
 
@@ -690,6 +716,18 @@ Hosted verification remains open.
 - Hosted activity backlog review remains pending. No hosted records or local
   business data were changed.
 
+## Survey follow-up evidence, 26 October 2026
+
+- CRM-07's automatic email gap is now closed locally. Survey invitations are
+  queued to a selected active partner contact through the retryable email
+  service. The private 90-day link accepts one anonymous response, records it
+  against its Service/delivery source, and updates NPS once. Token hashes,
+  expiry, audit/outbox, replay and duplicate-response checks pass in the
+  PostgreSQL/API integration workflow. English and Bulgarian public-page and
+  authenticated CRM browser tests pass.
+- Local test email is captured by Mailpit. Retest SMTP delivery on staging
+  after production email settings are configured. No hosted data was changed.
+
 ## Release checks
 
 - Unit/type/lint/build checks for each implementation batch.
@@ -697,3 +735,113 @@ Hosted verification remains open.
 - After deployment, recheck processing and the notification endpoint on the hosted
   environment. Capture safe error codes/references, never credentials or secrets.
 - Keep TESTME.md short and navigation-based. Preserve its current user edits.
+
+## Backup QA follow-up, 28 October 2026
+
+BCK-01's notification gap is now partly closed locally. Verified, final-failure,
+and missed-schedule alerts are deduplicated and queued to Backup-authorized
+employees through in-system and email channels. An optional Twilio SMS adapter
+is implemented and tested but stays disabled until deployment credentials and
+recipient numbers are set. Retry, duplicate, configuration, and isolated
+PostgreSQL lifecycle tests for these alerts pass. The annual plan-review page,
+immutable source/policy snapshot, approval/audit record and daily change/annual
+reminders are implemented; the isolated PostgreSQL lifecycle suite passes 4/4.
+BCK-01 remains **In progress**. Encrypted full backups of Vista's managed
+S3-compatible file store and second-person-approved recovery into an isolated
+generated prefix now support both the full snapshot and one explicitly selected
+file. API integration verifies that a single-file restore copies only that
+object and leaves live files untouched; the full-snapshot path remains intact.
+Archive tests pass 6/6, the focused Backup integration lifecycle passes 5/5,
+migration rollback/reapply succeeds, and the isolated API suite passes 380/380.
+The browser suite passed 65/66; the remaining trade-flow test had an ambiguous
+selector and stale button name, both corrected, and that full scenario then
+passed independently. Remaining local items are listed in the finding above;
+physical inventory, separate site storage and witnessed acceptance remain
+external.
+
+Mounted-share follow-up: a full encrypted backup adapter now handles one
+read-only mounted folder per policy. It detects unsafe links and source changes,
+verifies a source-bound per-file manifest, and supports approval-scoped full or
+single-file recovery to an isolated storage prefix. The Coolify API receives the
+configured host mount read-only at `/protected-sources`; absent or unsafe mounts
+cannot be approved. Archive tests pass 3/3; the isolated API suite passes
+384/384, including policy approval, execution, verification, full and single-file
+recovery, source immutability and migration protections. The connected trade
+browser regression passes 1/1. Real Vista share access and site restore remain
+acceptance evidence, not locally verifiable tests.
+
+Mounted-share incremental/differential follow-up, 28 October 2026: incremental
+runs link to the preceding verified run; differential runs link to the verified
+full baseline. Isolated recovery reconstructs the selected snapshot from its
+verified lineage, including additions, changes and deletions; a required base
+cannot be removed while dependent runs remain. Archive unit tests pass 5/5 and
+the isolated PostgreSQL backup integration suite passes 9/9, including migration
+rollback/reapply and both recovery modes. This closes only the mounted-share
+incremental/differential portion of BCK-01; other local adapters and recovery
+modes remain open.
+
+Managed object-store incremental/differential follow-up, 28 October 2026:
+managed-file policies now create a full first baseline, then incremental deltas
+from the preceding verified run or differential deltas from the full baseline.
+Each manifest records changed objects, hashes and deletions; restore verifies
+and reconstructs the selected snapshot into a new isolated prefix. Tests cover
+changed, unchanged, added, deleted and reverted objects, base-retention
+protection, and a complete approved restore. Archive tests pass 7/7 and the
+isolated PostgreSQL backup lifecycle suite passes 9/9. Other source adapters,
+At that point, system-image recovery, cross-run/block-level deduplication and granular/server recovery remained open;
+BCK-01 is still in progress.
+
+Managed object-store duplicate-payload follow-up, 28 October 2026: identical
+object contents within one archive are stored once and referenced by their
+other keys. Manifest parsing verifies the referenced object and checksum before
+restore; full and delta restores retain every original key. Archive tests pass
+8/8. Cross-run deduplication was added in the follow-up below.
+
+Cross-run file deduplication follow-up, 28 October 2026: incremental and
+differential archives for managed object storage and mounted shares now reuse
+matching payloads from the verified prior snapshot, including when an object or
+file moves to a new key. Restore validates the prior content hash and size,
+reconstructs the new snapshot, and retains one-file recovery after a path change.
+Object-store archive tests pass 12/12, mounted-share archive tests pass 6/6,
+and the isolated PostgreSQL backup lifecycle suite passes 9/9. The enhanced
+object-store block format keeps older archive versions readable. Remaining
+local BCK-01 work is source coverage and recovery modes, not a separate
+block-granularity requirement.
+
+Critical schedule control follow-up, 28 October 2026: pausing an active backup
+schedule now creates a pending disable-job request without stopping the job. A
+different authorised user must approve or reject it; approval pauses the
+version-checked policy, rejection leaves it active, and resuming revalidates the
+source and encryption configuration. Audit/outbox evidence, duplicate-request
+rejection, stale/expired handling, migration rollback/reapply, UI approval and
+the isolated API lifecycle are covered. The full isolated API suite passes
+384/384. This closes only job disabling under BCK-01; other named local items
+remain open. The browser acceptance rerun is blocked because the Playwright
+Chromium executable is not installed in this development environment.
+
+S3-compatible source follow-up, 28 October 2026: configured external buckets can
+use full, incremental and differential backups with encrypted artifacts and
+independently approved isolated recovery. Credentials stay in deployment
+secrets; new unconfigured sources are rejected. Migration 0117 preserves the
+mapping of existing managed-file sources and records each new run's bucket and
+non-secret endpoint fingerprint. A changed source starts a fresh full baseline;
+verification and restore do not require the source or its credentials. Eleven
+disposable PostgreSQL lifecycle/upgrade tests and one real local MinIO protocol
+test pass. Live provider configuration and acceptance remain unverified.
+
+Additional PostgreSQL recovery follow-up, 28 October 2026: a separately mapped
+PostgreSQL database without Vista tables can be backed up and restored into an
+isolated database after its source connection is removed. Both `postgres://`
+and `postgresql://` source URLs are supported. Vista archive restoration still
+checks for its migration ledger. The disposable database lifecycle verifies the
+restored reporting record and the absence of Vista's schema.
+
+Backup software closure, 28 October 2026: added immutable database-engine
+snapshots for MySQL/MariaDB and isolated one-record recovery for PostgreSQL and
+MySQL/MariaDB; added the Recovery record-export flow; and documented selected
+email-message and exported server-image recovery. The full Backup API
+integration suite passes 13/13, the Backup API unit suite 56/56, the Recovery UI
+suite 36/36, both app typechecks pass, and a disposable MariaDB dump/restore/
+record-recovery run passes. The remaining BCK-01 work is external acceptance:
+real-source setup, physical/isolated storage, and a witnessed replacement-
+hardware/site restore.

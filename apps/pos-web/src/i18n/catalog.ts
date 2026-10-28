@@ -263,6 +263,47 @@ export const bgText: Readonly<Record<string, string>> = {
   'Latest 50 events. Confirmed receipts remain in Sale history.':
     'Последните 50 събития. Потвърдените бележки остават в История на продажбите.',
   'No checkout activity has been saved here yet.': 'Все още няма запазени действия по плащанията.',
+  'Offline sales': 'Офлайн продажби',
+  'Printed DATECS receipts are saved here until the server confirms them.':
+    'Отпечатаните бележки от DATECS се пазят тук, докато сървърът ги потвърди.',
+  'No receipt issued': 'Не е издадена бележка',
+  'Needs review': 'Нужна е проверка',
+  'Check the printer': 'Проверете фискалното устройство',
+  'Waiting to sync': 'Чака синхронизация',
+  Syncing: 'Синхронизиране',
+  'Recorded in Sale history': 'Записано в История на продажбите',
+  'Printer confirmation required': 'Необходимо е потвърждение от устройството',
+  'Receipt not yet recorded': 'Бележката още не е записана',
+  'Offline · DATECS cash sales only': 'Офлайн · продажби в брой само с DATECS',
+  'Last-known prices and stock are shown. Offline cash sales use the connected DATECS device. Saved customer records, prices, and available serials can be used. Lot-tracked products require a selected available batch. Promotions, discounts, and loyalty points are unavailable offline.':
+    'Офлайн продажбите в брой използват последните запазени цени и наличности и свързаното устройство DATECS. Могат да се използват запазените клиентски данни и налични серийни номера. За продуктите с проследяване по партиди изберете налична партида. Промоциите, отстъпките и използването на точки не са достъпни офлайн.',
+  'Promotions, discounts, and loyalty points are unavailable offline.':
+    'Промоциите, отстъпките и използването на точки не са достъпни офлайн.',
+  'Choose a serial number saved as available for this counter.':
+    'Изберете сериен номер, записан като наличен за тази каса.',
+  'Showing customer records saved on this device.':
+    'Показани са клиентите, запазени на това устройство.',
+  'No customer records are saved on this device. Reconnect to search.':
+    'На това устройство няма запазени клиенти. Възстановете връзката, за да търсите.',
+  'Choose an available batch for each lot-tracked product.':
+    'Изберете налична партида за всеки артикул с проследяване по партиди.',
+  'The quantity exceeds the last stock count saved for this counter.':
+    'Количеството надвишава последната запазена наличност за тази каса.',
+  'A product price or VAT setting is missing from the saved counter data.':
+    'В запазените данни за касата липсва цена или настройка за ДДС.',
+  'Offline sales require the connected DATECS fiscal device. Test receipt mode is not available offline.':
+    'Офлайн продажбите изискват свързано фискално устройство DATECS. Тестовият режим не работи офлайн.',
+  'Offline sales currently accept cash only.':
+    'Офлайн продажбите засега приемат само плащане в брой.',
+  'Enter enough cash to cover this sale.': 'Въведете достатъчно пари в брой за продажбата.',
+  'Receipt {receipt} printed. This sale is saved on this device and will sync when the connection returns.':
+    'Бележка {receipt} е отпечатана. Продажбата е запазена на устройството и ще се синхронизира при възстановяване на връзката.',
+  'The printer did not issue a receipt. Start a new sale after checking the printer.':
+    'Устройството не издаде бележка. Проверете го, преди да започнете нова продажба.',
+  'The printer outcome is uncertain. Check the DATECS journal before taking another sale.':
+    'Резултатът от устройството не е сигурен. Проверете DATECS журнала, преди да направите друга продажба.',
+  'Offline receipt {receipt} was added to Sale history.':
+    'Офлайн бележка {receipt} е добавена в История на продажбите.',
   Dismiss: 'Скриване',
   'Review takings, returns, cash, products, and counter performance.':
     'Преглеждайте обороти, връщания, каса, продукти и резултати на работното място.',
@@ -375,8 +416,84 @@ export const bgText: Readonly<Record<string, string>> = {
   'Open a shift to use stock': 'Отворете смяна, за да използвате наличност',
   'Fiscal device unavailable': 'Фискалното устройство не е достъпно',
   'Network available': 'Има мрежова връзка',
-  'Offline · reconnect to complete sales':
-    'Офлайн · свържете се отново, за да завършите продажбите',
+  'Offline · sale payment paused': 'Офлайн · плащанията са спрени',
+  'DATECS FP-2000 setup': 'Настройка на DATECS FP-2000',
+  'Printer details are saved on this terminal; the password is not saved.':
+    'Данните за принтера се пазят на този терминал; паролата не се записва.',
+  'Fiscal device': 'Фискално устройство',
+  'Device serial': 'Сериен номер на устройството',
+  '8 characters': '8 знака',
+  'Operator ID': 'Идентификатор на оператора',
+  '4 characters': '4 знака',
+  'Operator number': 'Номер на оператора',
+  'Register number': 'Номер на касата',
+  'Operator password': 'Парола на оператора',
+  'Enter before each sale': 'Въведете преди всяка продажба',
+  'VAT group mapping': 'Групи по ДДС',
+  'Standard 20%': 'Стандартна ставка 20%',
+  'Reduced 9%': 'Намалена ставка 9%',
+  'Zero rate': 'Нулева ставка',
+  Exempt: 'Освободена доставка',
+  'Intra-community acquisition': 'Вътреобщностно придобиване',
+  'Default mapping: B 20%, C 9%, D 0%, E exempt. Printer settings are checked before each receipt.':
+    'Препоръчително съответствие: B 20%, C 9%, D 0%, E освободена доставка. Настройките на принтера се проверяват преди всяка бележка.',
+  'Pending fiscal receipt': 'Чакаща фискална бележка',
+  'Printer outcome needs review': 'Резултатът от принтера трябва да се провери',
+  'Ready to print': 'Готова за печат',
+  'Receipt may be printing': 'Бележката може да се печата',
+  'Receipt confirmed': 'Бележката е потвърдена',
+  'Receipt reference': 'Номер на продажбата',
+  'Do not print again. Reconnect to the same printer and check its last receipt.':
+    'Не печатайте отново. Свържете същия принтер и проверете последната му бележка.',
+  'Stock is held while this unprinted receipt is waiting.':
+    'Наличността е запазена, докато тази непечатана бележка чака.',
+  'The receipt is saved. Posting the sale will not print a second receipt.':
+    'Бележката е записана. При осчетоводяване на продажбата няма да се отпечата втора бележка.',
+  'Continue receipt': 'Продължаване на бележката',
+  'Post confirmed sale': 'Записване на потвърдената продажба',
+  'Check printer': 'Проверка на принтера',
+  'Cancel unprinted sale': 'Отказ на непечатаната продажба',
+  'Fiscal sale status could not be checked':
+    'Състоянието на фискалната продажба не може да се провери',
+  'The fiscal receipt status could not be checked. Refresh before taking payment.':
+    'Състоянието на фискалната бележка не може да се провери. Обновете преди плащане.',
+  'Checking the fiscal printer status…': 'Проверка на фискалния принтер…',
+  'Review the pending fiscal receipt before starting another sale.':
+    'Проверете чакащата фискална бележка преди нова продажба.',
+  'The connected DATECS flow currently accepts cash payments only.':
+    'Свързаният DATECS процес засега приема само плащане в брой.',
+  'Loading the fiscal printer settings…': 'Зареждане на настройките на фискалния принтер…',
+  'Complete the fiscal printer settings before taking payment.':
+    'Попълнете настройките на фискалния принтер преди плащане.',
+  'Enter the DATECS operator password for this sale.':
+    'Въведете паролата на DATECS оператора за тази продажба.',
+  'Enter valid printer settings and the operator password before continuing this receipt.':
+    'Въведете правилните настройки на принтера и паролата на оператора, преди да продължите с бележката.',
+  'The unprinted sale was cancelled and its stock was released.':
+    'Непечатаната продажба е отказана и запазената наличност е освободена.',
+  'The printer cancelled this receipt. No sale was posted.':
+    'Принтерът отказа тази бележка. Продажбата не е записана.',
+  'The printer refused to open the receipt. No sale was posted.':
+    'Принтерът отказа да отвори бележката. Продажбата не е записана.',
+  'The printer’s last receipt does not match this sale. Do not retry it; ask a manager to check the printer and receipt.':
+    'Последната бележка на принтера не съвпада с тази продажба. Не опитвайте отново; помолете ръководител да провери принтера и бележката.',
+  'The cashier register is not available.': 'Касата не е достъпна.',
+  'Check again': 'Проверете отново',
+  'Connection lost': 'Връзката е прекъсната',
+  'Using saved counter data': 'Използват се запазени касови данни',
+  'Prices and stock are last known. Reconnect and refresh before taking payment.':
+    'Показани са последните известни цени и наличности. Свържете се и обновете данните преди плащане.',
+  'Saved shortcuts · last known prices and stock':
+    'Запазени бързи бутони · последни известни цени и наличности',
+  'Reconnect before taking payment or completing a sale.':
+    'Свържете се отново преди плащане или приключване на продажба.',
+  'Restoring the saved basket…': 'Възстановяване на запазената кошница…',
+  'The saved basket was cleared because its cashier shift is closed.':
+    'Запазената кошница беше изчистена, защото касиерската смяна е затворена.',
+  'This basket could not be saved on this device. Keep the counter open and reconnect.':
+    'Кошницата не може да бъде запазена на това устройство. Оставете касата отворена и възстановете връзката.',
+  'No saved product data is available for this counter yet.':
+    'Все още няма запазени продуктови данни за тази каса.',
 };
 
 export function bg(text: string): string {

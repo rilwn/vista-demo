@@ -13,6 +13,15 @@ RUN npm prune --omit=dev --ignore-scripts --no-audit --no-fund
 
 FROM node:22.23.2-bookworm-slim AS api
 ENV NODE_ENV=production DOTENV_CONFIG_PATH=/dev/null API_HOST=0.0.0.0 API_PORT=3000
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates curl \
+    && install -d /etc/apt/keyrings \
+    && curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc -o /etc/apt/keyrings/postgresql.asc \
+    && echo "deb [signed-by=/etc/apt/keyrings/postgresql.asc] https://apt.postgresql.org/pub/repos/apt bookworm-pgdg main" > /etc/apt/sources.list.d/postgresql.list \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends postgresql-client-16 mariadb-client \
+    && apt-get purge -y --auto-remove curl \
+    && rm -rf /var/lib/apt/lists/*
 WORKDIR /workspace
 COPY --from=production-dependencies /workspace/node_modules ./node_modules
 COPY package.json ./

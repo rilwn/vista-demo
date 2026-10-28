@@ -314,6 +314,12 @@ describe.skipIf(!runInfrastructureTests)('partner master-data vertical slice', (
   it('registers every named scheduled handler and deduplicates its durable trigger', async () => {
     const handlers = application.get(JobHandlerRegistry);
     const expectedNames = [...namedBackgroundJobs].sort();
+    const scheduledNames = expectedNames.filter(
+      (name) =>
+        !['backup.execute', 'backup.verify', 'backup.restore.execute', 'report.generate'].includes(
+          name,
+        ),
+    );
     expect(handlers.registeredNames()).toEqual(
       [...expectedNames, 'integration.event.consume', 'notification.dispatch'].sort(),
     );
@@ -324,7 +330,7 @@ describe.skipIf(!runInfrastructureTests)('partner master-data vertical slice', (
       .mockImplementation(() => Promise.resolve(new Response(bnbFixture, { status: 200 })));
 
     try {
-      for (const name of expectedNames) {
+      for (const name of scheduledNames) {
         const context = {
           attemptNumber: 1,
           correlationId: `scheduled${runId}`,
@@ -349,7 +355,7 @@ describe.skipIf(!runInfrastructureTests)('partner master-data vertical slice', (
        WHERE aggregate_type = 'scheduled_job' AND correlation_id = $1`,
       [`scheduled${runId}`],
     );
-    expect(evidence.rows[0]?.count).toBe(String(expectedNames.length));
+    expect(evidence.rows[0]?.count).toBe(String(scheduledNames.length));
     const states = await database.query<{ event_type: string; status: string }>(
       `SELECT event_type, status FROM integration.outbox_events
        WHERE aggregate_type = 'scheduled_job' AND correlation_id = $1`,
@@ -368,9 +374,6 @@ describe.skipIf(!runInfrastructureTests)('partner master-data vertical slice', (
         states.rows.find((row) => row.event_type === `scheduler.${name}.requested`)?.status,
       ).toBe('completed');
     }
-    expect(
-      states.rows.find((row) => row.event_type === 'scheduler.backup.verify.requested')?.status,
-    ).toBe('pending');
     const importedRate = await database.query<{ eur_per_unit: string; rate_date: string }>(
       `SELECT eur_per_unit::text, rate_date::text
        FROM finance.currency_rates

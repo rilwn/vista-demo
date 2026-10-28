@@ -27,6 +27,8 @@ import type { AuthenticatedRequest } from '../auth/authentication.types.js';
 import type { CorrelatedRequest } from '../common/correlation-id.middleware.js';
 import { RateLimitPolicy } from '../security/rate-limit.decorator.js';
 import {
+  AcceptanceProtocolDto,
+  CreateAcceptanceProtocolDto,
   CreatePurchaseOrderDto,
   CreateSupplierClaimDto,
   CreateSupplierEvaluationDto,
@@ -121,6 +123,37 @@ export class ProcurementController {
     @Req() request: AuthenticatedRequest,
   ): Promise<GoodsReceiptDto> {
     return this.procurement.receivePurchaseOrder(
+      id,
+      input,
+      key,
+      request.authentication,
+      metadata(request),
+    );
+  }
+
+  @Get('goods-receipts/:id/acceptance-protocol')
+  @RateLimitPolicy('read')
+  @RequirePermissions({ action: 'view', module: 'erp.procurement' })
+  @ApiOkResponse({ type: AcceptanceProtocolDto })
+  @ApiParam({ format: 'uuid', name: 'id' })
+  acceptanceProtocol(@Param('id') id: string): Promise<AcceptanceProtocolDto> {
+    return this.procurement.acceptanceProtocol(id);
+  }
+
+  @Post('goods-receipts/:id/acceptance-protocol')
+  @HttpCode(HttpStatus.CREATED)
+  @RequirePermissions({ action: 'create', module: 'erp.procurement' })
+  @ApiBody({ type: CreateAcceptanceProtocolDto })
+  @ApiCreatedResponse({ type: AcceptanceProtocolDto })
+  @ApiHeader({ name: 'Idempotency-Key', required: true })
+  @ApiParam({ format: 'uuid', name: 'id' })
+  createAcceptanceProtocol(
+    @Body() input: CreateAcceptanceProtocolDto,
+    @Headers('idempotency-key') key: string | undefined,
+    @Param('id') id: string,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<AcceptanceProtocolDto> {
+    return this.procurement.createAcceptanceProtocol(
       id,
       input,
       key,

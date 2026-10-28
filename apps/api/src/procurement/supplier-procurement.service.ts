@@ -24,6 +24,7 @@ import type {
 } from '../auth/authentication.types.js';
 import { ApiErrorException } from '../common/api-error.exception.js';
 import { DatabaseService } from '../database/database.service.js';
+import { BnbCurrencyRatesService } from '../finance/bnb-currency-rates.service.js';
 
 type ClaimedCommand = { request_hash: string; response_body: unknown; status: string };
 
@@ -32,6 +33,7 @@ export class SupplierProcurementService {
   constructor(
     @Inject(DatabaseService) private readonly database: DatabaseService,
     @Inject(AuditService) private readonly audit: AuditService,
+    @Inject(BnbCurrencyRatesService) private readonly currencyRates: BnbCurrencyRatesService,
   ) {}
 
   async suppliers(): Promise<ProcurementSupplierRecord[]> {
@@ -216,12 +218,16 @@ export class SupplierProcurementService {
             'One or more invoice lines do not belong to the purchase order',
             HttpStatus.NOT_FOUND,
           );
+        const rate = await this.currencyRates.latestRate(
+          orderRow.currency_code,
+          normalized.invoiceDate,
+        );
         const invoiceId = randomUUID();
         await client.query(
           `INSERT INTO procurement.supplier_invoices (
            id, purchase_order_id, supplier_partner_id, supplier_invoice_number,
-           invoice_date, currency_code, recorded_by
-         ) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+           invoice_date, currency_code, exchange_rate, rate_date, rate_source, recorded_by
+         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
           [
             invoiceId,
             normalized.purchaseOrderId,
@@ -229,6 +235,9 @@ export class SupplierProcurementService {
             normalized.invoiceNumber,
             normalized.invoiceDate,
             orderRow.currency_code,
+            rate.exchangeRate,
+            rate.rateDate,
+            rate.rateSource,
             auth.accountId,
           ],
         );
@@ -559,11 +568,14 @@ export class SupplierProcurementService {
   private async loadInvoice(client: PoolClient, id: string): Promise<SupplierInvoice> {
     const invoice = await client.query<{
       currency_code: string;
+      exchange_rate: string | null;
       id: string;
       invoice_date: string;
       invoice_number: string;
       purchase_order_id: string;
       recorded_at: string;
+      rate_date: string | null;
+      rate_source: 'BNB' | 'internal_eur' | null;
       supplier_name: string;
       supplier_partner_id: string;
       tax_breakdown_complete: boolean;
@@ -575,6 +587,7 @@ export class SupplierProcurementService {
               supplier.display_name AS supplier_name,
               invoice.supplier_invoice_number AS invoice_number,
               invoice.invoice_date::text, invoice.currency_code, invoice.recorded_at::text,
+              invoice.exchange_rate::text, invoice.rate_date::text, invoice.rate_source,
               COALESCE(sum(line.line_total), 0)::text AS net_total,
               COALESCE(sum(line.vat_amount), 0)::text AS vat_total,
               COALESCE(sum(line.gross_total), 0)::text AS total,
@@ -620,9 +633,12 @@ export class SupplierProcurementService {
     );
     return {
       currencyCode: row.currency_code,
+      ...(row.exchange_rate ? { exchangeRate: row.exchange_rate } : {}),
       id: row.id,
       invoiceDate: row.invoice_date,
       invoiceNumber: row.invoice_number,
+      ...(row.rate_date ? { rateDate: row.rate_date } : {}),
+      ...(row.rate_source ? { rateSource: row.rate_source } : {}),
       lines: lines.rows.map(invoiceLine),
       netTotal: row.net_total,
       purchaseOrderId: row.purchase_order_id,

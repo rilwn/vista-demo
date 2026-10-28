@@ -18,6 +18,7 @@ export interface AuthSession extends LoginResponse {
 }
 
 interface AuthContextValue {
+  accept: (authenticated: LoginResponse) => Promise<void>;
   hasPermission: (module: string, action?: string) => boolean;
   login: (input: LoginRequest) => Promise<void>;
   logout: () => Promise<void>;
@@ -79,8 +80,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
     };
   }, [clearSession, session]);
 
-  const login = useCallback(async (input: LoginRequest) => {
-    const authenticated = await authenticate(input);
+  const accept = useCallback(async (authenticated: LoginResponse) => {
     let context: AuthenticationContextResponse;
     try {
       context = await getCurrentAccount(authenticated.sessionToken);
@@ -97,6 +97,13 @@ export function AuthProvider({ children }: PropsWithChildren) {
     setSession(nextSession);
     setStatus('authenticated');
   }, []);
+
+  const login = useCallback(
+    async (input: LoginRequest) => {
+      await accept(await authenticate(input));
+    },
+    [accept],
+  );
 
   const logout = useCallback(async () => {
     const token = session?.sessionToken;
@@ -120,8 +127,8 @@ export function AuthProvider({ children }: PropsWithChildren) {
   );
 
   const value = useMemo<AuthContextValue>(
-    () => ({ hasPermission, login, logout, session, status }),
-    [hasPermission, login, logout, session, status],
+    () => ({ accept, hasPermission, login, logout, session, status }),
+    [accept, hasPermission, login, logout, session, status],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

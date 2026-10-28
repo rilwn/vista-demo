@@ -12,6 +12,7 @@ import {
   Max,
   MaxLength,
   Min,
+  MinLength,
 } from 'class-validator';
 import type {
   CreateCustomerAdvanceRequest,
@@ -28,9 +29,68 @@ import type {
   PosAccountPayment,
   PosAccountReturnCredit,
   CreatePosAccountRefundRequest,
+  ApplyCustomerAdvanceToPosSaleRequest,
+  CustomerPaymentStatusFilter,
+  CustomerPaymentStatusPage,
+  CustomerPaymentStatusQuery,
+  CustomerPaymentStatusRecord,
 } from '@vista/contracts';
 
 const amountPattern = /^\d+(\.\d{1,4})?$/u;
+
+export class CustomerPaymentStatusQueryDto implements CustomerPaymentStatusQuery {
+  @ApiPropertyOptional({ default: 1, minimum: 1, type: Number })
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  page = 1;
+
+  @ApiPropertyOptional({ default: 25, maximum: 100, minimum: 1, type: Number })
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  pageSize = 25;
+
+  @ApiPropertyOptional({ maxLength: 120, minLength: 2, type: String })
+  @IsOptional()
+  @IsString()
+  @MinLength(2)
+  @MaxLength(120)
+  search?: string;
+
+  @ApiPropertyOptional({ enum: ['unpaid', 'partially_paid', 'paid', 'overdue'] })
+  @IsOptional()
+  @IsIn(['unpaid', 'partially_paid', 'paid', 'overdue'])
+  status?: CustomerPaymentStatusFilter;
+}
+
+class CustomerPaymentStatusRecordDto implements CustomerPaymentStatusRecord {
+  @ApiProperty({ type: String }) creditTotal!: string;
+  @ApiProperty({ type: String }) currencyCode!: string;
+  @ApiProperty({ type: String }) customerName!: string;
+  @ApiProperty({ format: 'uuid', type: String }) customerPartnerId!: string;
+  @ApiProperty({ format: 'date', type: String }) dueDate!: string;
+  @ApiProperty({ format: 'uuid', type: String }) id!: string;
+  @ApiProperty({ type: String }) number!: string;
+  @ApiProperty({ type: String }) outstandingTotal!: string;
+  @ApiProperty({ type: String }) paidTotal!: string;
+  @ApiProperty({ enum: ['unpaid', 'partially_paid', 'paid', 'overdue'] })
+  paymentStatus!: CustomerPaymentStatusFilter;
+  @ApiPropertyOptional({ type: String }) referenceNumber?: string;
+  @ApiProperty({ enum: ['issued_document', 'pos_sale'] })
+  sourceType!: CustomerPaymentStatusRecord['sourceType'];
+  @ApiProperty({ type: String }) total!: string;
+}
+
+export class CustomerPaymentStatusPageDto implements CustomerPaymentStatusPage {
+  @ApiProperty({ isArray: true, type: CustomerPaymentStatusRecordDto })
+  items!: CustomerPaymentStatusRecord[];
+  @ApiProperty({ type: Number }) page!: number;
+  @ApiProperty({ type: Number }) pageSize!: number;
+  @ApiProperty({ type: Number }) totalItems!: number;
+  @ApiProperty({ type: Number }) totalPages!: number;
+}
 
 export class UpsertCustomerPaymentTermsDto implements UpsertCustomerPaymentTermsRequest {
   @ApiProperty({ example: '2000.0000', type: String })
@@ -133,6 +193,22 @@ export class CreatePosAccountPaymentDto implements CreatePosAccountPaymentReques
   @IsString()
   @MaxLength(255)
   paymentReference?: string;
+}
+
+export class ApplyCustomerAdvanceToPosSaleDto implements ApplyCustomerAdvanceToPosSaleRequest {
+  @ApiProperty({ example: '50.0000', type: String })
+  @IsString()
+  @Matches(amountPattern)
+  amount!: string;
+
+  @ApiProperty({ format: 'uuid', type: String })
+  @IsUUID('loose')
+  customerAdvanceId!: string;
+
+  @ApiProperty({ example: '100.0000', type: String })
+  @IsString()
+  @Matches(amountPattern)
+  expectedOutstanding!: string;
 }
 export class ReversePosAccountPaymentDto implements ReversePosAccountPaymentRequest {
   @ApiProperty({ type: String, minLength: 10, maxLength: 1000 })

@@ -421,16 +421,24 @@ export class FilesService {
       parentType === 'warranty_claim' &&
       (hasPermission(auth.permissions, { action, module: 'erp.service' }) ||
         hasPermission(auth.permissions, { action, module: 'crm' }));
+    const canUploadDrTestEvidence =
+      parentType === 'backup_dr_test' &&
+      (hasPermission(auth.permissions, { action: 'edit', module: 'backup' }) ||
+        hasPermission(auth.permissions, { action: 'create', module: 'backup' }));
     const canAccessParent =
       parentType === 'warranty_claim'
         ? canAccessWarrantyClaim
-        : hasPermission(auth.permissions, {
-            action,
-            module:
-              parentType === 'financial_document' || parentType === 'financial_branding'
-                ? 'erp.finance'
-                : 'crm',
-          });
+        : parentType === 'backup_dr_test' && action === 'edit'
+          ? canUploadDrTestEvidence
+          : hasPermission(auth.permissions, {
+              action,
+              module:
+                parentType === 'backup_dr_test'
+                  ? 'backup'
+                  : parentType === 'financial_document' || parentType === 'financial_branding'
+                    ? 'erp.finance'
+                    : 'crm',
+            });
     if (!canAccessParent) {
       throw new ApiErrorException(
         'FILE_PARENT_ACCESS_DENIED',
@@ -439,7 +447,13 @@ export class FilesService {
       );
     }
     let parent;
-    if (parentType === 'partner') {
+    if (parentType === 'backup_dr_test') {
+      parent = await queryable.query<{ id: string }>(
+        `SELECT id FROM backup.dr_test_records
+         WHERE id=$1 AND ($2::varchar='view' OR status='planned')`,
+        [parentId, action],
+      );
+    } else if (parentType === 'partner') {
       parent = await queryable.query<{ id: string }>(
         'SELECT id FROM master_data.partners WHERE id = $1',
         [parentId],

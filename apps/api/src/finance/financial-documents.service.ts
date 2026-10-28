@@ -269,7 +269,8 @@ export class FinancialDocumentsService {
          JOIN service.requests request ON request.id = work_order.service_request_id
          JOIN master_data.partners customer ON customer.id = request.customer_partner_id
          LEFT JOIN finance.financial_documents document
-           ON document.source_service_work_order_id = work_order.id AND document.status = 'draft'
+           ON document.source_service_work_order_id = work_order.id
+          AND document.status IN ('draft', 'issued')
          WHERE work_order.status = 'completed'
            AND work_order.customer_charge_recorded
            AND work_order.total_customer_charge_eur > 0
@@ -2615,6 +2616,19 @@ async function serviceDraftLines(
     throw inputError(
       'FINANCE_CORRECTION_SERVICE_SOURCE_INVALID',
       'Correction notes must use the original Finance invoice link, not completed Service work.',
+    );
+  const issuedDocument = await client.query<{ id: string }>(
+    `SELECT id FROM finance.financial_documents
+     WHERE source_service_work_order_id = $1
+       AND document_type = 'invoice' AND status = 'issued'
+     LIMIT 1 FOR KEY SHARE`,
+    [workOrderId],
+  );
+  if (issuedDocument.rowCount)
+    throw new ApiErrorException(
+      'FINANCE_SERVICE_INVOICE_ALREADY_ISSUED',
+      'An invoice has already been issued for this Service work. Open the existing invoice or create a correction from it.',
+      HttpStatus.CONFLICT,
     );
   const header = await client.query<{
     customer_partner_id: string;

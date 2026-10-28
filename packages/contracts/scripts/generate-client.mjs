@@ -87,13 +87,17 @@ function validateDocument(value) {
       }
 
       const successResponses = Object.entries(operation.responses ?? {}).filter(([status]) =>
-        /^2\d\d$/u.test(status),
+        /^[23]\d\d$/u.test(status),
       );
       if (successResponses.length === 0) {
-        failures.push(label + ' has no explicit 2xx response.');
+        failures.push(label + ' has no explicit 2xx response or documented redirect.');
       }
       for (const [status, response] of successResponses) {
-        if (status !== '204' && (!response || typeof response !== 'object' || !response.content)) {
+        if (
+          !status.startsWith('3') &&
+          status !== '204' &&
+          (!response || typeof response !== 'object' || !response.content)
+        ) {
           failures.push(label + ' response ' + status + ' has no documented content.');
         }
       }

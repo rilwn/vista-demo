@@ -6,6 +6,11 @@ import {
   crmSlaScheduleId,
   financePaymentStatusScheduleId,
   RecurringBillingScheduleService,
+  backupRestoreDispatchScheduleId,
+  backupRetentionScheduleId,
+  backupMissedDetectionScheduleId,
+  backupDrTestReminderScheduleId,
+  backupPlanReviewReminderScheduleId,
   recurringBillingScheduleId,
   serviceInspectionReminderScheduleId,
   servicePlanVisitScheduleId,
@@ -41,6 +46,7 @@ describe('RecurringBillingScheduleService', () => {
     const service = new RecurringBillingScheduleService(
       {
         BUSINESS_TIMEZONE: 'Europe/Sofia',
+        BACKUP_DISPATCH_CRON: '0 * * * * *',
         CRM_SLA_EVALUATION_CRON: '0 */5 * * * *',
         FINANCE_PAYMENT_STATUS_CRON: '0 25 1 * * *',
         NODE_ENV: 'production',
@@ -111,6 +117,41 @@ describe('RecurringBillingScheduleService', () => {
       name: 'service.plan-visit.generate',
       pattern: '0 45 1 * * *',
       payload: { responsibility: 'subscription-service-visits' },
+      timezone: 'Europe/Sofia',
+    });
+    expect(upsertSchedule).toHaveBeenCalledWith({
+      id: backupRestoreDispatchScheduleId,
+      name: 'backup.restore.dispatch',
+      pattern: '0 * * * * *',
+      payload: { responsibility: 'dispatch-approved-backup-restores' },
+      timezone: 'Europe/Sofia',
+    });
+    expect(upsertSchedule).toHaveBeenCalledWith({
+      id: backupRetentionScheduleId,
+      name: 'backup.retention.enforce',
+      pattern: '0 30 3 * * *',
+      payload: { responsibility: 'enforce-approved-backup-retention' },
+      timezone: 'Europe/Sofia',
+    });
+    expect(upsertSchedule).toHaveBeenCalledWith({
+      id: backupMissedDetectionScheduleId,
+      name: 'backup.missed-detect',
+      pattern: '0 */15 * * * *',
+      payload: { responsibility: 'detect-overdue-backup-schedules' },
+      timezone: 'Europe/Sofia',
+    });
+    expect(upsertSchedule).toHaveBeenCalledWith({
+      id: backupDrTestReminderScheduleId,
+      name: 'backup.dr-test.remind',
+      pattern: '0 0 9 * * *',
+      payload: { responsibility: 'annual-disaster-recovery-test-reminder' },
+      timezone: 'Europe/Sofia',
+    });
+    expect(upsertSchedule).toHaveBeenCalledWith({
+      id: backupPlanReviewReminderScheduleId,
+      name: 'backup.plan-review.remind',
+      pattern: '0 15 9 * * *',
+      payload: { responsibility: 'annual-backup-plan-review-reminder' },
       timezone: 'Europe/Sofia',
     });
   });

@@ -113,9 +113,15 @@ export class CreateFinanceBankStatementDto implements CreateFinanceBankStatement
 }
 
 export class MatchFinanceBankTransactionDto implements MatchFinanceBankTransactionRequest {
-  @ApiProperty({ format: 'uuid', type: String })
+  @ApiPropertyOptional({ format: 'uuid', type: String })
+  @IsOptional()
   @IsUUID('loose')
-  customerDocumentId!: string;
+  customerDocumentId?: string;
+
+  @ApiPropertyOptional({ format: 'uuid', type: String })
+  @IsOptional()
+  @IsUUID('loose')
+  posSaleId?: string;
 
   @ApiProperty({ minimum: 1, type: Number })
   @Type(() => Number)
@@ -150,13 +156,15 @@ export class FinanceBankStatementListQueryDto {
 }
 
 class FinanceBankTransactionMatchDto {
-  @ApiProperty({ format: 'uuid', type: String }) customerDocumentId!: string;
+  @ApiPropertyOptional({ format: 'uuid', type: String }) customerDocumentId?: string;
   @ApiProperty({ type: String }) customerName!: string;
   @ApiProperty({ type: String }) documentNumber!: string;
   @ApiProperty({ format: 'date-time', type: String }) matchedAt!: string;
   @ApiProperty({ enum: ['automatic_reference', 'manual'] })
   method!: NonNullable<FinanceBankTransaction['match']>['method'];
   @ApiProperty({ type: String }) paymentNumber!: string;
+  @ApiProperty({ enum: ['collection', 'pos_account'] }) targetType!: 'collection' | 'pos_account';
+  @ApiPropertyOptional({ format: 'uuid', type: String }) posSaleId?: string;
 }
 
 class FinanceSupplierBankTransactionMatchDto {
@@ -232,12 +240,15 @@ export class FinanceBankStatementPageDto implements FinanceBankStatementPage {
 }
 
 export class FinanceBankMatchCandidateDto implements FinanceBankMatchCandidate {
-  @ApiProperty({ format: 'uuid', type: String }) customerDocumentId!: string;
+  @ApiProperty({ format: 'uuid', type: String }) targetId!: string;
+  @ApiProperty({ enum: ['collection', 'pos_account'] }) targetType!: 'collection' | 'pos_account';
   @ApiProperty({ type: String }) customerName!: string;
   @ApiProperty({ type: String }) documentNumber!: string;
   @ApiProperty({ format: 'date', type: String }) dueDate!: string;
   @ApiProperty({ type: String }) outstandingTotal!: string;
   @ApiProperty({ type: Boolean }) referenceMatched!: boolean;
   @ApiProperty({ type: Number }) score!: number;
-  @ApiProperty({ type: String }) sourceInvoiceNumber!: string;
+  @ApiPropertyOptional({ format: 'uuid', type: String }) customerDocumentId?: string;
+  @ApiPropertyOptional({ format: 'uuid', type: String }) posSaleId?: string;
+  @ApiPropertyOptional({ type: String }) sourceInvoiceNumber?: string;
 }

@@ -195,8 +195,66 @@ describe.skipIf(process.env['RUN_INFRASTRUCTURE_TESTS'] !== 'true')(
         await expect(database.query(sql)).rejects.toThrow('append-only');
       const audit = new AuditService({ getPool: () => database } as DatabaseService);
       expect((await audit.verifyIntegrity()).valid).toBe(true);
-      expect(await migrateDown(database, directory)).toBe('0083_pos_account_collections');
-      expect(await migrateUp(database, directory)).toEqual(['0083_pos_account_collections']);
+      expect(await migrateDown(database, directory)).toBe('0116_backup_file_share_lineage');
+      expect(await migrateDown(database, directory)).toBe('0115_backup_independent_copies');
+      expect(await migrateDown(database, directory)).toBe(
+        '0114_backup_retention_reduction_approval',
+      );
+      expect(await migrateDown(database, directory)).toBe('0113_backup_restore_point_deletion');
+      expect(await migrateDown(database, directory)).toBe('0112_backup_policy_disable_approval');
+      expect(await migrateDown(database, directory)).toBe('0111_backup_file_share_source');
+      expect(await migrateDown(database, directory)).toBe('0110_backup_granular_file_restore');
+      expect(await migrateDown(database, directory)).toBe('0109_backup_compression');
+      expect(await migrateDown(database, directory)).toBe('0108_backup_object_storage_restore');
+      expect(await migrateDown(database, directory)).toBe('0107_backup_plan_reviews');
+      expect(await migrateDown(database, directory)).toBe('0106_backup_dr_tests');
+      expect(await migrateDown(database, directory)).toBe('0105_backup_missed_schedules');
+      expect(await migrateDown(database, directory)).toBe('0104_backup_retention');
+      expect(await migrateDown(database, directory)).toBe('0103_backup_restore_requests');
+      expect(await migrateDown(database, directory)).toBe('0102_backup_execution_ledger');
+      expect(await migrateDown(database, directory)).toBe('0101_backup_policy_approval');
+      expect(await migrateDown(database, directory)).toBe('0100_backup_inventory_policies');
+      expect(await migrateDown(database, directory)).toBe('0099_finance_bank_value_date_semantics');
+      expect(await migrateDown(database, directory)).toBe('0098_pos_offline_sync_audit');
+      expect(await migrateDown(database, directory)).toBe('0097_pos_card_authorization_lifecycle');
+      expect(await migrateDown(database, directory)).toBe('0096_pos_datecs_unp_leases');
+      expect(await migrateDown(database, directory)).toBe('0095_pos_fiscal_return_saga');
+      expect(await migrateDown(database, directory)).toBe('0094_pos_fiscal_daily_reports');
+      expect(await migrateDown(database, directory)).toBe('0093_pos_fiscal_sale_saga');
+      expect(await migrateDown(database, directory)).toBe('0092_logistics_courier_bookings');
+      expect(await migrateDown(database, directory)).toBe('0091_crm_customer_survey_delivery');
+      expect(await migrateDown(database, directory)).toBe('0090_crm_warranty_coverage_offers');
+      expect(await migrateDown(database, directory)).toBe('0089_procurement_acceptance_protocols');
+      expect(await migrateUp(database, directory)).toEqual([
+        '0089_procurement_acceptance_protocols',
+        '0090_crm_warranty_coverage_offers',
+        '0091_crm_customer_survey_delivery',
+        '0092_logistics_courier_bookings',
+        '0093_pos_fiscal_sale_saga',
+        '0094_pos_fiscal_daily_reports',
+        '0095_pos_fiscal_return_saga',
+        '0096_pos_datecs_unp_leases',
+        '0097_pos_card_authorization_lifecycle',
+        '0098_pos_offline_sync_audit',
+        '0099_finance_bank_value_date_semantics',
+        '0100_backup_inventory_policies',
+        '0101_backup_policy_approval',
+        '0102_backup_execution_ledger',
+        '0103_backup_restore_requests',
+        '0104_backup_retention',
+        '0105_backup_missed_schedules',
+        '0106_backup_dr_tests',
+        '0107_backup_plan_reviews',
+        '0108_backup_object_storage_restore',
+        '0109_backup_compression',
+        '0110_backup_granular_file_restore',
+        '0111_backup_file_share_source',
+        '0112_backup_policy_disable_approval',
+        '0113_backup_restore_point_deletion',
+        '0114_backup_retention_reduction_approval',
+        '0115_backup_independent_copies',
+        '0116_backup_file_share_lineage',
+      ]);
       expect(await snapshot()).toEqual(before);
     });
   },

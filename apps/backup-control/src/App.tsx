@@ -1,28 +1,58 @@
 import { useBrowserSession } from '@vista/auth/browser-session';
-import type { AuthenticationContextResponse, LoginRequest, LoginResponse } from '@vista/contracts';
+import type {
+  AuthenticationContextResponse,
+  BackupPolicy,
+  BackupProtectedSource,
+  DirectorySignInOptions,
+  LoginRequest,
+  LoginResponse,
+} from '@vista/contracts';
 import { AuthenticationForm, Button, Help, SearchableSelects, VistaMark } from '@vista/ui';
 import { useActiveItemVisibility } from '@vista/ui/navigation';
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
-import { ApiClientError, authenticate, getCurrentAccount, revokeSession } from './api/auth';
+import { BackupRecords } from './BackupRecords';
+import { BackupRuns } from './BackupRuns';
+import { BackupDrTests } from './BackupDrTests';
+import { BackupPlanReviews } from './BackupPlanReviews';
+import { BackupOverviewReadiness } from './BackupOverviewReadiness';
+import { BackupApprovals } from './BackupApprovals';
+import { BackupRestores } from './BackupRestores';
+import {
+  ApiClientError,
+  authenticate,
+  exchangeDirectoryLogin,
+  getCurrentAccount,
+  getDirectorySignInOptions,
+  revokeSession,
+  startDirectoryLogin,
+} from './api/auth';
 import { messages } from './messages';
 import { bg } from './i18n/catalog';
 import { LanguageSwitcher } from './i18n/LanguageSwitcher';
 import { useLocalization } from './i18n/LocalizationProvider';
 
 type BackupScreen =
-  'approvals' | 'audit' | 'dr-tests' | 'jobs' | 'overview' | 'policies' | 'sources';
+  | 'approvals'
+  | 'audit'
+  | 'dr-tests'
+  | 'jobs'
+  | 'overview'
+  | 'plan-review'
+  | 'policies'
+  | 'restores'
+  | 'sources';
 
 const screens: Record<
   BackupScreen,
   { action: string; description: string; label: string; title: string }
 > = {
   approvals: {
-    title: 'Restore requests & approvals',
-    label: 'Restores & approvals',
-    action: 'Request restore',
+    title: 'Backup policy approvals',
+    label: 'Policy approvals',
+    action: '',
     description:
-      'Request file, database, server, or full-system restores and track their approvals.',
+      'Review policy changes independently before they can be considered for activation.',
   },
   audit: {
     title: 'Alerts & audit',
@@ -41,7 +71,7 @@ const screens: Record<
   jobs: {
     title: 'Jobs & restore points',
     label: 'Jobs & restore points',
-    action: 'Run verification',
+    action: '',
     description:
       'Monitor scheduled backup execution, snapshots, copies, retention, verification, and errors.',
   },
@@ -52,12 +82,25 @@ const screens: Record<
     description:
       'Review protected systems, backup schedules, restore readiness, and items that need attention.',
   },
+  'plan-review': {
+    title: 'Backup plan review',
+    label: 'Plan review',
+    action: '',
+    description:
+      'Compare the protected inventory and backup policies with the approved Information Backup Plan, then record the review.',
+  },
   policies: {
     title: 'Policies & schedules',
     label: 'Policies & schedules',
     action: 'Create policy',
     description:
       'Define approved full, incremental, differential, snapshot, image, retention, encryption, and storage policies.',
+  },
+  restores: {
+    title: 'Restore requests & approvals',
+    label: 'Restores & approvals',
+    action: '',
+    description: 'Request a restore, review approvals, and follow each recovery to completion.',
   },
   sources: {
     title: 'Sources & data inventory',
@@ -74,7 +117,9 @@ const screenOrder: BackupScreen[] = [
   'sources',
   'policies',
   'approvals',
+  'restores',
   'dr-tests',
+  'plan-review',
   'audit',
 ];
 
@@ -88,6 +133,8 @@ export function App() {
 }
 
 function Application() {
+  const { locale } = useLocalization();
+  const [directoryOptions, setDirectoryOptions] = useState<DirectorySignInOptions>();
   const authentication = useBrowserSession<
     LoginRequest,
     LoginResponse,
@@ -99,6 +146,22 @@ function Application() {
     revokeSession,
     storageKey: 'vista.backup-control.session.v1',
   });
+  useEffect(() => {
+    void getDirectorySignInOptions()
+      .then(setDirectoryOptions)
+      .catch(() => undefined);
+  }, []);
+  const beginDirectoryLogin = useCallback(async () => {
+    const result = await startDirectoryLogin({ app: 'recovery' });
+    globalThis.location.assign(result.authorizationUrl);
+  }, []);
+  const finishDirectoryLogin = useCallback(
+    async (ticket: string, totpCode?: string) => {
+      const response = await exchangeDirectoryLogin({ ticket, ...(totpCode ? { totpCode } : {}) });
+      await authentication.accept(response);
+    },
+    [authentication.accept],
+  );
   const session = authentication.session;
 
   if (authentication.status === 'checking') {
@@ -110,11 +173,23 @@ function Application() {
         <LanguageSwitcher floating />
         <AuthenticationForm
           applicationName="Vista Recovery"
-          eyebrow="Backup and recovery"
-          errorMessage={signInError}
+          eyebrow={locale === 'bg' ? 'Архивиране и възстановяване' : 'Backup and recovery'}
+          errorMessage={(error) => signInError(error, locale)}
+          directoryOptions={directoryOptions}
+          onStartDirectoryLogin={beginDirectoryLogin}
+          onExchangeDirectoryLogin={finishDirectoryLogin}
+          locale={locale}
           onAuthenticate={authentication.login}
-          subtitle="Use your assigned recovery account."
-          supportText="Need help? Contact your Vista Service administrator."
+          subtitle={
+            locale === 'bg'
+              ? 'Влезте с назначения си профил за възстановяване.'
+              : 'Use your assigned recovery account.'
+          }
+          supportText={
+            locale === 'bg'
+              ? 'Нуждаете се от помощ? Свържете се с администратор на Vista Service.'
+              : 'Need help? Contact your Vista Service administrator.'
+          }
           variant="recovery"
         />
       </>
@@ -139,18 +214,30 @@ function Application() {
     );
   }
   return (
-    <BackupConsole employeeName={session.context.displayName} onSignOut={authentication.logout} />
+    <BackupConsole
+      context={session.context}
+      employeeName={session.context.displayName}
+      onSignOut={authentication.logout}
+      sessionToken={session.sessionToken}
+    />
   );
 }
 
 function BackupConsole({
+  context,
   employeeName,
   onSignOut,
+  sessionToken,
 }: {
+  context: AuthenticationContextResponse;
   employeeName: string;
   onSignOut: () => Promise<void>;
+  sessionToken: string;
 }) {
   const [screen, setScreen] = useState<BackupScreen>('overview');
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [drTestPlanOpen, setDrTestPlanOpen] = useState(false);
+  const [recordToEdit, setRecordToEdit] = useState<BackupPolicy | BackupProtectedSource>();
   const { locale } = useLocalization();
   const active = screens[screen];
   const navigation = useActiveItemVisibility<HTMLElement>(screen);
@@ -188,7 +275,7 @@ function BackupConsole({
               <span className="backup-menu-icon" aria-hidden="true">
                 <BackupIcon name={screenIcon(item)} />
               </span>
-              {screens[item].label}
+              {locale === 'bg' ? bg(screens[item].label) : screens[item].label}
             </button>
           ))}
         </nav>
@@ -208,7 +295,7 @@ function BackupConsole({
             >
               {screenOrder.map((item) => (
                 <option key={item} value={item}>
-                  {screens[item].label}
+                  {locale === 'bg' ? bg(screens[item].label) : screens[item].label}
                 </option>
               ))}
             </select>
@@ -241,67 +328,118 @@ function BackupConsole({
         </header>
         <section className="backup-page-heading">
           <div>
-            <h1>{active.title}</h1>
-            <span>{active.description}</span>
+            <h1>{locale === 'bg' ? bg(active.title) : active.title}</h1>
+            <span>{locale === 'bg' ? bg(active.description) : active.description}</span>
           </div>
-          <button disabled title="Unavailable" type="button">
-            {active.action}
-          </button>
-        </section>
-        <section className="backup-readiness-strip" aria-label="Readiness state">
-          <article>
-            <span>Source inventory</span>
-            <strong>Not set up</strong>
-            <small>Add the systems and devices that need protection</small>
-          </article>
-          <article>
-            <span>Backup policy</span>
-            <strong>Not approved</strong>
-            <small>Schedules, retention, RPO, and RTO are not set</small>
-          </article>
-          <article>
-            <span>Restore test</span>
-            <strong>Not completed</strong>
-            <small>No disaster-recovery test has been recorded</small>
-          </article>
-        </section>
-        <section className="backup-list-shell">
-          <div className="backup-list-controls">
-            <label>
-              <span>Search</span>
-              <input
-                disabled
-                placeholder={
-                  locale === 'bg'
-                    ? `Търсене: ${bg(active.title).toLocaleLowerCase('bg-BG')}`
-                    : `Search ${active.title.toLowerCase()}`
-                }
-              />
-            </label>
-            <button disabled type="button">
-              All states
+          {active.action && (
+            <button
+              disabled={
+                (screen !== 'sources' && screen !== 'policies' && screen !== 'dr-tests') ||
+                !hasBackupPermission(context, 'create')
+              }
+              onClick={() => {
+                setRecordToEdit(undefined);
+                if (screen === 'dr-tests') setDrTestPlanOpen(true);
+                else setEditorOpen(true);
+              }}
+              type="button"
+            >
+              {active.action}
             </button>
-            <button disabled type="button">
-              Review period
-            </button>
-          </div>
-          <div className="backup-table-head">
-            <span>Reference</span>
-            <span>Protected source / scope</span>
-            <span>Status</span>
-            <span>Owner</span>
-            <span>Updated</span>
-          </div>
-          <div className="backup-empty">
-            <div>
-              <b>
-                <BackupIcon name={screenIcon(screen)} />
-              </b>
-              <h2>No records yet</h2>
-              <p>Records for this area will appear here.</p>
+          )}
+        </section>
+        {screen === 'overview' && <BackupOverviewReadiness sessionToken={sessionToken} />}
+        {screen === 'jobs' ? (
+          <section className="backup-list-shell backup-list-shell--records">
+            <BackupRuns
+              canRequestDeletion={hasBackupPermission(context, 'edit')}
+              canRequestRestore={hasBackupPermission(context, 'create')}
+              sessionToken={sessionToken}
+            />
+          </section>
+        ) : screen === 'sources' || screen === 'policies' ? (
+          <section className="backup-list-shell backup-list-shell--records">
+            <BackupRecords
+              canEdit={hasBackupPermission(context, 'edit')}
+              editorOpen={editorOpen}
+              onEditorOpenChange={setEditorOpen}
+              onRecordEdit={setRecordToEdit}
+              {...(recordToEdit === undefined ? {} : { recordToEdit })}
+              screen={screen}
+              sessionToken={sessionToken}
+            />
+          </section>
+        ) : screen === 'approvals' ? (
+          <section className="backup-list-shell backup-list-shell--records">
+            <BackupApprovals
+              canApprove={hasBackupPermission(context, 'approve')}
+              currentAccountId={context.accountId}
+              sessionToken={sessionToken}
+            />
+          </section>
+        ) : screen === 'restores' ? (
+          <section className="backup-list-shell backup-list-shell--records">
+            <BackupRestores
+              canApprove={hasBackupPermission(context, 'approve')}
+              currentAccountId={context.accountId}
+              sessionToken={sessionToken}
+            />
+          </section>
+        ) : screen === 'dr-tests' ? (
+          <section className="backup-list-shell backup-list-shell--records">
+            <BackupDrTests
+              canCreate={hasBackupPermission(context, 'create')}
+              onPlanOpenChange={setDrTestPlanOpen}
+              planOpen={drTestPlanOpen}
+              sessionToken={sessionToken}
+            />
+          </section>
+        ) : screen === 'plan-review' ? (
+          <section className="backup-list-shell backup-list-shell--records">
+            <BackupPlanReviews
+              canApprove={hasBackupPermission(context, 'approve')}
+              sessionToken={sessionToken}
+            />
+          </section>
+        ) : (
+          <section className="backup-list-shell">
+            <div className="backup-list-controls">
+              <label>
+                <span>Search</span>
+                <input
+                  disabled
+                  placeholder={
+                    locale === 'bg'
+                      ? `Търсене: ${bg(active.title).toLocaleLowerCase('bg-BG')}`
+                      : `Search ${active.title.toLowerCase()}`
+                  }
+                />
+              </label>
+              <button disabled type="button">
+                All states
+              </button>
+              <button disabled type="button">
+                Review period
+              </button>
             </div>
-          </div>
-        </section>
+            <div className="backup-table-head">
+              <span>Reference</span>
+              <span>Protected source / scope</span>
+              <span>Status</span>
+              <span>Owner</span>
+              <span>Updated</span>
+            </div>
+            <div className="backup-empty">
+              <div>
+                <b>
+                  <BackupIcon name={screenIcon(screen)} />
+                </b>
+                <h2>No records yet</h2>
+                <p>Records for this area will appear here.</p>
+              </div>
+            </div>
+          </section>
+        )}
       </main>
     </div>
   );
@@ -341,23 +479,55 @@ function hasBackupAccess(context: AuthenticationContextResponse | undefined): bo
   );
 }
 
+function hasBackupPermission(
+  context: AuthenticationContextResponse,
+  action: 'approve' | 'create' | 'edit' | 'view',
+): boolean {
+  return context.permissions.some(
+    (permission) =>
+      (permission.module === '*' || permission.module === 'backup') &&
+      (permission.action === '*' || permission.action === action),
+  );
+}
+
 function isAuthenticationContext(value: unknown): value is AuthenticationContextResponse {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
   const context = value as Record<string, unknown>;
   return typeof context['accountId'] === 'string' && Array.isArray(context['permissions']);
 }
 
-function signInError(error: unknown): string {
-  if (!(error instanceof ApiClientError))
-    return 'The service is unavailable. Check your connection and try again.';
-  if (error.code === 'TWO_FACTOR_ENROLLMENT_REQUIRED') {
-    return 'This administrative account must enroll an authenticator before it can sign in.';
-  }
-  if (error.code === 'PASSWORD_EXPIRED') {
-    return 'This password has expired. Contact a Vista Service administrator.';
-  }
-  if (error.code === 'RATE_LIMITED') return 'Too many attempts. Wait a moment and try again.';
-  return 'The email, password, or authentication code is incorrect.';
+function signInError(error: unknown, locale: 'bg' | 'en' = 'en'): string {
+  const copy =
+    locale === 'bg'
+      ? {
+          unavailable: 'Услугата не е достъпна. Проверете връзката си и опитайте отново.',
+          enrollment:
+            'Администраторският профил трябва първо да настрои приложение за удостоверяване.',
+          expired: 'Паролата е изтекла. Свържете се с администратор на Vista Service.',
+          rate: 'Твърде много опити. Изчакайте и опитайте отново.',
+          directory: 'Служебният вход не е достъпен. Опитайте отново след малко.',
+          failed:
+            'Служебният вход не може да бъде потвърден. Опитайте отново или се свържете с администратор.',
+          credentials: 'Имейлът, паролата или кодът за удостоверяване са неправилни.',
+        }
+      : {
+          unavailable: 'The service is unavailable. Check your connection and try again.',
+          enrollment:
+            'This administrative account must enroll an authenticator before it can sign in.',
+          expired: 'This password has expired. Contact a Vista Service administrator.',
+          rate: 'Too many attempts. Wait a moment and try again.',
+          directory: 'Organization sign-in is unavailable. Try again shortly.',
+          failed:
+            'Organization sign-in could not be verified. Start again or contact your administrator.',
+          credentials: 'The email, password, or authentication code is incorrect.',
+        };
+  if (!(error instanceof ApiClientError)) return copy.unavailable;
+  if (error.code === 'TWO_FACTOR_ENROLLMENT_REQUIRED') return copy.enrollment;
+  if (error.code === 'PASSWORD_EXPIRED') return copy.expired;
+  if (error.code === 'RATE_LIMITED') return copy.rate;
+  if (error.code === 'DIRECTORY_UNAVAILABLE') return copy.directory;
+  if (error.code === 'DIRECTORY_SIGN_IN_FAILED') return copy.failed;
+  return copy.credentials;
 }
 
 type BackupIconName =
@@ -368,10 +538,12 @@ type BackupIconName =
   | 'jobs'
   | 'logout'
   | 'overview'
+  | 'plan-review'
   | 'policies'
   | 'sources';
 
 function screenIcon(screen: BackupScreen): BackupIconName {
+  if (screen === 'restores') return 'approvals';
   return screen;
 }
 
@@ -402,6 +574,7 @@ const backupIconPaths: Record<BackupIconName, React.ReactNode> = {
   jobs: <path d="M5 5h14v14H5zM8 9h8m-8 4h5m-5 4h8" />,
   logout: <path d="M10 5H5v14h5m4-4 4-3-4-3m4 3H9" />,
   overview: <path d="M4 13h6V4H4zm10 7h6v-9h-6zM4 20h6v-3H4zm10-13h6V4h-6z" />,
+  'plan-review': <path d="M5 4h14v16H5zM8 8h8M8 12h5m-5 4h3m5-1 1.5 1.5L21 13" />,
   policies: <path d="M6 3h9l3 3v15H6zM14 3v4h4M9 11h6m-6 4h6" />,
   sources: <path d="M4 5h16v6H4zm0 8h16v6H4zM7 8h.01M7 16h.01" />,
 };

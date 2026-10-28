@@ -1,6 +1,8 @@
 import { Button, InlineAlert } from '@vista/ui';
 import type {
+  AcceptanceProtocol,
   CreatePurchaseOrderRequest,
+  GoodsReceipt,
   ProcurementReferenceData,
   PurchaseOrder,
   PurchaseOrderStatus,
@@ -10,6 +12,8 @@ import { type FormEvent, useCallback, useEffect, useState } from 'react';
 
 import { ApiClientError } from '../api/client';
 import {
+  createAcceptanceProtocol,
+  getAcceptanceProtocol,
   createPurchaseOrder,
   getProcurementReferenceData,
   listPurchaseOrders,
@@ -38,6 +42,10 @@ export function ProcurementPage({ view }: { view: ProcurementView }) {
   const data = useProcurementData(token, status || undefined);
   const [creating, setCreating] = useState(false);
   const [receiving, setReceiving] = useState<PurchaseOrder | null>(null);
+  const [protocolTarget, setProtocolTarget] = useState<{
+    order: PurchaseOrder;
+    receipt: GoodsReceipt;
+  } | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const canCreate = hasPermission('erp.procurement', 'create');
 
@@ -159,6 +167,21 @@ export function ProcurementPage({ view }: { view: ProcurementView }) {
                   <strong>{order.warehouseName}</strong>
                   <span>{messages.procurement.warehouse}</span>
                 </div>
+                {canCreate || receipt.acceptanceProtocol ? (
+                  <div className="procurement-receipt-action">
+                    <Button
+                      onClick={() => setProtocolTarget({ order, receipt })}
+                      variant={receipt.acceptanceProtocol ? 'secondary' : 'primary'}
+                    >
+                      {receipt.acceptanceProtocol
+                        ? messages.procurement.viewAcceptanceProtocol
+                        : messages.procurement.protocolCreate}
+                    </Button>
+                    {receipt.acceptanceProtocol ? (
+                      <small>{receipt.acceptanceProtocol.protocolNumber}</small>
+                    ) : null}
+                  </div>
+                ) : null}
               </article>
             ))}
           </section>
@@ -194,7 +217,304 @@ export function ProcurementPage({ view }: { view: ProcurementView }) {
           token={token}
         />
       ) : null}
+      {protocolTarget ? (
+        <AcceptanceProtocolDrawer
+          canCreate={canCreate}
+          onClose={() => setProtocolTarget(null)}
+          onCreated={(protocol) => {
+            setNotice(messages.procurement.acceptanceProtocolCreated);
+            data.reload();
+            setProtocolTarget((current) =>
+              current
+                ? { ...current, receipt: { ...current.receipt, acceptanceProtocol: protocol } }
+                : current,
+            );
+          }}
+          order={protocolTarget.order}
+          receipt={protocolTarget.receipt}
+          token={token}
+        />
+      ) : null}
     </div>
+  );
+}
+
+function AcceptanceProtocolDrawer({
+  canCreate,
+  onClose,
+  onCreated,
+  order,
+  receipt,
+  token,
+}: {
+  canCreate: boolean;
+  onClose: () => void;
+  onCreated: (protocol: AcceptanceProtocol) => void;
+  order: PurchaseOrder;
+  receipt: GoodsReceipt;
+  token: string;
+}) {
+  const [protocol, setProtocol] = useState<AcceptanceProtocol | null>(null);
+  const [supplierInvoiceId, setSupplierInvoiceId] = useState(order.supplierInvoices[0]?.id ?? '');
+  const [busy, setBusy] = useState(false);
+  const [loading, setLoading] = useState(Boolean(receipt.acceptanceProtocol));
+  const [error, setError] = useState<string | null>(null);
+  const [loadAttempt, setLoadAttempt] = useState(0);
+
+  useEffect(() => {
+    if (!receipt.acceptanceProtocol) return;
+    let active = true;
+    setLoading(true);
+    setError(null);
+    void getAcceptanceProtocol(token, receipt.id)
+      .then((result) => {
+        if (active) setProtocol(result);
+      })
+      .catch(() => {
+        if (active) setError(messages.procurement.acceptanceProtocolLoadError);
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [loadAttempt, receipt.acceptanceProtocol, receipt.id, token]);
+
+  async function create(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!canCreate || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await createAcceptanceProtocol(token, receipt.id, crypto.randomUUID(), {
+        ...(supplierInvoiceId ? { supplierInvoiceId } : {}),
+      });
+      setProtocol(result);
+      onCreated(result);
+    } catch (caught) {
+      setError(procurementError(caught, messages.procurement.acceptanceProtocolCreateError));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <ProcurementDrawer
+      actions={
+        <>
+          <Button disabled={busy} onClick={onClose} type="button" variant="quiet">
+            {messages.procurement.back}
+          </Button>
+          {protocol ? (
+            <Button disabled={loading} onClick={() => window.print()} type="button">
+              {messages.procurement.printProtocol}
+            </Button>
+          ) : canCreate ? (
+            <Button disabled={busy || loading} form="acceptance-protocol-form" type="submit">
+              {busy ? messages.procurement.saving : messages.procurement.protocolCreate}
+            </Button>
+          ) : null}
+        </>
+      }
+      busy={busy}
+      drawerClassName="acceptance-protocol-drawer"
+      onClose={onClose}
+      subtitle={protocol?.protocolNumber ?? receipt.supplierDeliveryReference ?? order.supplierName}
+      title={messages.procurement.acceptanceProtocol}
+    >
+      {loading ? (
+        <div className="procurement-state" role="status">
+          <h2>{messages.procurement.protocolLoading}</h2>
+        </div>
+      ) : protocol ? (
+        <AcceptanceProtocolDocument protocol={protocol} />
+      ) : (
+        <form
+          className="procurement-form acceptance-protocol-create-form"
+          id="acceptance-protocol-form"
+          onSubmit={(event) => void create(event)}
+        >
+          {error ? <InlineAlert tone="error">{error}</InlineAlert> : null}
+          <section className="procurement-receipt-summary">
+            <div>
+              <span>{messages.procurement.supplier}</span>
+              <strong>{order.supplierName}</strong>
+            </div>
+            <div>
+              <span>{messages.procurement.protocolWarehouse}</span>
+              <strong>{order.warehouseName}</strong>
+            </div>
+            <div>
+              <span>{messages.procurement.protocolReceived}</span>
+              <strong>{formatDateTime(receipt.receivedAt)}</strong>
+            </div>
+          </section>
+          {order.supplierInvoices.length ? (
+            <label>
+              <span>{messages.procurement.invoice}</span>
+              <select
+                aria-label={messages.procurement.invoice}
+                onChange={(event) => setSupplierInvoiceId(event.target.value)}
+                value={supplierInvoiceId}
+              >
+                <option value="">{messages.procurement.protocolOptional}</option>
+                {order.supplierInvoices.map((invoice) => (
+                  <option key={invoice.id} value={invoice.id}>
+                    {invoice.invoiceNumber} · {formatDate(invoice.invoiceDate)}
+                  </option>
+                ))}
+              </select>
+              <small>{messages.procurement.protocolInvoiceHint}</small>
+            </label>
+          ) : (
+            <InlineAlert tone="info">{messages.procurement.protocolNoInvoice}</InlineAlert>
+          )}
+          <section className="acceptance-protocol-receipt-lines">
+            <h3>{messages.procurement.receiptProducts}</h3>
+            {receipt.lines.map((line) => {
+              const orderLine = order.lines.find((item) => item.id === line.orderLineId);
+              return (
+                <article key={line.id}>
+                  <strong>{orderLine?.productName ?? line.productId}</strong>
+                  <span>
+                    {messages.procurement.acceptedQuantity}: {line.quantity}
+                  </span>
+                </article>
+              );
+            })}
+          </section>
+          <p className="acceptance-protocol-note">{messages.procurement.protocolImmutableHint}</p>
+        </form>
+      )}
+      {error && protocol ? <InlineAlert tone="error">{error}</InlineAlert> : null}
+      {error && receipt.acceptanceProtocol ? (
+        <Button
+          onClick={() => setLoadAttempt((attempt) => attempt + 1)}
+          type="button"
+          variant="secondary"
+        >
+          {messages.procurement.retry}
+        </Button>
+      ) : null}
+    </ProcurementDrawer>
+  );
+}
+
+function AcceptanceProtocolDocument({ protocol }: { protocol: AcceptanceProtocol }) {
+  return (
+    <article
+      aria-label={messages.procurement.acceptanceProtocol}
+      className="acceptance-protocol-print"
+    >
+      <header className="acceptance-protocol-title">
+        <div>
+          <p className="page-eyebrow">{messages.procurement.acceptanceProtocol}</p>
+          <h2>{protocol.protocolNumber}</h2>
+          <p>{protocol.supplierName}</p>
+        </div>
+        <span>{formatDateTime(protocol.receivedAt)}</span>
+      </header>
+      <dl className="acceptance-protocol-meta">
+        <div>
+          <dt>{messages.procurement.protocolWarehouse}</dt>
+          <dd>{protocol.warehouseName}</dd>
+        </div>
+        <div>
+          <dt>{messages.procurement.protocolReceived}</dt>
+          <dd>{protocol.receivedByName}</dd>
+        </div>
+        <div>
+          <dt>{messages.procurement.protocolPrepared}</dt>
+          <dd>{protocol.preparedByName}</dd>
+        </div>
+        {protocol.supplierDeliveryReference ? (
+          <div>
+            <dt>{messages.procurement.deliveryReference}</dt>
+            <dd>{protocol.supplierDeliveryReference}</dd>
+          </div>
+        ) : null}
+        {protocol.supplierInvoice ? (
+          <div>
+            <dt>{messages.procurement.invoice}</dt>
+            <dd>
+              {protocol.supplierInvoice.invoiceNumber} ·{' '}
+              {formatDate(protocol.supplierInvoice.invoiceDate)}
+            </dd>
+          </div>
+        ) : null}
+      </dl>
+      <div className="acceptance-protocol-table-scroll">
+        <table className="acceptance-protocol-table">
+          <thead>
+            <tr>
+              <th>{messages.procurement.product}</th>
+              <th>{messages.procurement.orderedQuantity}</th>
+              <th>{messages.procurement.previouslyReceived}</th>
+              <th>{messages.procurement.acceptedQuantity}</th>
+              <th>{messages.procurement.cumulativeReceived}</th>
+              <th>{messages.procurement.outstandingQuantity}</th>
+              <th>{messages.procurement.protocolUnitPrice}</th>
+              <th>{messages.procurement.protocolSerials}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {protocol.lines.map((line) => (
+              <tr key={line.id}>
+                <td>
+                  <strong>{line.productName}</strong>
+                  <small>{line.productCode}</small>
+                </td>
+                <td>{line.orderedQuantity}</td>
+                <td>{line.previouslyReceivedQuantity}</td>
+                <td>{line.acceptedQuantity}</td>
+                <td>{line.cumulativeReceivedQuantity}</td>
+                <td>{line.outstandingQuantity}</td>
+                <td>{formatMoney(line.unitPrice, line.currencyCode)}</td>
+                <td>
+                  {line.serialNumbers.length ? line.serialNumbers.join(', ') : null}
+                  {line.batchNumber ? <span>{line.batchNumber}</span> : null}
+                  {line.expiresAt ? <span>{formatDate(line.expiresAt)}</span> : null}
+                  {!line.serialNumbers.length && !line.batchNumber && !line.expiresAt
+                    ? messages.procurement.protocolNone
+                    : null}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <section className="acceptance-protocol-discrepancies">
+        <h3>{messages.procurement.discrepancies}</h3>
+        {protocol.lines.some((line) => line.discrepancies.length) ? (
+          <ul>
+            {protocol.lines.flatMap((line) =>
+              line.discrepancies.map((discrepancy) => (
+                <li key={discrepancy.claimId}>
+                  <strong>{discrepancyTypeLabel(discrepancy.claimType)}</strong>
+                  <span>{discrepancy.description}</span>
+                  <small>
+                    {discrepancy.quantity} · {discrepancyStatusLabel(discrepancy.status)}
+                  </small>
+                </li>
+              )),
+            )}
+          </ul>
+        ) : (
+          <p>{messages.procurement.protocolNoDiscrepancies}</p>
+        )}
+      </section>
+      <footer className="acceptance-protocol-signoff">
+        <div>
+          <span>{messages.procurement.protocolReceived}</span>
+          <strong>{protocol.receivedByName}</strong>
+        </div>
+        <div>
+          <span>{messages.procurement.protocolPrepared}</span>
+          <strong>{protocol.preparedByName}</strong>
+        </div>
+      </footer>
+    </article>
   );
 }
 
@@ -1013,6 +1333,20 @@ function statusLabel(status: PurchaseOrderStatus) {
   if (status === 'partially_received') return messages.procurement.partiallyReceived;
   if (status === 'received') return messages.procurement.received;
   return messages.procurement.open;
+}
+
+function discrepancyTypeLabel(
+  type: AcceptanceProtocol['lines'][number]['discrepancies'][number]['claimType'],
+) {
+  return type === 'damaged'
+    ? messages.procurement.discrepancyDamaged
+    : messages.procurement.discrepancyNonConforming;
+}
+
+function discrepancyStatusLabel(
+  status: AcceptanceProtocol['lines'][number]['discrepancies'][number]['status'],
+) {
+  return messages.procurement.discrepancyStatuses[status];
 }
 
 function formatOrderTotal(order: PurchaseOrder) {

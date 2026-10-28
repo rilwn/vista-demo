@@ -7,6 +7,8 @@ import { CrmTicketsService } from '../crm/crm-tickets.service.js';
 import { FinanceService } from '../finance/finance.service.js';
 import { BnbCurrencyRatesService } from '../finance/bnb-currency-rates.service.js';
 import { RecurringInvoicesService } from '../finance/recurring-invoices.service.js';
+import { BackupExecutionService } from '../backup/backup-execution.service.js';
+import { BackupRestoreWorkerService } from '../backup/backup-restore-worker.service.js';
 import { StructuredLogger } from '../logging/structured-logger.service.js';
 import { SalesSubscriptionsService } from '../sales/sales-subscriptions.service.js';
 import { ServiceCareService } from '../service/service-care.service.js';
@@ -39,6 +41,8 @@ export class NamedJobTriggerHandlersService implements OnModuleInit {
     @Inject(ServiceCareService) private readonly serviceCare: ServiceCareService,
     @Inject(CrmTicketsService) private readonly crmTickets: CrmTicketsService,
     @Inject(RecurringInvoicesService) private readonly recurringInvoices: RecurringInvoicesService,
+    @Inject(BackupExecutionService) private readonly backups: BackupExecutionService,
+    @Inject(BackupRestoreWorkerService) private readonly restores: BackupRestoreWorkerService,
   ) {}
 
   onModuleInit(): void {
@@ -66,7 +70,30 @@ export class NamedJobTriggerHandlersService implements OnModuleInit {
                     ? await this.serviceCare.prepareWarrantyReminders(context)
                     : context.name === 'crm.sla.evaluate'
                       ? await this.crmTickets.evaluateSla(context)
-                      : undefined;
+                      : context.name === 'backup.schedule.dispatch'
+                        ? await this.backups.dispatchDueRuns(context)
+                        : context.name === 'backup.execute'
+                          ? await this.backups.execute(context)
+                          : context.name === 'backup.verify'
+                            ? await this.backups.verify(context)
+                            : context.name === 'backup.restore.dispatch'
+                              ? {
+                                  ...(await this.restores.dispatchApprovedRestores()),
+                                  ...(await this.backups.dispatchApprovedArtifactDeletions(
+                                    context,
+                                  )),
+                                }
+                              : context.name === 'backup.restore.execute'
+                                ? await this.restores.execute(context)
+                                : context.name === 'backup.retention.enforce'
+                                  ? await this.backups.enforceRetention(context)
+                                  : context.name === 'backup.missed-detect'
+                                    ? await this.backups.detectMissedRuns(context)
+                                    : context.name === 'backup.dr-test.remind'
+                                      ? await this.backups.prepareDrTestReminders(context)
+                                      : context.name === 'backup.plan-review.remind'
+                                        ? await this.backups.preparePlanReviewReminders(context)
+                                        : undefined;
     // A fulfilled domain call is execution evidence, not another request for an
     // unregistered consumer. Keep genuine future handoffs pending.
     const completed = domainResult !== undefined;

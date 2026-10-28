@@ -32,6 +32,7 @@ import { ModulePage } from './pages/ModulePage';
 import { NotFoundPage } from './pages/NotFoundPage';
 import { OrganizationPage } from './pages/OrganizationPage';
 import { PartnersPage } from './pages/PartnersPage';
+import { PublicSurveyPage } from './pages/PublicSurveyPage';
 import { ProductCategoriesPage } from './pages/ProductCategoriesPage';
 import { type ProcurementView, ProcurementPage } from './pages/ProcurementPage';
 import {
@@ -65,6 +66,8 @@ function Application() {
 
   if (location.pathname === '/recover') return <RecoveryPage />;
   if (location.pathname === '/login') return <LoginPage />;
+  const publicSurvey = /^\/survey\/([^/]{1,128})$/u.exec(location.pathname);
+  if (publicSurvey?.[1]) return <PublicSurveyPage token={publicSurvey[1]} />;
   if (status === 'checking') return <FullPageLoader />;
   if (status === 'anonymous') {
     return <Navigate replace state={{ from: location.pathname }} to="/login" />;

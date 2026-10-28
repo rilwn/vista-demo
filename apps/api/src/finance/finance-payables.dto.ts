@@ -113,15 +113,23 @@ export class CreateFinanceSupplierOffsetDto implements CreateFinanceSupplierOffs
   @Matches(amountPattern)
   amount!: string;
 
-  @ApiProperty({ format: 'uuid', type: String })
+  @ApiPropertyOptional({ format: 'uuid', type: String })
+  @ValidateIf((input: CreateFinanceSupplierOffsetDto) => !input.posSaleId)
   @IsUUID('loose')
-  customerDocumentId!: string;
+  customerDocumentId?: string;
 
-  @ApiProperty({ minimum: 1, type: Number })
+  @ApiPropertyOptional({ minimum: 1, type: Number })
+  @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  expectedCustomerDocumentVersion!: number;
+  expectedCustomerDocumentVersion?: number;
+
+  @ApiPropertyOptional({ example: '125.0000', type: String })
+  @ValidateIf((input: CreateFinanceSupplierOffsetDto) => Boolean(input.posSaleId))
+  @IsString()
+  @Matches(amountPattern)
+  expectedPosOutstanding?: string;
 
   @ApiProperty({ minimum: 1, type: Number })
   @Type(() => Number)
@@ -137,6 +145,11 @@ export class CreateFinanceSupplierOffsetDto implements CreateFinanceSupplierOffs
   @IsString()
   @MaxLength(1000)
   reason!: string;
+
+  @ApiPropertyOptional({ format: 'uuid', type: String })
+  @ValidateIf((input: CreateFinanceSupplierOffsetDto) => !input.customerDocumentId)
+  @IsUUID('loose')
+  posSaleId?: string;
 
   @ApiProperty({ format: 'uuid', type: String })
   @IsUUID('loose')
@@ -215,12 +228,17 @@ class FinanceSupplierReferenceDto implements FinanceSupplierReference {
 class FinanceOffsetReceivableReferenceDto implements FinanceOffsetReceivableReference {
   @ApiProperty({ type: String }) customerName!: string;
   @ApiProperty({ format: 'uuid', type: String }) customerPartnerId!: string;
+  @ApiProperty({ type: String }) currencyCode!: string;
   @ApiProperty({ format: 'date', type: String }) dueDate!: string;
   @ApiProperty({ format: 'uuid', type: String }) id!: string;
   @ApiProperty({ type: String }) number!: string;
   @ApiProperty({ type: String }) outstandingTotal!: string;
-  @ApiProperty({ type: String }) sourceInvoiceNumber!: string;
-  @ApiProperty({ type: Number }) version!: number;
+  @ApiProperty({ enum: ['customer_document', 'pos_account'] }) sourceType!:
+    'customer_document' | 'pos_account';
+  @ApiPropertyOptional({ type: String }) sourceInvoiceNumber?: string;
+  @ApiPropertyOptional({ type: String }) saleNumber?: string;
+  @ApiPropertyOptional({ format: 'uuid', type: String }) posSaleId?: string;
+  @ApiPropertyOptional({ type: Number }) version?: number;
 }
 
 export class FinanceSupplierReferenceDataDto implements FinanceSupplierReferenceData {
@@ -309,13 +327,15 @@ export class FinanceSupplierAdvancePageDto implements FinanceSupplierAdvancePage
 export class FinanceSupplierOffsetDto implements FinanceSupplierOffset {
   @ApiProperty({ type: String }) amount!: string;
   @ApiProperty({ format: 'date-time', type: String }) createdAt!: string;
-  @ApiProperty({ format: 'uuid', type: String }) customerDocumentId!: string;
-  @ApiProperty({ type: String }) customerDocumentNumber!: string;
+  @ApiPropertyOptional({ format: 'uuid', type: String }) customerDocumentId?: string;
+  @ApiPropertyOptional({ type: String }) customerDocumentNumber?: string;
   @ApiProperty({ format: 'uuid', type: String }) id!: string;
   @ApiProperty({ type: String }) number!: string;
   @ApiProperty({ format: 'date', type: String }) offsetDate!: string;
   @ApiProperty({ format: 'uuid', type: String }) partnerId!: string;
   @ApiProperty({ type: String }) partnerName!: string;
+  @ApiPropertyOptional({ format: 'uuid', type: String }) posSaleId?: string;
+  @ApiPropertyOptional({ type: String }) posSaleNumber?: string;
   @ApiProperty({ type: String }) reason!: string;
   @ApiProperty({ format: 'uuid', type: String }) supplierPayableId!: string;
   @ApiProperty({ type: String }) supplierPayableNumber!: string;

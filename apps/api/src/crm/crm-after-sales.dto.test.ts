@@ -14,6 +14,7 @@ describe('CRM after-sales DTOs', () => {
   it('accepts the supported after-sales commands', async () => {
     const warranty = plainToInstance(UpdateCrmWarrantyOfferDto, { offerStatus: 'interested' });
     const survey = plainToInstance(SendCrmCustomerSurveyDto, {
+      recipientEmail: 'customer@example.test',
       sourceId: '45b842ca-ac89-b31c-c25c-9d20fcd86ff2',
       sourceKind: 'service',
     });

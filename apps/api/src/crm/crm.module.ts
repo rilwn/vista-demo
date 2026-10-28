@@ -6,7 +6,10 @@ import { ServiceOperationsModule } from '../service/service.module.js';
 import { CrmAnalyticsController } from './crm-analytics.controller.js';
 import { CrmAnalyticsService } from './crm-analytics.service.js';
 import { CrmPipelineController } from './crm-pipeline.controller.js';
-import { CrmAfterSalesController } from './crm-after-sales.controller.js';
+import {
+  CrmAfterSalesController,
+  CrmPublicSurveyController,
+} from './crm-after-sales.controller.js';
 import { CrmAfterSalesService } from './crm-after-sales.service.js';
 import { CrmPipelineService } from './crm-pipeline.service.js';
 import { CrmTimelineController } from './crm-timeline.controller.js';
@@ -18,6 +21,7 @@ import { CrmTicketsService } from './crm-tickets.service.js';
   controllers: [
     CrmAnalyticsController,
     CrmAfterSalesController,
+    CrmPublicSurveyController,
     CrmPipelineController,
     CrmTicketsController,
     CrmTimelineController,

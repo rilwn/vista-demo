@@ -605,6 +605,9 @@ export class ServiceWorkOrderDto implements ServiceWorkOrder {
   @ApiProperty({ type: String }) customerName!: string;
   @ApiProperty({ format: 'uuid', type: String }) customerPartnerId!: string;
   @ApiProperty({ type: String }) deviceName!: string;
+  @ApiPropertyOptional({ format: 'uuid', type: String }) financialDocumentId?: string;
+  @ApiPropertyOptional({ type: String }) financialDocumentNumber?: string;
+  @ApiPropertyOptional({ enum: ['draft', 'issued'] }) financialDocumentStatus?: 'draft' | 'issued';
   @ApiProperty({ isArray: true, type: ServiceWorkOrderHistoryEntryDto })
   history!: ServiceWorkOrder['history'];
   @ApiProperty({ format: 'uuid', type: String }) id!: string;

@@ -14,6 +14,10 @@ import { CustomerAssetsController } from '../partners/customer-assets.controller
 import { PartnersController } from '../partners/partners.controller.js';
 import { ProductCategoriesController } from '../product-categories/product-categories.controller.js';
 import { ProcurementController } from '../procurement/procurement.controller.js';
+import {
+  CrmAfterSalesController,
+  CrmPublicSurveyController,
+} from '../crm/crm-after-sales.controller.js';
 import { FinanceCustomerAccountsController } from '../finance/finance-customer-accounts.controller.js';
 import { FinancialDocumentsController } from '../finance/financial-documents.controller.js';
 import { RecurringInvoicesController } from '../finance/recurring-invoices.controller.js';
@@ -25,6 +29,8 @@ import { RATE_LIMIT_POLICY, type RateLimitPolicyName } from './rate-limit.decora
 
 const controllers = [
   AuthController,
+  CrmAfterSalesController,
+  CrmPublicSurveyController,
   CatalogController,
   FilesController,
   FinanceCustomerAccountsController,
@@ -59,10 +65,30 @@ describe('HTTP rate-limit coverage', () => {
       })),
     );
 
-    expect(assignments).toHaveLength(179);
+    expect(assignments).toHaveLength(201);
     expect(assignments.filter(({ policy }) => policy === undefined)).toEqual([]);
     expect(assignments).toEqual(
       expect.arrayContaining([
+        expect.objectContaining({
+          controller: 'CrmAfterSalesController',
+          name: 'createWarrantyCoverageOffer',
+          policy: 'write',
+        }),
+        expect.objectContaining({
+          controller: 'CrmAfterSalesController',
+          name: 'transitionWarrantyCoverageOffer',
+          policy: 'write',
+        }),
+        expect.objectContaining({
+          controller: 'CrmPublicSurveyController',
+          name: 'getSurvey',
+          policy: 'public',
+        }),
+        expect.objectContaining({
+          controller: 'CrmPublicSurveyController',
+          name: 'submitResponse',
+          policy: 'public',
+        }),
         expect.objectContaining({
           controller: 'FinancialDocumentsController',
           name: 'collection',
@@ -70,10 +96,50 @@ describe('HTTP rate-limit coverage', () => {
         }),
         expect.objectContaining({
           controller: 'FinanceCustomerAccountsController',
+          name: 'paymentStatus',
+          policy: 'read',
+        }),
+        expect.objectContaining({
+          controller: 'FinanceCustomerAccountsController',
           name: 'refund',
           policy: 'sensitive',
         }),
+        expect.objectContaining({
+          controller: 'FinanceCustomerAccountsController',
+          name: 'allocateAdvance',
+          policy: 'write',
+        }),
         expect.objectContaining({ controller: 'AuthController', name: 'login', policy: 'public' }),
+        expect.objectContaining({
+          controller: 'AuthController',
+          name: 'directoryOptions',
+          policy: 'read',
+        }),
+        expect.objectContaining({
+          controller: 'AuthController',
+          name: 'startDirectoryLogin',
+          policy: 'sensitive',
+        }),
+        expect.objectContaining({
+          controller: 'AuthController',
+          name: 'completeOidcLogin',
+          policy: 'sensitive',
+        }),
+        expect.objectContaining({
+          controller: 'AuthController',
+          name: 'completeSamlLogin',
+          policy: 'sensitive',
+        }),
+        expect.objectContaining({
+          controller: 'AuthController',
+          name: 'samlMetadata',
+          policy: 'read',
+        }),
+        expect.objectContaining({
+          controller: 'AuthController',
+          name: 'exchangeDirectoryLogin',
+          policy: 'sensitive',
+        }),
         expect.objectContaining({
           controller: 'JobsController',
           name: 'prometheus',
@@ -195,7 +261,19 @@ function expectedPolicy(assignment: {
   name: string;
 }): RateLimitPolicyName {
   if (assignment.controller === 'RootController') return 'public';
+  if (assignment.controller === 'CrmPublicSurveyController') return 'public';
   if (assignment.controller === 'AuthController' && assignment.name === 'login') return 'public';
+  if (
+    assignment.controller === 'AuthController' &&
+    [
+      'startDirectoryLogin',
+      'completeOidcLogin',
+      'completeSamlLogin',
+      'exchangeDirectoryLogin',
+    ].includes(assignment.name)
+  ) {
+    return 'sensitive';
+  }
   if (
     assignment.controller === 'AuthController' &&
     (assignment.name === 'logout' ||

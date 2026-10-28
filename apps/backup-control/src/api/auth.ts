@@ -1,4 +1,12 @@
-import type { AuthenticationContextResponse, LoginRequest, LoginResponse } from '@vista/contracts';
+import type {
+  AuthenticationContextResponse,
+  DirectoryLoginExchangeRequest,
+  DirectoryLoginStartRequest,
+  DirectoryLoginStartResponse,
+  DirectorySignInOptions,
+  LoginRequest,
+  LoginResponse,
+} from '@vista/contracts';
 
 import { authorizationHeaders, backupApiClient, unwrapApiResponse } from './client';
 
@@ -6,6 +14,24 @@ export { ApiClientError } from './client';
 
 export function authenticate(input: LoginRequest): Promise<LoginResponse> {
   return unwrapApiResponse(backupApiClient.POST('/api/v1/auth/login', { body: input }));
+}
+
+export function getDirectorySignInOptions(): Promise<DirectorySignInOptions> {
+  return unwrapApiResponse(backupApiClient.GET('/api/v1/auth/directory/options'));
+}
+
+export function startDirectoryLogin(
+  input: DirectoryLoginStartRequest,
+): Promise<DirectoryLoginStartResponse> {
+  return unwrapApiResponse(backupApiClient.POST('/api/v1/auth/directory/start', { body: input }));
+}
+
+export function exchangeDirectoryLogin(
+  input: DirectoryLoginExchangeRequest,
+): Promise<LoginResponse> {
+  return unwrapApiResponse(
+    backupApiClient.POST('/api/v1/auth/directory/exchange', { body: input }),
+  );
 }
 
 export function getCurrentAccount(token: string): Promise<AuthenticationContextResponse> {

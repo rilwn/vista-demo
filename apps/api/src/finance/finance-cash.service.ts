@@ -22,6 +22,7 @@ import { ApiErrorException } from '../common/api-error.exception.js';
 import { APP_ENVIRONMENT } from '../config/config.module.js';
 import { DatabaseService } from '../database/database.service.js';
 import { FinanceService } from './finance.service.js';
+import { appendPosAccountPaymentEntry, lockPosAccountCharge } from './pos-account-collection.js';
 import type {
   FinanceCashDailyReportQueryDto,
   FinanceCashVoucherListQueryDto,
@@ -43,6 +44,8 @@ interface VoucherRow {
   created_at: string | Date;
   currency_code: string;
   customer_document_id: string | null;
+  source_pos_sale_id: string | null;
+  pos_sale_number: string | null;
   direction: FinanceCashVoucher['direction'];
   id: string;
   issued_by_name: string;
@@ -69,7 +72,7 @@ export class FinanceCashService {
   ) {}
 
   async referenceData(): Promise<FinanceCashReferenceData> {
-    const [registers, partners, collections, businessDate] = await Promise.all([
+    const [registers, partners, collections, posAccounts, businessDate] = await Promise.all([
       this.database.getPool().query<{
         branch_name: string;
         business_location_id: string;
@@ -134,6 +137,28 @@ export class FinanceCashService {
            AND document.currency_code = 'EUR' AND document.outstanding_total > 0
          ORDER BY document.due_date, document.document_number, document.id`,
       ),
+      this.database.getPool().query<{
+        customer_name: string;
+        customer_partner_id: string;
+        due_date: string;
+        outstanding_total: string;
+        sale_id: string;
+        sale_number: string;
+      }>(
+        `SELECT sale.id AS sale_id,sale.sale_number,charge.customer_partner_id,
+                partner.display_name AS customer_name,charge.due_on::text AS due_date,
+                ledger.balance::text AS outstanding_total
+         FROM finance.customer_account_entries charge
+         JOIN pos.sales sale ON sale.id=charge.pos_sale_id AND sale.status='completed'
+         JOIN master_data.partners partner ON partner.id=charge.customer_partner_id
+         CROSS JOIN LATERAL (
+           SELECT coalesce(sum(CASE WHEN entry.entry_type IN ('charge','payment_reversal')
+             THEN entry.amount ELSE -entry.amount END),0) AS balance
+           FROM finance.customer_account_entries entry WHERE entry.pos_sale_id=sale.id
+         ) ledger
+         WHERE charge.entry_type='charge' AND ledger.balance>0
+         ORDER BY charge.due_on,sale.sale_number,sale.id`,
+      ),
       this.businessDate(),
     ]);
     const cashRegisters = new Map<string, FinanceCashReferenceData['cashRegisters'][number]>();
@@ -168,6 +193,14 @@ export class FinanceCashService {
         number: row.number,
         outstandingTotal: row.outstanding_total,
         sourceInvoiceNumber: row.source_invoice_number,
+      })),
+      openPosAccounts: posAccounts.rows.map((row) => ({
+        customerName: row.customer_name,
+        customerPartnerId: row.customer_partner_id,
+        dueDate: row.due_date,
+        outstandingTotal: row.outstanding_total,
+        saleId: row.sale_id,
+        saleNumber: row.sale_number,
       })),
       partners: partners.rows,
     };
@@ -349,6 +382,14 @@ export class FinanceCashService {
         let paymentId: string | undefined;
         let paymentNumber: string | undefined;
         let beforeDocument: CollectionRow | undefined;
+        let posSaleNumber: string | undefined;
+        let posCharge: Awaited<ReturnType<typeof lockPosAccountCharge>> | undefined;
+
+        if (customerDocumentId && normalized.posSaleId)
+          throw inputError(
+            'FINANCE_CASH_COLLECTION_TARGET_INVALID',
+            'Choose one customer collection or one POS account sale, not both.',
+          );
 
         if (customerDocumentId) {
           if (normalized.direction !== 'receipt')
@@ -393,6 +434,49 @@ export class FinanceCashService {
             );
           counterpartyPartnerId = beforeDocument.customer_partner_id;
           counterpartyName = beforeDocument.customer_name;
+        } else if (normalized.posSaleId) {
+          if (normalized.direction !== 'receipt')
+            throw inputError(
+              'FINANCE_CASH_COLLECTION_DIRECTION_INVALID',
+              'Only a cash receipt voucher can be allocated to a POS account balance.',
+            );
+          const sale = await client.query<{
+            customer_partner_id: string;
+            customer_name: string;
+            sale_number: string;
+          }>(
+            `SELECT sale.customer_partner_id,partner.display_name AS customer_name,sale.sale_number
+             FROM pos.sales sale JOIN master_data.partners partner ON partner.id=sale.customer_partner_id
+             WHERE sale.id=$1`,
+            [normalized.posSaleId],
+          );
+          const saleRow = sale.rows[0];
+          if (!saleRow)
+            throw notFound('POS_ACCOUNT_SOURCE_INVALID', 'The selected POS sale was not found.');
+          posCharge = await lockPosAccountCharge(
+            client,
+            saleRow.customer_partner_id,
+            normalized.posSaleId,
+            this.environment.BUSINESS_TIMEZONE,
+          );
+          if (normalized.voucherDate < posCharge.sale_date)
+            throw inputError(
+              'POS_ACCOUNT_PAYMENT_DATE_INVALID',
+              'The receipt date cannot be before the POS sale date.',
+            );
+          if (decimalUnits(normalized.amount) > decimalUnits(posCharge.balance))
+            throw conflict(
+              'FINANCE_CASH_ALLOCATION_EXCEEDS_BALANCE',
+              'The cash receipt exceeds the remaining POS account balance.',
+            );
+          if (counterpartyPartnerId && counterpartyPartnerId !== saleRow.customer_partner_id)
+            throw inputError(
+              'FINANCE_CASH_COUNTERPARTY_MISMATCH',
+              'The selected counterparty does not own this POS account balance.',
+            );
+          counterpartyPartnerId = saleRow.customer_partner_id;
+          counterpartyName = saleRow.customer_name;
+          posSaleNumber = saleRow.sale_number;
         } else if (counterpartyPartnerId) {
           const partner = await client.query<{ display_name: string }>(
             'SELECT display_name FROM master_data.partners WHERE id = $1 AND active FOR KEY SHARE',
@@ -491,13 +575,43 @@ export class FinanceCashService {
             );
         }
 
+        if (posCharge && normalized.posSaleId) {
+          paymentId = randomUUID();
+          paymentNumber = await this.nextInternalNumber(client, 'payment', 'PAY');
+          await client.query(
+            `INSERT INTO finance.payments (
+               id,payment_number,customer_partner_id,payment_date,payment_method,currency_code,amount,
+               payment_reference,notes,recorded_by,source_pos_sale_id
+             ) VALUES ($1,$2,$3,$4,'cash','EUR',$5,$6,$7,$8,$9)`,
+            [
+              paymentId,
+              paymentNumber,
+              posCharge.customer_partner_id,
+              normalized.voucherDate,
+              normalized.amount,
+              normalized.paymentReference ?? undefined,
+              normalized.notes ?? `Allocated by cash receipt for POS sale ${posSaleNumber}.`,
+              auth.accountId,
+              normalized.posSaleId,
+            ],
+          );
+          await appendPosAccountPaymentEntry(
+            client,
+            posCharge,
+            paymentId,
+            normalized.amount,
+            auth.accountId,
+            metadata.correlationId,
+          );
+        }
+
         await client.query(
           `INSERT INTO finance.cash_vouchers (
              id, voucher_number, direction, business_location_id, cash_register_id,
              operator_id, voucher_date, amount, counterparty_partner_id, counterparty_name,
-             customer_document_id, generated_payment_id, purpose, payment_reference,
+             customer_document_id, source_pos_sale_id, generated_payment_id, purpose, payment_reference,
              notes, issued_by
-           ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
+           ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
           [
             voucherId,
             voucherNumber,
@@ -510,6 +624,7 @@ export class FinanceCashService {
             counterpartyPartnerId ?? null,
             counterpartyName,
             customerDocumentId ?? null,
+            normalized.posSaleId ?? null,
             paymentId ?? null,
             normalized.purpose,
             normalized.paymentReference ?? null,
@@ -562,7 +677,7 @@ export class FinanceCashService {
             'This cash voucher changed after it was opened. Refresh and try again.',
           );
         if (before.status === 'cancelled') return before;
-        if (before.customerDocumentId)
+        if (before.customerDocumentId || before.posSaleId)
           throw conflict(
             'FINANCE_CASH_LINKED_REVERSAL_REQUIRED',
             'A receipt allocated to a customer collection requires the approved payment-reversal workflow and cannot be cancelled here.',
@@ -808,6 +923,7 @@ function voucherQuery() {
                  voucher.voucher_date::text, voucher.currency_code, voucher.amount::text,
                  voucher.counterparty_partner_id, voucher.counterparty_name,
                  voucher.customer_document_id, document.document_number AS collection_number,
+                 voucher.source_pos_sale_id, sale.sale_number AS pos_sale_number,
                  payment.payment_number, voucher.purpose, voucher.payment_reference,
                  voucher.notes, voucher.cancellation_reason, voucher.cancelled_at,
                  voucher.version, issuer_employee.display_name AS issued_by_name,
@@ -825,6 +941,7 @@ function voucherQuery() {
           JOIN identity.employees issuer_employee ON issuer_employee.id = issuer_account.employee_id
           LEFT JOIN finance.customer_documents document
             ON document.id = voucher.customer_document_id
+          LEFT JOIN pos.sales sale ON sale.id=voucher.source_pos_sale_id
           LEFT JOIN finance.payments payment ON payment.id = voucher.generated_payment_id`;
 }
 
@@ -852,6 +969,8 @@ function mapVoucher(row: VoucherRow): FinanceCashVoucher {
     createdAt: asIso(row.created_at),
     currencyCode: row.currency_code,
     ...(row.customer_document_id ? { customerDocumentId: row.customer_document_id } : {}),
+    ...(row.source_pos_sale_id ? { posSaleId: row.source_pos_sale_id } : {}),
+    ...(row.pos_sale_number ? { posSaleNumber: row.pos_sale_number } : {}),
     direction: row.direction,
     id: row.id,
     issuedByName: row.issued_by_name,
@@ -879,6 +998,7 @@ function normalizeVoucher(input: CreateFinanceCashVoucherRequest) {
     ...(counterpartyName ? { counterpartyName } : {}),
     ...(input.counterpartyPartnerId ? { counterpartyPartnerId: input.counterpartyPartnerId } : {}),
     ...(input.customerDocumentId ? { customerDocumentId: input.customerDocumentId } : {}),
+    ...(input.posSaleId ? { posSaleId: input.posSaleId } : {}),
     direction: input.direction,
     ...(notes ? { notes } : {}),
     operatorId: input.operatorId,

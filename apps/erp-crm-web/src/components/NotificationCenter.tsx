@@ -171,6 +171,23 @@ function notificationTitle(notification: NotificationMessage, t: Translator): st
   if (notification.templateKey === 'crm.ticket.sla.breached')
     return t('notifications.ticketBreached');
   if (notification.templateKey === 'crm.task.reminder') return t('notifications.taskDue');
+  if (notification.templateKey === 'backup.run.verified') return t('notifications.backupVerified');
+  if (notification.templateKey === 'backup.run.failed') return t('notifications.backupFailed');
+  if (notification.templateKey === 'backup.schedule.missed') return t('notifications.backupMissed');
+  if (notification.templateKey === 'backup.dr-test.due') {
+    const state = value(notification.payload, 'reminderState');
+    if (state === 'initial') return t('notifications.drTestInitial');
+    if (state === 'overdue') return t('notifications.drTestOverdue');
+    return t('notifications.drTestDue');
+  }
+  if (notification.templateKey === 'backup.plan-review.due') {
+    const state = value(notification.payload, 'reminderState');
+    if (state === 'initial') return t('notifications.backupPlanReviewInitial');
+    if (state === 'inventory_changed') return t('notifications.backupPlanChanged');
+    if (state === 'actions_due') return t('notifications.backupPlanActions');
+    if (state === 'overdue') return t('notifications.backupPlanOverdue');
+    return t('notifications.backupPlanDue');
+  }
   return t('notifications.new');
 }
 
@@ -215,6 +232,40 @@ function notificationDetail(
     const customer = value(notification.payload, 'customerName');
     const dueAt = dateTimeValue(notification.payload, 'dueAt', dateLocale);
     return t('notifications.taskDetail', { customer, date: dueAt, title });
+  }
+  if (
+    notification.templateKey === 'backup.run.verified' ||
+    notification.templateKey === 'backup.run.failed' ||
+    notification.templateKey === 'backup.schedule.missed'
+  ) {
+    return t('notifications.backupDetail', {
+      date: dateTimeValue(notification.payload, 'scheduledFor', dateLocale),
+      policy: value(notification.payload, 'policyCode'),
+    });
+  }
+  if (notification.templateKey === 'backup.dr-test.due') {
+    if (value(notification.payload, 'reminderState') === 'initial')
+      return t('notifications.drTestInitialDetail');
+    return t('notifications.drTestDetail', {
+      date: dateValue(notification.payload, 'dueDate', dateLocale),
+      status:
+        value(notification.payload, 'reminderState') === 'overdue'
+          ? t('notifications.drTestOverdueStatus')
+          : t('notifications.drTestUpcomingStatus'),
+    });
+  }
+  if (notification.templateKey === 'backup.plan-review.due') {
+    const state = value(notification.payload, 'reminderState');
+    if (state === 'initial') return t('notifications.backupPlanInitialDetail');
+    if (state === 'inventory_changed') return t('notifications.backupPlanChangedDetail');
+    if (state === 'actions_due') return t('notifications.backupPlanActionsDetail');
+    return t('notifications.backupPlanDueDetail', {
+      date: dateValue(notification.payload, 'dueDate', dateLocale),
+      status:
+        state === 'overdue'
+          ? t('notifications.backupPlanOverdueStatus')
+          : t('notifications.backupPlanUpcomingStatus'),
+    });
   }
   if (
     notification.templateKey === 'service.inspection.due' ||

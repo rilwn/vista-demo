@@ -24,6 +24,7 @@ import { APP_ENVIRONMENT } from '../config/config.module.js';
 import { DatabaseService } from '../database/database.service.js';
 import type { FinanceBankStatementListQueryDto } from './finance-bank.dto.js';
 import { FinanceService } from './finance.service.js';
+import { appendPosAccountPaymentEntry, lockPosAccountCharge } from './pos-account-collection.js';
 
 interface StatementSummaryRow {
   account_iban: string;
@@ -52,12 +53,14 @@ interface TransactionRow {
   counterparty_name: string;
   direction: FinanceBankTransaction['direction'];
   document_number: string | null;
+  pos_sale_number: string | null;
   id: string;
   line_number: number;
   match_method: NonNullable<FinanceBankTransaction['match']>['method'] | null;
   match_status: FinanceBankTransaction['matchStatus'];
   matched_at: string | Date | null;
   matched_customer_document_id: string | null;
+  matched_pos_sale_id: string | null;
   matched_payment_id: string | null;
   matched_supplier_payable_id: string | null;
   matched_supplier_payment_id: string | null;
@@ -166,23 +169,82 @@ export class FinanceBankService {
        LIMIT 50`,
       [row.payment_reference, row.amount, row.counterparty_name],
     );
-    return candidates.rows
-      .map((candidate) => ({
+    const posCandidates = await this.database.getPool().query<{
+      customer_name: string;
+      due_date: string;
+      outstanding_total: string;
+      reference_matched: boolean;
+      sale_id: string;
+      sale_number: string;
+    }>(
+      `SELECT sale.id AS sale_id,sale.sale_number,customer.display_name AS customer_name,
+              charge.due_on::text AS due_date,ledger.balance::text AS outstanding_total,
+              coalesce(($1 ILIKE ('%' || sale.sale_number || '%')
+                OR $1 ILIKE ('%' || sale.fiscal_receipt_number || '%')
+                OR $1 ILIKE ('%' || financial.official_number || '%')
+                OR $1 ILIKE ('%' || financial.draft_number || '%')), false) AS reference_matched
+       FROM finance.customer_account_entries charge
+       JOIN pos.sales sale ON sale.id=charge.pos_sale_id AND sale.status='completed'
+       JOIN master_data.partners customer ON customer.id=charge.customer_partner_id
+       LEFT JOIN LATERAL (
+         SELECT official_number,draft_number
+         FROM finance.financial_documents
+         WHERE source_pos_sale_id=sale.id AND status IN ('draft','issued')
+         ORDER BY (official_number IS NOT NULL) DESC, created_at DESC, id DESC
+         LIMIT 1
+       ) financial ON true
+       CROSS JOIN LATERAL (
+         SELECT coalesce(sum(CASE WHEN entry.entry_type IN ('charge','payment_reversal')
+           THEN entry.amount ELSE -entry.amount END),0) AS balance
+         FROM finance.customer_account_entries entry WHERE entry.pos_sale_id=sale.id
+       ) ledger
+       WHERE charge.entry_type='charge' AND ledger.balance >= $2::numeric
+       ORDER BY reference_matched DESC,
+                (lower(customer.display_name)=lower($3)) DESC,
+                (ledger.balance=$2::numeric) DESC,charge.due_on,sale.id
+       LIMIT 50`,
+      [row.payment_reference, row.amount, row.counterparty_name],
+    );
+    const score = (outstanding: string, customerName: string, referenceMatched: boolean) =>
+      (referenceMatched ? 60 : 0) +
+      (decimalUnits(outstanding) === decimalUnits(row.amount) ? 30 : 0) +
+      (customerName.toLocaleLowerCase() === row.counterparty_name.toLocaleLowerCase() ? 10 : 0);
+    const all: FinanceBankMatchCandidate[] = [
+      ...candidates.rows.map((candidate) => ({
         customerDocumentId: candidate.customer_document_id,
+        targetId: candidate.customer_document_id,
+        targetType: 'collection' as const,
         customerName: candidate.customer_name,
         documentNumber: candidate.document_number,
         dueDate: candidate.due_date,
         outstandingTotal: candidate.outstanding_total,
         referenceMatched: candidate.reference_matched,
-        score:
-          (candidate.reference_matched ? 60 : 0) +
-          (decimalUnits(candidate.outstanding_total) === decimalUnits(row.amount) ? 30 : 0) +
-          (candidate.customer_name.toLocaleLowerCase() === row.counterparty_name.toLocaleLowerCase()
-            ? 10
-            : 0),
+        score: score(
+          candidate.outstanding_total,
+          candidate.customer_name,
+          candidate.reference_matched,
+        ),
         sourceInvoiceNumber: candidate.source_invoice_number,
-      }))
-      .sort((left, right) => right.score - left.score || left.dueDate.localeCompare(right.dueDate));
+      })),
+      ...posCandidates.rows.map((candidate) => ({
+        posSaleId: candidate.sale_id,
+        targetId: candidate.sale_id,
+        targetType: 'pos_account' as const,
+        customerName: candidate.customer_name,
+        documentNumber: candidate.sale_number,
+        dueDate: candidate.due_date,
+        outstandingTotal: candidate.outstanding_total,
+        referenceMatched: candidate.reference_matched,
+        score: score(
+          candidate.outstanding_total,
+          candidate.customer_name,
+          candidate.reference_matched,
+        ),
+      })),
+    ];
+    return all
+      .sort((left, right) => right.score - left.score || left.dueDate.localeCompare(right.dueDate))
+      .slice(0, 50);
   }
 
   async createStatement(
@@ -321,8 +383,14 @@ export class FinanceBankService {
     const normalized = {
       customerDocumentId: input.customerDocumentId,
       expectedVersion: input.expectedVersion,
+      posSaleId: input.posSaleId,
       reviewPossibleDuplicate: input.reviewPossibleDuplicate === true,
     };
+    if (Boolean(normalized.customerDocumentId) === Boolean(normalized.posSaleId))
+      throw inputError(
+        'FINANCE_BANK_MATCH_TARGET_REQUIRED',
+        'Choose one customer collection or one POS account sale.',
+      );
     return this.command(
       `finance.bank-transaction.match:${id}`,
       key,
@@ -340,7 +408,12 @@ export class FinanceBankService {
         await this.allocateTransaction(
           client,
           id,
-          normalized.customerDocumentId,
+          {
+            ...(normalized.customerDocumentId
+              ? { customerDocumentId: normalized.customerDocumentId }
+              : {}),
+            ...(normalized.posSaleId ? { posSaleId: normalized.posSaleId } : {}),
+          },
           'manual',
           auth,
           metadata,
@@ -355,7 +428,7 @@ export class FinanceBankService {
   private async allocateTransaction(
     client: PoolClient,
     transactionId: string,
-    customerDocumentId: string,
+    target: { customerDocumentId?: string; posSaleId?: string },
     method: 'automatic_reference' | 'manual',
     auth: AuthenticationContext,
     metadata: RequestSecurityMetadata,
@@ -379,6 +452,92 @@ export class FinanceBankService {
         'FINANCE_BANK_TRANSACTION_DIRECTION_INVALID',
         'Only incoming bank transactions can be matched to customer collections.',
       );
+    if (Boolean(target.customerDocumentId) === Boolean(target.posSaleId))
+      throw inputError(
+        'FINANCE_BANK_MATCH_TARGET_REQUIRED',
+        'Choose one customer collection or one POS account sale.',
+      );
+    if (target.posSaleId) {
+      const charge = await lockPosAccountCharge(
+        client,
+        (
+          await client.query<{ customer_partner_id: string }>(
+            'SELECT customer_partner_id FROM pos.sales WHERE id=$1',
+            [target.posSaleId],
+          )
+        ).rows[0]?.customer_partner_id ?? '',
+        target.posSaleId,
+        this.environment.BUSINESS_TIMEZONE,
+      );
+      if (transaction.value_date < charge.sale_date)
+        throw inputError(
+          'POS_ACCOUNT_PAYMENT_DATE_INVALID',
+          'The bank value date cannot be before the POS sale date.',
+        );
+      if (decimalUnits(transaction.amount) > decimalUnits(charge.balance))
+        throw conflict(
+          'FINANCE_BANK_MATCH_EXCEEDS_BALANCE',
+          'The transfer exceeds the remaining POS account balance. Match a partial amount only after the bank transaction has been split into separate lines.',
+        );
+      const paymentId = randomUUID();
+      const paymentNumber = await this.nextNumber(client, 'payment', 'PAY');
+      await client.query(
+        `INSERT INTO finance.payments (
+           id,payment_number,customer_partner_id,payment_date,payment_method,currency_code,amount,
+           payment_reference,notes,recorded_by,source_pos_sale_id
+         ) VALUES ($1,$2,$3,$4,'bank_transfer','EUR',$5,$6,$7,$8,$9)`,
+        [
+          paymentId,
+          paymentNumber,
+          charge.customer_partner_id,
+          transaction.value_date,
+          transaction.amount,
+          transaction.payment_reference,
+          `Matched from bank statement ${transaction.statement_number}, line ${transaction.line_number}.`,
+          auth.accountId,
+          target.posSaleId,
+        ],
+      );
+      await appendPosAccountPaymentEntry(
+        client,
+        charge,
+        paymentId,
+        transaction.amount,
+        auth.accountId,
+        metadata.correlationId,
+      );
+      await client.query(
+        `UPDATE finance.bank_transactions
+         SET match_status='matched',match_method=$2,matched_pos_sale_id=$3,matched_payment_id=$4,
+             matched_by=$5,matched_at=now(),possible_duplicate=false,version=version+1,updated_at=now()
+         WHERE id=$1`,
+        [transactionId, method, target.posSaleId, paymentId, auth.accountId],
+      );
+      await client.query(
+        'UPDATE finance.bank_statements SET version=version+1,updated_at=now() WHERE id=$1',
+        [transaction.bank_statement_id],
+      );
+      await this.sideEffects(
+        client,
+        'finance_bank_transaction',
+        transactionId,
+        'finance.bank-transaction.matched',
+        {
+          amount: transaction.amount,
+          matchMethod: method,
+          paymentId,
+          paymentNumber,
+          posSaleId: target.posSaleId,
+          possibleDuplicateReviewed: transaction.possible_duplicate,
+          transactionId,
+        },
+        auth,
+        metadata,
+        `${commandKey}:${transactionId}`,
+      );
+      return;
+    }
+    const customerDocumentId = target.customerDocumentId!;
     const documentResult = await client.query<{
       allocated_total: string;
       customer_partner_id: string;
@@ -621,11 +780,6 @@ function normalizeStatement(input: CreateFinanceBankStatementRequest) {
   const lines = input.lines.map((line) => {
     const transactionDate = normalizeDate(line.transactionDate);
     const valueDate = normalizeDate(line.valueDate);
-    if (valueDate < transactionDate)
-      throw inputError(
-        'FINANCE_BANK_VALUE_DATE_INVALID',
-        'Value date cannot precede transaction date.',
-      );
     return {
       amount: normalizePositiveDecimal(line.amount),
       ...(line.counterpartyIban
@@ -661,24 +815,53 @@ function normalizeStatement(input: CreateFinanceBankStatementRequest) {
   };
 }
 
-async function exactReferenceCandidates(client: PoolClient, reference: string, amount: string) {
-  const result = await client.query<{ id: string }>(
-    `SELECT document.id
-     FROM finance.customer_documents document
-     LEFT JOIN sales.invoices source ON source.id = document.source_sales_invoice_id
-     LEFT JOIN finance.financial_documents financial ON financial.id = document.financial_document_id
-     WHERE document.review_state = 'pending_finance_review'
-       AND document.currency_code = 'EUR'
-       AND document.outstanding_total >= $2::numeric
-       AND ($1 ILIKE ('%' || document.document_number || '%')
-         OR $1 ILIKE ('%' || source.invoice_number || '%')
-         OR $1 ILIKE ('%' || financial.official_number || '%')
-         OR $1 ILIKE ('%' || financial.draft_number || '%'))
-     ORDER BY document.id
-     LIMIT 2`,
+async function exactReferenceCandidates(
+  client: PoolClient,
+  reference: string,
+  amount: string,
+): Promise<Array<{ customerDocumentId?: string; posSaleId?: string }>> {
+  const result = await client.query<{
+    customer_document_id: string | null;
+    pos_sale_id: string | null;
+  }>(
+    `SELECT candidate.customer_document_id,candidate.pos_sale_id FROM (
+       SELECT document.id AS customer_document_id,NULL::uuid AS pos_sale_id
+       FROM finance.customer_documents document
+       LEFT JOIN sales.invoices source ON source.id=document.source_sales_invoice_id
+       LEFT JOIN finance.financial_documents financial ON financial.id=document.financial_document_id
+       WHERE document.review_state='pending_finance_review' AND document.currency_code='EUR'
+         AND document.outstanding_total >= $2::numeric
+         AND ($1 ILIKE ('%' || document.document_number || '%')
+           OR $1 ILIKE ('%' || source.invoice_number || '%')
+           OR $1 ILIKE ('%' || financial.official_number || '%')
+           OR $1 ILIKE ('%' || financial.draft_number || '%'))
+       UNION ALL
+       SELECT NULL::uuid,sale.id
+       FROM pos.sales sale
+       JOIN finance.customer_account_entries charge ON charge.pos_sale_id=sale.id AND charge.entry_type='charge'
+       LEFT JOIN LATERAL (
+         SELECT official_number,draft_number
+         FROM finance.financial_documents
+         WHERE source_pos_sale_id=sale.id AND status IN ('draft','issued')
+         ORDER BY (official_number IS NOT NULL) DESC, created_at DESC, id DESC
+         LIMIT 1
+       ) financial ON true
+       WHERE sale.status='completed'
+         AND (SELECT coalesce(sum(CASE WHEN entry.entry_type IN ('charge','payment_reversal')
+           THEN entry.amount ELSE -entry.amount END),0)
+           FROM finance.customer_account_entries entry WHERE entry.pos_sale_id=sale.id) >= $2::numeric
+         AND ($1 ILIKE ('%' || sale.sale_number || '%')
+           OR $1 ILIKE ('%' || sale.fiscal_receipt_number || '%')
+           OR $1 ILIKE ('%' || financial.official_number || '%')
+           OR $1 ILIKE ('%' || financial.draft_number || '%'))
+     ) candidate LIMIT 2`,
     [reference, amount],
   );
-  return result.rows.map(({ id }) => id);
+  return result.rows.map((row) =>
+    row.customer_document_id
+      ? { customerDocumentId: row.customer_document_id }
+      : { posSaleId: row.pos_sale_id! },
+  );
 }
 
 async function lockTransaction(client: PoolClient, id: string) {
@@ -723,9 +906,13 @@ async function loadStatement(client: PoolClient, id: string): Promise<FinanceBan
             transaction.payment_reference, transaction.match_status, transaction.match_method,
             transaction.possible_duplicate,
             transaction.matched_customer_document_id, transaction.matched_payment_id,
+            transaction.matched_pos_sale_id,
             transaction.matched_supplier_payable_id, transaction.matched_supplier_payment_id,
-            transaction.matched_at, transaction.version, document.document_number,
-            customer.display_name AS customer_name, payment.payment_number,
+            transaction.matched_at, transaction.version,
+            coalesce(document.document_number,sale.sale_number) AS document_number,
+            sale.sale_number AS pos_sale_number,
+            coalesce(customer.display_name,pos_customer.display_name) AS customer_name,
+            payment.payment_number,
             supplier_payable.payable_number AS supplier_payable_number,
             supplier_payment.payment_number AS supplier_payment_number,
             supplier_payment.payment_kind AS supplier_payment_kind,
@@ -735,6 +922,8 @@ async function loadStatement(client: PoolClient, id: string): Promise<FinanceBan
      LEFT JOIN finance.customer_documents document
        ON document.id = transaction.matched_customer_document_id
      LEFT JOIN master_data.partners customer ON customer.id = document.customer_partner_id
+     LEFT JOIN pos.sales sale ON sale.id=transaction.matched_pos_sale_id
+     LEFT JOIN master_data.partners pos_customer ON pos_customer.id=sale.customer_partner_id
      LEFT JOIN finance.payments payment ON payment.id = transaction.matched_payment_id
      LEFT JOIN finance.supplier_payables supplier_payable
        ON supplier_payable.id = transaction.matched_supplier_payable_id
@@ -812,7 +1001,7 @@ function mapTransaction(row: TransactionRow): FinanceBankTransaction {
     id: row.id,
     lineNumber: row.line_number,
     ...(row.match_status === 'matched' &&
-    row.matched_customer_document_id &&
+    (row.matched_customer_document_id || row.matched_pos_sale_id) &&
     row.document_number &&
     row.customer_name &&
     row.matched_at &&
@@ -820,12 +1009,18 @@ function mapTransaction(row: TransactionRow): FinanceBankTransaction {
     row.payment_number
       ? {
           match: {
-            customerDocumentId: row.matched_customer_document_id,
+            ...(row.matched_customer_document_id
+              ? { customerDocumentId: row.matched_customer_document_id }
+              : {}),
+            ...(row.matched_pos_sale_id ? { posSaleId: row.matched_pos_sale_id } : {}),
             customerName: row.customer_name,
             documentNumber: row.document_number,
             matchedAt: asIso(row.matched_at),
             method: row.match_method,
             paymentNumber: row.payment_number,
+            targetType: row.matched_pos_sale_id
+              ? ('pos_account' as const)
+              : ('collection' as const),
           },
         }
       : {}),

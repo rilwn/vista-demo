@@ -7,6 +7,8 @@ import type { BnbCurrencyRatesService } from '../finance/bnb-currency-rates.serv
 import type { StructuredLogger } from '../logging/structured-logger.service.js';
 import type { SalesSubscriptionsService } from '../sales/sales-subscriptions.service.js';
 import type { RecurringInvoicesService } from '../finance/recurring-invoices.service.js';
+import type { BackupExecutionService } from '../backup/backup-execution.service.js';
+import type { BackupRestoreWorkerService } from '../backup/backup-restore-worker.service.js';
 import type { ServiceCareService } from '../service/service-care.service.js';
 import { JobHandlerRegistry } from './job-handler-registry.service.js';
 import type { FinanceReportExportsService } from './finance-report-exports.service.js';
@@ -35,7 +37,7 @@ describe('NamedJobTriggerHandlersService', () => {
       idempotencyKey: '2026-08-10',
       jobId: 'job-1',
       maxAttempts: 5,
-      name: 'backup.verify',
+      name: 'backup.plan-review.remind',
       payload: { scheduledFor: '2026-08-10T08:00:00.000Z' },
       retryAllowed: true,
     } as const;
@@ -47,14 +49,14 @@ describe('NamedJobTriggerHandlersService', () => {
     const firstParameters = query.mock.calls[0]?.[1] as unknown[];
     const replayParameters = query.mock.calls[1]?.[1] as unknown[];
     expect(firstParameters[0]).toBe(replayParameters[0]);
-    expect(firstParameters[1]).toBe('scheduler.backup.verify.requested');
+    expect(firstParameters[1]).toBe('scheduler.backup.plan-review.remind.requested');
     expect(firstParameters[3]).toBe(replayParameters[3]);
     expect(firstParameters[4]).toEqual({
       input: { scheduledFor: '2026-08-10T08:00:00.000Z' },
-      jobName: 'backup.verify',
+      jobName: 'backup.plan-review.remind',
       queuedAt: '2026-08-10T08:00:00.000Z',
     });
-    expect(firstParameters[5]).toBe('pending');
+    expect(firstParameters[5]).toBe('completed');
   });
 
   it('runs overdue detection before recording the durable scheduled-job handoff', async () => {
@@ -212,6 +214,61 @@ describe('NamedJobTriggerHandlersService', () => {
 
     expect(currencyRates.refresh).toHaveBeenCalledWith();
   });
+
+  it.each([
+    ['backup.schedule.dispatch', 'dispatchDueRuns'],
+    ['backup.execute', 'execute'],
+    ['backup.verify', 'verify'],
+    ['backup.retention.enforce', 'enforceRetention'],
+    ['backup.missed-detect', 'detectMissedRuns'],
+    ['backup.dr-test.remind', 'prepareDrTestReminders'],
+    ['backup.plan-review.remind', 'preparePlanReviewReminders'],
+  ] as const)('runs %s through the backup execution service', async (name, method) => {
+    const { backups, registry, service } = createSubject();
+    service.onModuleInit();
+    const context = {
+      attemptNumber: 1,
+      correlationId: `correlation-${name}`,
+      enqueuedAt: '2026-10-27T10:00:00.000Z',
+      idempotencyKey: `backup-${name}-2026-10-27`,
+      jobId: `backup-job-${name}`,
+      maxAttempts: 5,
+      name,
+      payload: { policyId: 'policy-1', runId: 'run-1', scheduledFor: '2026-10-27T10:00:00.000Z' },
+      retryAllowed: true,
+    } as const;
+
+    await registry.execute(context);
+
+    expect(backups[method]).toHaveBeenCalledWith(context);
+  });
+
+  it.each([
+    ['backup.restore.dispatch', 'dispatchApprovedRestores'],
+    ['backup.restore.execute', 'execute'],
+  ] as const)('runs %s through the backup restore worker', async (name, method) => {
+    const { backups, registry, restores, service } = createSubject();
+    service.onModuleInit();
+    const context = {
+      attemptNumber: 1,
+      correlationId: `correlation-${name}`,
+      enqueuedAt: '2026-10-27T10:00:00.000Z',
+      idempotencyKey: `backup-${name}-2026-10-27`,
+      jobId: `backup-job-${name}`,
+      maxAttempts: 5,
+      name,
+      payload: { restoreRequestId: 'restore-1' },
+      retryAllowed: true,
+    } as const;
+
+    await registry.execute(context);
+
+    if (method === 'execute') expect(restores[method]).toHaveBeenCalledWith(context);
+    else {
+      expect(restores[method]).toHaveBeenCalledOnce();
+      expect(backups.dispatchApprovedArtifactDeletions).toHaveBeenCalledWith(context);
+    }
+  });
 });
 
 function createSubject(
@@ -246,6 +303,27 @@ function createSubject(
   const serviceCare = serviceCareSpies as unknown as ServiceCareService;
   const crmTicketSpies = { evaluateSla: vi.fn() };
   const crmTickets = crmTicketSpies as unknown as CrmTicketsService;
+  const backupSpies = {
+    dispatchDueRuns: vi
+      .fn()
+      .mockResolvedValue({ dueCount: 0, enqueuedCount: 0, deduplicatedCount: 0 }),
+    dispatchApprovedArtifactDeletions: vi.fn().mockResolvedValue({
+      completedCount: 0,
+      failedCount: 0,
+      processedCount: 0,
+      retryScheduledCount: 0,
+    }),
+    execute: vi.fn().mockResolvedValue({ runId: 'run-1', status: 'stored' }),
+    enforceRetention: vi.fn().mockResolvedValue({ deletedArtifactCount: 0, processedCount: 0 }),
+    detectMissedRuns: vi.fn().mockResolvedValue({ detectedCount: 0, notifiedCount: 0 }),
+    prepareDrTestReminders: vi.fn().mockResolvedValue({ dueCount: 0, notifiedCount: 0 }),
+    preparePlanReviewReminders: vi.fn().mockResolvedValue({ dueCount: 0, notifiedCount: 0 }),
+    verify: vi.fn().mockResolvedValue({ runId: 'run-1', status: 'verified' }),
+  };
+  const restoreSpies = {
+    dispatchApprovedRestores: vi.fn().mockResolvedValue({ enqueuedCount: 0, deduplicatedCount: 0 }),
+    execute: vi.fn().mockResolvedValue({ restoreRequestId: 'restore-1', status: 'completed' }),
+  };
   return {
     crmTickets: crmTicketSpies,
     currencyRates,
@@ -266,6 +344,10 @@ function createSubject(
           .fn()
           .mockResolvedValue({ issuedCount: 0, reviewCount: 0, retryCount: 0, skippedCount: 0 }),
       } as unknown as RecurringInvoicesService,
+      backupSpies as unknown as BackupExecutionService,
+      restoreSpies as unknown as BackupRestoreWorkerService,
     ),
+    backups: backupSpies,
+    restores: restoreSpies,
   };
 }

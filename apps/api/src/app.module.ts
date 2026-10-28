@@ -23,6 +23,7 @@ import { ServiceOperationsModule } from './service/service.module.js';
 import { FilesModule } from './files/files.module.js';
 import { CrmModule } from './crm/crm.module.js';
 import { PosModule } from './pos/pos.module.js';
+import { BackupModule } from './backup/backup.module.js';
 
 @Module({
   controllers: [RootController],
@@ -49,6 +50,7 @@ import { PosModule } from './pos/pos.module.js';
     CrmModule,
     FilesModule,
     PosModule,
+    BackupModule,
   ],
 })
 export class AppModule {}

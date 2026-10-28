@@ -11,6 +11,7 @@ import type {
   LogisticsRoutePlan,
   LogisticsRoutePlanPage,
   ReceiveLogisticsReturnRequest,
+  ReconcileLogisticsCourierBookingRequest,
   ReportLogisticsDeliveryExceptionRequest,
   UpdateLogisticsDeliveryStatusRequest,
 } from '@vista/contracts';
@@ -58,6 +59,45 @@ export function createLogisticsDelivery(
       body: input,
       headers: authorizationHeaders(token),
       params: { header: idempotencyParameters(key).header },
+    }),
+  );
+}
+
+export function bookLogisticsCourier(
+  token: string,
+  id: string,
+  key: string,
+): Promise<LogisticsDelivery> {
+  return unwrapApiResponse(
+    apiClient.POST('/api/v1/logistics/deliveries/{id}/courier-booking', {
+      headers: authorizationHeaders(token),
+      params: { header: idempotencyParameters(key).header, path: { id } },
+    }),
+  );
+}
+
+export function refreshLogisticsCourierTracking(
+  token: string,
+  id: string,
+): Promise<LogisticsDelivery> {
+  return unwrapApiResponse(
+    apiClient.POST('/api/v1/logistics/deliveries/{id}/courier-tracking', {
+      headers: authorizationHeaders(token),
+      params: { path: { id } },
+    }),
+  );
+}
+
+export function reconcileLogisticsCourierBooking(
+  token: string,
+  id: string,
+  input: ReconcileLogisticsCourierBookingRequest,
+): Promise<LogisticsDelivery> {
+  return unwrapApiResponse(
+    apiClient.POST('/api/v1/logistics/deliveries/{id}/courier-booking/reconcile', {
+      body: input,
+      headers: authorizationHeaders(token),
+      params: { path: { id } },
     }),
   );
 }

@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Document xmlns="urn:iso:std:iso:20022:tech:xsd:camt.053.001.08">
+  <BkToCstmrStmt>
+    <GrpHdr>
+      <MsgId>VISTA-DEMO-CAMT-20261027</MsgId>
+      <CreDtTm>2026-10-27T10:00:00Z</CreDtTm>
+    </GrpHdr>
+    <Stmt>
+      <Id>DEMO-CAMT-20261027-01</Id>
+      <FrToDt>
+        <FrDtTm>2026-10-27T00:00:00Z</FrDtTm>
+        <ToDtTm>2026-10-27T23:59:59Z</ToDtTm>
+      </FrToDt>
+      <Acct>
+        <Id><IBAN>BG76DEMO00000000000000</IBAN></Id>
+        <Ccy>EUR</Ccy>
+      </Acct>
+      <Bal>
+        <Tp><CdOrPrtry><Cd>OPBD</Cd></CdOrPrtry></Tp>
+        <Amt Ccy="EUR">100.00</Amt>
+        <CdtDbtInd>CRDT</CdtDbtInd>
+        <Dt><Dt>2026-10-27</Dt></Dt>
+      </Bal>
+      <Bal>
+        <Tp><CdOrPrtry><Cd>CLBD</Cd></CdOrPrtry></Tp>
+        <Amt Ccy="EUR">160.00</Amt>
+        <CdtDbtInd>CRDT</CdtDbtInd>
+        <Dt><Dt>2026-10-27</Dt></Dt>
+      </Bal>
+      <Ntry>
+        <NtryRef>CAMT-ENTRY-0001</NtryRef>
+        <Amt Ccy="EUR">60.00</Amt>
+        <CdtDbtInd>CRDT</CdtDbtInd>
+        <Sts>BOOK</Sts>
+        <BookgDt><Dt>2026-10-27</Dt></BookgDt>
+        <ValDt><Dt>2026-10-27</Dt></ValDt>
+        <NtryDtls>
+          <TxDtls>
+            <Refs><EndToEndId>DEMO-CAMT-INV-001</EndToEndId></Refs>
+            <AmtDtls><TxAmt><Amt Ccy="EUR">60.00</Amt></TxAmt></AmtDtls>
+            <RltdPties><Dbtr><Pty><Nm>Vista Demo Customer</Nm></Pty></Dbtr></RltdPties>
+            <RmtInf><Ustrd>DEMO-CAMT-INV-001</Ustrd></RmtInf>
+          </TxDtls>
+        </NtryDtls>
+      </Ntry>
+    </Stmt>
+  </BkToCstmrStmt>
+</Document>

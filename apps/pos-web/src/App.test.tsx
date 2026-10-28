@@ -1,10 +1,28 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { IDBFactory, IDBKeyRange } from 'fake-indexeddb';
+import type {
+  PosCatalogItem,
+  PosCustomerOption,
+  PosRegisterOption,
+  PosShift,
+} from '@vista/contracts';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { App } from './App';
 import { TestCheckoutChannel } from './test-checkout-channel';
-import { saveCheckout, readCheckoutHistory, clearCheckout } from './checkout-store';
+import { saveCheckout, readCheckout, readCheckoutHistory, clearCheckout } from './checkout-store';
+import {
+  reserveOfflineFiscalSale,
+  readOfflineCatalog,
+  readOfflineBasket,
+  saveOfflineDatecsUnpLease,
+  saveOfflineBasket,
+  saveOfflineCatalog,
+  saveOfflineContext,
+  saveOfflinePosCustomers,
+  updateOfflineFiscalSale,
+} from './offline-store';
+import { emptyDatecsSaleSettings, saveDatecsSaleSettings } from './fiscal/datecs-settings';
 
 afterEach(cleanup);
 
@@ -13,6 +31,8 @@ describe('POS application', () => {
     vi.stubGlobal('indexedDB', new IDBFactory());
     vi.stubGlobal('IDBKeyRange', IDBKeyRange);
     vi.stubGlobal('BroadcastChannel', TestCheckoutChannel);
+    Object.defineProperty(window.navigator, 'onLine', { configurable: true, value: true });
+    vi.stubGlobal('navigator', window.navigator);
     window.history.replaceState(null, '', '/');
     localStorage.clear();
     sessionStorage.clear();
@@ -113,6 +133,193 @@ describe('POS application', () => {
     expect(await screen.findByRole('heading', { name: 'Reports' })).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Reports' }).getAttribute('aria-current')).toBe('page');
     expect(window.location.pathname).toBe('/reports');
+  });
+
+  it('restores an unexpired cashier session and last-known counter data while offline', async () => {
+    Object.defineProperty(window.navigator, 'onLine', { configurable: true, value: false });
+    await saveOfflineContext(posContext.accountId, {
+      currentShift: shift,
+      registers: [register],
+    });
+    await saveOfflineCatalog(posContext.accountId, shift.id, [catalogItem]);
+    expect((await readOfflineCatalog(posContext.accountId, shift.id))?.value).toEqual([
+      catalogItem,
+    ]);
+    await saveOfflineBasket({
+      accountId: posContext.accountId,
+      shiftId: shift.id,
+      transactionId: '86a47c28-7521-4a81-aafd-c04d92363230',
+      lines: [{ item: catalogItem, quantity: 1 }],
+      savedAt: new Date().toISOString(),
+    });
+    const offlineFetch = vi
+      .fn<typeof fetch>()
+      .mockRejectedValue(new TypeError('Network unavailable'));
+    vi.stubGlobal('fetch', offlineFetch);
+
+    render(<App />);
+
+    expect(await screen.findByRole('heading', { name: 'New sale' })).toBeTruthy();
+    expect(await screen.findByText('Connection lost')).toBeTruthy();
+    expect(
+      screen.getByText(
+        'Last-known prices and stock are shown. Offline cash sales use the connected DATECS device. Saved customer records, prices, and available serials can be used. Lot-tracked products require a selected available batch. Promotions, discounts, and loyalty points are unavailable offline.',
+      ),
+    ).toBeTruthy();
+    await screen.findByRole('button', { name: 'No pending checkouts' });
+    await screen.findAllByText('DEV-ADAPTER-12V');
+    await screen.findByRole('button', { name: 'Remove Demo 12 V Power Adapter' });
+    expect(screen.getAllByText('Demo 12 V Power Adapter').length).toBeGreaterThanOrEqual(2);
+    expect(
+      screen.getByRole('button', { name: /Complete sale · 60.00 EUR/u }).hasAttribute('disabled'),
+    ).toBe(true);
+    expect(screen.queryByRole('heading', { name: sale.fiscalReceiptNumber })).toBeNull();
+    expect(await readCheckout(posContext.accountId)).toBeUndefined();
+    expect(
+      offlineFetch.mock.calls.some(([input, init]) => {
+        const url =
+          typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+        const method = init?.method ?? (input instanceof Request ? input.method : 'GET');
+        return url.includes('/pos/sales') && method === 'POST';
+      }),
+    ).toBe(false);
+  });
+
+  it('uses saved customer, location and serial data for an offline DATECS cash sale', async () => {
+    Object.defineProperty(window.navigator, 'onLine', { configurable: true, value: false });
+    const hardwareRegister = { ...register, fiscalMode: 'hardware' as const };
+    const serialItem: PosCatalogItem = {
+      ...catalogItem,
+      availableQuantity: '1.0000',
+      id: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+      name: 'Demo Fiscal Register X1',
+      productCode: 'OFFLINE-SERIAL-001',
+      serialNumbers: ['SERIAL-DEMO-001'],
+      trackingMode: 'serial',
+      unitPrice: '10.0000',
+    };
+    await saveOfflineContext(posContext.accountId, {
+      currentShift: shift,
+      registers: [hardwareRegister],
+    });
+    await saveOfflinePosCustomers(posContext.accountId, [customer]);
+    await saveOfflineCatalog(posContext.accountId, shift.id, [serialItem], customer.id);
+    await saveOfflineDatecsUnpLease(posContext.accountId, {
+      cashRegisterId: register.id,
+      deviceSerial: 'DT000600',
+      operatorIdentifier: 'OP01',
+      uniqueSaleIds: ['DT000600-OP01-0001000'],
+    });
+    saveDatecsSaleSettings(posContext.accountId, register.id, {
+      ...emptyDatecsSaleSettings('OP01'),
+      deviceSerial: 'DT000600',
+    });
+    const offlineFetch = vi
+      .fn<typeof fetch>()
+      .mockRejectedValue(new TypeError('Network unavailable'));
+    vi.stubGlobal('fetch', offlineFetch);
+
+    render(<App />);
+    await screen.findByRole('heading', { name: 'New sale' });
+    fireEvent.click(screen.getByRole('button', { name: 'Add customer' }));
+    expect(await screen.findByText('Showing customer records saved on this device.')).toBeTruthy();
+    fireEvent.click(await screen.findByRole('button', { name: /Alfa Market Demo Ltd\./u }));
+    fireEvent.click(screen.getByRole('button', { name: 'Use customer' }));
+    fireEvent.click(
+      await screen.findByRole('button', { name: /OFFLINE-SERIAL-001.*Demo Fiscal Register X1/u }),
+    );
+    fireEvent.change(screen.getByLabelText('Serial number'), {
+      target: { value: 'SERIAL-DEMO-001' },
+    });
+    fireEvent.change(screen.getByLabelText('Cash received'), { target: { value: '12.00' } });
+    fireEvent.change(screen.getByLabelText('Operator password'), { target: { value: '1234' } });
+
+    expect(
+      await screen.findByRole('button', { name: /Complete sale · 12\.00 EUR/u }),
+    ).not.toHaveProperty('disabled', true);
+    expect(
+      offlineFetch.mock.calls.some(([input]) => {
+        const url =
+          typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+        return url.includes('/pos/customers');
+      }),
+    ).toBe(false);
+    expect(
+      await readOfflineCatalog(posContext.accountId, shift.id, undefined, customer.id),
+    ).toBeTruthy();
+    await waitFor(async () => {
+      expect(await readOfflineBasket(posContext.accountId)).toMatchObject({
+        customer: {
+          customer: { id: customer.id },
+          location: { id: customer.locations[0]?.id },
+        },
+        lines: [{ serialNumber: 'SERIAL-DEMO-001' }],
+      });
+    });
+  });
+
+  it('shows a physically printed offline DATECS receipt in recovery until it syncs', async () => {
+    await saveOfflineDatecsUnpLease(posContext.accountId, {
+      cashRegisterId: register.id,
+      deviceSerial: 'DT000600',
+      operatorIdentifier: 'OP01',
+      uniqueSaleIds: ['DT000600-OP01-0001000'],
+    });
+    const request = {
+      clientTransactionId: 'offline-transaction-1',
+      lines: [{ productId: catalogItem.id, quantity: '1.0000' }],
+      payments: [{ amount: '60.00', method: 'cash' as const, tenderedAmount: '60.00' }],
+      shiftId: shift.id,
+    };
+    const saved = await reserveOfflineFiscalSale(posContext.accountId, {
+      accountId: posContext.accountId,
+      cashRegisterId: register.id,
+      cashTenderedEur: '60.00',
+      clientTransactionId: request.clientTransactionId,
+      deviceSerial: 'DT000600',
+      operatorIdentifier: 'OP01',
+      receiptLines: [
+        {
+          description: catalogItem.name,
+          grossTotalEur: '60.00',
+          quantity: '1',
+          unitCode: 'PCS',
+          unitPriceEur: '60.00',
+          vatTreatment: 'standard_20',
+        },
+      ],
+      request,
+      shiftId: shift.id,
+      totalGrossEur: '60.00',
+    });
+    await updateOfflineFiscalSale(posContext.accountId, saved.id, {
+      changeEur: '0.00',
+      fiscalDocumentNumber: '001234',
+      status: 'receipt_confirmed',
+    });
+    installApiMock();
+    window.history.replaceState(null, '', '/checkouts');
+    render(<App />);
+
+    expect(await screen.findByRole('heading', { name: 'Offline sales' })).toBeTruthy();
+    expect(screen.getByText('Waiting to sync')).toBeTruthy();
+    expect(screen.getByText('Receipt 001234')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Copy checkout ID' })).toBeTruthy();
+  });
+
+  it('does not restore the cached POS session after the server rejects it', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValue(
+          jsonResponse({ error: { code: 'SESSION_INVALID', message: 'Session invalid' } }, 401),
+        ),
+    );
+    render(<App />);
+
+    expect(await screen.findByRole('heading', { name: 'Open the counter' })).toBeTruthy();
+    expect(sessionStorage.getItem('vista.pos.session.v1')).toBeNull();
   });
 
   it('keeps recovery visible across routes, blocks shift closure and opens the recovered receipt', async () => {
@@ -263,7 +470,7 @@ describe('POS application', () => {
     fireEvent.change(screen.getByLabelText('Cash received'), { target: { value: '100' } });
     const complete = screen.getByRole('button', { name: /Complete sale · 60.00 EUR/u });
     expect(complete.hasAttribute('disabled')).toBe(true);
-    expect(screen.getByText('Checking offers…')).toBeTruthy();
+    expect(await screen.findByText('Checking offers…')).toBeTruthy();
     release();
     await waitFor(() => expect(complete.hasAttribute('disabled')).toBe(false));
   });
@@ -578,7 +785,7 @@ function installApiMock({ lookupSale = false, savedReport = false } = {}) {
             vatTotal: (net * 0.2).toFixed(4),
           },
         ],
-        loyaltyBalance: customer.loyalty.balance,
+        loyaltyBalance: customer.loyalty?.balance ?? 0,
         loyaltyDiscountTotal: loyalty.toFixed(4),
         loyaltyPointsRedeemed: Number(body.loyaltyPointsToRedeem ?? 0),
         manualDiscountTotal: manual.toFixed(4),
@@ -665,7 +872,7 @@ const posContext = {
   sessionId: '6d2decae-3d3b-4224-9caa-679d51b8e5d3',
   twoFactorVerified: true,
 };
-const register = {
+const register: PosRegisterOption = {
   businessLocationId: '11111111-1111-4111-8111-111111111111',
   businessLocationName: 'Vratsa Service & Retail Centre',
   code: 'POS-01',
@@ -682,7 +889,7 @@ const register = {
   warehouseId: '44444444-4444-4444-8444-444444444444',
   warehouseName: 'Demo Central Warehouse',
 };
-const shift = {
+const shift: PosShift = {
   cashRegisterId: register.id,
   cashRegisterName: register.name,
   expectedCashEur: '100.0000',
@@ -697,7 +904,7 @@ const shift = {
   warehouseId: register.warehouseId,
   warehouseName: register.warehouseName,
 };
-const catalogItem = {
+const catalogItem: PosCatalogItem = {
   availableQuantity: '12.0000',
   barcodes: ['3801234567898'],
   batches: [],
@@ -713,7 +920,7 @@ const catalogItem = {
   unitPrice: '50.0000',
   vatTreatment: 'standard_20',
 };
-const customer = {
+const customer: PosCustomerOption = {
   id: '88888888-8888-4888-8888-888888888888',
   loyalty: {
     balance: 300,

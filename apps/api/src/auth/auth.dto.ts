@@ -9,6 +9,8 @@ import type {
   ChangePasswordResponse,
   DisableTotpRequest,
   DisableTotpResponse,
+  DirectorySignInOptions,
+  DirectoryProvider,
   LoginRequest,
   LoginResponse,
   PasswordPolicyResponse,
@@ -22,7 +24,15 @@ import type {
   VerifyTotpEnrollmentRequest,
   VerifyTotpEnrollmentResponse,
 } from '@vista/contracts';
-import { IsEmail, IsOptional, IsString, Matches, MaxLength, MinLength } from 'class-validator';
+import {
+  IsEmail,
+  IsIn,
+  IsOptional,
+  IsString,
+  Matches,
+  MaxLength,
+  MinLength,
+} from 'class-validator';
 
 export class LoginRequestDto implements LoginRequest {
   @ApiProperty({ example: 'employee@example.invalid', maxLength: 320, type: String })
@@ -45,6 +55,60 @@ export class LoginRequestDto implements LoginRequest {
   @IsOptional()
   @Matches(/^\d{6}$/u)
   totpCode?: string;
+
+  @ApiPropertyOptional({ maxLength: 500, minLength: 8, type: String, writeOnly: true })
+  @IsOptional()
+  @IsString()
+  @MinLength(8)
+  @MaxLength(500)
+  emergencyAccessReason?: string;
+}
+
+export class DirectoryLoginStartRequestDto {
+  @ApiProperty({ enum: ['operations', 'pos', 'recovery'] })
+  @IsIn(['operations', 'pos', 'recovery'])
+  app!: 'operations' | 'pos' | 'recovery';
+}
+
+export class DirectorySignInOptionsDto implements DirectorySignInOptions {
+  @ApiProperty({ type: Boolean })
+  enabled!: boolean;
+
+  @ApiProperty({ type: Boolean })
+  emergencyAccessAvailable!: boolean;
+
+  @ApiProperty({ enum: ['ldap', 'oidc', 'saml'], nullable: true, type: String })
+  method!: DirectoryProvider | null;
+}
+
+export class DirectoryLoginStartResponseDto {
+  @ApiProperty({ format: 'uri', type: String })
+  authorizationUrl!: string;
+}
+
+export class DirectoryLoginExchangeRequestDto {
+  @ApiProperty({ maxLength: 43, minLength: 43, type: String, writeOnly: true })
+  @IsString()
+  @Matches(/^[A-Za-z0-9_-]{43}$/u)
+  ticket!: string;
+
+  @ApiPropertyOptional({ example: '123456', pattern: '^\\d{6}$', type: String, writeOnly: true })
+  @IsOptional()
+  @Matches(/^\d{6}$/u)
+  totpCode?: string;
+}
+
+export class DirectorySamlCallbackDto {
+  @ApiProperty({ type: String, writeOnly: true })
+  @IsString()
+  @MinLength(1)
+  @MaxLength(100_000)
+  SAMLResponse!: string;
+
+  @ApiProperty({ maxLength: 43, minLength: 43, type: String, writeOnly: true })
+  @IsString()
+  @Matches(/^[A-Za-z0-9_-]{43}$/u)
+  RelayState!: string;
 }
 
 export class LoginAccountDto implements AuthenticationAccountSummary {

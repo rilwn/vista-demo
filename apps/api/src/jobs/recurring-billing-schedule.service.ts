@@ -13,6 +13,12 @@ export const serviceInspectionReminderScheduleId = 'service.inspection-reminder.
 export const serviceWarrantyReminderScheduleId = 'service.warranty-reminder.daily';
 export const servicePlanVisitScheduleId = 'service.plan-visit.daily';
 export const crmSlaScheduleId = 'crm.sla.frequent';
+export const backupDispatchScheduleId = 'backup.schedule.frequent';
+export const backupRestoreDispatchScheduleId = 'backup.restore.frequent';
+export const backupRetentionScheduleId = 'backup.retention.daily';
+export const backupMissedDetectionScheduleId = 'backup.missed-detection.frequent';
+export const backupDrTestReminderScheduleId = 'backup.dr-test.daily';
+export const backupPlanReviewReminderScheduleId = 'backup.plan-review.daily';
 
 @Injectable()
 export class RecurringBillingScheduleService implements OnApplicationBootstrap {
@@ -122,6 +128,72 @@ export class RecurringBillingScheduleService implements OnApplicationBootstrap {
     this.logger.event('info', 'crm.sla.schedule.ready', {
       nextRunAt: crmSlaSchedule.nextRunAt,
       scheduleId: crmSlaSchedule.id,
+    });
+    const backupSchedule = await this.jobs.upsertSchedule({
+      id: backupDispatchScheduleId,
+      name: 'backup.schedule.dispatch',
+      pattern: this.environment.BACKUP_DISPATCH_CRON,
+      payload: { responsibility: 'dispatch-due-protection-schedules' },
+      timezone: this.environment.BUSINESS_TIMEZONE,
+    });
+    this.logger.event('info', 'backup.schedule.dispatch.ready', {
+      nextRunAt: backupSchedule.nextRunAt,
+      scheduleId: backupSchedule.id,
+    });
+    const restoreSchedule = await this.jobs.upsertSchedule({
+      id: backupRestoreDispatchScheduleId,
+      name: 'backup.restore.dispatch',
+      pattern: this.environment.BACKUP_DISPATCH_CRON,
+      payload: { responsibility: 'dispatch-approved-backup-restores' },
+      timezone: this.environment.BUSINESS_TIMEZONE,
+    });
+    this.logger.event('info', 'backup.restore.dispatch.ready', {
+      nextRunAt: restoreSchedule.nextRunAt,
+      scheduleId: restoreSchedule.id,
+    });
+    const retentionSchedule = await this.jobs.upsertSchedule({
+      id: backupRetentionScheduleId,
+      name: 'backup.retention.enforce',
+      pattern: '0 30 3 * * *',
+      payload: { responsibility: 'enforce-approved-backup-retention' },
+      timezone: this.environment.BUSINESS_TIMEZONE,
+    });
+    this.logger.event('info', 'backup.retention.enforce.schedule.ready', {
+      nextRunAt: retentionSchedule.nextRunAt,
+      scheduleId: retentionSchedule.id,
+    });
+    const missedDetectionSchedule = await this.jobs.upsertSchedule({
+      id: backupMissedDetectionScheduleId,
+      name: 'backup.missed-detect',
+      pattern: '0 */15 * * * *',
+      payload: { responsibility: 'detect-overdue-backup-schedules' },
+      timezone: this.environment.BUSINESS_TIMEZONE,
+    });
+    this.logger.event('info', 'backup.missed-detect.schedule.ready', {
+      nextRunAt: missedDetectionSchedule.nextRunAt,
+      scheduleId: missedDetectionSchedule.id,
+    });
+    const drTestReminderSchedule = await this.jobs.upsertSchedule({
+      id: backupDrTestReminderScheduleId,
+      name: 'backup.dr-test.remind',
+      pattern: '0 0 9 * * *',
+      payload: { responsibility: 'annual-disaster-recovery-test-reminder' },
+      timezone: this.environment.BUSINESS_TIMEZONE,
+    });
+    this.logger.event('info', 'backup.dr-test.remind.schedule.ready', {
+      nextRunAt: drTestReminderSchedule.nextRunAt,
+      scheduleId: drTestReminderSchedule.id,
+    });
+    const backupPlanReviewSchedule = await this.jobs.upsertSchedule({
+      id: backupPlanReviewReminderScheduleId,
+      name: 'backup.plan-review.remind',
+      pattern: '0 15 9 * * *',
+      payload: { responsibility: 'annual-backup-plan-review-reminder' },
+      timezone: this.environment.BUSINESS_TIMEZONE,
+    });
+    this.logger.event('info', 'backup.plan-review.remind.schedule.ready', {
+      nextRunAt: backupPlanReviewSchedule.nextRunAt,
+      scheduleId: backupPlanReviewSchedule.id,
     });
   }
 }

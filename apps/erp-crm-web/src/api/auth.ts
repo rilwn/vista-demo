@@ -6,6 +6,10 @@ import type {
   CompleteAccountRecoveryResponse,
   DisableTotpRequest,
   DisableTotpResponse,
+  DirectoryLoginExchangeRequest,
+  DirectoryLoginStartRequest,
+  DirectoryLoginStartResponse,
+  DirectorySignInOptions,
   LoginRequest,
   LoginResponse,
   PasswordPolicyResponse,
@@ -26,6 +30,22 @@ export { ApiClientError } from './client';
 
 export function authenticate(input: LoginRequest): Promise<LoginResponse> {
   return unwrapApiResponse(apiClient.POST('/api/v1/auth/login', { body: input }));
+}
+
+export function getDirectorySignInOptions(): Promise<DirectorySignInOptions> {
+  return unwrapApiResponse(apiClient.GET('/api/v1/auth/directory/options'));
+}
+
+export function startDirectoryLogin(
+  input: DirectoryLoginStartRequest,
+): Promise<DirectoryLoginStartResponse> {
+  return unwrapApiResponse(apiClient.POST('/api/v1/auth/directory/start', { body: input }));
+}
+
+export function exchangeDirectoryLogin(
+  input: DirectoryLoginExchangeRequest,
+): Promise<LoginResponse> {
+  return unwrapApiResponse(apiClient.POST('/api/v1/auth/directory/exchange', { body: input }));
 }
 
 export function getCurrentAccount(token: string): Promise<AuthenticationContextResponse> {

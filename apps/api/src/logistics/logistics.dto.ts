@@ -29,6 +29,7 @@ import {
   type CreateLogisticsRouteRequest,
   type CreateLogisticsRouteStopRequest,
   type LogisticsDelivery,
+  type LogisticsCourierBooking,
   type LogisticsDeliveryHistoryEntry,
   type LogisticsDeliveryPage,
   type LogisticsReferenceData,
@@ -40,6 +41,7 @@ import {
   type LogisticsRouteStop,
   type ReceiveLogisticsReturnRequest,
   type ReportLogisticsDeliveryExceptionRequest,
+  type ReconcileLogisticsCourierBookingRequest,
   type UpdateLogisticsDeliveryStatusRequest,
 } from '@vista/contracts';
 
@@ -129,6 +131,33 @@ export class CreateLogisticsDeliveryDto implements CreateLogisticsDeliveryReques
   @MaxLength(2000)
   instructions?: string;
 
+  @ApiPropertyOptional({ maximum: 100, minimum: 1, type: Number })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  parcelCount?: number;
+
+  @ApiPropertyOptional({ example: '2.500', type: String })
+  @IsOptional()
+  @IsString()
+  @Matches(/^\d{1,9}(?:\.\d{1,3})?$/u)
+  parcelWeightKg?: string;
+
+  @ApiPropertyOptional({ maxLength: 255, type: String })
+  @IsOptional()
+  @IsString()
+  @Matches(/\S/u)
+  @MaxLength(255)
+  recipientName?: string;
+
+  @ApiPropertyOptional({ maxLength: 30, type: String })
+  @IsOptional()
+  @IsString()
+  @Matches(/^[+()\d .-]{7,30}$/u)
+  recipientPhone?: string;
+
   @ApiProperty({ format: 'date-time', type: String })
   @IsDateString()
   scheduledEnd!: string;
@@ -140,6 +169,14 @@ export class CreateLogisticsDeliveryDto implements CreateLogisticsDeliveryReques
   @ApiProperty({ format: 'uuid', type: String })
   @IsUUID('loose')
   shipmentId!: string;
+}
+
+export class ReconcileLogisticsCourierBookingDto implements ReconcileLogisticsCourierBookingRequest {
+  @ApiProperty({ maxLength: 120, type: String })
+  @IsString()
+  @Matches(/\S/u)
+  @MaxLength(120)
+  providerReference!: string;
 }
 
 export class UpdateLogisticsDeliveryStatusDto implements UpdateLogisticsDeliveryStatusRequest {
@@ -397,6 +434,26 @@ class LogisticsCourierConnectionDto {
   @ApiProperty({ enum: ['econt', 'speedy'] }) provider!: 'econt' | 'speedy';
 }
 
+class LogisticsCourierTrackingEventDto {
+  @ApiProperty({ type: String }) description!: string;
+  @ApiProperty({ format: 'date-time', type: String }) occurredAt!: string;
+  @ApiPropertyOptional({ type: String }) place?: string;
+  @ApiProperty({ type: String }) status!: string;
+}
+
+class LogisticsCourierBookingDto implements LogisticsCourierBooking {
+  @ApiProperty({ type: Number }) attemptCount!: number;
+  @ApiProperty({ isArray: true, type: LogisticsCourierTrackingEventDto })
+  events!: LogisticsCourierBooking['events'];
+  @ApiPropertyOptional({ format: 'date-time', type: String }) lastCheckedAt?: string;
+  @ApiPropertyOptional({ type: String }) lastError?: string;
+  @ApiProperty({ enum: ['econt', 'speedy'] }) provider!: LogisticsCourierBooking['provider'];
+  @ApiPropertyOptional({ type: String }) providerReference?: string;
+  @ApiPropertyOptional({ type: String }) providerStatus?: string;
+  @ApiProperty({ enum: ['pending', 'booking', 'booked', 'failed', 'needs_review'] })
+  status!: LogisticsCourierBooking['status'];
+}
+
 export class LogisticsReferenceDataDto implements LogisticsReferenceData {
   @ApiProperty({ isArray: true, type: LogisticsAssigneeReferenceDto })
   assignees!: LogisticsReferenceData['assignees'];
@@ -428,6 +485,10 @@ export class LogisticsDeliveryDto implements LogisticsDelivery {
   @ApiProperty({ type: String }) addressLine1!: string;
   @ApiPropertyOptional({ type: String }) addressLine2?: string;
   @ApiProperty({ type: String }) city!: string;
+  @ApiPropertyOptional({ type: LogisticsCourierBookingDto })
+  courierBooking?: LogisticsCourierBooking;
+  @ApiPropertyOptional({ type: String }) courierRecipientName?: string;
+  @ApiPropertyOptional({ type: String }) courierRecipientPhone?: string;
   @ApiProperty({ type: String }) countryCode!: string;
   @ApiProperty({ format: 'date-time', type: String }) createdAt!: string;
   @ApiProperty({ format: 'uuid', type: String }) customerId!: string;
@@ -446,6 +507,8 @@ export class LogisticsDeliveryDto implements LogisticsDelivery {
   @ApiProperty({ format: 'uuid', type: String }) id!: string;
   @ApiPropertyOptional({ type: String }) instructions?: string;
   @ApiProperty({ type: String }) number!: string;
+  @ApiPropertyOptional({ type: Number }) parcelCount?: number;
+  @ApiPropertyOptional({ type: String }) parcelWeightKg?: string;
   @ApiPropertyOptional({ type: String }) postalCode?: string;
   @ApiPropertyOptional({ type: String }) proofNotes?: string;
   @ApiPropertyOptional({ type: String }) recipientName?: string;

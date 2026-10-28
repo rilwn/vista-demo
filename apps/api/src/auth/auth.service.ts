@@ -20,6 +20,11 @@ import { APP_ENVIRONMENT } from '../config/config.module.js';
 import { DatabaseService } from '../database/database.service.js';
 import { StructuredLogger } from '../logging/structured-logger.service.js';
 import type { AuthenticationContext, RequestSecurityMetadata } from './authentication.types.js';
+import {
+  DirectoryAuthenticationService,
+  mapDirectoryGroupsToRoleCodes,
+  type DirectoryIdentity,
+} from './directory-authentication.service.js';
 import { PasswordService } from './password.service.js';
 import { SessionService } from './session.service.js';
 import { TotpService } from './totp.service.js';
@@ -28,6 +33,7 @@ export interface LoginInput {
   email: string;
   password: string;
   totpCode?: string;
+  emergencyAccessReason?: string;
 }
 
 export interface LoginResult {
@@ -79,6 +85,8 @@ export class AuthService {
     @Inject(PasswordService) private readonly passwords: PasswordService,
     @Inject(TotpService) private readonly totp: TotpService,
     @Inject(SessionService) private readonly sessions: SessionService,
+    @Inject(DirectoryAuthenticationService)
+    private readonly directory: DirectoryAuthenticationService,
     @Inject(AuditService) private readonly audit: AuditService,
     @Inject(StructuredLogger) private readonly logger: StructuredLogger,
   ) {}
@@ -595,6 +603,30 @@ export class AuthService {
 
   async login(input: LoginInput, metadata: RequestSecurityMetadata): Promise<LoginResult> {
     const email = input.email.trim().toLowerCase();
+    const provider = this.environment.DIRECTORY_AUTH_PROVIDER;
+    const emergencyAccess =
+      provider !== 'disabled' &&
+      this.environment.DIRECTORY_EMERGENCY_EMAILS.includes(email) &&
+      Boolean(input.emergencyAccessReason?.trim());
+    if (provider === 'ldap' && !emergencyAccess) {
+      const identity = await this.directory.authenticatePassword(email, input.password);
+      if (!identity) {
+        const account = await this.findAccount(email);
+        await this.recordFailedLogin(
+          account,
+          metadata,
+          'directory_credentials_invalid',
+          Boolean(account),
+        );
+        throw authenticationFailed();
+      }
+      return this.loginWithDirectoryIdentity(identity, input.totpCode, metadata);
+    }
+    if (provider !== 'disabled' && !emergencyAccess) {
+      const account = await this.findAccount(email);
+      await this.recordFailedLogin(account, metadata, 'directory_sign_in_required', false);
+      throw authenticationFailed();
+    }
     const account = await this.findAccount(email);
     const passwordMatches = await this.passwords.verify(
       input.password,
@@ -648,7 +680,20 @@ export class AuthService {
       );
     }
 
-    const secondFactorRequired = factors.rows.length > 0;
+    if (emergencyAccess && factors.rows.length === 0) {
+      await this.recordFailedLogin(
+        account,
+        metadata,
+        'emergency_two_factor_enrollment_required',
+        false,
+      );
+      throw new ApiErrorException(
+        'TWO_FACTOR_ENROLLMENT_REQUIRED',
+        'Emergency access requires an enrolled authenticator. Ask an administrator to restore access.',
+        HttpStatus.FORBIDDEN,
+      );
+    }
+    const secondFactorRequired = factors.rows.length > 0 || emergencyAccess;
     if (secondFactorRequired && input.totpCode === undefined) {
       await this.recordFailedLogin(account, metadata, 'two_factor_required', false);
       throw new ApiErrorException(
@@ -667,13 +712,114 @@ export class AuthService {
       throw authenticationFailed();
     }
 
-    const session = await this.sessions.create(account.id, secondFactorRequired, metadata);
+    const reason = input.emergencyAccessReason?.trim();
+    const session = await this.sessions.create(account.id, secondFactorRequired, metadata, {
+      authProvider: 'local',
+      authMethod: emergencyAccess ? 'emergency_password' : 'password',
+      ...(emergencyAccess && reason ? { emergencyReason: reason } : {}),
+    });
     return {
       account: {
         displayName: account.display_name,
         email: account.email,
         id: account.id,
         isAdministrative: account.is_administrative,
+      },
+      expiresAt: session.expiresAt,
+      sessionToken: session.token,
+    };
+  }
+
+  async loginWithDirectoryIdentity(
+    identity: DirectoryIdentity,
+    totpCode: string | undefined,
+    metadata: RequestSecurityMetadata,
+  ): Promise<LoginResult> {
+    if (this.environment.DIRECTORY_AUTH_PROVIDER !== identity.provider)
+      throw authenticationFailed();
+    const email = identity.email.trim().toLowerCase();
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(email)) throw authenticationFailed();
+    const account = await this.findAccount(email);
+    if (!account || !account.active || account.status === 'disabled') {
+      await this.recordFailedLogin(
+        account,
+        metadata,
+        'directory_account_unavailable',
+        Boolean(account),
+      );
+      throw authenticationFailed();
+    }
+    if (
+      account.status === 'locked' ||
+      (account.locked_until && account.locked_until.getTime() > Date.now())
+    ) {
+      await this.recordFailedLogin(account, metadata, 'account_locked', false);
+      throw new ApiErrorException(
+        'ACCOUNT_TEMPORARILY_LOCKED',
+        'The account is temporarily unavailable',
+        HttpStatus.UNAUTHORIZED,
+      );
+    }
+    const mappedRoleCodes = mapDirectoryGroupsToRoleCodes(
+      identity.groups,
+      this.environment.DIRECTORY_GROUP_ROLE_MAPPINGS_JSON,
+    );
+    const mappedAdmin =
+      mappedRoleCodes.length > 0
+        ? ((
+            await this.database
+              .getPool()
+              .query<{ is_administrative: boolean }>(
+                'SELECT COALESCE(bool_or(is_administrative), false) AS is_administrative FROM iam.roles WHERE code = ANY($1::text[])',
+                [mappedRoleCodes],
+              )
+          ).rows[0]?.is_administrative ?? false)
+        : false;
+    const isAdministrative = account.is_administrative || mappedAdmin;
+    const factors = await this.database.getPool().query<{ encrypted_secret: Buffer }>(
+      `SELECT encrypted_secret
+       FROM identity.authentication_factors
+       WHERE account_id = $1 AND factor_type = 'totp' AND enabled = true
+         AND verified_at IS NOT NULL AND encrypted_secret IS NOT NULL
+       ORDER BY created_at`,
+      [account.id],
+    );
+    if (isAdministrative && factors.rowCount === 0) {
+      await this.recordFailedLogin(account, metadata, 'two_factor_enrollment_required', false);
+      throw new ApiErrorException(
+        'TWO_FACTOR_ENROLLMENT_REQUIRED',
+        'An administrative account must enroll a second factor before login',
+        HttpStatus.FORBIDDEN,
+      );
+    }
+    if (factors.rows.length > 0 && totpCode === undefined) {
+      throw new ApiErrorException(
+        'TWO_FACTOR_REQUIRED',
+        'A second-factor code is required',
+        HttpStatus.UNAUTHORIZED,
+      );
+    }
+    if (
+      factors.rows.length > 0 &&
+      !factors.rows.some(
+        ({ encrypted_secret }) =>
+          totpCode !== undefined && this.verifyTotp(totpCode, encrypted_secret),
+      )
+    ) {
+      await this.recordFailedLogin(account, metadata, 'two_factor_invalid', true);
+      throw authenticationFailed();
+    }
+    const session = await this.sessions.create(account.id, factors.rows.length > 0, metadata, {
+      authProvider: identity.provider,
+      authMethod: identity.provider === 'ldap' ? 'directory_password' : identity.provider,
+      directoryGroups: identity.groups,
+    });
+    return {
+      account: {
+        displayName: account.display_name,
+        email: account.email,
+        id: account.id,
+        isAdministrative,
       },
       expiresAt: session.expiresAt,
       sessionToken: session.token,

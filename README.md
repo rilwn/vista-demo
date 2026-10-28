@@ -69,28 +69,32 @@ account's password. The fixture set includes the related local organization,
 warehouse, catalog, partner, equipment, and Service data needed for the
 implemented ERP/CRM workflows. It is not production data.
 
-| Account                        | Intended testing scope                                                                   |
-| ------------------------------ | ---------------------------------------------------------------------------------------- |
-| `manager@vista.local`          | Broad, non-administrative access across currently implemented ERP/CRM workflows.         |
-| `platform.manager@vista.local` | Read-only Security review and business-structure workflows.                              |
-| `crm@vista.local`              | Partner, location, contact, and equipment workflows.                                     |
-| `warehouse@vista.local`        | Catalog, warehouse, stock, reservation, and traceability workflows.                      |
-| `procurement@vista.local`      | Supplier, purchase-order, goods-receipt, supplier-invoice, and supplier-claim workflows. |
-| `sales@vista.local`            | Quotation, order, shipment, handover, pricing, and subscription workflows.               |
-| `finance@vista.local`          | Finance collection and payment-allocation workflows.                                     |
-| `dispatcher@vista.local`       | Service-request intake and technician-dispatch workflows.                                |
-| `technician@vista.local`       | Assigned Service work, time, parts, evidence, signature, and completion workflows.       |
-| `pos.operator@vista.local`     | POS sign-in and controlled terminal-shell access only.                                   |
-| `backup.operator@vista.local`  | Backup Control sign-in and controlled console-shell access only.                         |
-| `viewer@vista.local`           | Read-only review of ERP/CRM registers outside restricted Service work.                   |
+| Account                            | Intended testing scope                                                                   |
+| ---------------------------------- | ---------------------------------------------------------------------------------------- |
+| `manager@vista.local`              | Broad, non-administrative access across currently implemented ERP/CRM workflows.         |
+| `platform.manager@vista.local`     | Read-only Security review and business-structure workflows.                              |
+| `crm@vista.local`                  | Partner, location, contact, and equipment workflows.                                     |
+| `warehouse@vista.local`            | Catalog, warehouse, stock, reservation, and traceability workflows.                      |
+| `procurement@vista.local`          | Supplier, purchase-order, goods-receipt, supplier-invoice, and supplier-claim workflows. |
+| `sales@vista.local`                | Quotation, order, shipment, handover, pricing, and subscription workflows.               |
+| `finance@vista.local`              | Finance collection and payment-allocation workflows.                                     |
+| `dispatcher@vista.local`           | Service-request intake and technician-dispatch workflows.                                |
+| `technician@vista.local`           | Assigned Service work, time, parts, evidence, signature, and completion workflows.       |
+| `pos.operator@vista.local`         | POS sign-in and controlled terminal-shell access only.                                   |
+| `backup.operator@vista.local`      | Backup Control sign-in and controlled console-shell access only.                         |
+| `backup.administrator@vista.local` | Protected-source inventory and draft backup-policy setup.                                |
+| `security.officer@vista.local`     | Independent review of critical backup and recovery actions.                              |
+| `viewer@vista.local`               | Read-only review of ERP/CRM registers outside restricted Service work.                   |
 
 Administrative roles still require a configured second factor, so this local
 fixture set deliberately does not create a generally usable administrator. To
 create the first administrator for a private environment, use the controlled
 one-time `npm run iam:provision-initial-admin` command described in the user
-guide; it requires an authenticator setup before sign-in. POS and Backup Control
-use the shared authenticated session, but their operational workflows remain
-deliberately unavailable until their respective backend phases are complete.
+guide; it requires an authenticator setup before sign-in. Backup Control
+requires a verified authenticator before opening; configure one from My access &
+security in Vista Operations. Backup fixture roles are separated: the operator
+can review, the administrator can maintain inventory and draft policies, and
+the security officer is reserved for independent approvals.
 
 ## Validation
 

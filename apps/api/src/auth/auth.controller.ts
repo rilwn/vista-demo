@@ -9,6 +9,7 @@ import {
   ParseUUIDPipe,
   Post,
   Req,
+  Res,
   UseGuards,
 } from '@nestjs/common';
 import {
@@ -21,14 +22,18 @@ import {
   ApiNoContentResponse,
   ApiOkResponse,
   ApiParam,
+  ApiResponse,
   ApiTags,
   ApiTooManyRequestsResponse,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import type { Permission } from '@vista/auth';
-import type { Request } from 'express';
+import type { AppEnvironment } from '@vista/config';
+import type { Request, Response as ExpressResponse } from 'express';
 
 import type { CorrelatedRequest } from '../common/correlation-id.middleware.js';
+import { ApiErrorException } from '../common/api-error.exception.js';
+import { APP_ENVIRONMENT } from '../config/config.module.js';
 import { RateLimitPolicy } from '../security/rate-limit.decorator.js';
 import { Public, RequirePermissions } from './auth.decorators.js';
 import {
@@ -40,6 +45,11 @@ import {
   CompleteAccountRecoveryResponseDto,
   DisableTotpRequestDto,
   DisableTotpResponseDto,
+  DirectoryLoginExchangeRequestDto,
+  DirectoryLoginStartRequestDto,
+  DirectoryLoginStartResponseDto,
+  DirectorySignInOptionsDto,
+  DirectorySamlCallbackDto,
   LoginRequestDto,
   LoginResponseDto,
   PasswordPolicyResponseDto,
@@ -58,6 +68,7 @@ import { AuthService } from './auth.service.js';
 import type { AuthenticatedRequest, RequestSecurityMetadata } from './authentication.types.js';
 import { LoginRateLimitGuard } from './login-rate-limit.guard.js';
 import { SessionService } from './session.service.js';
+import { DirectoryAuthenticationService } from './directory-authentication.service.js';
 
 @ApiTags('authentication')
 @RateLimitPolicy('read')
@@ -67,6 +78,9 @@ export class AuthController {
     @Inject(AuthService) private readonly authentication: AuthService,
     @Inject(AccountRecoveryService) private readonly recovery: AccountRecoveryService,
     @Inject(SessionService) private readonly sessions: SessionService,
+    @Inject(DirectoryAuthenticationService)
+    private readonly directory: DirectoryAuthenticationService,
+    @Inject(APP_ENVIRONMENT) private readonly environment: AppEnvironment,
   ) {}
 
   @Public()
@@ -81,6 +95,102 @@ export class AuthController {
   @ApiTooManyRequestsResponse({ description: 'Too many attempts for this client/account pair.' })
   login(@Body() input: LoginRequestDto, @Req() request: Request): Promise<LoginResponseDto> {
     return this.authentication.login(input, requestMetadata(request));
+  }
+
+  @Public()
+  @RateLimitPolicy('read')
+  @Get('directory/options')
+  @ApiOkResponse({ type: DirectorySignInOptionsDto })
+  directoryOptions(): DirectorySignInOptionsDto {
+    return this.directory.options();
+  }
+
+  @Public()
+  @RateLimitPolicy('sensitive')
+  @Post('directory/start')
+  @HttpCode(HttpStatus.OK)
+  @ApiBody({ type: DirectoryLoginStartRequestDto })
+  @ApiOkResponse({ type: DirectoryLoginStartResponseDto })
+  startDirectoryLogin(
+    @Body() input: DirectoryLoginStartRequestDto,
+  ): Promise<DirectoryLoginStartResponseDto> {
+    return this.directory.startLogin(input.app);
+  }
+
+  @Public()
+  @RateLimitPolicy('sensitive')
+  @Get('directory/oidc/callback')
+  @ApiResponse({
+    status: 303,
+    description: 'The verified identity returns to the selected Vista app.',
+  })
+  async completeOidcLogin(
+    @Req() request: Request,
+    @Res() response: ExpressResponse,
+  ): Promise<void> {
+    const callbackUrl = new URL(this.environment.DIRECTORY_OIDC_CALLBACK_URL);
+    callbackUrl.search = new URL(request.originalUrl, 'http://vista.invalid').search;
+    const completed = await this.directory.completeOidcCallback(callbackUrl);
+    response.redirect(303, completed.redirectUrl);
+  }
+
+  @Public()
+  @RateLimitPolicy('sensitive')
+  @Post('directory/saml/callback')
+  @ApiResponse({
+    status: 303,
+    description: 'The verified identity returns to the selected Vista app.',
+  })
+  async completeSamlLogin(
+    @Body() input: DirectorySamlCallbackDto,
+    @Res() response: ExpressResponse,
+  ): Promise<void> {
+    const completed = await this.directory.completeSamlCallback(
+      input.SAMLResponse,
+      input.RelayState,
+    );
+    response.redirect(303, completed.redirectUrl);
+  }
+
+  @Public()
+  @RateLimitPolicy('read')
+  @Get('directory/saml/metadata')
+  @ApiOkResponse({ description: 'SAML service-provider metadata XML.', schema: { type: 'string' } })
+  samlMetadata(@Res() response: ExpressResponse): void {
+    response.type('application/xml').send(this.directory.samlMetadata());
+  }
+
+  @Public()
+  @RateLimitPolicy('sensitive')
+  @Post('directory/exchange')
+  @HttpCode(HttpStatus.OK)
+  @ApiBody({ type: DirectoryLoginExchangeRequestDto })
+  @ApiOkResponse({ type: LoginResponseDto })
+  async exchangeDirectoryLogin(
+    @Body() input: DirectoryLoginExchangeRequestDto,
+    @Req() request: Request,
+  ): Promise<LoginResponseDto> {
+    const claim = await this.directory.claimTicket(input.ticket);
+    if (!claim) {
+      throw new ApiErrorException(
+        'DIRECTORY_SIGN_IN_FAILED',
+        'Organization sign-in expired or is already being completed. Start again.',
+        HttpStatus.UNAUTHORIZED,
+      );
+    }
+    let consumed = false;
+    try {
+      const identity = await this.directory.readTicket(input.ticket);
+      const result = await this.authentication.loginWithDirectoryIdentity(
+        identity,
+        input.totpCode,
+        requestMetadata(request),
+      );
+      consumed = true;
+      return result;
+    } finally {
+      await this.directory.finishTicket(input.ticket, claim, consumed);
+    }
   }
 
   @Public()

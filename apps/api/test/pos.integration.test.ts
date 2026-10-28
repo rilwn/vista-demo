@@ -1,6 +1,6 @@
 import 'reflect-metadata';
 
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
 import type { INestApplication } from '@nestjs/common';
@@ -11,11 +11,23 @@ import type {
   CustomerOperationalOverview,
   CustomerPaymentAccount,
   FinancialDocument,
+  FinanceBankStatement,
+  FinanceCashReferenceData,
+  FinanceCashVoucher,
+  CustomerPaymentStatusPage,
+  FinanceSupplierOffset,
+  FinanceSupplierPayable,
+  FinanceSupplierReferenceData,
   PosCatalogPage,
   PosBasketPricing,
+  PosDatecsUnpLease,
+  PosOfflineSyncEventResponse,
   PosCustomerOption,
   PosCustomerPaymentOptions,
   PosDiscountAuthorization,
+  PosFiscalSalePreparation,
+  PosFiscalDailyReport,
+  PosFiscalReturnPreparation,
   PosLoyaltyLedger,
   PosCommercialRule,
   PosQuickAccess,
@@ -41,7 +53,15 @@ import { bootstrapDevelopmentFixtures, fixtureId } from '../src/database/develop
 import { migrateDown, migrateUp } from '../src/database/migration-runner.js';
 import { ObjectStorageService } from '../src/storage/object-storage.service.js';
 import { PosReportsService } from '../src/pos/pos-reports.service.js';
+import {
+  POS_CARD_TERMINAL_ADAPTER,
+  type CardAuthorizationCommand,
+  type CardAuthorizationLookup,
+  type CardAuthorizationResult,
+  type CardTerminalAdapter,
+} from '../src/pos/card-terminal-adapter.js';
 import { loadPosInvoiceSettlement } from '../src/finance/pos-invoice-settlement.js';
+import { AuditService } from '../src/audit/audit.service.js';
 
 const runInfrastructureTests = process.env['RUN_INFRASTRUCTURE_TESTS'] === 'true';
 const password = 'Vista-Pos-Integration-Test-8!';
@@ -51,6 +71,7 @@ describe.skipIf(!runInfrastructureTests)('POS split payment and linked return li
   let application: INestApplication;
   let database: Pool;
   let databaseName: string;
+  let cardTerminal: IntegrationCardTerminalAdapter;
   let managerToken: string;
   let posToken: string;
   let viewerToken: string;
@@ -99,7 +120,10 @@ describe.skipIf(!runInfrastructureTests)('POS split payment and linked return li
       TOTP_ENCRYPTION_KEY: 'a-test-totp-key-with-at-least-32-characters',
     });
 
+    cardTerminal = new IntegrationCardTerminalAdapter();
     const module = await Test.createTestingModule({ imports: [AppModule] })
+      .overrideProvider(POS_CARD_TERMINAL_ADAPTER)
+      .useValue(cardTerminal)
       .overrideProvider(ObjectStorageService)
       .useValue({
         bucketName: () => 'vista-pos-integration-test',
@@ -452,6 +476,30 @@ describe.skipIf(!runInfrastructureTests)('POS split payment and linked return li
       shiftId: opening.id,
     };
     const saleKey = `split-pos-sale-${runId}`;
+    const cardAuthorizationKey = `pos-sale:${salePayload.clientTransactionId}:card`;
+    cardTerminal.nextAuthorizationResult = {
+      adapter: 'development-card-simulator',
+      message: 'Simulated response was interrupted.',
+      status: 'uncertain',
+    };
+    const uncertainAuthorization = await request(application.getHttpServer())
+      .post('/api/v1/pos/sales')
+      .set('authorization', `Bearer ${posToken}`)
+      .set('idempotency-key', saleKey)
+      .send(salePayload)
+      .expect(503);
+    expect(uncertainAuthorization.body.error.code).toBe('POS_CARD_PAYMENT_OUTCOME_UNKNOWN');
+    expect(
+      await database.query<{ status: string }>(
+        `SELECT status FROM pos.card_authorization_attempts WHERE client_transaction_id = $1`,
+        [salePayload.clientTransactionId],
+      ),
+    ).toMatchObject({ rows: [{ status: 'uncertain' }] });
+    cardTerminal.reconciliationResults.set(cardAuthorizationKey, {
+      adapter: 'development-card-simulator',
+      providerReference: 'CARD-RECOVERED-01',
+      status: 'approved',
+    });
     const sale = await post<PosSale>(
       application,
       '/api/v1/pos/sales',
@@ -484,6 +532,39 @@ describe.skipIf(!runInfrastructureTests)('POS split payment and linked return li
         }),
       ]),
     );
+    const cardAttempts = await database.query<{
+      amount_eur: string;
+      attempt_count: number;
+      status: string;
+    }>(
+      `SELECT amount_eur::text, attempt_count, status
+       FROM pos.card_authorization_attempts WHERE client_transaction_id = $1`,
+      [salePayload.clientTransactionId],
+    );
+    expect(cardAttempts.rows).toEqual([
+      { amount_eur: '27.6098', attempt_count: 1, status: 'approved' },
+    ]);
+    const cardEvents = await database.query<{ event_type: string }>(
+      `SELECT event_type FROM pos.card_authorization_events event
+       JOIN pos.card_authorization_attempts attempt ON attempt.id = event.attempt_id
+       WHERE attempt.client_transaction_id = $1 ORDER BY event.occurred_at, event.id`,
+      [salePayload.clientTransactionId],
+    );
+    expect(cardEvents.rows.map((row) => row.event_type)).toEqual([
+      'authorization_started',
+      'authorization_uncertain',
+      'authorization_approved',
+    ]);
+    await expect(
+      database.query(
+        `UPDATE pos.card_authorization_events SET details = '{}'::jsonb
+         WHERE attempt_id = (
+           SELECT id FROM pos.card_authorization_attempts WHERE client_transaction_id = $1
+         )`,
+        [salePayload.clientTransactionId],
+      ),
+    ).rejects.toThrow('POS card authorization events are immutable');
+    expect(cardTerminal.callsFor(cardAuthorizationKey)).toEqual({ authorize: 1, reconcile: 1 });
     const replayedSale = await post<PosSale>(
       application,
       '/api/v1/pos/sales',
@@ -492,6 +573,51 @@ describe.skipIf(!runInfrastructureTests)('POS split payment and linked return li
       salePayload,
     );
     expect(replayedSale.id).toBe(sale.id);
+    expect(cardTerminal.callsFor(cardAuthorizationKey)).toEqual({ authorize: 1, reconcile: 1 });
+    expect(
+      await database.query(
+        `SELECT id FROM pos.card_authorization_attempts WHERE client_transaction_id = $1`,
+        [salePayload.clientTransactionId],
+      ),
+    ).toMatchObject({ rowCount: 1 });
+
+    const declinedPayload = { ...salePayload, clientTransactionId: randomUUID() };
+    const declinedSaleKey = `declined-pos-sale-${runId}`;
+    const declinedCardAuthorizationKey = `pos-sale:${declinedPayload.clientTransactionId}:card`;
+    cardTerminal.nextAuthorizationResult = {
+      adapter: 'development-card-simulator',
+      code: 'DO_NOT_HONOR',
+      message: 'Simulated decline.',
+      status: 'declined',
+    };
+    const declinedSale = await request(application.getHttpServer())
+      .post('/api/v1/pos/sales')
+      .set('authorization', `Bearer ${posToken}`)
+      .set('idempotency-key', declinedSaleKey)
+      .send(declinedPayload)
+      .expect(409);
+    expect(declinedSale.body.error.code).toBe('POS_CARD_PAYMENT_DECLINED');
+    expect(
+      await database.query<{ status: string }>(
+        `SELECT status FROM pos.card_authorization_attempts WHERE client_transaction_id = $1`,
+        [declinedPayload.clientTransactionId],
+      ),
+    ).toMatchObject({ rows: [{ status: 'declined' }] });
+    expect(cardTerminal.callsFor(declinedCardAuthorizationKey)).toEqual({
+      authorize: 1,
+      reconcile: 0,
+    });
+    const declinedReplay = await request(application.getHttpServer())
+      .post('/api/v1/pos/sales')
+      .set('authorization', `Bearer ${posToken}`)
+      .set('idempotency-key', declinedSaleKey)
+      .send(declinedPayload)
+      .expect(409);
+    expect(declinedReplay.body.error.code).toBe('POS_CARD_PAYMENT_DECLINED');
+    expect(cardTerminal.callsFor(declinedCardAuthorizationKey)).toEqual({
+      authorize: 1,
+      reconcile: 0,
+    });
     const lookupPath = `/api/v1/pos/sales/by-transaction/${salePayload.clientTransactionId}`;
     expect((await get<PosSale>(application, lookupPath, posToken)).id).toBe(sale.id);
     await request(application.getHttpServer()).get(lookupPath).expect(401);
@@ -1241,6 +1367,697 @@ describe.skipIf(!runInfrastructureTests)('POS split payment and linked return li
     });
   }, 20_000);
 
+  it('reserves and finalizes a DATECS receipt once, while allowing safe cancellation before printing', async () => {
+    const terminal = await get<PosTerminalContext>(
+      application,
+      '/api/v1/pos/terminal-context',
+      posToken,
+    );
+    const registerId = terminal.registers[0]!.id;
+    const originalConfiguration = await database.query<{
+      fiscal_device_label: string | null;
+      fiscal_mode: string;
+    }>(
+      `SELECT fiscal_mode, fiscal_device_label FROM pos.terminal_configurations
+       WHERE cash_register_id = $1`,
+      [registerId],
+    );
+    await database.query(
+      `UPDATE pos.terminal_configurations
+       SET fiscal_mode = 'hardware', fiscal_device_label = 'DATECS integration fixture',
+           version = version + 1 WHERE cash_register_id = $1`,
+      [registerId],
+    );
+    const fiscalProductId = fixtureId('catalog:product:fiscal-register');
+    const originalFiscalPrices = await database.query<{ id: string; unit_price: string }>(
+      `SELECT id, unit_price::text FROM sales.price_list_lines WHERE product_id = $1`,
+      [fiscalProductId],
+    );
+    try {
+      await database.query(
+        `UPDATE sales.price_list_lines SET unit_price = 100.00 WHERE product_id = $1`,
+        [fiscalProductId],
+      );
+      const shift = await post<PosShift>(
+        application,
+        '/api/v1/pos/shifts',
+        posToken,
+        randomUUID(),
+        {
+          cashRegisterId: registerId,
+          openingCashEur: '100.00',
+        },
+      );
+      const customerId = fixtureId('partner:alfa');
+      const location = await database.query<{ id: string }>(
+        `SELECT id FROM master_data.customer_locations
+         WHERE partner_id = $1 AND active ORDER BY name, id LIMIT 1`,
+        [customerId],
+      );
+      const locationId = location.rows[0]?.id;
+      expect(locationId).toBeTruthy();
+      const catalog = await get<PosCatalogPage>(
+        application,
+        `/api/v1/pos/catalog?shiftId=${shift.id}&search=DEV-FISCAL-X1`,
+        posToken,
+      );
+      const product = catalog.items.find((item) => item.productCode === 'DEV-FISCAL-X1');
+      const serial = product?.serialNumbers[0];
+      expect(serial).toBeTruthy();
+      const priced = await post<PosBasketPricing>(
+        application,
+        '/api/v1/pos/baskets/price',
+        posToken,
+        randomUUID(),
+        {
+          customerPartnerId: customerId,
+          lines: [{ productId: product!.id, quantity: '1', serialNumbers: [serial] }],
+          shiftId: shift.id,
+        },
+      );
+      const leaseKey = randomUUID();
+      const leaseRequest = {
+        deviceSerial: 'DT000600',
+        operatorIdentifier: 'OP01',
+        shiftId: shift.id,
+      };
+      const lease = await post<PosDatecsUnpLease>(
+        application,
+        '/api/v1/pos/fiscal-sales/unp-leases',
+        posToken,
+        leaseKey,
+        leaseRequest,
+      );
+      expect(lease).toMatchObject({
+        cashRegisterId: registerId,
+        deviceSerial: 'DT000600',
+        operatorIdentifier: 'OP01',
+      });
+      expect(lease.uniqueSaleIds).toHaveLength(20);
+      expect(new Set(lease.uniqueSaleIds).size).toBe(20);
+      expect(lease.uniqueSaleIds[0]).toMatch(/^DT000600-OP01-\d{7}$/u);
+
+      const offlineEvent = {
+        cashRegisterId: registerId,
+        clientEventId: randomUUID(),
+        clientTransactionId: randomUUID(),
+        deviceSerial: 'DT000600',
+        occurredAt: new Date().toISOString(),
+        operatorIdentifier: 'OP01',
+        reasonCode: 'sync_interrupted',
+        type: 'retry',
+        uniqueSaleId: lease.uniqueSaleIds[1]!,
+      };
+      const sendOfflineEvent = (body: typeof offlineEvent) =>
+        request(application.getHttpServer())
+          .post('/api/v1/pos/offline-sync-events')
+          .set('authorization', `Bearer ${posToken}`)
+          .send(body);
+      const firstEvent = await sendOfflineEvent(offlineEvent)
+        .expect(201)
+        .then((response) => response.body as PosOfflineSyncEventResponse);
+      const replayedEvent = await sendOfflineEvent(offlineEvent)
+        .expect(201)
+        .then((response) => response.body as PosOfflineSyncEventResponse);
+      expect(firstEvent).toMatchObject({
+        clientEventId: offlineEvent.clientEventId,
+        duplicate: false,
+      });
+      expect(replayedEvent).toEqual({ ...firstEvent, duplicate: true });
+      await sendOfflineEvent({ ...offlineEvent, reasonCode: 'server_rejected' }).expect(409);
+      await sendOfflineEvent({
+        ...offlineEvent,
+        clientEventId: randomUUID(),
+        uniqueSaleId: 'DT000600-OP01-9999999',
+      }).expect(409);
+      const auditRows = await database.query<{ count: string }>(
+        `SELECT count(*)::text AS count FROM audit.events
+         WHERE id = $1 AND action = 'pos.offline_sync.retry'`,
+        [firstEvent.auditEventId],
+      );
+      expect(auditRows.rows[0]?.count).toBe('1');
+      expect(await application.get(AuditService).verifyIntegrity()).toMatchObject({ valid: true });
+      await expect(
+        database.query(
+          `UPDATE pos.offline_sync_events SET reason_code = 'server_rejected'
+           WHERE client_event_id = $1`,
+          [offlineEvent.clientEventId],
+        ),
+      ).rejects.toThrow('audit events are append-only');
+
+      const replayedLease = await post<PosDatecsUnpLease>(
+        application,
+        '/api/v1/pos/fiscal-sales/unp-leases',
+        posToken,
+        leaseKey,
+        leaseRequest,
+      );
+      expect(replayedLease.uniqueSaleIds).toEqual(lease.uniqueSaleIds);
+
+      const makePreparation = (clientTransactionId: string, uniqueSaleId?: string) => ({
+        clientTransactionId,
+        customerLocationId: locationId,
+        customerPartnerId: customerId,
+        deviceSerial: 'DT000600',
+        lines: [{ productId: product!.id, quantity: '1', serialNumbers: [serial] }],
+        operatorIdentifier: 'OP01',
+        ...(uniqueSaleId ? { uniqueSaleId } : {}),
+        payments: [
+          {
+            amount: priced.grossTotal,
+            method: 'cash',
+            tenderedAmount: (Number(priced.grossTotal) + 100).toFixed(4),
+          },
+        ],
+        shiftId: shift.id,
+      });
+
+      const cancelledPreparation = await post<PosFiscalSalePreparation>(
+        application,
+        '/api/v1/pos/fiscal-sales/preparations',
+        posToken,
+        randomUUID(),
+        makePreparation(randomUUID(), lease.uniqueSaleIds[0]),
+      );
+      expect(cancelledPreparation.status).toBe('prepared');
+      expect(cancelledPreparation.uniqueSaleId).toBe(lease.uniqueSaleIds[0]);
+      expect(
+        await get<PosFiscalSalePreparation | null>(
+          application,
+          `/api/v1/pos/fiscal-sales/preparations/active?shiftId=${shift.id}`,
+          posToken,
+        ),
+      ).toMatchObject({ id: cancelledPreparation.id });
+      const released = await post<PosFiscalSalePreparation>(
+        application,
+        `/api/v1/pos/fiscal-sales/preparations/${cancelledPreparation.id}/cancel`,
+        posToken,
+        randomUUID(),
+        { evidence: 'before_printing' },
+      );
+      expect(released.status).toBe('cancelled');
+      await request(application.getHttpServer())
+        .post('/api/v1/pos/fiscal-sales/preparations')
+        .set('authorization', `Bearer ${posToken}`)
+        .set('idempotency-key', randomUUID())
+        .send(makePreparation(randomUUID(), lease.uniqueSaleIds[0]))
+        .expect(409);
+      await expectNoActiveFiscalOperation(
+        application,
+        `/api/v1/pos/fiscal-sales/preparations/active?shiftId=${shift.id}`,
+        posToken,
+      );
+
+      const openRejectedPreparation = await post<PosFiscalSalePreparation>(
+        application,
+        '/api/v1/pos/fiscal-sales/preparations',
+        posToken,
+        randomUUID(),
+        makePreparation(randomUUID()),
+      );
+      await post<PosFiscalSalePreparation>(
+        application,
+        `/api/v1/pos/fiscal-sales/preparations/${openRejectedPreparation.id}/printing`,
+        posToken,
+        randomUUID(),
+        {},
+      );
+      const rejectedOpen = await post<PosFiscalSalePreparation>(
+        application,
+        `/api/v1/pos/fiscal-sales/preparations/${openRejectedPreparation.id}/cancel`,
+        posToken,
+        randomUUID(),
+        { evidence: 'printer_open_rejected' },
+      );
+      expect(rejectedOpen.status).toBe('cancelled');
+
+      const transactionId = randomUUID();
+      const preparation = await post<PosFiscalSalePreparation>(
+        application,
+        '/api/v1/pos/fiscal-sales/preparations',
+        posToken,
+        randomUUID(),
+        makePreparation(transactionId),
+      );
+      expect(preparation.status).toBe('prepared');
+      expect(preparation.uniqueSaleId).toMatch(/^[A-Z0-9]{8}-[A-Z0-9]{4}-\d{7}$/u);
+      const printing = await post<PosFiscalSalePreparation>(
+        application,
+        `/api/v1/pos/fiscal-sales/preparations/${preparation.id}/printing`,
+        posToken,
+        randomUUID(),
+        {},
+      );
+      expect(printing.status).toBe('printing');
+      await request(application.getHttpServer())
+        .post(`/api/v1/pos/fiscal-sales/preparations/${preparation.id}/cancel`)
+        .set('authorization', `Bearer ${posToken}`)
+        .set('idempotency-key', randomUUID())
+        .send({ evidence: 'before_printing' })
+        .expect(409);
+
+      const receipt = {
+        changeEur: (() => {
+          const [whole = '0', fraction = ''] = preparation.changeEur.split('.');
+          return `${whole}.${fraction.padEnd(2, '0').slice(0, 2)}`;
+        })(),
+        fiscalDocumentNumber: '000123',
+        fiscalReceiptsSinceDailyReport: '1',
+        uniqueSaleId: preparation.uniqueSaleId,
+      };
+      const sale = await post<PosSale>(
+        application,
+        `/api/v1/pos/fiscal-sales/preparations/${preparation.id}/receipt`,
+        posToken,
+        randomUUID(),
+        receipt,
+      );
+      const replayed = await post<PosSale>(
+        application,
+        `/api/v1/pos/fiscal-sales/preparations/${preparation.id}/receipt`,
+        posToken,
+        randomUUID(),
+        receipt,
+      );
+      const finalizeReplay = await post<PosSale>(
+        application,
+        `/api/v1/pos/fiscal-sales/preparations/${preparation.id}/finalize`,
+        posToken,
+        randomUUID(),
+        {},
+      );
+      expect(sale).toMatchObject({
+        fiscalAdapter: 'datecs-fp2000',
+        fiscalReceiptNumber: 'DT000600-000123',
+        fiscalStatus: 'fiscalized',
+        status: 'completed',
+      });
+      expect(replayed.id).toBe(sale.id);
+      expect(finalizeReplay.id).toBe(sale.id);
+      await expectNoActiveFiscalOperation(
+        application,
+        `/api/v1/pos/fiscal-sales/preparations/active?shiftId=${shift.id}`,
+        posToken,
+      );
+      const serialState = await database.query<{ status: string }>(
+        `SELECT status FROM inventory.serialized_items WHERE serial_number = $1`,
+        [serial],
+      );
+      expect(serialState.rows[0]?.status).toBe('issued');
+      const movements = await database.query<{ total: string }>(
+        `SELECT count(*)::text AS total FROM inventory.stock_movements
+         WHERE reference_type = 'pos_sale' AND reference_id = $1`,
+        [sale.lines[0]!.id],
+      );
+      expect(movements.rows[0]?.total).toBe('1');
+
+      expect((await get<PosSale>(application, `/api/v1/pos/sales/${sale.id}`, posToken)).id).toBe(
+        sale.id,
+      );
+      await request(application.getHttpServer())
+        .get(`/api/v1/pos/sales/${sale.id}`)
+        .set('Authorization', `Bearer ${managerToken}`)
+        .expect(404);
+
+      const returnPayload = {
+        deviceSerial: 'DT000600',
+        lines: sale.lines.map((line) => ({
+          disposition: 'restock',
+          originalSaleLineId: line.id,
+          quantity: line.quantity,
+          ...(line.serialNumbers.length ? { serialNumbers: line.serialNumbers } : {}),
+        })),
+        operatorIdentifier: 'OP01',
+        originalSaleId: sale.id,
+        reason: 'Customer return',
+        refunds: sale.payments.map((payment) => ({
+          amount: payment.refundableAmount,
+          method: payment.method,
+          originalPaymentId: payment.id,
+        })),
+        shiftId: shift.id,
+      };
+      await request(application.getHttpServer())
+        .post('/api/v1/pos/fiscal-returns/preparations')
+        .set('Authorization', `Bearer ${posToken}`)
+        .set('Idempotency-Key', randomUUID())
+        .send({
+          ...returnPayload,
+          lines: returnPayload.lines.map((line) => ({ ...line, quantity: '0.5000' })),
+        })
+        .expect(409);
+
+      const unprintedReturnKey = randomUUID();
+      const unprintedReturn = await post<PosFiscalReturnPreparation>(
+        application,
+        '/api/v1/pos/fiscal-returns/preparations',
+        posToken,
+        unprintedReturnKey,
+        returnPayload,
+      );
+      expect(unprintedReturn.status).toBe('prepared');
+      expect(
+        (
+          await post<PosFiscalReturnPreparation>(
+            application,
+            '/api/v1/pos/fiscal-returns/preparations',
+            posToken,
+            unprintedReturnKey,
+            returnPayload,
+          )
+        ).id,
+      ).toBe(unprintedReturn.id);
+      await request(application.getHttpServer())
+        .post(`/api/v1/pos/shifts/${shift.id}/close`)
+        .set('Authorization', `Bearer ${posToken}`)
+        .set('Idempotency-Key', randomUUID())
+        .send({ closingCashEur: '100.00', version: shift.version })
+        .expect(409);
+      expect(
+        await get<PosFiscalReturnPreparation | null>(
+          application,
+          `/api/v1/pos/fiscal-returns/preparations/active?shiftId=${shift.id}`,
+          posToken,
+        ),
+      ).toMatchObject({ id: unprintedReturn.id, status: 'prepared' });
+      const cancelledReturn = await post<PosFiscalReturnPreparation>(
+        application,
+        `/api/v1/pos/fiscal-returns/preparations/${unprintedReturn.id}/resolve`,
+        posToken,
+        randomUUID(),
+        { evidence: 'before_printing' },
+      );
+      expect(cancelledReturn.status).toBe('cancelled');
+
+      const preparedReturn = await post<PosFiscalReturnPreparation>(
+        application,
+        '/api/v1/pos/fiscal-returns/preparations',
+        posToken,
+        randomUUID(),
+        returnPayload,
+      );
+      await post<PosFiscalReturnPreparation>(
+        application,
+        `/api/v1/pos/fiscal-returns/preparations/${preparedReturn.id}/printing`,
+        posToken,
+        randomUUID(),
+        {},
+      );
+      const uncertainReturn = await post<PosFiscalReturnPreparation>(
+        application,
+        `/api/v1/pos/fiscal-returns/preparations/${preparedReturn.id}/outcome-unknown`,
+        posToken,
+        randomUUID(),
+        {},
+      );
+      expect(uncertainReturn.status).toBe('outcome_unknown');
+      const recoveryEvidence = {
+        fiscalDocumentNumber: '000124',
+        uniqueReversalId: preparedReturn.uniqueReversalId,
+      };
+      const returned = await post<PosReturn>(
+        application,
+        `/api/v1/pos/fiscal-returns/preparations/${preparedReturn.id}/confirm`,
+        posToken,
+        randomUUID(),
+        recoveryEvidence,
+      );
+      expect(returned).toMatchObject({
+        fiscalAdapter: 'datecs-fp2000',
+        fiscalDocumentNumber: '000124',
+        fiscalReversalNumber: preparedReturn.uniqueReversalId,
+        originalSaleId: sale.id,
+      });
+      expect(
+        (
+          await post<PosReturn>(
+            application,
+            `/api/v1/pos/fiscal-returns/preparations/${preparedReturn.id}/confirm`,
+            posToken,
+            randomUUID(),
+            recoveryEvidence,
+          )
+        ).id,
+      ).toBe(returned.id);
+      expect(
+        (await get<PosSale>(application, `/api/v1/pos/sales/${sale.id}`, posToken)).status,
+      ).toBe('returned');
+      await expectNoActiveFiscalOperation(
+        application,
+        `/api/v1/pos/fiscal-returns/preparations/active?shiftId=${shift.id}`,
+        posToken,
+      );
+      const restockedSerial = await database.query<{ status: string }>(
+        `SELECT status FROM inventory.serialized_items WHERE serial_number = $1`,
+        [serial],
+      );
+      expect(restockedSerial.rows[0]?.status).toBe('available');
+      const activeTerminal = await get<PosTerminalContext>(
+        application,
+        '/api/v1/pos/terminal-context',
+        posToken,
+      );
+      const activeShift = activeTerminal.currentShift;
+      expect(activeShift?.id).toBe(shift.id);
+      const toCents = (value: string) => {
+        const [whole = '0', fraction = ''] = value.split('.');
+        return BigInt(whole) * 100n + BigInt(fraction.padEnd(2, '0').slice(0, 2));
+      };
+      const asFiscalMoney = (value: string) => {
+        const cents = toCents(value);
+        return `${cents / 100n}.${(cents % 100n).toString().padStart(2, '0')}`;
+      };
+      const closingCashCents =
+        10_000n +
+        sale.payments
+          .filter((payment) => payment.method === 'cash')
+          .reduce((total, payment) => total + toCents(payment.amount), 0n);
+      const closingCashEur = `${closingCashCents / 100n}.${(closingCashCents % 100n)
+        .toString()
+        .padStart(2, '0')}`;
+      const zReport = await post<PosFiscalDailyReport>(
+        application,
+        '/api/v1/pos/fiscal-daily-reports',
+        posToken,
+        randomUUID(),
+        {
+          closingCashEur,
+          shiftId: shift.id,
+          shiftVersion: activeShift!.version,
+          type: 'z',
+        },
+      );
+      await post<PosFiscalDailyReport>(
+        application,
+        `/api/v1/pos/fiscal-daily-reports/${zReport.id}/printing`,
+        posToken,
+        randomUUID(),
+        {},
+      );
+      await post<PosFiscalDailyReport>(
+        application,
+        `/api/v1/pos/fiscal-daily-reports/${zReport.id}/confirm`,
+        posToken,
+        randomUUID(),
+        {
+          fiscalRecordNumber: '44',
+          nonVatSalesTotalEur: '0.00',
+          taxGroupTotals: {
+            A: '0.00',
+            B: asFiscalMoney(sale.grossTotal),
+            C: '0.00',
+            D: '0.00',
+            E: '0.00',
+            F: '0.00',
+            G: '0.00',
+            H: '0.00',
+          },
+        },
+      );
+    } finally {
+      for (const price of originalFiscalPrices.rows)
+        await database.query(`UPDATE sales.price_list_lines SET unit_price = $2 WHERE id = $1`, [
+          price.id,
+          price.unit_price,
+        ]);
+      const original = originalConfiguration.rows[0];
+      if (original)
+        await database.query(
+          `UPDATE pos.terminal_configurations
+           SET fiscal_mode = $2, fiscal_device_label = $3, version = version + 1
+           WHERE cash_register_id = $1`,
+          [registerId, original.fiscal_mode, original.fiscal_device_label],
+        );
+    }
+  }, 20_000);
+
+  it('records device X/Z reports durably and closes a hardware shift only with its Z report', async () => {
+    const terminal = await get<PosTerminalContext>(
+      application,
+      '/api/v1/pos/terminal-context',
+      posToken,
+    );
+    const registerId = terminal.registers[0]!.id;
+    const original = await database.query<{
+      fiscal_device_label: string | null;
+      fiscal_mode: string;
+    }>(
+      `SELECT fiscal_mode, fiscal_device_label FROM pos.terminal_configurations
+       WHERE cash_register_id = $1`,
+      [registerId],
+    );
+    await database.query(
+      `UPDATE pos.terminal_configurations
+       SET fiscal_mode = 'hardware', fiscal_device_label = 'DATECS report fixture',
+           version = version + 1 WHERE cash_register_id = $1`,
+      [registerId],
+    );
+    try {
+      const shift = await post<PosShift>(
+        application,
+        '/api/v1/pos/shifts',
+        posToken,
+        randomUUID(),
+        {
+          cashRegisterId: registerId,
+          openingCashEur: '100.00',
+        },
+      );
+      const createReportKey = randomUUID();
+      const createX = () =>
+        request(application.getHttpServer())
+          .post('/api/v1/pos/fiscal-daily-reports')
+          .set('authorization', `Bearer ${posToken}`)
+          .set('idempotency-key', createReportKey)
+          .send({ shiftId: shift.id, type: 'x' });
+      const x = (await createX().expect(201)).body as PosFiscalDailyReport;
+      expect((await createX().expect(201)).body.id).toBe(x.id);
+      await request(application.getHttpServer())
+        .get(`/api/v1/pos/fiscal-daily-reports/active?shiftId=${shift.id}`)
+        .set('authorization', `Bearer ${posToken}`)
+        .expect(200)
+        .expect(({ body }) => expect(body.report).toMatchObject({ id: x.id, reportType: 'x' }));
+
+      const printing = await post<PosFiscalDailyReport>(
+        application,
+        `/api/v1/pos/fiscal-daily-reports/${x.id}/printing`,
+        posToken,
+        randomUUID(),
+        {},
+      );
+      expect(printing.status).toBe('printing');
+      const unknown = await post<PosFiscalDailyReport>(
+        application,
+        `/api/v1/pos/fiscal-daily-reports/${x.id}/outcome-unknown`,
+        posToken,
+        randomUUID(),
+        {},
+      );
+      expect(unknown.status).toBe('outcome_unknown');
+
+      await request(application.getHttpServer())
+        .post('/api/v1/pos/sales')
+        .set('authorization', `Bearer ${posToken}`)
+        .set('idempotency-key', randomUUID())
+        .send({
+          clientTransactionId: randomUUID(),
+          lines: [{ productId: fixtureId('catalog:product:adapter'), quantity: '1' }],
+          payments: [{ amount: '1.00', method: 'cash', tenderedAmount: '1.00' }],
+          shiftId: shift.id,
+        })
+        .expect(409);
+
+      const totals = {
+        fiscalRecordNumber: '42',
+        nonVatSalesTotalEur: '0.00',
+        taxGroupTotals: {
+          A: '0.00',
+          B: '0.00',
+          C: '0.00',
+          D: '0.00',
+          E: '0.00',
+          F: '0.00',
+          G: '0.00',
+          H: '0.00',
+        },
+      };
+      const confirmationKey = randomUUID();
+      const confirmX = () =>
+        request(application.getHttpServer())
+          .post(`/api/v1/pos/fiscal-daily-reports/${x.id}/confirm`)
+          .set('authorization', `Bearer ${posToken}`)
+          .set('idempotency-key', confirmationKey)
+          .send(totals);
+      const completedX = (await confirmX().expect(200)).body as PosFiscalDailyReport;
+      expect(completedX).toMatchObject({ fiscalRecordNumber: '42', status: 'completed' });
+      expect((await confirmX().expect(200)).body.id).toBe(x.id);
+      await request(application.getHttpServer())
+        .post(`/api/v1/pos/fiscal-daily-reports/${x.id}/confirm`)
+        .set('authorization', `Bearer ${posToken}`)
+        .set('idempotency-key', randomUUID())
+        .send({ ...totals, nonVatSalesTotalEur: '0.01' })
+        .expect(409);
+      await request(application.getHttpServer())
+        .get(`/api/v1/pos/fiscal-daily-reports/active?shiftId=${shift.id}`)
+        .set('authorization', `Bearer ${posToken}`)
+        .expect(200)
+        .expect(({ body }) => expect(body.report).toBeNull());
+
+      await request(application.getHttpServer())
+        .post(`/api/v1/pos/shifts/${shift.id}/close`)
+        .set('authorization', `Bearer ${posToken}`)
+        .set('idempotency-key', randomUUID())
+        .send({ closingCashEur: '100.00', version: shift.version })
+        .expect(409);
+
+      const z = await post<PosFiscalDailyReport>(
+        application,
+        '/api/v1/pos/fiscal-daily-reports',
+        posToken,
+        randomUUID(),
+        { closingCashEur: '100.00', shiftId: shift.id, shiftVersion: shift.version, type: 'z' },
+      );
+      expect(z).toMatchObject({ closingCashEur: '100.0000', reportType: 'z', status: 'prepared' });
+      await post<PosFiscalDailyReport>(
+        application,
+        `/api/v1/pos/fiscal-daily-reports/${z.id}/printing`,
+        posToken,
+        randomUUID(),
+        {},
+      );
+      const completedZ = await post<PosFiscalDailyReport>(
+        application,
+        `/api/v1/pos/fiscal-daily-reports/${z.id}/confirm`,
+        posToken,
+        randomUUID(),
+        { ...totals, fiscalRecordNumber: '43' },
+      );
+      expect(completedZ.status).toBe('completed');
+      const closedShift = await get<PosTerminalContext>(
+        application,
+        '/api/v1/pos/terminal-context',
+        posToken,
+      );
+      expect(closedShift.currentShift).toBeUndefined();
+      const audit = await database.query<{ count: number }>(
+        `SELECT count(*)::integer AS count FROM audit.events
+         WHERE target_id = ANY($1::uuid[])
+           AND action IN ('pos.fiscal_daily_report.x.completed', 'pos.fiscal_daily_report.z.completed')`,
+        [[x.id, z.id]],
+      );
+      expect(audit.rows[0]?.count).toBe(2);
+    } finally {
+      const configuration = original.rows[0];
+      if (configuration)
+        await database.query(
+          `UPDATE pos.terminal_configurations
+           SET fiscal_mode = $2, fiscal_device_label = $3, version = version + 1
+           WHERE cash_register_id = $1`,
+          [registerId, configuration.fiscal_mode, configuration.fiscal_device_label],
+        );
+    }
+  }, 20_000);
+
   it('reconciles POS invoice payments, deferred credit and refunds without duplicating money or collections', async () => {
     const customerId = fixtureId('partner:alfa');
     const terminal = await get<PosTerminalContext>(
@@ -1319,6 +2136,26 @@ describe.skipIf(!runInfrastructureTests)('POS split payment and linked return li
     const issued = (await issue(draft).expect(200)).body as FinancialDocument;
     expect(issued.posSettlement?.status).toBe('paid');
     expect(issued).not.toHaveProperty('collection');
+    const paidInvoiceStatus = await get<CustomerPaymentStatusPage>(
+      application,
+      `/api/v1/finance/customer-accounts/payment-status?search=${encodeURIComponent(cash.fiscalReceiptNumber)}`,
+      managerToken,
+    );
+    expect(paidInvoiceStatus).toMatchObject({
+      totalItems: 1,
+      items: [
+        expect.objectContaining({
+          id: cash.id,
+          number: issued.officialNumber,
+          referenceNumber: cash.fiscalReceiptNumber,
+          total: cash.grossTotal,
+          paidTotal: cash.grossTotal,
+          outstandingTotal: '0.0000',
+          paymentStatus: 'paid',
+          sourceType: 'pos_sale',
+        }),
+      ],
+    });
     await issue(issued).expect(200);
     expect((await prepare(cash)).id).toBe(issued.id);
     expect((await evidence()).rows).toEqual(before);
@@ -1364,6 +2201,24 @@ describe.skipIf(!runInfrastructureTests)('POS split payment and linked return li
     });
     expect(partial.grossTotal).toBe(issued.grossTotal);
     expect(partial.version).toBe(issued.version);
+    const returnedInvoiceStatus = await get<CustomerPaymentStatusPage>(
+      application,
+      `/api/v1/finance/customer-accounts/payment-status?search=${encodeURIComponent(issued.officialNumber!)}`,
+      managerToken,
+    );
+    expect(returnedInvoiceStatus).toMatchObject({
+      totalItems: 1,
+      items: [
+        expect.objectContaining({
+          id: cash.id,
+          total: '15.3388',
+          creditTotal: '15.3387',
+          paidTotal: '15.3388',
+          outstandingTotal: '0.0000',
+          paymentStatus: 'paid',
+        }),
+      ],
+    });
 
     const splitSale = await createSale([
       { method: 'cash', amount: '15.3387', tenderedAmount: '20' },
@@ -1552,6 +2407,24 @@ describe.skipIf(!runInfrastructureTests)('POS split payment and linked return li
       randomUUID(),
       {},
     );
+    const initialPaymentStatus = await get<CustomerPaymentStatusPage>(
+      application,
+      `/api/v1/finance/customer-accounts/payment-status?search=${encodeURIComponent(sale.saleNumber)}`,
+      managerToken,
+    );
+    expect(initialPaymentStatus).toMatchObject({
+      totalItems: 1,
+      items: [
+        expect.objectContaining({
+          id: sale.id,
+          number: sale.saleNumber,
+          outstandingTotal: '30.6775',
+          paidTotal: '0.0000',
+          paymentStatus: 'unpaid',
+          sourceType: 'pos_sale',
+        }),
+      ],
+    });
     const path = `/api/v1/finance/customer-accounts/${customerId}/pos-sales/${sale.id}/payments`;
     const paymentDate = new Intl.DateTimeFormat('en-CA', {
       timeZone: 'Europe/Sofia',
@@ -1598,6 +2471,26 @@ describe.skipIf(!runInfrastructureTests)('POS split payment and linked return li
       outstandingTotal: '20.6775',
       status: 'partially_paid',
     });
+    const partialPaymentStatus = await get<CustomerPaymentStatusPage>(
+      application,
+      `/api/v1/finance/customer-accounts/payment-status?search=${encodeURIComponent(sale.saleNumber)}&status=partially_paid`,
+      managerToken,
+    );
+    expect(partialPaymentStatus.items).toEqual([
+      expect.objectContaining({
+        id: sale.id,
+        total: '30.6775',
+        paidTotal: '10.0000',
+        outstandingTotal: '20.6775',
+        paymentStatus: 'partially_paid',
+      }),
+    ]);
+    const draftInvoiceStatus = await get<CustomerPaymentStatusPage>(
+      application,
+      `/api/v1/finance/customer-accounts/payment-status?search=${encodeURIComponent(invoice.number)}`,
+      managerToken,
+    );
+    expect(draftInvoiceStatus.totalItems).toBe(0);
     const payment = receivable.payments[0]!;
     await requestPayment(randomUUID()).expect(409);
     const source = await get<FinancialDocument>(
@@ -2031,9 +2924,575 @@ describe.skipIf(!runInfrastructureTests)('POS split payment and linked return li
     await expect(
       database.query('UPDATE finance.payments SET amount=amount+1 WHERE id=$1', [payment.id]),
     ).rejects.toThrow('immutable');
+
+    const collectionSale = await post<PosSale>(
+      application,
+      '/api/v1/pos/sales',
+      posToken,
+      randomUUID(),
+      {
+        clientTransactionId: randomUUID(),
+        shiftId: shift.id,
+        customerPartnerId: customerId,
+        lines: [{ productId: fixtureId('catalog:product:adapter'), quantity: '1' }],
+        payments: [{ method: 'on_account', amount: '30.6775' }],
+      },
+    );
+    const advance = await post<CustomerAdvance>(
+      application,
+      '/api/v1/finance/customer-accounts/advances',
+      managerToken,
+      randomUUID(),
+      {
+        amount: '3',
+        customerPartnerId: customerId,
+        paymentMethod: 'bank_transfer',
+        receivedOn: paymentDate,
+      },
+    );
+    const advancePath = `/api/v1/finance/customer-accounts/${customerId}/pos-sales/${collectionSale.id}/advance-allocations`;
+    const advanceAllocation = (key: string, amount: string, expectedOutstanding: string) =>
+      request(application.getHttpServer())
+        .post(advancePath)
+        .set('authorization', `Bearer ${managerToken}`)
+        .set('idempotency-key', key)
+        .send({ amount, customerAdvanceId: advance.id, expectedOutstanding });
+    const firstAdvanceKey = randomUUID();
+    const firstAdvance = await advanceAllocation(firstAdvanceKey, '1', '30.6775').expect(201);
+    const firstAdvanceReplay = await advanceAllocation(firstAdvanceKey, '1', '30.6775').expect(201);
+    expect(firstAdvanceReplay.body as CustomerPaymentAccount).toEqual(
+      firstAdvance.body as CustomerPaymentAccount,
+    );
+    expect(
+      (await advanceAllocation(randomUUID(), '2.0001', '29.6775').expect(409)).body.error.code,
+    ).toBe('FINANCE_ADVANCE_ALLOCATION_EXCEEDS_BALANCE');
+    await advanceAllocation(randomUUID(), '2', '29.6775').expect(201);
+
+    const cashReferences = await get<FinanceCashReferenceData>(
+      application,
+      '/api/v1/finance/cash/reference-data',
+      managerToken,
+    );
+    const cashRegister = cashReferences.cashRegisters.find((register) => register.operators.length);
+    if (!cashRegister?.operators[0]) throw new Error('Finance cash register fixture is missing');
+    expect(cashReferences.openPosAccounts).toEqual(
+      expect.arrayContaining([expect.objectContaining({ saleId: collectionSale.id })]),
+    );
+    const cashVoucherBody = {
+      amount: '5',
+      cashRegisterId: cashRegister.id,
+      counterpartyName: 'Alfa Market Demo Ltd.',
+      counterpartyPartnerId: customerId,
+      direction: 'receipt',
+      operatorId: cashRegister.operators[0].id,
+      paymentReference: 'POS-CASH-COLLECTION-TEST',
+      posSaleId: collectionSale.id,
+      purpose: 'Deferred POS sale collection',
+      voucherDate: paymentDate,
+    };
+    const cashKey = randomUUID();
+    const cashVoucher = await request(application.getHttpServer())
+      .post('/api/v1/finance/cash/vouchers')
+      .set('authorization', `Bearer ${managerToken}`)
+      .set('idempotency-key', cashKey)
+      .send(cashVoucherBody)
+      .expect(201);
+    const cashVoucherReplay = await request(application.getHttpServer())
+      .post('/api/v1/finance/cash/vouchers')
+      .set('authorization', `Bearer ${managerToken}`)
+      .set('idempotency-key', cashKey)
+      .send(cashVoucherBody)
+      .expect(201);
+    expect(cashVoucherReplay.body).toEqual(cashVoucher.body);
+    expect(cashVoucher.body as FinanceCashVoucher).toMatchObject({
+      amount: '5.0000',
+      direction: 'receipt',
+      posSaleId: collectionSale.id,
+      posSaleNumber: collectionSale.saleNumber,
+      status: 'issued',
+    });
+    await request(application.getHttpServer())
+      .post(`/api/v1/finance/cash/vouchers/${(cashVoucher.body as FinanceCashVoucher).id}/cancel`)
+      .set('authorization', `Bearer ${managerToken}`)
+      .set('idempotency-key', randomUUID())
+      .send({
+        cancellationReason: 'Linked receipts require correction review.',
+        expectedVersion: 1,
+      })
+      .expect(409);
+
+    const bankAmount = '22.6775';
+    const bankStatement = await post<FinanceBankStatement>(
+      application,
+      '/api/v1/finance/bank-statements',
+      managerToken,
+      randomUUID(),
+      {
+        accountIban: 'BG76DEMO00000000000000',
+        bankName: 'Vista POS account test bank',
+        closingBalance: '122.6775',
+        currencyCode: 'EUR',
+        lines: [
+          {
+            amount: bankAmount,
+            counterpartyName: 'Alfa Market Demo Ltd.',
+            direction: 'incoming',
+            paymentReference: 'POS-BANK-COLLECTION-TEST',
+            transactionDate: paymentDate,
+            valueDate: paymentDate,
+          },
+        ],
+        openingBalance: '100',
+        statementDate: paymentDate,
+        statementReference: `POS-COLLECTION-${runId}`,
+      },
+    );
+    const bankLine = bankStatement.transactions[0];
+    if (!bankLine) throw new Error('Expected one bank statement transaction');
+    const bankCandidates = await get<
+      Array<{ posSaleId?: string; targetType: string; targetId: string }>
+    >(
+      application,
+      `/api/v1/finance/bank-transactions/${bankLine.id}/match-candidates`,
+      managerToken,
+    );
+    expect(bankCandidates).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ posSaleId: collectionSale.id, targetType: 'pos_account' }),
+      ]),
+    );
+    const matchedStatement = await request(application.getHttpServer())
+      .post(`/api/v1/finance/bank-transactions/${bankLine.id}/match`)
+      .set('authorization', `Bearer ${managerToken}`)
+      .set('idempotency-key', randomUUID())
+      .send({ expectedVersion: bankLine.version, posSaleId: collectionSale.id })
+      .expect(200);
+    expect((matchedStatement.body as FinanceBankStatement).transactions[0]).toMatchObject({
+      matchStatus: 'matched',
+      match: { posSaleId: collectionSale.id, targetType: 'pos_account' },
+    });
+
+    const collectedAccount = await get<CustomerPaymentAccount>(
+      application,
+      `/api/v1/finance/customer-accounts/${customerId}`,
+      managerToken,
+    );
+    expect(
+      collectedAccount.posReceivables!.find((item) => item.saleId === collectionSale.id),
+    ).toMatchObject({
+      paidTotal: '30.6775',
+      outstandingTotal: '0.0000',
+      status: 'paid',
+    });
+    const linkedSources = await database.query<{
+      advance_count: string;
+      cash_count: string;
+      bank_count: string;
+      allocation_count: string;
+    }>(
+      `SELECT count(*) FILTER (WHERE source_customer_advance_id=$2)::text AS advance_count,
+              count(*) FILTER (WHERE payment_method='cash')::text AS cash_count,
+              count(*) FILTER (WHERE payment_method='bank_transfer' AND source_customer_advance_id IS NULL)::text AS bank_count,
+              count(*) FILTER (WHERE allocation.id IS NOT NULL)::text AS allocation_count
+       FROM finance.payments payment
+       LEFT JOIN finance.payment_allocations allocation ON allocation.payment_id=payment.id
+       WHERE payment.source_pos_sale_id=$1`,
+      [collectionSale.id, advance.id],
+    );
+    expect(linkedSources.rows[0]).toEqual({
+      advance_count: '2',
+      cash_count: '1',
+      bank_count: '1',
+      allocation_count: '0',
+    });
+
+    const offsetSale = await post<PosSale>(
+      application,
+      '/api/v1/pos/sales',
+      posToken,
+      randomUUID(),
+      {
+        clientTransactionId: randomUUID(),
+        shiftId: shift.id,
+        customerPartnerId: customerId,
+        lines: [{ productId: fixtureId('catalog:product:adapter'), quantity: '1' }],
+        payments: [{ method: 'on_account', amount: '30.6775' }],
+      },
+    );
+    const posInvoiceDraft = await post<FinancialDocument>(
+      application,
+      `/api/v1/pos/sales/${offsetSale.id}/invoice-draft`,
+      posToken,
+      randomUUID(),
+      {},
+    );
+    const issuedPosInvoiceResponse = await request(application.getHttpServer())
+      .post(`/api/v1/finance/financial-documents/${posInvoiceDraft.id}/issue`)
+      .set('authorization', `Bearer ${managerToken}`)
+      .set('idempotency-key', randomUUID())
+      .send({ expectedVersion: posInvoiceDraft.version })
+      .expect(200);
+    const issuedPosInvoice = issuedPosInvoiceResponse.body as FinancialDocument;
+    const linkedPosPaymentStatus = await get<CustomerPaymentStatusPage>(
+      application,
+      `/api/v1/finance/customer-accounts/payment-status?search=${encodeURIComponent(offsetSale.saleNumber)}`,
+      managerToken,
+    );
+    expect(linkedPosPaymentStatus).toMatchObject({
+      totalItems: 1,
+      items: [
+        expect.objectContaining({
+          id: offsetSale.id,
+          number: issuedPosInvoice.officialNumber,
+          referenceNumber: offsetSale.fiscalReceiptNumber,
+          sourceType: 'pos_sale',
+        }),
+      ],
+    });
+    const firstPaymentStatusPage = await get<CustomerPaymentStatusPage>(
+      application,
+      '/api/v1/finance/customer-accounts/payment-status?page=1&pageSize=1&search=Alfa',
+      managerToken,
+    );
+    const secondPaymentStatusPage = await get<CustomerPaymentStatusPage>(
+      application,
+      '/api/v1/finance/customer-accounts/payment-status?page=2&pageSize=1&search=Alfa',
+      managerToken,
+    );
+    expect(firstPaymentStatusPage.totalItems).toBeGreaterThan(1);
+    expect(firstPaymentStatusPage.items).toHaveLength(1);
+    expect(secondPaymentStatusPage.items).toHaveLength(1);
+    expect(firstPaymentStatusPage.items[0]?.id).not.toBe(secondPaymentStatusPage.items[0]?.id);
+    const supplierInvoiceId = await seedPosOffsetSupplierInvoice(
+      database,
+      fixtureId('account:manager'),
+      customerId,
+      fixtureId('warehouse:central'),
+      fixtureId('catalog:product:adapter'),
+      paymentDate,
+      runId,
+    );
+    const supplierPayable = await post<FinanceSupplierPayable>(
+      application,
+      '/api/v1/finance/supplier-payables',
+      managerToken,
+      randomUUID(),
+      { dueDate: paymentDate, supplierInvoiceId },
+    );
+    const references = await get<FinanceSupplierReferenceData>(
+      application,
+      '/api/v1/finance/supplier-reference-data',
+      managerToken,
+    );
+    expect(references.openReceivables).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: offsetSale.id,
+          posSaleId: offsetSale.id,
+          saleNumber: offsetSale.saleNumber,
+          sourceType: 'pos_account',
+          outstandingTotal: '30.6775',
+        }),
+      ]),
+    );
+    const offsetBody = {
+      amount: '5',
+      expectedPosOutstanding: '30.6775',
+      expectedSupplierPayableVersion: supplierPayable.version,
+      offsetDate: paymentDate,
+      posSaleId: offsetSale.id,
+      reason: 'Bilateral POS account compensation test',
+      supplierPayableId: supplierPayable.id,
+    };
+    await request(application.getHttpServer())
+      .post('/api/v1/finance/supplier-offsets')
+      .set('authorization', `Bearer ${managerToken}`)
+      .set('idempotency-key', randomUUID())
+      .send({ ...offsetBody, expectedPosOutstanding: '30.0000' })
+      .expect(409)
+      .expect(({ body }) =>
+        expect(body.error.code).toBe('FINANCE_POS_RECEIVABLE_VERSION_CONFLICT'),
+      );
+    await request(application.getHttpServer())
+      .post('/api/v1/finance/supplier-offsets')
+      .set('authorization', `Bearer ${managerToken}`)
+      .set('idempotency-key', randomUUID())
+      .send({ ...offsetBody, amount: '30.6776' })
+      .expect(409)
+      .expect(({ body }) => expect(body.error.code).toBe('FINANCE_OFFSET_RECEIVABLE_EXCEEDED'));
+    const offsetKey = randomUUID();
+    const offsetResponse = await request(application.getHttpServer())
+      .post('/api/v1/finance/supplier-offsets')
+      .set('authorization', `Bearer ${managerToken}`)
+      .set('idempotency-key', offsetKey)
+      .send(offsetBody)
+      .expect(201);
+    const posOffset = offsetResponse.body as FinanceSupplierOffset;
+    expect(posOffset).toMatchObject({
+      amount: '5.0000',
+      posSaleId: offsetSale.id,
+      posSaleNumber: offsetSale.saleNumber,
+      supplierPayableId: supplierPayable.id,
+    });
+    const offsetReplay = await request(application.getHttpServer())
+      .post('/api/v1/finance/supplier-offsets')
+      .set('authorization', `Bearer ${managerToken}`)
+      .set('idempotency-key', offsetKey)
+      .send(offsetBody)
+      .expect(201);
+    expect(offsetReplay.body).toEqual(offsetResponse.body);
+    const accountAfterOffset = await get<CustomerPaymentAccount>(
+      application,
+      `/api/v1/finance/customer-accounts/${customerId}`,
+      managerToken,
+    );
+    expect(
+      accountAfterOffset.posReceivables!.find((item) => item.saleId === offsetSale.id),
+    ).toMatchObject({ paidTotal: '5.0000', outstandingTotal: '25.6775' });
+    const statusAfterOffset = await get<CustomerPaymentStatusPage>(
+      application,
+      `/api/v1/finance/customer-accounts/payment-status?search=${encodeURIComponent(offsetSale.saleNumber)}&status=partially_paid`,
+      managerToken,
+    );
+    expect(statusAfterOffset.items).toEqual([
+      expect.objectContaining({
+        id: offsetSale.id,
+        paidTotal: '5.0000',
+        outstandingTotal: '25.6775',
+        paymentStatus: 'partially_paid',
+      }),
+    ]);
+    const payableAfterOffset = await get<FinanceSupplierPayable>(
+      application,
+      `/api/v1/finance/supplier-payables/${supplierPayable.id}`,
+      managerToken,
+    );
+    expect(payableAfterOffset).toMatchObject({
+      allocatedTotal: '5.0000',
+      outstandingTotal: '91.0000',
+    });
+    const offsetPaymentLinks = await database.query<{
+      account_entry_count: string;
+      allocation_count: string;
+      payment_count: string;
+    }>(
+      `SELECT count(DISTINCT payment.id)::text AS payment_count,
+              count(DISTINCT account_entry.id)::text AS account_entry_count,
+              count(DISTINCT allocation.id)::text AS allocation_count
+       FROM finance.payments payment
+       LEFT JOIN finance.customer_account_entries account_entry
+         ON account_entry.payment_id = payment.id AND account_entry.entry_type = 'payment'
+       LEFT JOIN finance.payment_allocations allocation ON allocation.payment_id = payment.id
+       WHERE payment.source_pos_sale_id = $1 AND payment.payment_method = 'offset'`,
+      [offsetSale.id],
+    );
+    expect(offsetPaymentLinks.rows[0]).toEqual({
+      payment_count: '1',
+      account_entry_count: '1',
+      allocation_count: '0',
+    });
+    const listedOffsets = await get<{ items: FinanceSupplierOffset[] }>(
+      application,
+      '/api/v1/finance/supplier-offsets?page=1&pageSize=100',
+      managerToken,
+    );
+    expect(listedOffsets.items).toEqual(
+      expect.arrayContaining([expect.objectContaining({ posSaleNumber: offsetSale.saleNumber })]),
+    );
+    await database.query('DELETE FROM pos.fiscal_preparation_loyalty_reservations');
+    await database.query(
+      `UPDATE pos.discount_authorizations
+       SET reserved_by_fiscal_preparation_id = NULL
+       WHERE reserved_by_fiscal_preparation_id IS NOT NULL`,
+    );
+    await database.query(
+      `DELETE FROM inventory.stock_reservation_serials
+       WHERE reservation_id IN (
+         SELECT id FROM inventory.stock_reservations WHERE reference_type = 'pos_fiscal_preparation'
+       )`,
+    );
+    await database.query(
+      `DELETE FROM inventory.stock_reservations WHERE reference_type = 'pos_fiscal_preparation'`,
+    );
+    expect(
+      await migrateDown(
+        database,
+        fileURLToPath(new URL('../src/database/migrations', import.meta.url)),
+      ),
+    ).toBe('0115_backup_independent_copies');
+    expect(
+      await migrateDown(
+        database,
+        fileURLToPath(new URL('../src/database/migrations', import.meta.url)),
+      ),
+    ).toBe('0114_backup_retention_reduction_approval');
+    expect(
+      await migrateDown(
+        database,
+        fileURLToPath(new URL('../src/database/migrations', import.meta.url)),
+      ),
+    ).toBe('0113_backup_restore_point_deletion');
+    expect(
+      await migrateDown(
+        database,
+        fileURLToPath(new URL('../src/database/migrations', import.meta.url)),
+      ),
+    ).toBe('0112_backup_policy_disable_approval');
+    expect(
+      await migrateDown(
+        database,
+        fileURLToPath(new URL('../src/database/migrations', import.meta.url)),
+      ),
+    ).toBe('0111_backup_file_share_source');
+    expect(
+      await migrateDown(
+        database,
+        fileURLToPath(new URL('../src/database/migrations', import.meta.url)),
+      ),
+    ).toBe('0110_backup_granular_file_restore');
+    expect(
+      await migrateDown(
+        database,
+        fileURLToPath(new URL('../src/database/migrations', import.meta.url)),
+      ),
+    ).toBe('0109_backup_compression');
+    expect(
+      await migrateDown(
+        database,
+        fileURLToPath(new URL('../src/database/migrations', import.meta.url)),
+      ),
+    ).toBe('0108_backup_object_storage_restore');
+    expect(
+      await migrateDown(
+        database,
+        fileURLToPath(new URL('../src/database/migrations', import.meta.url)),
+      ),
+    ).toBe('0107_backup_plan_reviews');
+    expect(
+      await migrateDown(
+        database,
+        fileURLToPath(new URL('../src/database/migrations', import.meta.url)),
+      ),
+    ).toBe('0106_backup_dr_tests');
+    expect(
+      await migrateDown(
+        database,
+        fileURLToPath(new URL('../src/database/migrations', import.meta.url)),
+      ),
+    ).toBe('0105_backup_missed_schedules');
+    expect(
+      await migrateDown(
+        database,
+        fileURLToPath(new URL('../src/database/migrations', import.meta.url)),
+      ),
+    ).toBe('0104_backup_retention');
+    expect(
+      await migrateDown(
+        database,
+        fileURLToPath(new URL('../src/database/migrations', import.meta.url)),
+      ),
+    ).toBe('0103_backup_restore_requests');
+    expect(
+      await migrateDown(
+        database,
+        fileURLToPath(new URL('../src/database/migrations', import.meta.url)),
+      ),
+    ).toBe('0102_backup_execution_ledger');
+    expect(
+      await migrateDown(
+        database,
+        fileURLToPath(new URL('../src/database/migrations', import.meta.url)),
+      ),
+    ).toBe('0101_backup_policy_approval');
+    expect(
+      await migrateDown(
+        database,
+        fileURLToPath(new URL('../src/database/migrations', import.meta.url)),
+      ),
+    ).toBe('0100_backup_inventory_policies');
+    expect(
+      await migrateDown(
+        database,
+        fileURLToPath(new URL('../src/database/migrations', import.meta.url)),
+      ),
+    ).toBe('0099_finance_bank_value_date_semantics');
+    expect(
+      await migrateDown(
+        database,
+        fileURLToPath(new URL('../src/database/migrations', import.meta.url)),
+      ),
+    ).toBe('0098_pos_offline_sync_audit');
+    await database.query('DELETE FROM pos.datecs_unp_leases');
+    await database.query('DELETE FROM pos.fiscal_sale_preparations');
+    expect(
+      await migrateDown(
+        database,
+        fileURLToPath(new URL('../src/database/migrations', import.meta.url)),
+      ),
+    ).toBe('0097_pos_card_authorization_lifecycle');
+    expect(
+      await migrateDown(
+        database,
+        fileURLToPath(new URL('../src/database/migrations', import.meta.url)),
+      ),
+    ).toBe('0096_pos_datecs_unp_leases');
+    expect(
+      await migrateDown(
+        database,
+        fileURLToPath(new URL('../src/database/migrations', import.meta.url)),
+      ),
+    ).toBe('0095_pos_fiscal_return_saga');
+    expect(
+      await migrateDown(
+        database,
+        fileURLToPath(new URL('../src/database/migrations', import.meta.url)),
+      ),
+    ).toBe('0094_pos_fiscal_daily_reports');
+    expect(
+      await migrateDown(
+        database,
+        fileURLToPath(new URL('../src/database/migrations', import.meta.url)),
+      ),
+    ).toBe('0093_pos_fiscal_sale_saga');
+    expect(
+      await migrateDown(
+        database,
+        fileURLToPath(new URL('../src/database/migrations', import.meta.url)),
+      ),
+    ).toBe('0092_logistics_courier_bookings');
+    expect(
+      await migrateDown(
+        database,
+        fileURLToPath(new URL('../src/database/migrations', import.meta.url)),
+      ),
+    ).toBe('0091_crm_customer_survey_delivery');
+    expect(
+      await migrateDown(
+        database,
+        fileURLToPath(new URL('../src/database/migrations', import.meta.url)),
+      ),
+    ).toBe('0090_crm_warranty_coverage_offers');
+    expect(
+      await migrateDown(
+        database,
+        fileURLToPath(new URL('../src/database/migrations', import.meta.url)),
+      ),
+    ).toBe('0089_procurement_acceptance_protocols');
+    expect(
+      await migrateDown(
+        database,
+        fileURLToPath(new URL('../src/database/migrations', import.meta.url)),
+      ),
+    ).toBe('0088_supplier_invoice_rate_snapshots');
+    expect(
+      await migrateDown(
+        database,
+        fileURLToPath(new URL('../src/database/migrations', import.meta.url)),
+      ),
+    ).toBe('0087_finance_payment_status_register');
     await expect(
       migrateDown(database, fileURLToPath(new URL('../src/database/migrations', import.meta.url))),
-    ).rejects.toThrow('Cannot discard');
+    ).rejects.toThrow('Cannot remove supplier offsets linked to POS account sales');
   }, 40000);
 
   async function stockQuantity(): Promise<number> {
@@ -2045,6 +3504,105 @@ describe.skipIf(!runInfrastructureTests)('POS split payment and linked return li
     return Number(result.rows[0]?.quantity ?? '0');
   }
 });
+
+class IntegrationCardTerminalAdapter implements CardTerminalAdapter {
+  readonly reconciliationResults = new Map<string, CardAuthorizationLookup>();
+  nextAuthorizationResult: CardAuthorizationResult | undefined;
+
+  private readonly outcomes = new Map<string, CardAuthorizationResult>();
+  private readonly calls = new Map<string, { authorize: number; reconcile: number }>();
+
+  authorize(command: CardAuthorizationCommand): Promise<CardAuthorizationResult> {
+    const calls = this.callsFor(command.idempotencyKey);
+    calls.authorize += 1;
+    this.calls.set(command.idempotencyKey, calls);
+    const previous = this.outcomes.get(command.idempotencyKey);
+    if (previous) return Promise.resolve(previous);
+    const result =
+      this.nextAuthorizationResult ??
+      ({
+        adapter: 'development-card-simulator',
+        providerReference: `CARD-${createHash('sha256')
+          .update(command.idempotencyKey)
+          .digest('hex')
+          .slice(0, 16)
+          .toUpperCase()}`,
+        status: 'approved',
+      } satisfies CardAuthorizationResult);
+    this.nextAuthorizationResult = undefined;
+    this.outcomes.set(command.idempotencyKey, result);
+    return Promise.resolve(result);
+  }
+
+  reconcile(command: CardAuthorizationCommand): Promise<CardAuthorizationLookup> {
+    const calls = this.callsFor(command.idempotencyKey);
+    calls.reconcile += 1;
+    this.calls.set(command.idempotencyKey, calls);
+    return Promise.resolve(
+      this.reconciliationResults.get(command.idempotencyKey) ??
+        this.outcomes.get(command.idempotencyKey) ?? { status: 'not_found' },
+    );
+  }
+
+  callsFor(idempotencyKey: string) {
+    const calls = this.calls.get(idempotencyKey) ?? { authorize: 0, reconcile: 0 };
+    return { ...calls };
+  }
+}
+
+async function seedPosOffsetSupplierInvoice(
+  pool: Pool,
+  actorId: string,
+  supplierPartnerId: string,
+  warehouseId: string,
+  productId: string,
+  invoiceDate: string,
+  runId: string,
+) {
+  const purchaseOrderId = randomUUID();
+  const purchaseOrderLineId = randomUUID();
+  const supplierInvoiceId = randomUUID();
+  await pool.query(
+    `INSERT INTO master_data.partner_roles (partner_id, role, assigned_by)
+     VALUES ($1, 'supplier', $2) ON CONFLICT DO NOTHING`,
+    [supplierPartnerId, actorId],
+  );
+  await pool.query(
+    `INSERT INTO procurement.purchase_orders (
+       id, supplier_partner_id, warehouse_id, currency_code, status, created_by, updated_by
+     ) VALUES ($1, $2, $3, 'EUR', 'received', $4, $4)`,
+    [purchaseOrderId, supplierPartnerId, warehouseId, actorId],
+  );
+  await pool.query(
+    `INSERT INTO procurement.purchase_order_lines (
+       id, purchase_order_id, product_id, ordered_quantity, delivered_quantity,
+       invoiced_quantity, unit_price, expected_delivery_date
+     ) VALUES ($1, $2, $3, 1, 1, 1, 80, $4)`,
+    [purchaseOrderLineId, purchaseOrderId, productId, invoiceDate],
+  );
+  await pool.query(
+    `INSERT INTO procurement.supplier_invoices (
+       id, purchase_order_id, supplier_partner_id, supplier_invoice_number,
+       invoice_date, currency_code, recorded_by
+     ) VALUES ($1, $2, $3, $4, $5, 'EUR', $6)`,
+    [
+      supplierInvoiceId,
+      purchaseOrderId,
+      supplierPartnerId,
+      `POS-OFFSET-${runId}`,
+      invoiceDate,
+      actorId,
+    ],
+  );
+  await pool.query(
+    `INSERT INTO procurement.supplier_invoice_lines (
+       id, supplier_invoice_id, purchase_order_id, purchase_order_line_id,
+       quantity, unit_price, vat_treatment, vat_rate
+     ) VALUES ($1, $2, $3, $4, 1, 80, 'standard_20', 20)`,
+    [randomUUID(), supplierInvoiceId, purchaseOrderId, purchaseOrderLineId],
+  );
+  return supplierInvoiceId;
+}
 
 async function login(application: INestApplication, email: string): Promise<string> {
   const response = await request(application.getHttpServer())
@@ -2060,6 +3618,18 @@ async function get<T>(application: INestApplication, path: string, token: string
     .set('authorization', `Bearer ${token}`)
     .expect(200);
   return response.body as T;
+}
+
+async function expectNoActiveFiscalOperation(
+  application: INestApplication,
+  path: string,
+  token: string,
+): Promise<void> {
+  const response = await request(application.getHttpServer())
+    .get(path)
+    .set('authorization', `Bearer ${token}`)
+    .expect(200);
+  expect(response.text).toBe('');
 }
 
 async function post<T>(

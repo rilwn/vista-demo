@@ -27,6 +27,11 @@ import {
   type CreateSupplierEvaluationRequest,
   type CreateSupplierInvoiceLineRequest,
   type CreateSupplierInvoiceRequest,
+  type CreateAcceptanceProtocolRequest,
+  type AcceptanceProtocol,
+  type AcceptanceProtocolDiscrepancy,
+  type AcceptanceProtocolLine,
+  type AcceptanceProtocolSummary,
   type ProcurementSupplierRecord,
   type CreatePurchaseOrderLineRequest,
   type CreatePurchaseOrderRequest,
@@ -206,7 +211,79 @@ export class GoodsReceiptLineDto implements GoodsReceiptLine {
   @ApiProperty({ type: String }) unitCostEur!: string;
 }
 
+export class AcceptanceProtocolDiscrepancyDto implements AcceptanceProtocolDiscrepancy {
+  @ApiProperty({ format: 'uuid', type: String }) claimId!: string;
+  @ApiProperty({ enum: ['damaged', 'non_conforming'] })
+  claimType!: AcceptanceProtocolDiscrepancy['claimType'];
+  @ApiProperty({ type: String }) description!: string;
+  @ApiProperty({ type: String }) quantity!: string;
+  @ApiProperty({ enum: ['open', 'submitted', 'resolved', 'closed'] })
+  status!: AcceptanceProtocolDiscrepancy['status'];
+}
+
+export class AcceptanceProtocolLineDto implements AcceptanceProtocolLine {
+  @ApiProperty({ type: String }) acceptedQuantity!: string;
+  @ApiPropertyOptional({ type: String }) batchNumber?: string;
+  @ApiProperty({ type: String }) currencyCode!: string;
+  @ApiProperty({ type: String }) cumulativeReceivedQuantity!: string;
+  @ApiProperty({ isArray: true, type: AcceptanceProtocolDiscrepancyDto })
+  discrepancies!: AcceptanceProtocolDiscrepancyDto[];
+  @ApiPropertyOptional({ format: 'date', type: String }) expiresAt?: string;
+  @ApiProperty({ format: 'uuid', type: String }) goodsReceiptLineId!: string;
+  @ApiProperty({ format: 'uuid', type: String }) id!: string;
+  @ApiProperty({ format: 'uuid', type: String }) orderLineId!: string;
+  @ApiProperty({ type: String }) orderedQuantity!: string;
+  @ApiProperty({ type: String }) outstandingQuantity!: string;
+  @ApiProperty({ type: String }) previouslyReceivedQuantity!: string;
+  @ApiProperty({ type: String }) productCode!: string;
+  @ApiProperty({ format: 'uuid', type: String }) productId!: string;
+  @ApiProperty({ type: String }) productName!: string;
+  @ApiProperty({ isArray: true, type: String }) serialNumbers!: string[];
+  @ApiProperty({ type: String }) unitPrice!: string;
+}
+
+class AcceptanceProtocolInvoiceDto {
+  @ApiProperty({ format: 'uuid', type: String }) id!: string;
+  @ApiProperty({ format: 'date', type: String }) invoiceDate!: string;
+  @ApiProperty({ type: String }) invoiceNumber!: string;
+}
+
+export class AcceptanceProtocolSummaryDto implements AcceptanceProtocolSummary {
+  @ApiProperty({ format: 'uuid', type: String }) id!: string;
+  @ApiProperty({ type: String }) protocolNumber!: string;
+}
+
+export class AcceptanceProtocolDto implements AcceptanceProtocol {
+  @ApiProperty({ format: 'date-time', type: String }) createdAt!: string;
+  @ApiProperty({ format: 'uuid', type: String }) goodsReceiptId!: string;
+  @ApiProperty({ format: 'uuid', type: String }) id!: string;
+  @ApiProperty({ isArray: true, type: AcceptanceProtocolLineDto })
+  lines!: AcceptanceProtocolLineDto[];
+  @ApiProperty({ type: Number }) numberSequence!: number;
+  @ApiProperty({ type: Number }) numberYear!: number;
+  @ApiProperty({ type: String }) preparedByName!: string;
+  @ApiProperty({ type: String }) protocolNumber!: string;
+  @ApiProperty({ format: 'uuid', type: String }) purchaseOrderId!: string;
+  @ApiProperty({ format: 'date-time', type: String }) receivedAt!: string;
+  @ApiProperty({ type: String }) receivedByName!: string;
+  @ApiPropertyOptional({ type: String }) supplierDeliveryReference?: string;
+  @ApiPropertyOptional({ type: AcceptanceProtocolInvoiceDto })
+  supplierInvoice?: AcceptanceProtocolInvoiceDto;
+  @ApiProperty({ type: String }) supplierName!: string;
+  @ApiProperty({ format: 'uuid', type: String }) supplierPartnerId!: string;
+  @ApiProperty({ type: String }) warehouseName!: string;
+}
+
+export class CreateAcceptanceProtocolDto implements CreateAcceptanceProtocolRequest {
+  @ApiPropertyOptional({ format: 'uuid', type: String })
+  @IsOptional()
+  @IsUUID(postgresUuid)
+  supplierInvoiceId?: string;
+}
+
 export class GoodsReceiptDto implements GoodsReceipt {
+  @ApiPropertyOptional({ type: AcceptanceProtocolSummaryDto })
+  acceptanceProtocol?: AcceptanceProtocolSummaryDto;
   @ApiProperty({ format: 'uuid', type: String }) id!: string;
   @ApiProperty({ isArray: true, type: GoodsReceiptLineDto }) lines!: GoodsReceiptLineDto[];
   @ApiProperty({ format: 'uuid', type: String }) purchaseOrderId!: string;
@@ -407,12 +484,15 @@ export class SupplierInvoiceLineDto implements SupplierInvoiceLine {
 
 export class SupplierInvoiceDto implements SupplierInvoice {
   @ApiProperty({ type: String }) currencyCode!: string;
+  @ApiPropertyOptional({ type: String }) exchangeRate?: string;
   @ApiProperty({ format: 'uuid', type: String }) id!: string;
   @ApiProperty({ format: 'date', type: String }) invoiceDate!: string;
   @ApiProperty({ type: String }) invoiceNumber!: string;
   @ApiProperty({ isArray: true, type: SupplierInvoiceLineDto }) lines!: SupplierInvoiceLine[];
   @ApiProperty({ type: String }) netTotal!: string;
   @ApiProperty({ format: 'uuid', type: String }) purchaseOrderId!: string;
+  @ApiPropertyOptional({ format: 'date', type: String }) rateDate?: string;
+  @ApiPropertyOptional({ enum: ['BNB', 'internal_eur'] }) rateSource?: 'BNB' | 'internal_eur';
   @ApiProperty({ format: 'date-time', type: String }) recordedAt!: string;
   @ApiProperty({ type: String }) supplierName!: string;
   @ApiProperty({ format: 'uuid', type: String }) supplierPartnerId!: string;

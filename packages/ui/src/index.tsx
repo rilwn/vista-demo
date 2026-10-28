@@ -5,6 +5,7 @@ import type {
   ReactNode,
 } from 'react';
 import { type FormEvent, useEffect, useRef, useState } from 'react';
+import type { DirectorySignInOptions } from '@vista/contracts';
 
 export { SearchableSelects } from './searchable-selects';
 export { Help } from './help';
@@ -336,6 +337,7 @@ export interface BrowserSignInInput {
   email: string;
   password: string;
   totpCode?: string;
+  emergencyAccessReason?: string;
 }
 
 export interface AuthenticationFormProps {
@@ -343,6 +345,10 @@ export interface AuthenticationFormProps {
   eyebrow: string;
   errorMessage: (error: unknown) => string;
   onAuthenticate: (input: BrowserSignInInput) => Promise<void>;
+  directoryOptions?: DirectorySignInOptions | undefined;
+  onStartDirectoryLogin?: () => Promise<void>;
+  onExchangeDirectoryLogin?: (ticket: string, totpCode?: string) => Promise<void>;
+  locale?: 'bg' | 'en';
   subtitle: string;
   supportText: string;
   variant?: 'operations' | 'pos' | 'recovery';
@@ -353,6 +359,10 @@ export function AuthenticationForm({
   applicationName,
   eyebrow,
   errorMessage,
+  directoryOptions,
+  onExchangeDirectoryLogin,
+  onStartDirectoryLogin,
+  locale = 'en',
   onAuthenticate,
   subtitle,
   supportText,
@@ -362,27 +372,117 @@ export function AuthenticationForm({
   const [email, setEmail] = useState('');
   const [error, setError] = useState('');
   const [password, setPassword] = useState('');
-  const [step, setStep] = useState<'credentials' | 'totp'>('credentials');
+  const [step, setStep] = useState<'credentials' | 'totp' | 'directory-totp'>('credentials');
   const [totpCode, setTotpCode] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [emergencyMode, setEmergencyMode] = useState(false);
+  const [emergencyReason, setEmergencyReason] = useState('');
+  const [directoryTicket, setDirectoryTicket] = useState('');
+  const [directoryBusy, setDirectoryBusy] = useState(false);
+  const processedTicket = useRef('');
+
+  const copy =
+    locale === 'bg'
+      ? {
+          workEmail: 'Служебен имейл',
+          password: 'Парола',
+          show: 'Покажи',
+          hide: 'Скрий',
+          signIn: 'Вход',
+          signingIn: 'Влизане',
+          verify: 'Потвърждаване и продължаване',
+          verifying: 'Потвърждаване',
+          code: 'Код за удостоверяване',
+          codeHint: 'Въведете текущия шестцифрен код от приложението за удостоверяване.',
+          organization: 'Вход с фирмения профил',
+          organizationHelp: 'Продължете чрез системата за служебни профили на Vista.',
+          emergency: 'Аварийно влизане',
+          emergencyReason: 'Причина за аварийния достъп',
+          emergencyHint: 'Този вход се записва в одитния дневник.',
+          back: 'Назад',
+          accountVerified: 'Фирменият профил е потвърден',
+        }
+      : {
+          workEmail: 'Work email',
+          password: 'Password',
+          show: 'Show',
+          hide: 'Hide',
+          signIn: 'Sign in',
+          signingIn: 'Signing in',
+          verify: 'Verify and continue',
+          verifying: 'Verifying',
+          code: 'Authentication code',
+          codeHint: 'Enter the current six-digit code from your authenticator app.',
+          organization: 'Sign in with your organization account',
+          organizationHelp: 'Continue through Vista’s configured sign-in service.',
+          emergency: 'Emergency access',
+          emergencyReason: 'Reason for emergency access',
+          emergencyHint: 'This sign-in is recorded in the audit log.',
+          back: 'Back',
+          accountVerified: 'Organization account verified',
+        };
 
   const credentialTitle =
     variant === 'pos'
-      ? 'Open the counter'
+      ? locale === 'bg'
+        ? 'Отворете касата'
+        : 'Open the counter'
       : variant === 'recovery'
-        ? 'Open recovery centre'
-        : 'Open your workspace';
+        ? locale === 'bg'
+          ? 'Отворете центъра за възстановяване'
+          : 'Open recovery centre'
+        : locale === 'bg'
+          ? 'Отворете работното пространство'
+          : 'Open your workspace';
+
+  useEffect(() => {
+    const hash = new URLSearchParams(globalThis.location.hash.replace(/^#/u, ''));
+    const ticket = hash.get('directory_ticket');
+    if (!ticket || processedTicket.current === ticket) return;
+    processedTicket.current = ticket;
+    globalThis.history.replaceState(
+      null,
+      '',
+      `${globalThis.location.pathname}${globalThis.location.search}`,
+    );
+    setDirectoryTicket(ticket);
+    setStep('directory-totp');
+    if (!onExchangeDirectoryLogin) return;
+    setBusy(true);
+    void onExchangeDirectoryLogin(ticket)
+      .then(() => setDirectoryTicket(''))
+      .catch((caught: unknown) => {
+        if (errorCode(caught) !== 'TWO_FACTOR_REQUIRED') setError(errorMessage(caught));
+        setStep('directory-totp');
+      })
+      .finally(() => setBusy(false));
+  }, [errorMessage, onExchangeDirectoryLogin]);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setBusy(true);
     setError('');
     try {
-      await onAuthenticate({ email, password, ...(step === 'totp' ? { totpCode } : {}) });
+      if (step === 'directory-totp') {
+        if (!directoryTicket || !onExchangeDirectoryLogin)
+          throw new Error('Sign-in expired. Start again.');
+        await onExchangeDirectoryLogin(directoryTicket, totpCode);
+        setDirectoryTicket('');
+      } else {
+        await onAuthenticate({
+          email,
+          password,
+          ...(step === 'totp' ? { totpCode } : {}),
+          ...(emergencyMode ? { emergencyAccessReason: emergencyReason } : {}),
+        });
+      }
     } catch (caught) {
       if (errorCode(caught) === 'TWO_FACTOR_REQUIRED' && step === 'credentials') {
         setStep('totp');
         setTotpCode('');
+      } else if (errorCode(caught) === 'TWO_FACTOR_REQUIRED' && step === 'directory-totp') {
+        setTotpCode('');
+        setError('');
       } else {
         setError(errorMessage(caught));
       }
@@ -406,14 +506,16 @@ export function AuthenticationForm({
               <small>{eyebrow}</small>
               <strong>{applicationName}</strong>
             </span>
-            {step === 'totp' ? <em>Step 2</em> : null}
+            {step !== 'credentials' ? <em>{locale === 'bg' ? 'Стъпка 2' : 'Step 2'}</em> : null}
           </header>
-          <h2>{step === 'credentials' ? credentialTitle : 'Confirm your sign-in'}</h2>
-          <p>
+          <h2>
             {step === 'credentials'
-              ? subtitle
-              : 'Enter the current six-digit code from your authenticator app.'}
-          </p>
+              ? credentialTitle
+              : locale === 'bg'
+                ? 'Потвърдете входа'
+                : 'Confirm your sign-in'}
+          </h2>
+          <p>{step === 'credentials' ? subtitle : copy.codeHint}</p>
           <form className="vista-auth-form" onSubmit={(event) => void submit(event)}>
             {error ? (
               <InlineAlert tone="error">
@@ -422,49 +524,101 @@ export function AuthenticationForm({
             ) : null}
             {step === 'credentials' ? (
               <>
-                <TextField
-                  autoComplete="username"
-                  autoFocus
-                  id="work-email"
-                  label="Work email"
-                  maxLength={320}
-                  onChange={(event) => setEmail(event.target.value)}
-                  required
-                  type="email"
-                  value={email}
-                />
-                <TextField
-                  autoComplete="current-password"
-                  id="work-password"
-                  label="Password"
-                  maxLength={128}
-                  onChange={(event) => setPassword(event.target.value)}
-                  required
-                  trailingAction={
-                    <button
-                      aria-label={showPassword ? 'Hide password' : 'Show password'}
-                      onClick={() => setShowPassword((current) => !current)}
+                {(directoryOptions?.method === 'oidc' || directoryOptions?.method === 'saml') &&
+                !emergencyMode ? (
+                  <div className="vista-auth-directory">
+                    <p>{copy.organizationHelp}</p>
+                    <Button
+                      busy={directoryBusy}
+                      busyLabel={copy.signingIn}
+                      fullWidth
+                      onClick={() => {
+                        if (!onStartDirectoryLogin) return;
+                        setDirectoryBusy(true);
+                        setError('');
+                        void onStartDirectoryLogin()
+                          .catch((caught: unknown) => setError(errorMessage(caught)))
+                          .finally(() => setDirectoryBusy(false));
+                      }}
                       type="button"
+                      variant="secondary"
                     >
-                      {showPassword ? 'Hide' : 'Show'}
-                    </button>
-                  }
-                  type={showPassword ? 'text' : 'password'}
-                  value={password}
-                />
+                      {copy.organization}
+                    </Button>
+                  </div>
+                ) : null}
+                {directoryOptions?.emergencyAccessAvailable ? (
+                  <label className="vista-auth-emergency">
+                    <input
+                      checked={emergencyMode}
+                      onChange={(event) => setEmergencyMode(event.target.checked)}
+                      type="checkbox"
+                    />
+                    <span>{copy.emergency}</span>
+                  </label>
+                ) : null}
+                {!directoryOptions?.enabled ||
+                directoryOptions.method === 'ldap' ||
+                emergencyMode ? (
+                  <>
+                    <TextField
+                      autoComplete="username"
+                      autoFocus
+                      id="work-email"
+                      label={copy.workEmail}
+                      maxLength={320}
+                      onChange={(event) => setEmail(event.target.value)}
+                      required
+                      type="email"
+                      value={email}
+                    />
+                    <TextField
+                      autoComplete="current-password"
+                      id="work-password"
+                      label={copy.password}
+                      maxLength={128}
+                      onChange={(event) => setPassword(event.target.value)}
+                      required
+                      trailingAction={
+                        <button
+                          aria-label={showPassword ? copy.hide : copy.show}
+                          onClick={() => setShowPassword((current) => !current)}
+                          type="button"
+                        >
+                          {showPassword ? copy.hide : copy.show}
+                        </button>
+                      }
+                      type={showPassword ? 'text' : 'password'}
+                      value={password}
+                    />
+                    {emergencyMode ? (
+                      <TextField
+                        autoComplete="off"
+                        id="emergency-access-reason"
+                        label={copy.emergencyReason}
+                        maxLength={500}
+                        minLength={8}
+                        onChange={(event) => setEmergencyReason(event.target.value)}
+                        required
+                        value={emergencyReason}
+                        hint={copy.emergencyHint}
+                      />
+                    ) : null}
+                  </>
+                ) : null}
               </>
             ) : (
               <>
                 <div className="vista-auth-account">
-                  <span aria-hidden="true">{email.slice(0, 1).toUpperCase()}</span>
-                  <strong>{email}</strong>
+                  <span aria-hidden="true">{(email.slice(0, 1) || 'V').toUpperCase()}</span>
+                  <strong>{step === 'directory-totp' ? copy.accountVerified : email}</strong>
                 </div>
                 <TextField
                   autoComplete="one-time-code"
                   autoFocus
                   id="authentication-code"
                   inputMode="numeric"
-                  label="Authentication code"
+                  label={copy.code}
                   maxLength={6}
                   onChange={(event) =>
                     setTotpCode(event.target.value.replace(/\D/gu, '').slice(0, 6))
@@ -477,24 +631,25 @@ export function AuthenticationForm({
             )}
             <Button
               busy={busy}
-              busyLabel={step === 'credentials' ? 'Signing in' : 'Verifying'}
+              busyLabel={step === 'credentials' ? copy.signingIn : copy.verifying}
               fullWidth
               type="submit"
             >
-              {step === 'credentials' ? 'Sign in' : 'Verify and continue'}
+              {step === 'directory-totp' || step === 'totp' ? copy.verify : copy.signIn}
             </Button>
-            {step === 'totp' ? (
+            {step !== 'credentials' ? (
               <Button
                 disabled={busy}
                 fullWidth
                 onClick={() => {
                   setError('');
+                  if (step === 'directory-totp') setDirectoryTicket('');
                   setStep('credentials');
                   setTotpCode('');
                 }}
                 variant="quiet"
               >
-                Use a different account
+                {copy.back}
               </Button>
             ) : null}
           </form>

@@ -20,6 +20,102 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/auth/directory/exchange': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['AuthController_exchangeDirectoryLogin'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/auth/directory/oidc/callback': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['AuthController_completeOidcLogin'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/auth/directory/options': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['AuthController_directoryOptions'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/auth/directory/saml/callback': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['AuthController_completeSamlLogin'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/auth/directory/saml/metadata': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['AuthController_samlMetadata'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/auth/directory/start': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['AuthController_startDirectoryLogin'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/auth/login': {
     parameters: {
       query?: never;
@@ -228,6 +324,422 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/backup/approval-requests': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['BackupController_policyApprovalRequests'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/backup/approval-requests/{id}/decision': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['BackupController_decidePolicyApproval'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/backup/artifact-deletion-requests': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['BackupController_artifactDeletionRequests'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/backup/artifact-deletion-requests/{id}/decision': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['BackupController_decideArtifactDeletion'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/backup/dr-tests': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['BackupController_drTests'];
+    put?: never;
+    post: operations['BackupController_planDrTest'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/backup/dr-tests/{id}/result': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['BackupController_recordDrTestResult'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/backup/plan-reviews': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['BackupController_planReviews'];
+    put?: never;
+    post: operations['BackupController_recordPlanReview'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/backup/policies': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['BackupController_policies'];
+    put?: never;
+    post: operations['BackupController_createPolicy'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/backup/policies/{id}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put: operations['BackupController_updatePolicy'];
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/backup/policies/{id}/activate': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['BackupController_activatePolicy'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/backup/policies/{id}/approval': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['BackupController_requestPolicyApproval'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/backup/policies/{id}/pause-requests': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['BackupController_requestPolicyPause'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/backup/policies/{id}/resume': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['BackupController_resumePolicy'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/backup/policies/{id}/retention-reduction-requests': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['BackupController_requestPolicyRetentionReduction'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/backup/reference-data': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['BackupController_referenceData'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/backup/restore-requests': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['BackupController_restoreRequests'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/backup/restore-requests/{id}/database/record': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['BackupController_recoverDatabaseRecord'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/backup/restore-requests/{id}/database/tables': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['BackupController_databaseRecoveryTables'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/backup/restore-requests/{id}/decision': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['BackupController_decideRestoreApproval'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/backup/restore-requests/{id}/download': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['BackupController_downloadRestoredFile'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/backup/runs': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['BackupController_runs'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/backup/runs/{id}/deletion-requests': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['BackupController_requestArtifactDeletion'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/backup/runs/{id}/file-restore-options': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['BackupController_fileRestoreOptions'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/backup/runs/{id}/restore-requests': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['BackupController_requestRestore'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/backup/sources': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['BackupController_sources'];
+    put?: never;
+    post: operations['BackupController_createSource'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/backup/sources/{id}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put: operations['BackupController_updateSource'];
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/crm/after-sales': {
     parameters: {
       query?: never;
@@ -238,6 +750,22 @@ export interface paths {
     get: operations['CrmAfterSalesController_overview'];
     put?: never;
     post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/crm/after-sales/coverage-offers/{id}/status': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['CrmAfterSalesController_transitionWarrantyCoverageOffer'];
     delete?: never;
     options?: never;
     head?: never;
@@ -286,6 +814,22 @@ export interface paths {
     get?: never;
     put?: never;
     post: operations['CrmAfterSalesController_recordSurveyResponse'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/crm/after-sales/warranty-cards/{id}/coverage-offers': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['CrmAfterSalesController_createWarrantyCoverageOffer'];
     delete?: never;
     options?: never;
     head?: never;
@@ -510,6 +1054,38 @@ export interface paths {
     get: operations['CrmPipelineController_referenceData'];
     put?: never;
     post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/crm/public-surveys/{token}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['CrmPublicSurveyController_getSurvey'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/crm/public-surveys/{token}/response': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['CrmPublicSurveyController_submitResponse'];
     delete?: never;
     options?: never;
     head?: never;
@@ -1124,6 +1700,22 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/finance/customer-accounts/{customerPartnerId}/pos-sales/{saleId}/advance-allocations': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['FinanceCustomerAccountsController_allocateAdvance'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/finance/customer-accounts/{customerPartnerId}/pos-sales/{saleId}/payments': {
     parameters: {
       query?: never;
@@ -1198,6 +1790,22 @@ export interface paths {
     get?: never;
     put?: never;
     post: operations['FinanceCustomerAccountsController_createAdvance'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/finance/customer-accounts/payment-status': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['FinanceCustomerAccountsController_paymentStatus'];
+    put?: never;
+    post?: never;
     delete?: never;
     options?: never;
     head?: never;
@@ -1950,6 +2558,54 @@ export interface paths {
     get?: never;
     put?: never;
     post: operations['LogisticsController_completeDelivery'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/logistics/deliveries/{id}/courier-booking': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['LogisticsController_bookCourierDelivery'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/logistics/deliveries/{id}/courier-booking/reconcile': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['LogisticsController_reconcileCourierBooking'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/logistics/deliveries/{id}/courier-tracking': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['LogisticsController_refreshCourierTracking'];
     delete?: never;
     options?: never;
     head?: never;
@@ -3206,6 +3862,326 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/pos/fiscal-daily-reports': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['PosController_prepareFiscalDailyReport'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/pos/fiscal-daily-reports/{id}/confirm': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['PosController_confirmFiscalDailyReport'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/pos/fiscal-daily-reports/{id}/outcome-unknown': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['PosController_markFiscalDailyReportOutcomeUnknown'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/pos/fiscal-daily-reports/{id}/printing': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['PosController_markFiscalDailyReportPrinting'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/pos/fiscal-daily-reports/{id}/reject': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['PosController_rejectFiscalDailyReport'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/pos/fiscal-daily-reports/active': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['PosController_activeFiscalDailyReport'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/pos/fiscal-returns/preparations': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['PosController_prepareFiscalReturn'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/pos/fiscal-returns/preparations/{id}/confirm': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['PosController_confirmFiscalReturn'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/pos/fiscal-returns/preparations/{id}/outcome-unknown': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['PosController_markFiscalReturnOutcomeUnknown'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/pos/fiscal-returns/preparations/{id}/printing': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['PosController_markFiscalReturnPrinting'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/pos/fiscal-returns/preparations/{id}/resolve': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['PosController_resolveFiscalReturn'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/pos/fiscal-returns/preparations/active': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['PosController_activeFiscalReturnPreparation'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/pos/fiscal-sales/preparations': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['PosController_prepareFiscalSale'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/pos/fiscal-sales/preparations/{id}/cancel': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['PosController_cancelFiscalSalePreparation'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/pos/fiscal-sales/preparations/{id}/finalize': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['PosController_finalizeConfirmedFiscalSale'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/pos/fiscal-sales/preparations/{id}/outcome-unknown': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['PosController_markFiscalSaleOutcomeUnknown'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/pos/fiscal-sales/preparations/{id}/printing': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['PosController_markFiscalSalePrinting'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/pos/fiscal-sales/preparations/{id}/receipt': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['PosController_confirmFiscalSaleReceipt'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/pos/fiscal-sales/preparations/active': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['PosController_activeFiscalSalePreparation'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/pos/fiscal-sales/unp-leases': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['PosController_reserveDatecsUnpLease'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/pos/loyalty/accounts': {
     parameters: {
       query?: never;
@@ -3232,6 +4208,22 @@ export interface paths {
     get: operations['PosController_loyaltyLedger'];
     put?: never;
     post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/pos/offline-sync-events': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['PosController_reportOfflineSyncEvent'];
     delete?: never;
     options?: never;
     head?: never;
@@ -3398,6 +4390,22 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/pos/sales/{saleId}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['PosController_saleById'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/pos/sales/{saleId}/warranty-cards/{cardId}/pdf': {
     parameters: {
       query?: never;
@@ -3488,6 +4496,22 @@ export interface paths {
     get: operations['PosController_terminalContext'];
     put?: never;
     post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/procurement/goods-receipts/{id}/acceptance-protocol': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['ProcurementController_acceptanceProtocol'];
+    put?: never;
+    post: operations['ProcurementController_createAcceptanceProtocol'];
     delete?: never;
     options?: never;
     head?: never;
@@ -4938,6 +5962,76 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
   schemas: {
+    AcceptanceProtocolDiscrepancyDto: {
+      /** Format: uuid */
+      claimId: string;
+      /** @enum {string} */
+      claimType: 'damaged' | 'non_conforming';
+      description: string;
+      quantity: string;
+      /** @enum {string} */
+      status: 'open' | 'submitted' | 'resolved' | 'closed';
+    };
+    AcceptanceProtocolDto: {
+      /** Format: date-time */
+      createdAt: string;
+      /** Format: uuid */
+      goodsReceiptId: string;
+      /** Format: uuid */
+      id: string;
+      lines: components['schemas']['AcceptanceProtocolLineDto'][];
+      numberSequence: number;
+      numberYear: number;
+      preparedByName: string;
+      protocolNumber: string;
+      /** Format: uuid */
+      purchaseOrderId: string;
+      /** Format: date-time */
+      receivedAt: string;
+      receivedByName: string;
+      supplierDeliveryReference?: string;
+      supplierInvoice?: components['schemas']['AcceptanceProtocolInvoiceDto'];
+      supplierName: string;
+      /** Format: uuid */
+      supplierPartnerId: string;
+      warehouseName: string;
+    };
+    AcceptanceProtocolInvoiceDto: {
+      /** Format: uuid */
+      id: string;
+      /** Format: date */
+      invoiceDate: string;
+      invoiceNumber: string;
+    };
+    AcceptanceProtocolLineDto: {
+      acceptedQuantity: string;
+      batchNumber?: string;
+      cumulativeReceivedQuantity: string;
+      currencyCode: string;
+      discrepancies: components['schemas']['AcceptanceProtocolDiscrepancyDto'][];
+      /** Format: date */
+      expiresAt?: string;
+      /** Format: uuid */
+      goodsReceiptLineId: string;
+      /** Format: uuid */
+      id: string;
+      orderedQuantity: string;
+      /** Format: uuid */
+      orderLineId: string;
+      outstandingQuantity: string;
+      previouslyReceivedQuantity: string;
+      productCode: string;
+      /** Format: uuid */
+      productId: string;
+      productName: string;
+      serialNumbers: string[];
+      unitPrice: string;
+    };
+    AcceptanceProtocolSummaryDto: {
+      /** Format: uuid */
+      id: string;
+      protocolNumber: string;
+    };
     AcceptSalesHandoverDto: {
       acceptanceNotes?: string;
       acceptedByName: string;
@@ -4952,6 +6046,9 @@ export interface components {
       expiresAt: string;
       /** @description One-time recovery code. It is returned only when issued. */
       recoveryCode: string;
+    };
+    ActivateBackupPolicyDto: {
+      expectedVersion: number;
     };
     AllocateCustomerAdvanceDto: {
       /** @example 125.0000 */
@@ -4985,6 +6082,14 @@ export interface components {
         | 'pos'
         | 'backup'
         | '*';
+    };
+    ApplyCustomerAdvanceToPosSaleDto: {
+      /** @example 50.0000 */
+      amount: string;
+      /** Format: uuid */
+      customerAdvanceId: string;
+      /** @example 100.0000 */
+      expectedOutstanding: string;
     };
     AssignServiceWorkOrderDto: {
       expectedVersion: number;
@@ -5086,6 +6191,412 @@ export interface components {
       /** Format: date-time */
       timestamp: string;
       waiting: number;
+    };
+    BackupArtifactDeletionRequestDto: {
+      approvedByName?: string;
+      /** Format: date-time */
+      completedAt?: string;
+      /** Format: date-time */
+      createdAt: string;
+      errorCode?: string;
+      /** Format: date-time */
+      expiresAt: string;
+      /** Format: uuid */
+      id: string;
+      policyCode: string;
+      policyName: string;
+      reason: string;
+      /** Format: uuid */
+      requestedBy: string;
+      requestedByName: string;
+      /** Format: uuid */
+      runId: string;
+      /** Format: date-time */
+      scheduledFor: string;
+      /** @enum {string} */
+      status:
+        | 'approved'
+        | 'completed'
+        | 'expired'
+        | 'failed'
+        | 'pending_approval'
+        | 'rejected'
+        | 'running';
+    };
+    BackupArtifactDeletionRequestPageDto: {
+      items: components['schemas']['BackupArtifactDeletionRequestDto'][];
+      total: number;
+    };
+    BackupDatabaseRecordRecoveryDto: {
+      /** @enum {string} */
+      databaseEngine: 'mariadb' | 'postgresql';
+      /** @enum {string} */
+      format: 'vista-database-record-recovery-v1';
+      primaryKey: {
+        [key: string]: string;
+      };
+      record: {
+        [key: string]: unknown;
+      };
+      /** Format: date-time */
+      recoveredAt: string;
+      /** Format: uuid */
+      restoreRequestId: string;
+      /** Format: uuid */
+      sourceRunId: string;
+      tableName: string;
+    };
+    BackupDatabaseRecordRecoveryRequestDto: {
+      primaryKey: {
+        [key: string]: string;
+      };
+      tableName: string;
+    };
+    BackupDatabaseRecoveryTableDto: {
+      name: string;
+      primaryKeyColumns: string[];
+    };
+    BackupDatabaseRecoveryTablePageDto: {
+      items: components['schemas']['BackupDatabaseRecoveryTableDto'][];
+    };
+    BackupDrTestDto: {
+      actualRpoMinutes?: number;
+      actualRtoMinutes?: number;
+      /** Format: uuid */
+      backupRunId: string;
+      /** Format: date-time */
+      backupScheduledFor: string;
+      /** Format: date-time */
+      completedAt?: string;
+      correctiveActions?: string;
+      /** Format: date-time */
+      createdAt: string;
+      createdByName: string;
+      /** Format: uuid */
+      evidenceFileId?: string;
+      /** Format: uuid */
+      id: string;
+      nonConformities?: string;
+      /** @enum {string} */
+      outcome?: 'failed' | 'passed';
+      /** Format: date-time */
+      plannedFor: string;
+      policyCode: string;
+      policyName: string;
+      /** Format: date-time */
+      protocolSignedAt?: string;
+      protocolSignedBy?: string;
+      /** Format: uuid */
+      restoreRequestId?: string;
+      /** @enum {string} */
+      restoreStatus?:
+        | 'approved'
+        | 'completed'
+        | 'expired'
+        | 'failed'
+        | 'pending_approval'
+        | 'rejected'
+        | 'running';
+      resultSummary?: string;
+      rpoMet?: boolean;
+      rpoTargetMinutes: number;
+      rtoMet?: boolean;
+      rtoTargetMinutes: number;
+      scope: string;
+      /** @enum {string} */
+      status: 'planned' | 'recorded';
+      testCode: string;
+    };
+    BackupDrTestPageDto: {
+      items: components['schemas']['BackupDrTestDto'][];
+      total: number;
+    };
+    BackupEmployeeOptionDto: {
+      displayName: string;
+      employeeNumber: string;
+      /** Format: uuid */
+      id: string;
+    };
+    BackupExecutionRunDto: {
+      artifactAvailable: boolean;
+      /** @enum {string} */
+      artifactDeletedReason?: 'approved_retention_policy' | 'approved_restore_point_deletion';
+      /** @enum {string} */
+      artifactDeletionStatus?:
+        | 'approved'
+        | 'completed'
+        | 'expired'
+        | 'failed'
+        | 'pending_approval'
+        | 'rejected'
+        | 'running';
+      artifactSizeBytes?: string;
+      attemptCount: number;
+      /** @enum {string} */
+      backupType: 'database_snapshot' | 'differential' | 'full' | 'incremental' | 'system_image';
+      /** @enum {string} */
+      compressionAlgorithm: 'gzip' | 'none' | 'postgres_custom';
+      errorCode?: string;
+      /** Format: uuid */
+      id: string;
+      independentCopyErrorCode?: string;
+      /** @enum {string} */
+      independentCopyStatus: 'failed' | 'not_configured' | 'pending' | 'running' | 'verified';
+      independentCopyTargetCode?: string;
+      /** Format: date-time */
+      independentCopyVerifiedAt?: string;
+      policyCode: string;
+      policyName: string;
+      restoreAvailable: boolean;
+      /** Format: date-time */
+      scheduledFor: string;
+      /** @enum {string} */
+      sourceType: 'cloud_service' | 'database' | 'email' | 'file' | 'file_share' | 'object_storage';
+      /** Format: date-time */
+      startedAt: string;
+      /** @enum {string} */
+      status: 'failed' | 'running' | 'stored' | 'verified';
+      /** Format: date-time */
+      storedAt?: string;
+      uncompressedSizeBytes?: string;
+      verificationAttemptCount: number;
+      /** @enum {string} */
+      verificationStatus: 'failed' | 'pending' | 'running' | 'verified';
+      /** Format: date-time */
+      verifiedAt?: string;
+    };
+    BackupExecutionRunPageDto: {
+      items: components['schemas']['BackupExecutionRunDto'][];
+      page: number;
+      pageSize: number;
+      restoreAvailable: boolean;
+      total: number;
+    };
+    BackupFileRestoreOptionDto: {
+      key: string;
+      label?: string;
+      sizeBytes: string;
+    };
+    BackupFileRestoreOptionsDto: {
+      items: components['schemas']['BackupFileRestoreOptionDto'][];
+      total: number;
+    };
+    BackupPlanReviewDto: {
+      correctiveActions?: string;
+      /** Format: uuid */
+      id: string;
+      /** Format: date-time */
+      nextReviewDueAt: string;
+      /** @enum {string} */
+      outcome: 'approved' | 'changes_required';
+      planSnapshot: components['schemas']['BackupPlanReviewSnapshotDto'];
+      policyCount: number;
+      protectedSourceCount: number;
+      reviewCode: string;
+      /** Format: date-time */
+      reviewedAt: string;
+      reviewedByName: string;
+      snapshotSha256: string;
+      summary: string;
+    };
+    BackupPlanReviewPageDto: {
+      currentPlanSnapshot: components['schemas']['BackupPlanReviewSnapshotDto'];
+      currentSnapshotSha256: string;
+      items: components['schemas']['BackupPlanReviewDto'][];
+      reviewRequired: boolean;
+      total: number;
+    };
+    BackupPlanReviewPolicySnapshotDto: {
+      backupType: string;
+      compressionEnabled: boolean;
+      dayOfMonth?: number;
+      dayOfWeek?: number;
+      encryptionRequired: boolean;
+      frequency: string;
+      policyCode: string;
+      retentionDailyCopies: number;
+      retentionMonthlyCopies: number;
+      rpoMinutes: number;
+      rtoMinutes: number;
+      runTimeLocal?: string;
+      sourceCodes: string[];
+      status: string;
+      verificationRequired: boolean;
+      version: number;
+    };
+    BackupPlanReviewSnapshotDto: {
+      policies: components['schemas']['BackupPlanReviewPolicySnapshotDto'][];
+      protectedSources: components['schemas']['BackupPlanReviewSourceSnapshotDto'][];
+      storageTarget: string;
+    };
+    BackupPlanReviewSourceSnapshotDto: {
+      classification: string;
+      location: string;
+      name: string;
+      ownerName?: string;
+      sourceCode: string;
+      sourceType: string;
+      status: string;
+      stewardName?: string;
+      version: number;
+    };
+    BackupPolicyApprovalPageDto: {
+      items: components['schemas']['BackupPolicyApprovalRequestDto'][];
+      total: number;
+    };
+    BackupPolicyApprovalRequestDto: {
+      /** @enum {string} */
+      action: 'disable_job' | 'modify_policy' | 'reduce_retention';
+      /** Format: date-time */
+      createdAt: string;
+      /** Format: date-time */
+      expiresAt: string;
+      /** Format: uuid */
+      id: string;
+      justification: string;
+      policyCode: string;
+      /** Format: uuid */
+      policyId: string;
+      policyName: string;
+      previousDailyCopies?: number;
+      previousMonthlyCopies?: number;
+      proposedDailyCopies?: number;
+      proposedMonthlyCopies?: number;
+      requestedBy: string;
+      requestedByName: string;
+      /** @enum {string} */
+      status: 'pending';
+      version: number;
+    };
+    BackupPolicyDto: {
+      /** @enum {string} */
+      backupType: 'database_snapshot' | 'differential' | 'full' | 'incremental' | 'system_image';
+      compressionEnabled: boolean;
+      /** Format: date-time */
+      createdAt: string;
+      dayOfMonth?: number;
+      dayOfWeek?: number;
+      encryptionRequired: boolean;
+      /** @enum {string} */
+      frequency: 'daily' | 'hourly' | 'monthly' | 'weekly';
+      /** Format: uuid */
+      id: string;
+      name: string;
+      pauseRequestPending?: boolean;
+      policyCode: string;
+      retentionDailyCopies: number;
+      retentionMonthlyCopies: number;
+      rpoMinutes: number;
+      rtoMinutes: number;
+      runTimeLocal?: string;
+      sources: components['schemas']['BackupPolicySourceDto'][];
+      /** @enum {string} */
+      status: 'active' | 'approved' | 'draft' | 'paused' | 'pending_approval';
+      /** Format: date-time */
+      updatedAt: string;
+      verificationRequired: boolean;
+      version: number;
+    };
+    BackupPolicyPageDto: {
+      items: components['schemas']['BackupPolicyDto'][];
+      page: number;
+      pageSize: number;
+      total: number;
+    };
+    BackupPolicySourceDto: {
+      /** Format: uuid */
+      id: string;
+      name: string;
+      sourceCode: string;
+    };
+    BackupProtectedSourceDto: {
+      annualGrowthPercent?: string;
+      /** Format: date-time */
+      createdAt: string;
+      credentialCustody: string;
+      /** @enum {string} */
+      dataClassification: 'critical' | 'important' | 'standard';
+      /** Format: uuid */
+      dataStewardEmployeeId?: string;
+      dataStewardName?: string;
+      dependencies: string;
+      encryptedAtSource: boolean;
+      estimatedSizeGib?: string;
+      /** Format: uuid */
+      id: string;
+      location: string;
+      name: string;
+      /** Format: uuid */
+      ownerEmployeeId?: string;
+      ownerName?: string;
+      restorePrerequisites: string;
+      sourceCode: string;
+      /** @enum {string} */
+      sourceType:
+        | 'cloud_service'
+        | 'database'
+        | 'email'
+        | 'file'
+        | 'file_share'
+        | 'mobile_device'
+        | 'object_storage'
+        | 'other'
+        | 'server'
+        | 'workstation';
+      /** @enum {string} */
+      status: 'active' | 'inactive';
+      /** Format: date-time */
+      updatedAt: string;
+      version: number;
+    };
+    BackupProtectedSourcePageDto: {
+      items: components['schemas']['BackupProtectedSourceDto'][];
+      page: number;
+      pageSize: number;
+      total: number;
+    };
+    BackupReferenceDataDto: {
+      employees: components['schemas']['BackupEmployeeOptionDto'][];
+    };
+    BackupRestoreRequestDto: {
+      approvedByName?: string;
+      attemptCount: number;
+      /** Format: date-time */
+      completedAt?: string;
+      /** Format: date-time */
+      createdAt: string;
+      errorCode?: string;
+      /** Format: uuid */
+      id: string;
+      policyCode: string;
+      policyName: string;
+      reason: string;
+      /** Format: uuid */
+      requestedBy: string;
+      requestedByName: string;
+      restoreObjectKey?: string;
+      /** Format: uuid */
+      runId: string;
+      /** Format: date-time */
+      scheduledFor: string;
+      /** @enum {string} */
+      sourceType: 'cloud_service' | 'database' | 'email' | 'file' | 'file_share' | 'object_storage';
+      /** @enum {string} */
+      status:
+        | 'approved'
+        | 'completed'
+        | 'expired'
+        | 'failed'
+        | 'pending_approval'
+        | 'rejected'
+        | 'running';
+      targetDatabaseName?: string;
+      targetStorageBucket?: string;
+      targetStoragePrefix?: string;
+    };
+    BackupRestoreRequestPageDto: {
+      items: components['schemas']['BackupRestoreRequestDto'][];
+      total: number;
     };
     BusinessBranchDto: {
       active: boolean;
@@ -5234,6 +6745,35 @@ export interface components {
       /** Format: uuid */
       warehouseId: string;
     };
+    ConfirmPosFiscalDailyReportDto: {
+      /** @example 123 */
+      fiscalRecordNumber: string;
+      /** @example 0.00 */
+      nonVatSalesTotalEur: string;
+      taxGroupTotals: components['schemas']['PosFiscalDailyReportTaxTotalsDto'];
+    };
+    ConfirmPosFiscalReturnDto: {
+      /** @example 0000124 */
+      fiscalDocumentNumber: string;
+      /** @example 0001 */
+      fiscalReversalsSinceDailyReport?: string;
+      /** @example DT000600-OP01-0001001 */
+      uniqueReversalId: string;
+    };
+    ConfirmPosFiscalSaleCancellationDto: {
+      /** @enum {string} */
+      evidence: 'before_printing' | 'printer_open_rejected' | 'printer_receipt_cancelled';
+    };
+    ConfirmPosFiscalSaleReceiptDto: {
+      /** @example 0.0000 */
+      changeEur: string;
+      /** @example 000123 */
+      fiscalDocumentNumber: string;
+      /** @example 27 */
+      fiscalReceiptsSinceDailyReport?: string;
+      /** @example DT000600-OP01-0001000 */
+      uniqueSaleId: string;
+    };
     ConfirmSalesQuotationDto: {
       lines: components['schemas']['ConfirmSalesQuotationLineDto'][];
     };
@@ -5255,6 +6795,64 @@ export interface components {
       customer: components['schemas']['CrmCustomerReferenceDto'];
       lead: components['schemas']['CrmLeadDto'];
       opportunity?: components['schemas']['CrmOpportunityDto'];
+    };
+    CreateAcceptanceProtocolDto: {
+      /** Format: uuid */
+      supplierInvoiceId?: string;
+    };
+    CreateBackupPolicyDto: {
+      /** @enum {string} */
+      backupType: 'database_snapshot' | 'differential' | 'full' | 'incremental' | 'system_image';
+      /** @default true */
+      compressionEnabled?: boolean;
+      dayOfMonth?: number;
+      dayOfWeek?: number;
+      /** @default true */
+      encryptionRequired?: boolean;
+      /** @enum {string} */
+      frequency: 'daily' | 'hourly' | 'monthly' | 'weekly';
+      name: string;
+      policyCode: string;
+      /** @default 35 */
+      retentionDailyCopies?: number;
+      /** @default 12 */
+      retentionMonthlyCopies?: number;
+      rpoMinutes: number;
+      rtoMinutes: number;
+      /** @example 02:00 */
+      runTimeLocal?: string;
+      sourceIds: string[];
+      /** @default true */
+      verificationRequired?: boolean;
+    };
+    CreateBackupProtectedSourceDto: {
+      annualGrowthPercent?: string;
+      credentialCustody?: string;
+      /** @enum {string} */
+      dataClassification: 'critical' | 'important' | 'standard';
+      /** Format: uuid */
+      dataStewardEmployeeId?: string;
+      dependencies?: string;
+      encryptedAtSource: boolean;
+      estimatedSizeGib?: string;
+      location: string;
+      name: string;
+      /** Format: uuid */
+      ownerEmployeeId?: string;
+      restorePrerequisites?: string;
+      sourceCode: string;
+      /** @enum {string} */
+      sourceType:
+        | 'cloud_service'
+        | 'database'
+        | 'email'
+        | 'file'
+        | 'file_share'
+        | 'mobile_device'
+        | 'object_storage'
+        | 'other'
+        | 'server'
+        | 'workstation';
     };
     CreateBusinessBranchDto: {
       code: string;
@@ -5397,6 +6995,19 @@ export interface components {
       /** Format: uuid */
       slaPolicyId: string;
     };
+    CreateCrmWarrantyCoverageOfferDto: {
+      /** Format: date */
+      coverageStartsOn: string;
+      durationMonths: number;
+      /** @enum {string} */
+      offerType: 'extended_warranty' | 'service_plan';
+      /** @example 240.00 */
+      quotedAmount: string;
+      terms: string;
+      /** Format: date */
+      validUntil: string;
+      visitFrequencyMonths?: number;
+    };
     CreateCustomerAdvanceDto: {
       /** @example 150.0000 */
       amount: string;
@@ -5508,6 +7119,8 @@ export interface components {
       /** Format: uuid */
       operatorId: string;
       paymentReference?: string;
+      /** Format: uuid */
+      posSaleId?: string;
       purpose: string;
       /** Format: date */
       voucherDate: string;
@@ -5564,11 +7177,15 @@ export interface components {
       /** @example 125.0000 */
       amount: string;
       /** Format: uuid */
-      customerDocumentId: string;
-      expectedCustomerDocumentVersion: number;
+      customerDocumentId?: string;
+      expectedCustomerDocumentVersion?: number;
+      /** @example 125.0000 */
+      expectedPosOutstanding?: string;
       expectedSupplierPayableVersion: number;
       /** Format: date */
       offsetDate: string;
+      /** Format: uuid */
+      posSaleId?: string;
       reason: string;
       /** Format: uuid */
       supplierPayableId: string;
@@ -5656,6 +7273,11 @@ export interface components {
       /** @enum {string} */
       deliveryMethod: 'company_transport' | 'econt' | 'speedy';
       instructions?: string;
+      parcelCount?: number;
+      /** @example 2.500 */
+      parcelWeightKg?: string;
+      recipientName?: string;
+      recipientPhone?: string;
       /** Format: date-time */
       scheduledEnd: string;
       /** Format: date-time */
@@ -5798,6 +7420,15 @@ export interface components {
       /** Format: uuid */
       shiftId: string;
       totpCode?: string;
+    };
+    CreatePosFiscalDailyReportDto: {
+      /** @example 160.0000 */
+      closingCashEur?: string;
+      /** Format: uuid */
+      shiftId: string;
+      shiftVersion?: number;
+      /** @enum {string} */
+      type: 'x' | 'z';
     };
     CreatePosReportExportDto: {
       /** Format: uuid */
@@ -6156,6 +7787,7 @@ export interface components {
       assignees: components['schemas']['CrmAfterSalesAssigneeDto'][];
       businessTimezone: string;
       claims: components['schemas']['WarrantyClaimDto'][];
+      coverageOffers: components['schemas']['CrmWarrantyCoverageOfferDto'][];
       customers: components['schemas']['CrmAfterSalesCustomerDto'][];
       nps: components['schemas']['CrmNpsSummaryDto'];
       referrals: components['schemas']['CrmReferralDto'][];
@@ -6278,9 +7910,13 @@ export interface components {
       customerName: string;
       /** Format: uuid */
       customerPartnerId: string;
+      /** @enum {string} */
+      deliveryStatus?: 'pending' | 'processing' | 'delivered' | 'failed' | 'cancelled';
       /** Format: uuid */
       id: string;
       number: string;
+      /** Format: email */
+      recipientEmail?: string;
       /** Format: date-time */
       respondedAt?: string;
       score?: number;
@@ -6492,6 +8128,16 @@ export interface components {
       customers: components['schemas']['CrmCustomerReferenceDto'][];
       quotations: components['schemas']['CrmQuotationReferenceDto'][];
     };
+    CrmPublicSurveyDto: {
+      /** Format: date-time */
+      expiresAt: string;
+      number: string;
+      score?: number;
+      /** @enum {string} */
+      sourceKind: 'delivery' | 'service';
+      /** @enum {string} */
+      status: 'awaiting_response' | 'responded' | 'expired';
+    };
     CrmQuotationReferenceDto: {
       currencyCode: string;
       /** Format: uuid */
@@ -6597,6 +8243,7 @@ export interface components {
       /** Format: uuid */
       id: string;
       label: string;
+      recipientEmails: string[];
       /** @enum {string} */
       sourceKind: 'delivery' | 'service';
     };
@@ -6839,6 +8486,36 @@ export interface components {
       missingCards: number;
       registeredSoldSerials: number;
     };
+    CrmWarrantyCoverageOfferDto: {
+      /** Format: date */
+      coverageStartsOn: string;
+      /** Format: date-time */
+      createdAt: string;
+      /** @enum {string} */
+      currencyCode: 'EUR';
+      customerName: string;
+      /** Format: uuid */
+      customerPartnerId: string;
+      deviceName: string;
+      durationMonths: number;
+      /** Format: uuid */
+      id: string;
+      number: string;
+      /** @enum {string} */
+      offerType: 'extended_warranty' | 'service_plan';
+      quotedAmount: string;
+      serialNumber: string;
+      /** @enum {string} */
+      status: 'draft' | 'offered' | 'accepted' | 'declined' | 'expired';
+      terms: string;
+      /** Format: date */
+      validUntil: string;
+      visitFrequencyMonths?: number;
+      /** Format: uuid */
+      warrantyCardId: string;
+      /** Format: date */
+      warrantyEndsOn: string;
+    };
     CustomerAccountEntryDto: {
       amount: string;
       /** Format: date */
@@ -6992,6 +8669,33 @@ export interface components {
       businessTimezone?: string;
       customers: components['schemas']['CustomerPaymentAccountCustomerDto'][];
     };
+    CustomerPaymentStatusPageDto: {
+      items: components['schemas']['CustomerPaymentStatusRecordDto'][];
+      page: number;
+      pageSize: number;
+      totalItems: number;
+      totalPages: number;
+    };
+    CustomerPaymentStatusRecordDto: {
+      creditTotal: string;
+      currencyCode: string;
+      customerName: string;
+      /** Format: uuid */
+      customerPartnerId: string;
+      /** Format: date */
+      dueDate: string;
+      /** Format: uuid */
+      id: string;
+      number: string;
+      outstandingTotal: string;
+      paidTotal: string;
+      /** @enum {string} */
+      paymentStatus: 'unpaid' | 'partially_paid' | 'paid' | 'overdue';
+      referenceNumber?: string;
+      /** @enum {string} */
+      sourceType: 'issued_document' | 'pos_sale';
+      total: string;
+    };
     CustomerPaymentSummaryDto: {
       /** @example 20.0000 */
       amount: string;
@@ -7086,6 +8790,40 @@ export interface components {
       /** @example 60.0000 */
       total: string;
     };
+    DecideBackupArtifactDeletionDto: {
+      comment?: string;
+      /** @enum {string} */
+      decision: 'approve' | 'reject';
+    };
+    DecideBackupPolicyApprovalDto: {
+      comment?: string;
+      /** @enum {string} */
+      decision: 'approve' | 'reject';
+    };
+    DecideBackupRestoreApprovalDto: {
+      comment?: string;
+      /** @enum {string} */
+      decision: 'approve' | 'reject';
+    };
+    DirectoryLoginExchangeRequestDto: {
+      ticket: string;
+      /** @example 123456 */
+      totpCode?: string;
+    };
+    DirectoryLoginStartRequestDto: {
+      /** @enum {string} */
+      app: 'operations' | 'pos' | 'recovery';
+    };
+    DirectoryLoginStartResponseDto: {
+      /** Format: uri */
+      authorizationUrl: string;
+    };
+    DirectorySignInOptionsDto: {
+      emergencyAccessAvailable: boolean;
+      enabled: boolean;
+      /** @enum {string|null} */
+      method: 'ldap' | 'oidc' | 'saml' | null;
+    };
     DisableTotpRequestDto: {
       /** @example 123456 */
       code: string;
@@ -7178,6 +8916,10 @@ export interface components {
       total: number;
       totalPages: number;
     };
+    FailPosFiscalDailyReportDto: {
+      /** @enum {string} */
+      reason: 'printer_rejected';
+    };
     FinanceAgingReportDto: {
       /** Format: date */
       asOf: string;
@@ -7220,15 +8962,21 @@ export interface components {
     };
     FinanceBankMatchCandidateDto: {
       /** Format: uuid */
-      customerDocumentId: string;
+      customerDocumentId?: string;
       customerName: string;
       documentNumber: string;
       /** Format: date */
       dueDate: string;
       outstandingTotal: string;
+      /** Format: uuid */
+      posSaleId?: string;
       referenceMatched: boolean;
       score: number;
-      sourceInvoiceNumber: string;
+      sourceInvoiceNumber?: string;
+      /** Format: uuid */
+      targetId: string;
+      /** @enum {string} */
+      targetType: 'collection' | 'pos_account';
     };
     FinanceBankStatementDto: {
       accountIban: string;
@@ -7311,7 +9059,7 @@ export interface components {
     };
     FinanceBankTransactionMatchDto: {
       /** Format: uuid */
-      customerDocumentId: string;
+      customerDocumentId?: string;
       customerName: string;
       documentNumber: string;
       /** Format: date-time */
@@ -7319,6 +9067,10 @@ export interface components {
       /** @enum {string} */
       method: 'automatic_reference' | 'manual';
       paymentNumber: string;
+      /** Format: uuid */
+      posSaleId?: string;
+      /** @enum {string} */
+      targetType: 'collection' | 'pos_account';
     };
     FinanceCashCollectionReferenceDto: {
       customerName: string;
@@ -7361,11 +9113,23 @@ export interface components {
       name: string;
       roles: ('customer' | 'supplier')[];
     };
+    FinanceCashPosAccountReferenceDto: {
+      customerName: string;
+      /** Format: uuid */
+      customerPartnerId: string;
+      /** Format: date */
+      dueDate: string;
+      outstandingTotal: string;
+      /** Format: uuid */
+      saleId: string;
+      saleNumber: string;
+    };
     FinanceCashReferenceDataDto: {
       /** Format: date */
       businessDate: string;
       cashRegisters: components['schemas']['FinanceCashRegisterReferenceDto'][];
       openCollections: components['schemas']['FinanceCashCollectionReferenceDto'][];
+      openPosAccounts: components['schemas']['FinanceCashPosAccountReferenceDto'][];
       partners: components['schemas']['FinanceCashPartnerReferenceDto'][];
     };
     FinanceCashRegisterReferenceDto: {
@@ -7414,6 +9178,9 @@ export interface components {
       operatorName: string;
       paymentNumber?: string;
       paymentReference?: string;
+      /** Format: uuid */
+      posSaleId?: string;
+      posSaleNumber?: string;
       purpose: string;
       /** @enum {string} */
       status: 'issued' | 'cancelled';
@@ -7561,6 +9328,7 @@ export interface components {
       type: 'invoice' | 'proforma' | 'credit_note' | 'debit_note';
     };
     FinanceOffsetReceivableReferenceDto: {
+      currencyCode: string;
       customerName: string;
       /** Format: uuid */
       customerPartnerId: string;
@@ -7570,8 +9338,13 @@ export interface components {
       id: string;
       number: string;
       outstandingTotal: string;
-      sourceInvoiceNumber: string;
-      version: number;
+      /** Format: uuid */
+      posSaleId?: string;
+      saleNumber?: string;
+      sourceInvoiceNumber?: string;
+      /** @enum {string} */
+      sourceType: 'customer_document' | 'pos_account';
+      version?: number;
     };
     FinancePaymentDto: {
       /** Format: date-time */
@@ -7735,8 +9508,8 @@ export interface components {
       /** Format: date-time */
       createdAt: string;
       /** Format: uuid */
-      customerDocumentId: string;
-      customerDocumentNumber: string;
+      customerDocumentId?: string;
+      customerDocumentNumber?: string;
       /** Format: uuid */
       id: string;
       number: string;
@@ -7745,6 +9518,9 @@ export interface components {
       /** Format: uuid */
       partnerId: string;
       partnerName: string;
+      /** Format: uuid */
+      posSaleId?: string;
+      posSaleNumber?: string;
       reason: string;
       /** Format: uuid */
       supplierPayableId: string;
@@ -8156,6 +9932,7 @@ export interface components {
       vatTreatment: 'standard_20' | 'reduced_9' | 'zero' | 'exempt' | 'ica';
     };
     GoodsReceiptDto: {
+      acceptanceProtocol?: components['schemas']['AcceptanceProtocolSummaryDto'];
       /** Format: uuid */
       id: string;
       lines: components['schemas']['GoodsReceiptLineDto'][];
@@ -8416,6 +10193,7 @@ export interface components {
     LoginRequestDto: {
       /** @example employee@example.invalid */
       email: string;
+      emergencyAccessReason?: string;
       /** Format: password */
       password: string;
       /** @example 123456 */
@@ -8434,16 +10212,39 @@ export interface components {
       displayName: string;
       email: string;
     };
+    LogisticsCourierBookingDto: {
+      attemptCount: number;
+      events: components['schemas']['LogisticsCourierTrackingEventDto'][];
+      /** Format: date-time */
+      lastCheckedAt?: string;
+      lastError?: string;
+      /** @enum {string} */
+      provider: 'econt' | 'speedy';
+      providerReference?: string;
+      providerStatus?: string;
+      /** @enum {string} */
+      status: 'pending' | 'booking' | 'booked' | 'failed' | 'needs_review';
+    };
     LogisticsCourierConnectionDto: {
       connected: boolean;
       /** @enum {string} */
       provider: 'econt' | 'speedy';
+    };
+    LogisticsCourierTrackingEventDto: {
+      description: string;
+      /** Format: date-time */
+      occurredAt: string;
+      place?: string;
+      status: string;
     };
     LogisticsDeliveryDto: {
       addressLine1: string;
       addressLine2?: string;
       city: string;
       countryCode: string;
+      courierBooking?: components['schemas']['LogisticsCourierBookingDto'];
+      courierRecipientName?: string;
+      courierRecipientPhone?: string;
       /** Format: date-time */
       createdAt: string;
       /** Format: uuid */
@@ -8466,6 +10267,8 @@ export interface components {
       id: string;
       instructions?: string;
       number: string;
+      parcelCount?: number;
+      parcelWeightKg?: string;
       postalCode?: string;
       proofNotes?: string;
       recipientName?: string;
@@ -8700,6 +10503,7 @@ export interface components {
       parentId: string;
       /** @enum {string} */
       parentType:
+        | 'backup_dr_test'
         | 'partner'
         | 'warranty_claim'
         | 'crm_interaction'
@@ -8721,10 +10525,15 @@ export interface components {
       total: number;
       totalPages: number;
     };
+    MarkPosFiscalSaleOutcomeUnknownDto: {
+      commandCode: number;
+    };
     MatchFinanceBankTransactionDto: {
       /** Format: uuid */
-      customerDocumentId: string;
+      customerDocumentId?: string;
       expectedVersion: number;
+      /** Format: uuid */
+      posSaleId?: string;
       reviewPossibleDuplicate?: boolean;
     };
     MatchFinanceSupplierBankTransactionDto: {
@@ -8893,6 +10702,13 @@ export interface components {
       requireNumber: boolean;
       requireSymbol: boolean;
       requireUppercase: boolean;
+    };
+    PlanBackupDrTestDto: {
+      /** Format: date-time */
+      plannedFor: string;
+      /** Format: uuid */
+      runId: string;
+      scope: string;
     };
     PlatformIdentificationDto: {
       name: string;
@@ -9118,6 +10934,13 @@ export interface components {
       outstandingBalance: string;
       paymentTermsDays?: number;
     };
+    PosDatecsUnpLeaseDto: {
+      /** Format: uuid */
+      cashRegisterId: string;
+      deviceSerial: string;
+      operatorIdentifier: string;
+      uniqueSaleIds: string[];
+    };
     PosDiscountAuthorizationDto: {
       approverName: string;
       /** @enum {string} */
@@ -9128,6 +10951,93 @@ export interface components {
       /** Format: uuid */
       id: string;
       reason: string;
+    };
+    PosFiscalDailyReportActiveResponseDto: {
+      report: components['schemas']['PosFiscalDailyReportDto'] | null;
+    };
+    PosFiscalDailyReportDto: {
+      closingCashEur?: string;
+      /** Format: date-time */
+      completedAt?: string;
+      /** Format: date-time */
+      createdAt: string;
+      fiscalRecordNumber?: string;
+      /** Format: uuid */
+      id: string;
+      nonVatSalesTotalEur?: string;
+      /** @enum {string} */
+      reportType: 'x' | 'z';
+      /** Format: uuid */
+      shiftId: string;
+      shiftNumber: string;
+      /** @enum {string} */
+      status: 'prepared' | 'printing' | 'outcome_unknown' | 'completed' | 'failed';
+      taxGroupTotals?: components['schemas']['PosFiscalDailyReportTaxTotalsDto'];
+    };
+    PosFiscalDailyReportTaxTotalsDto: {
+      /** @example 0.00 */
+      A: string;
+      /** @example 100.00 */
+      B: string;
+      /** @example 0.00 */
+      C: string;
+      /** @example 0.00 */
+      D: string;
+      /** @example 0.00 */
+      E: string;
+      /** @example 0.00 */
+      F: string;
+      /** @example 0.00 */
+      G: string;
+      /** @example 0.00 */
+      H: string;
+    };
+    PosFiscalReceiptLineDto: {
+      description: string;
+      discountEur?: string;
+      grossTotalEur: string;
+      quantity: string;
+      unitCode?: string;
+      unitPriceEur: string;
+      /** @enum {string} */
+      vatTreatment: 'standard_20' | 'reduced_9' | 'zero' | 'exempt' | 'ica';
+    };
+    PosFiscalReturnPreparationDto: {
+      deviceSerial: string;
+      fiscalDocumentNumber?: string;
+      fiscalReversalsSinceDailyReport?: string;
+      /** Format: uuid */
+      id: string;
+      operatorIdentifier: string;
+      originalFiscalDocumentNumber: string;
+      /** Format: uuid */
+      originalSaleId: string;
+      originalUniqueSaleId: string;
+      request: components['schemas']['CreatePosReturnDto'];
+      /** @enum {string} */
+      status: 'cancelled' | 'completed' | 'outcome_unknown' | 'prepared' | 'printing' | 'rejected';
+      uniqueReversalId: string;
+    };
+    PosFiscalSalePreparationDto: {
+      cashTenderedEur: string;
+      changeEur: string;
+      deviceSerial: string;
+      fiscalDocumentNumber?: string;
+      fiscalReceiptNumber?: string;
+      /** Format: uuid */
+      id: string;
+      lines: components['schemas']['PosFiscalReceiptLineDto'][];
+      /** @enum {string} */
+      status:
+        | 'cancelled'
+        | 'finalized'
+        | 'outcome_unknown'
+        | 'prepared'
+        | 'printing'
+        | 'receipt_confirmed';
+      totalGrossEur: string;
+      /** @example DT000600-OP01-0001000 */
+      uniqueSaleId: string;
     };
     PosInvoicePaymentDto: {
       amount: string;
@@ -9223,6 +11133,13 @@ export interface components {
       discountType: 'fixed_amount' | 'percentage';
       /** @example 10.0000 */
       discountValue: string;
+    };
+    PosOfflineSyncEventResponseDto: {
+      /** Format: uuid */
+      auditEventId: string;
+      /** Format: uuid */
+      clientEventId: string;
+      duplicate: boolean;
     };
     PosPaymentReportRowDto: {
       collectedEur: string;
@@ -9410,7 +11327,9 @@ export interface components {
       /** Format: date-time */
       completedAt: string;
       fiscalAdapter: string;
+      fiscalDocumentNumber?: string;
       fiscalReversalNumber: string;
+      fiscalReversalsSinceDailyReport?: string;
       grossTotal: string;
       /** Format: uuid */
       id: string;
@@ -9641,6 +11560,39 @@ export interface components {
       warrantyEndsOn: string;
       /** Format: date */
       warrantyStartsOn: string;
+    };
+    PreparePosFiscalReturnDto: {
+      /** @example DT000600 */
+      deviceSerial: string;
+      lines: components['schemas']['CreatePosReturnLineDto'][];
+      /** @example OP01 */
+      operatorIdentifier: string;
+      /** Format: uuid */
+      originalSaleId: string;
+      reason: string;
+      refunds: components['schemas']['CreatePosReturnRefundDto'][];
+      /** Format: uuid */
+      shiftId: string;
+    };
+    PreparePosFiscalSaleDto: {
+      /** Format: uuid */
+      clientTransactionId: string;
+      /** Format: uuid */
+      customerLocationId?: string;
+      /** Format: uuid */
+      customerPartnerId?: string;
+      /** @example DT000600 */
+      deviceSerial: string;
+      lines: components['schemas']['CreatePosSaleLineDto'][];
+      loyaltyPointsToRedeem?: number;
+      manualDiscount?: components['schemas']['PosManualDiscountDto'];
+      /** @example OP01 */
+      operatorIdentifier: string;
+      payments: components['schemas']['CreatePosSalePaymentDto'][];
+      /** Format: uuid */
+      shiftId: string;
+      /** @example DT000600-OP01-0001000 */
+      uniqueSaleId?: string;
     };
     PriceListDto: {
       active: boolean;
@@ -9885,6 +11837,29 @@ export interface components {
       /** Format: uuid */
       warehouseId: string;
     };
+    ReconcileLogisticsCourierBookingDto: {
+      providerReference: string;
+    };
+    RecordBackupDrTestDto: {
+      actualRpoMinutes: number;
+      actualRtoMinutes: number;
+      correctiveActions?: string;
+      /** Format: uuid */
+      evidenceFileId: string;
+      nonConformities?: string;
+      /** Format: date-time */
+      protocolSignedAt: string;
+      protocolSignedBy: string;
+      /** Format: uuid */
+      restoreRequestId: string;
+      resultSummary: string;
+    };
+    RecordBackupPlanReviewDto: {
+      correctiveActions?: string;
+      /** @enum {string} */
+      outcome: 'approved' | 'changes_required';
+      summary: string;
+    };
     RecordCrmSurveyResponseDto: {
       comment?: string;
       score: number;
@@ -10024,6 +11999,26 @@ export interface components {
       expectedVersion: number;
       reason: string;
     };
+    ReportPosOfflineSyncEventDto: {
+      /** Format: uuid */
+      cashRegisterId: string;
+      /** Format: uuid */
+      clientEventId: string;
+      /** Format: uuid */
+      clientTransactionId: string;
+      /** @example DT000600 */
+      deviceSerial: string;
+      /** Format: date-time */
+      occurredAt: string;
+      /** @example OP01 */
+      operatorIdentifier: string;
+      /** @enum {string} */
+      reasonCode: 'receipt_mismatch' | 'server_rejected' | 'sync_interrupted';
+      /** @enum {string} */
+      type: 'conflict' | 'retry';
+      /** @example DT000600-OP01-0001000 */
+      uniqueSaleId: string;
+    };
     ReportRunDto: {
       export: components['schemas']['LibraryExportDto'];
       /** Format: uuid */
@@ -10084,6 +12079,35 @@ export interface components {
     ReportScheduleStateDto: {
       enabled: boolean;
       version: number;
+    };
+    RequestBackupArtifactDeletionDto: {
+      reason: string;
+    };
+    RequestBackupPolicyApprovalDto: {
+      expectedVersion: number;
+      justification: string;
+    };
+    RequestBackupRestoreDto: {
+      objectKey?: string;
+      reason: string;
+    };
+    RequestBackupRetentionReductionDto: {
+      expectedVersion: number;
+      justification: string;
+      retentionDailyCopies: number;
+      retentionMonthlyCopies: number;
+    };
+    ReservePosDatecsUnpLeaseDto: {
+      /** @example DT000600 */
+      deviceSerial: string;
+      /** @example OP01 */
+      operatorIdentifier: string;
+      /** Format: uuid */
+      shiftId: string;
+    };
+    ResolvePosFiscalReturnDto: {
+      /** @enum {string} */
+      evidence: 'before_printing' | 'printer_rejected';
     };
     ReturnStockDto: {
       /** Format: uuid */
@@ -10559,6 +12583,11 @@ export interface components {
       userAgent?: string;
     };
     SendCrmCustomerSurveyDto: {
+      /**
+       * Format: email
+       * @example customer@example.com
+       */
+      recipientEmail: string;
       /** Format: uuid */
       sourceId: string;
       /** @enum {string} */
@@ -11078,6 +13107,11 @@ export interface components {
       customerPartsChargeEur: string;
       customerTransportChargeEur: string;
       deviceName: string;
+      /** Format: uuid */
+      financialDocumentId?: string;
+      financialDocumentNumber?: string;
+      /** @enum {string} */
+      financialDocumentStatus?: 'draft' | 'issued';
       history: components['schemas']['ServiceWorkOrderHistoryEntryDto'][];
       /** Format: uuid */
       id: string;
@@ -11504,6 +13538,7 @@ export interface components {
     };
     SupplierInvoiceDto: {
       currencyCode: string;
+      exchangeRate?: string;
       /** Format: uuid */
       id: string;
       /** Format: date */
@@ -11513,6 +13548,10 @@ export interface components {
       netTotal: string;
       /** Format: uuid */
       purchaseOrderId: string;
+      /** Format: date */
+      rateDate?: string;
+      /** @enum {string} */
+      rateSource?: 'BNB' | 'internal_eur';
       /** Format: date-time */
       recordedAt: string;
       supplierName: string;
@@ -11570,6 +13609,10 @@ export interface components {
       /** @enum {string} */
       status: 'new' | 'in_progress' | 'waiting_customer' | 'resolved' | 'closed' | 'cancelled';
     };
+    TransitionCrmWarrantyCoverageOfferDto: {
+      /** @enum {string} */
+      nextStatus: 'offered' | 'accepted' | 'declined';
+    };
     TransitionWarrantyClaimDto: {
       expectedVersion: number;
       /** @enum {string} */
@@ -11583,6 +13626,62 @@ export interface components {
       id: string;
       name: string;
       version: number;
+    };
+    UpdateBackupPolicyDto: {
+      /** @enum {string} */
+      backupType: 'database_snapshot' | 'differential' | 'full' | 'incremental' | 'system_image';
+      /** @default true */
+      compressionEnabled?: boolean;
+      dayOfMonth?: number;
+      dayOfWeek?: number;
+      /** @default true */
+      encryptionRequired?: boolean;
+      expectedVersion: number;
+      /** @enum {string} */
+      frequency: 'daily' | 'hourly' | 'monthly' | 'weekly';
+      name: string;
+      policyCode: string;
+      /** @default 35 */
+      retentionDailyCopies?: number;
+      /** @default 12 */
+      retentionMonthlyCopies?: number;
+      rpoMinutes: number;
+      rtoMinutes: number;
+      /** @example 02:00 */
+      runTimeLocal?: string;
+      sourceIds: string[];
+      /** @default true */
+      verificationRequired?: boolean;
+    };
+    UpdateBackupProtectedSourceDto: {
+      annualGrowthPercent?: string;
+      credentialCustody?: string;
+      /** @enum {string} */
+      dataClassification: 'critical' | 'important' | 'standard';
+      /** Format: uuid */
+      dataStewardEmployeeId?: string;
+      dependencies?: string;
+      encryptedAtSource: boolean;
+      estimatedSizeGib?: string;
+      expectedVersion: number;
+      location: string;
+      name: string;
+      /** Format: uuid */
+      ownerEmployeeId?: string;
+      restorePrerequisites?: string;
+      sourceCode: string;
+      /** @enum {string} */
+      sourceType:
+        | 'cloud_service'
+        | 'database'
+        | 'email'
+        | 'file'
+        | 'file_share'
+        | 'mobile_device'
+        | 'object_storage'
+        | 'other'
+        | 'server'
+        | 'workstation';
     };
     UpdateBusinessBranchDto: {
       code: string;
@@ -11895,6 +13994,211 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['PlatformIdentificationDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  AuthController_exchangeDirectoryLogin: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['DirectoryLoginExchangeRequestDto'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['LoginResponseDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  AuthController_completeOidcLogin: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description The verified identity returns to the selected Vista app. */
+      303: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  AuthController_directoryOptions: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['DirectorySignInOptionsDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  AuthController_completeSamlLogin: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description The verified identity returns to the selected Vista app. */
+      303: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  AuthController_samlMetadata: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description SAML service-provider metadata XML. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': string;
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  AuthController_startDirectoryLogin: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['DirectoryLoginStartRequestDto'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['DirectoryLoginStartResponseDto'];
         };
       };
       /** @description The endpoint request limit was exceeded. */
@@ -12467,6 +14771,1138 @@ export interface operations {
       };
     };
   };
+  BackupController_policyApprovalRequests: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['BackupPolicyApprovalPageDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  BackupController_decidePolicyApproval: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path: {
+        id: unknown;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['DecideBackupPolicyApprovalDto'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['BackupPolicyDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  BackupController_artifactDeletionRequests: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['BackupArtifactDeletionRequestPageDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  BackupController_decideArtifactDeletion: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path: {
+        id: unknown;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['DecideBackupArtifactDeletionDto'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['BackupArtifactDeletionRequestDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  BackupController_drTests: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['BackupDrTestPageDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  BackupController_planDrTest: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['PlanBackupDrTestDto'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['BackupDrTestDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  BackupController_recordDrTestResult: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path: {
+        id: unknown;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['RecordBackupDrTestDto'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['BackupDrTestDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  BackupController_planReviews: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['BackupPlanReviewPageDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  BackupController_recordPlanReview: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['RecordBackupPlanReviewDto'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['BackupPlanReviewDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  BackupController_policies: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['BackupPolicyPageDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  BackupController_createPolicy: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['CreateBackupPolicyDto'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['BackupPolicyDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  BackupController_updatePolicy: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path: {
+        id: unknown;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['UpdateBackupPolicyDto'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['BackupPolicyDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  BackupController_activatePolicy: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path: {
+        id: unknown;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ActivateBackupPolicyDto'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['BackupPolicyDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  BackupController_requestPolicyApproval: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path: {
+        id: unknown;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['RequestBackupPolicyApprovalDto'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['BackupPolicyDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  BackupController_requestPolicyPause: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path: {
+        id: unknown;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['RequestBackupPolicyApprovalDto'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['BackupPolicyDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  BackupController_resumePolicy: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path: {
+        id: unknown;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ActivateBackupPolicyDto'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['BackupPolicyDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  BackupController_requestPolicyRetentionReduction: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path: {
+        id: unknown;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['RequestBackupRetentionReductionDto'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['BackupPolicyDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  BackupController_referenceData: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['BackupReferenceDataDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  BackupController_restoreRequests: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['BackupRestoreRequestPageDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  BackupController_recoverDatabaseRecord: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: unknown;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['BackupDatabaseRecordRecoveryRequestDto'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['BackupDatabaseRecordRecoveryDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  BackupController_databaseRecoveryTables: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: unknown;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['BackupDatabaseRecoveryTablePageDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  BackupController_decideRestoreApproval: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path: {
+        id: unknown;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['DecideBackupRestoreApprovalDto'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['BackupRestoreRequestDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  BackupController_downloadRestoredFile: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: unknown;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/octet-stream': string;
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  BackupController_runs: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['BackupExecutionRunPageDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  BackupController_requestArtifactDeletion: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path: {
+        id: unknown;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['RequestBackupArtifactDeletionDto'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['BackupArtifactDeletionRequestDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  BackupController_fileRestoreOptions: {
+    parameters: {
+      query: {
+        search: string;
+      };
+      header?: never;
+      path: {
+        id: unknown;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['BackupFileRestoreOptionsDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  BackupController_requestRestore: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path: {
+        id: unknown;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['RequestBackupRestoreDto'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['BackupRestoreRequestDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  BackupController_sources: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['BackupProtectedSourcePageDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  BackupController_createSource: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['CreateBackupProtectedSourceDto'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['BackupProtectedSourceDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  BackupController_updateSource: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path: {
+        id: unknown;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['UpdateBackupProtectedSourceDto'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['BackupProtectedSourceDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
   CrmAfterSalesController_overview: {
     parameters: {
       query?: never;
@@ -12482,6 +15918,47 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['CrmAfterSalesOverviewDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  CrmAfterSalesController_transitionWarrantyCoverageOffer: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path: {
+        id: unknown;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['TransitionCrmWarrantyCoverageOfferDto'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CrmWarrantyCoverageOfferDto'];
         };
       };
       /** @description The endpoint request limit was exceeded. */
@@ -12601,6 +16078,47 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['CrmCustomerSurveyDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  CrmAfterSalesController_createWarrantyCoverageOffer: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path: {
+        id: unknown;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['CreateCrmWarrantyCoverageOfferDto'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CrmWarrantyCoverageOfferDto'];
         };
       };
       /** @description The endpoint request limit was exceeded. */
@@ -13208,6 +16726,80 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['CrmPipelineReferenceDataDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  CrmPublicSurveyController_getSurvey: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        token: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CrmPublicSurveyDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  CrmPublicSurveyController_submitResponse: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        token: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['RecordCrmSurveyResponseDto'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CrmPublicSurveyDto'];
         };
       };
       /** @description The endpoint request limit was exceeded. */
@@ -14259,6 +17851,7 @@ export interface operations {
         pageSize?: number;
         parentId: string;
         parentType:
+          | 'backup_dr_test'
           | 'partner'
           | 'warranty_claim'
           | 'crm_interaction'
@@ -14313,6 +17906,7 @@ export interface operations {
           parentId: string;
           /** @enum {string} */
           parentType:
+            | 'backup_dr_test'
             | 'partner'
             | 'warranty_claim'
             | 'crm_interaction'
@@ -15016,6 +18610,48 @@ export interface operations {
       };
     };
   };
+  FinanceCustomerAccountsController_allocateAdvance: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path: {
+        customerPartnerId: unknown;
+        saleId: unknown;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ApplyCustomerAdvanceToPosSaleDto'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CustomerPaymentAccountDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
   FinanceCustomerAccountsController_collect: {
     parameters: {
       query?: never;
@@ -15206,6 +18842,44 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['CustomerAdvanceDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  FinanceCustomerAccountsController_paymentStatus: {
+    parameters: {
+      query?: {
+        page?: number;
+        pageSize?: number;
+        search?: string;
+        status?: 'unpaid' | 'partially_paid' | 'paid' | 'overdue';
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CustomerPaymentStatusPageDto'];
         };
       };
       /** @description The endpoint request limit was exceeded. */
@@ -17306,6 +20980,117 @@ export interface operations {
     };
     responses: {
       201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['LogisticsDeliveryDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  LogisticsController_bookCourierDelivery: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path: {
+        id: unknown;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['LogisticsDeliveryDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  LogisticsController_reconcileCourierBooking: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: unknown;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ReconcileLogisticsCourierBookingDto'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['LogisticsDeliveryDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  LogisticsController_refreshCourierTracking: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: unknown;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
         headers: {
           [name: string]: unknown;
         };
@@ -20759,6 +24544,774 @@ export interface operations {
       };
     };
   };
+  PosController_prepareFiscalDailyReport: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['CreatePosFiscalDailyReportDto'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PosFiscalDailyReportDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  PosController_confirmFiscalDailyReport: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ConfirmPosFiscalDailyReportDto'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PosFiscalDailyReportDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  PosController_markFiscalDailyReportOutcomeUnknown: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PosFiscalDailyReportDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  PosController_markFiscalDailyReportPrinting: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PosFiscalDailyReportDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  PosController_rejectFiscalDailyReport: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['FailPosFiscalDailyReportDto'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PosFiscalDailyReportDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  PosController_activeFiscalDailyReport: {
+    parameters: {
+      query: {
+        shiftId: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PosFiscalDailyReportActiveResponseDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  PosController_prepareFiscalReturn: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['PreparePosFiscalReturnDto'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PosFiscalReturnPreparationDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  PosController_confirmFiscalReturn: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ConfirmPosFiscalReturnDto'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PosReturnDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  PosController_markFiscalReturnOutcomeUnknown: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PosFiscalReturnPreparationDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  PosController_markFiscalReturnPrinting: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PosFiscalReturnPreparationDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  PosController_resolveFiscalReturn: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ResolvePosFiscalReturnDto'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PosFiscalReturnPreparationDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  PosController_activeFiscalReturnPreparation: {
+    parameters: {
+      query: {
+        shiftId: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PosFiscalReturnPreparationDto'] | null;
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  PosController_prepareFiscalSale: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['PreparePosFiscalSaleDto'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PosFiscalSalePreparationDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  PosController_cancelFiscalSalePreparation: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ConfirmPosFiscalSaleCancellationDto'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PosFiscalSalePreparationDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  PosController_finalizeConfirmedFiscalSale: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PosSaleDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  PosController_markFiscalSaleOutcomeUnknown: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['MarkPosFiscalSaleOutcomeUnknownDto'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PosFiscalSalePreparationDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  PosController_markFiscalSalePrinting: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PosFiscalSalePreparationDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  PosController_confirmFiscalSaleReceipt: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ConfirmPosFiscalSaleReceiptDto'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PosSaleDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  PosController_activeFiscalSalePreparation: {
+    parameters: {
+      query: {
+        shiftId: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PosFiscalSalePreparationDto'] | null;
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  PosController_reserveDatecsUnpLease: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ReservePosDatecsUnpLeaseDto'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PosDatecsUnpLeaseDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
   PosController_enrolLoyalty: {
     parameters: {
       query?: never;
@@ -20815,6 +25368,43 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['PosLoyaltyLedgerDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  PosController_reportOfflineSyncEvent: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ReportPosOfflineSyncEventDto'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PosOfflineSyncEventResponseDto'];
         };
       };
       /** @description The endpoint request limit was exceeded. */
@@ -21348,6 +25938,41 @@ export interface operations {
       };
     };
   };
+  PosController_saleById: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        saleId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PosSaleDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
   PosController_warrantyCardPdf: {
     parameters: {
       query?: never;
@@ -21588,6 +26213,82 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['PosTerminalContextDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  ProcurementController_acceptanceProtocol: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: unknown;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['AcceptanceProtocolDto'];
+        };
+      };
+      /** @description The endpoint request limit was exceeded. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The distributed request-protection store is unavailable. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  ProcurementController_createAcceptanceProtocol: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+      };
+      path: {
+        id: unknown;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['CreateAcceptanceProtocolDto'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['AcceptanceProtocolDto'];
         };
       };
       /** @description The endpoint request limit was exceeded. */

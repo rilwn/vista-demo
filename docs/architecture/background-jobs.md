@@ -12,27 +12,55 @@ retried as if they were temporary failures.
 
 ## Registered responsibilities
 
-| Job name                               | Required responsibility                       | Owning delivery phase |
-| -------------------------------------- | --------------------------------------------- | --------------------- |
-| `finance.payment-status.detect`        | Upcoming and overdue payment detection        | Phase 3               |
-| `finance.payment-notification.prepare` | Payment reminders                             | Phase 3               |
-| `sales.subscription-invoice.generate`  | Recurring subscription invoices               | Phase 3               |
-| `service.inspection-reminder.prepare`  | Fiscal-device and scale inspection reminders  | Phase 4               |
-| `service.plan-visit.generate`          | Upcoming visits from service plans            | Phase 4               |
-| `crm.warranty-expiration.prepare`      | Warranty-expiration reminders                 | Phases 4–5            |
-| `crm.sla.evaluate`                     | SLA risk monitoring and escalation            | Phase 5               |
-| `report.generate`                      | Scheduled and asynchronous reports            | Phases 3–8            |
-| `backup.execute`                       | Backup execution                              | Phase 8               |
-| `backup.verify`                        | Backup verification                           | Phase 8               |
-| `backup.missed-detect`                 | Missed-backup detection                       | Phase 8               |
-| `backup.plan-review.remind`            | Annual backup-plan review reminder            | Phase 8               |
-| `backup.dr-test.remind`                | Annual disaster-recovery test reminder        | Phase 8               |
-| `notification.dispatch`                | Delivery of a previously created notification | Phase 1               |
+| Job name                               | Required responsibility                                  | Owning delivery phase |
+| -------------------------------------- | -------------------------------------------------------- | --------------------- |
+| `finance.payment-status.detect`        | Upcoming and overdue payment detection                   | Phase 3               |
+| `finance.payment-notification.prepare` | Payment reminders                                        | Phase 3               |
+| `sales.subscription-invoice.generate`  | Recurring subscription invoices                          | Phase 3               |
+| `service.inspection-reminder.prepare`  | Fiscal-device and scale inspection reminders             | Phase 4               |
+| `service.plan-visit.generate`          | Upcoming visits from service plans                       | Phase 4               |
+| `crm.warranty-expiration.prepare`      | Warranty-expiration reminders                            | Phases 4–5            |
+| `crm.sla.evaluate`                     | SLA risk monitoring and escalation                       | Phase 5               |
+| `report.generate`                      | Scheduled and asynchronous reports                       | Phases 3–8            |
+| `backup.execute`                       | Backup execution                                         | Phase 8               |
+| `backup.verify`                        | Backup verification                                      | Phase 8               |
+| `backup.missed-detect`                 | Missed-backup detection                                  | Phase 8               |
+| `backup.dr-test.remind`                | Annual restore-test reminders                            | Phase 8               |
+| `backup.plan-review.remind`            | Annual and change-triggered backup-plan review reminders | Phase 8               |
+| `notification.dispatch`                | Delivery of a previously created notification            | Phase 1               |
 
 `notification.dispatch` is an active domain handler. It uses a transactional
 PostgreSQL claim, records attempts and terminal failures, recovers stale claims,
-and currently delivers only in-system notifications. Email and SMS remain
-observable failures until their provider adapters are delivered.
+and delivers in-system and email notifications. Backup alerts can also use the
+Twilio SMS adapter when its provider credentials and E.164 recipient list are
+configured; otherwise SMS remains disabled and no billable message is queued.
+
+`backup.missed-detect` runs every 15 minutes. It checks the prior 90 days of
+active database schedules, applying a 20-minute grace period to hourly runs,
+two hours to daily runs, and 24 hours to weekly/monthly runs. A unique
+policy-and-slot record makes each missed alert auditable and prevents duplicate
+notices. Verified copies and final failures after queue retries also create
+transactional in-system and email notices for active accounts with Backup view
+access. Provider delivery is retried by the notification worker.
+
+`backup.dr-test.remind` runs daily at 09:00 in the business timezone. It uses
+the latest recorded DR exercise or planned exercise to identify the next due
+date, sends a reminder up to 30 days before the date and an overdue notice after
+it, and flags an installation with no planned or recorded exercise. Messages go
+only to active accounts with Backup view access, use a stable reminder/date/
+recipient key across retries, and use in-system and email delivery plus SMS
+only when Twilio is explicitly configured. A planned exercise scheduled before
+the annual deadline suppresses a duplicate annual reminder; its own planned date
+is still monitored until the result is recorded.
+`backup.plan-review.remind` runs daily at 09:15 Europe/Sofia. It compares the
+current protected-source and backup-policy snapshot with the latest immutable
+management review, then sends an initial, changed-plan, corrective-action,
+upcoming or overdue reminder as applicable. Stable event/recipient keys make
+retries safe; notices use in-system and email delivery, with SMS only when
+Twilio is explicitly configured. Recording a review stores the exact inventory
+and policy snapshot, reviewer, decision, corrective actions and one-year next
+review date in append-only evidence. A focused PostgreSQL lifecycle regression
+covers review recording, replay, changed plans and reminder deduplication.
 
 `finance.payment-status.detect` is also an active domain handler. Startup
 upserts its stable daily schedule using `FINANCE_PAYMENT_STATUS_CRON` in
@@ -96,8 +124,8 @@ content, records exactly which statuses it repairs, and has a scoped rollback.
 Generic report requests without an export ID, notification-only legacy markers,
 backup handoffs and unsupported business events are not marked complete.
 
-The remaining later-phase handlers form the durable boundary for domains
-delivered in later ordered phases. A successful handler writes one deterministic
+Named responsibilities without an active domain handler remain durable
+handoffs, not completed business work. A successful generic handler writes one deterministic
 `scheduler.<job-name>.requested` event to the transactional outbox. Replaying the
 same logical run cannot create a second event. Success therefore means that the
 requested work is durably handed to its owning domain; it does not claim that an

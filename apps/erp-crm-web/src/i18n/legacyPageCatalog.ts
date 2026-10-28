@@ -496,6 +496,7 @@ export const legacyBulgarianText: Readonly<Record<string, string>> = {
   'Supplier offset register': 'Регистър на прихващанията с доставчици',
   Compensation: 'Прихващане',
   'Receivable offsets': 'Прихванати вземания',
+  'Customer balance offsets': 'Прихващания на клиентски салда',
   'No offsets recorded.': 'Няма записани прихващания.',
   'No supplier invoices are ready': 'Няма готови фактури от доставчици',
   'Record a EUR supplier invoice in Procurement before adding a payable.':
@@ -535,10 +536,13 @@ export const legacyBulgarianText: Readonly<Record<string, string>> = {
   'No bilateral balances are ready': 'Няма готови насрещни салда',
   'An offset requires the same partner to have both an open customer receivable and supplier payable.':
     'За прихващане един и същ партньор трябва да има открито клиентско вземане и задължение към доставчик.',
+  'An offset requires the same partner to have both an open customer balance and supplier payable.':
+    'За прихващане един и същ партньор трябва да има открито клиентско салдо и задължение към доставчик.',
   'Balances to compensate': 'Салда за прихващане',
   'Both records must belong to the same legal counterparty.':
     'Двата записа трябва да принадлежат на един и същ правен контрагент.',
   'Customer receivable': 'Вземане от клиент',
+  'Customer balance': 'Клиентско салдо',
   'Compensation record': 'Запис за прихващане',
   'The amount reduces both balances in the same transaction.':
     'Сумата намалява и двете салда в една транзакция.',

@@ -125,4 +125,18 @@ describe('durable checkout recovery', () => {
     await expect(submitDurableCheckout('cashier', 'token', request)).rejects.toThrow();
     expect(await readCheckout('cashier')).toBeUndefined();
   });
+
+  it('releases a declined card checkout but keeps an uncertain card outcome for review', async () => {
+    vi.mocked(completePosSale).mockRejectedValue(
+      new ApiClientError('Declined.', 'POS_CARD_PAYMENT_DECLINED', 409),
+    );
+    await expect(submitDurableCheckout('cashier', 'token', request)).rejects.toThrow();
+    expect(await readCheckout('cashier')).toBeUndefined();
+
+    vi.mocked(completePosSale).mockRejectedValue(
+      new ApiClientError('Check terminal before retry.', 'POS_CARD_PAYMENT_OUTCOME_UNKNOWN', 503),
+    );
+    await expect(submitDurableCheckout('cashier', 'token', request)).rejects.toThrow();
+    expect((await readCheckout('cashier'))?.request).toEqual(request);
+  });
 });

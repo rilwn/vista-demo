@@ -1,9 +1,15 @@
 import type {
   ApiErrorResponse,
+  ConfirmPosFiscalSaleCancellationRequest,
+  ConfirmPosFiscalDailyReportRequest,
   CreatePosDiscountAuthorizationRequest,
   CreatePosReportExportRequest,
   CreatePosReturnRequest,
   CreatePosSaleRequest,
+  CreatePosFiscalDailyReportRequest,
+  FailPosFiscalDailyReportRequest,
+  ConfirmPosFiscalSaleReceiptRequest,
+  ConfirmPosFiscalReturnRequest,
   EnrolPosLoyaltyRequest,
   FinancialDocument,
   ClosePosShiftRequest,
@@ -13,6 +19,12 @@ import type {
   PosCustomerOption,
   PosCustomerPaymentOptions,
   PosDiscountAuthorization,
+  PosDatecsUnpLease,
+  PosOfflineSyncEventResponse,
+  PosFiscalSalePreparation,
+  PosFiscalReturnPreparation,
+  PosFiscalDailyReport,
+  PosFiscalDailyReportActiveResponse,
   PosLoyaltyAccount,
   PosLoyaltyLedger,
   PosQuickAccess,
@@ -30,6 +42,11 @@ import type {
   PosShift,
   PosTerminalContext,
   PricePosBasketRequest,
+  PreparePosFiscalSaleRequest,
+  ReservePosDatecsUnpLeaseRequest,
+  ReportPosOfflineSyncEventRequest,
+  PreparePosFiscalReturnRequest,
+  ResolvePosFiscalReturnRequest,
   UpdatePosQuickAccessRequest,
 } from '@vista/contracts';
 
@@ -323,6 +340,220 @@ export function completePosSale(
   );
 }
 
+export function preparePosFiscalSale(
+  token: string,
+  input: PreparePosFiscalSaleRequest,
+  idempotencyKey: string,
+): Promise<PosFiscalSalePreparation> {
+  return unwrapApiResponse(
+    posApiClient.POST('/api/v1/pos/fiscal-sales/preparations', {
+      body: input,
+      signal: AbortSignal.timeout(30000),
+      headers: authorizationHeaders(token),
+      params: { header: { 'Idempotency-Key': idempotencyKey } },
+    }),
+  );
+}
+
+export function reservePosDatecsUnpLease(
+  token: string,
+  input: ReservePosDatecsUnpLeaseRequest,
+  idempotencyKey: string = crypto.randomUUID(),
+): Promise<PosDatecsUnpLease> {
+  return unwrapApiResponse(
+    posApiClient.POST('/api/v1/pos/fiscal-sales/unp-leases', {
+      body: input,
+      headers: authorizationHeaders(token),
+      params: { header: { 'Idempotency-Key': idempotencyKey } },
+    }),
+  );
+}
+
+export function reportPosOfflineSyncEvent(
+  token: string,
+  input: ReportPosOfflineSyncEventRequest,
+): Promise<PosOfflineSyncEventResponse> {
+  return unwrapApiResponse(
+    posApiClient.POST('/api/v1/pos/offline-sync-events', {
+      body: input,
+      headers: authorizationHeaders(token),
+    }),
+  );
+}
+
+export function getActivePosFiscalSalePreparation(
+  token: string,
+  shiftId: string,
+): Promise<PosFiscalSalePreparation | null> {
+  return unwrapApiResponse(
+    posApiClient.GET('/api/v1/pos/fiscal-sales/preparations/active', {
+      headers: authorizationHeaders(token),
+      params: { query: { shiftId } },
+    }),
+  );
+}
+
+export function preparePosFiscalDailyReport(
+  token: string,
+  input: CreatePosFiscalDailyReportRequest,
+): Promise<PosFiscalDailyReport> {
+  return unwrapApiResponse(
+    posApiClient.POST('/api/v1/pos/fiscal-daily-reports', {
+      body: input,
+      headers: authorizationHeaders(token),
+      params: { header: { 'Idempotency-Key': crypto.randomUUID() } },
+    }),
+  );
+}
+
+export function getActivePosFiscalDailyReport(
+  token: string,
+  shiftId: string,
+): Promise<PosFiscalDailyReportActiveResponse> {
+  return unwrapApiResponse(
+    posApiClient.GET('/api/v1/pos/fiscal-daily-reports/active', {
+      headers: authorizationHeaders(token),
+      params: { query: { shiftId } },
+    }),
+  );
+}
+
+export function markPosFiscalDailyReportPrinting(
+  token: string,
+  reportId: string,
+): Promise<PosFiscalDailyReport> {
+  return unwrapApiResponse(
+    posApiClient.POST('/api/v1/pos/fiscal-daily-reports/{id}/printing', {
+      headers: authorizationHeaders(token),
+      params: {
+        header: { 'Idempotency-Key': crypto.randomUUID() },
+        path: { id: reportId },
+      },
+    }),
+  );
+}
+
+export function markPosFiscalDailyReportUnknown(
+  token: string,
+  reportId: string,
+): Promise<PosFiscalDailyReport> {
+  return unwrapApiResponse(
+    posApiClient.POST('/api/v1/pos/fiscal-daily-reports/{id}/outcome-unknown', {
+      headers: authorizationHeaders(token),
+      params: {
+        header: { 'Idempotency-Key': crypto.randomUUID() },
+        path: { id: reportId },
+      },
+    }),
+  );
+}
+
+export function confirmPosFiscalDailyReport(
+  token: string,
+  reportId: string,
+  input: ConfirmPosFiscalDailyReportRequest,
+): Promise<PosFiscalDailyReport> {
+  return unwrapApiResponse(
+    posApiClient.POST('/api/v1/pos/fiscal-daily-reports/{id}/confirm', {
+      body: input,
+      headers: authorizationHeaders(token),
+      params: {
+        header: { 'Idempotency-Key': crypto.randomUUID() },
+        path: { id: reportId },
+      },
+    }),
+  );
+}
+
+export function rejectPosFiscalDailyReport(
+  token: string,
+  reportId: string,
+  input: FailPosFiscalDailyReportRequest,
+): Promise<PosFiscalDailyReport> {
+  return unwrapApiResponse(
+    posApiClient.POST('/api/v1/pos/fiscal-daily-reports/{id}/reject', {
+      body: input,
+      headers: authorizationHeaders(token),
+      params: {
+        header: { 'Idempotency-Key': crypto.randomUUID() },
+        path: { id: reportId },
+      },
+    }),
+  );
+}
+
+export function markPosFiscalSalePrinting(
+  token: string,
+  preparationId: string,
+  idempotencyKey: string,
+): Promise<PosFiscalSalePreparation> {
+  return unwrapApiResponse(
+    posApiClient.POST('/api/v1/pos/fiscal-sales/preparations/{id}/printing', {
+      params: { path: { id: preparationId }, header: { 'Idempotency-Key': idempotencyKey } },
+      headers: authorizationHeaders(token),
+    }),
+  );
+}
+
+export function markPosFiscalSaleOutcomeUnknown(
+  token: string,
+  preparationId: string,
+  commandCode: number,
+  idempotencyKey: string,
+): Promise<PosFiscalSalePreparation> {
+  return unwrapApiResponse(
+    posApiClient.POST('/api/v1/pos/fiscal-sales/preparations/{id}/outcome-unknown', {
+      body: { commandCode },
+      params: { path: { id: preparationId }, header: { 'Idempotency-Key': idempotencyKey } },
+      headers: authorizationHeaders(token),
+    }),
+  );
+}
+
+export function cancelPosFiscalSalePreparation(
+  token: string,
+  preparationId: string,
+  input: ConfirmPosFiscalSaleCancellationRequest,
+  idempotencyKey: string,
+): Promise<PosFiscalSalePreparation> {
+  return unwrapApiResponse(
+    posApiClient.POST('/api/v1/pos/fiscal-sales/preparations/{id}/cancel', {
+      body: input,
+      params: { path: { id: preparationId }, header: { 'Idempotency-Key': idempotencyKey } },
+      headers: authorizationHeaders(token),
+    }),
+  );
+}
+
+export function confirmPosFiscalSaleReceipt(
+  token: string,
+  preparationId: string,
+  input: ConfirmPosFiscalSaleReceiptRequest,
+  idempotencyKey: string,
+): Promise<PosSale> {
+  return unwrapApiResponse(
+    posApiClient.POST('/api/v1/pos/fiscal-sales/preparations/{id}/receipt', {
+      body: input,
+      signal: AbortSignal.timeout(30000),
+      params: { path: { id: preparationId }, header: { 'Idempotency-Key': idempotencyKey } },
+      headers: authorizationHeaders(token),
+    }),
+  );
+}
+
+export function finalizeConfirmedPosFiscalSale(
+  token: string,
+  preparationId: string,
+): Promise<PosSale> {
+  return unwrapApiResponse(
+    posApiClient.POST('/api/v1/pos/fiscal-sales/preparations/{id}/finalize', {
+      params: { path: { id: preparationId } },
+      signal: AbortSignal.timeout(30000),
+      headers: authorizationHeaders(token),
+    }),
+  );
+}
+
 export function createPosReturn(
   token: string,
   input: CreatePosReturnRequest,
@@ -333,6 +564,90 @@ export function createPosReturn(
       body: input,
       headers: authorizationHeaders(token),
       params: { header: { 'Idempotency-Key': idempotencyKey } },
+    }),
+  );
+}
+
+export function preparePosFiscalReturn(
+  token: string,
+  input: PreparePosFiscalReturnRequest,
+  idempotencyKey: string,
+): Promise<PosFiscalReturnPreparation> {
+  return unwrapApiResponse(
+    posApiClient.POST('/api/v1/pos/fiscal-returns/preparations', {
+      body: input,
+      signal: AbortSignal.timeout(30000),
+      headers: authorizationHeaders(token),
+      params: { header: { 'Idempotency-Key': idempotencyKey } },
+    }),
+  );
+}
+
+export function getActivePosFiscalReturnPreparation(
+  token: string,
+  shiftId: string,
+): Promise<PosFiscalReturnPreparation | null> {
+  return unwrapApiResponse(
+    posApiClient.GET('/api/v1/pos/fiscal-returns/preparations/active', {
+      headers: authorizationHeaders(token),
+      params: { query: { shiftId } },
+    }),
+  );
+}
+
+export function markPosFiscalReturnPrinting(
+  token: string,
+  preparationId: string,
+  idempotencyKey = crypto.randomUUID(),
+): Promise<PosFiscalReturnPreparation> {
+  return unwrapApiResponse(
+    posApiClient.POST('/api/v1/pos/fiscal-returns/preparations/{id}/printing', {
+      headers: authorizationHeaders(token),
+      params: { path: { id: preparationId }, header: { 'Idempotency-Key': idempotencyKey } },
+    }),
+  );
+}
+
+export function markPosFiscalReturnUnknown(
+  token: string,
+  preparationId: string,
+  idempotencyKey = crypto.randomUUID(),
+): Promise<PosFiscalReturnPreparation> {
+  return unwrapApiResponse(
+    posApiClient.POST('/api/v1/pos/fiscal-returns/preparations/{id}/outcome-unknown', {
+      headers: authorizationHeaders(token),
+      params: { path: { id: preparationId }, header: { 'Idempotency-Key': idempotencyKey } },
+    }),
+  );
+}
+
+export function resolvePosFiscalReturn(
+  token: string,
+  preparationId: string,
+  evidence: ResolvePosFiscalReturnRequest['evidence'],
+  idempotencyKey = crypto.randomUUID(),
+): Promise<PosFiscalReturnPreparation> {
+  return unwrapApiResponse(
+    posApiClient.POST('/api/v1/pos/fiscal-returns/preparations/{id}/resolve', {
+      body: { evidence },
+      headers: authorizationHeaders(token),
+      params: { path: { id: preparationId }, header: { 'Idempotency-Key': idempotencyKey } },
+    }),
+  );
+}
+
+export function confirmPosFiscalReturn(
+  token: string,
+  preparationId: string,
+  input: ConfirmPosFiscalReturnRequest,
+  idempotencyKey = crypto.randomUUID(),
+): Promise<PosReturn> {
+  return unwrapApiResponse(
+    posApiClient.POST('/api/v1/pos/fiscal-returns/preparations/{id}/confirm', {
+      body: input,
+      signal: AbortSignal.timeout(30000),
+      headers: authorizationHeaders(token),
+      params: { path: { id: preparationId }, header: { 'Idempotency-Key': idempotencyKey } },
     }),
   );
 }
@@ -351,6 +666,15 @@ export function getPosSales(token: string): Promise<PosSalePage> {
     posApiClient.GET('/api/v1/pos/sales', {
       headers: authorizationHeaders(token),
       params: { query: { page: 1, pageSize: 50 } },
+    }),
+  );
+}
+
+export function getPosSale(token: string, saleId: string): Promise<PosSale> {
+  return unwrapApiResponse(
+    posApiClient.GET('/api/v1/pos/sales/{saleId}', {
+      headers: authorizationHeaders(token),
+      params: { path: { saleId } },
     }),
   );
 }

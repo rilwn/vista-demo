@@ -20,6 +20,7 @@ export function definitelyRejected(error: unknown): boolean {
           'POS_LOYALTY_BALANCE_EXCEEDED',
           'POS_ADVANCE_BALANCE_EXCEEDED',
           'POS_ACCOUNT_CREDIT_EXCEEDED',
+          'POS_CARD_PAYMENT_DECLINED',
         ].includes(error.code)))
   );
 }

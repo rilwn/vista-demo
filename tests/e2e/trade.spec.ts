@@ -123,8 +123,10 @@ test('received serial reaches handover and its collection is settled in two paym
   await surveySource.getByRole('button', { name: 'Prepare survey' }).click();
   const surveyDialog = page.getByRole('dialog', { name: 'Prepare customer survey' });
   await expect(surveyDialog).toContainText('How likely are you to recommend Vista Service?');
-  await expect(surveyDialog.locator('select option:checked')).toContainText(handoverNumber);
-  await surveyDialog.getByRole('button', { name: 'Record invitation shared' }).click();
+  await expect(
+    surveyDialog.getByLabel('Delivery or Service job').locator('option:checked'),
+  ).toContainText(handoverNumber);
+  await surveyDialog.getByRole('button', { name: 'Send survey' }).click();
   const surveyRecord = page
     .locator('.crm-care-survey-list > button')
     .filter({ hasText: handoverNumber });

@@ -1,4 +1,6 @@
 import type {
+  AcceptanceProtocol,
+  CreateAcceptanceProtocolRequest,
   CreatePurchaseOrderRequest,
   CreateSupplierClaimRequest,
   CreateSupplierEvaluationRequest,
@@ -72,6 +74,36 @@ export function receivePurchaseOrder(
       params: {
         header: idempotencyParameters(idempotencyKey).header,
         path: { id: purchaseOrderId },
+      },
+    }),
+  );
+}
+
+export function getAcceptanceProtocol(
+  token: string,
+  goodsReceiptId: string,
+): Promise<AcceptanceProtocol> {
+  return unwrapApiResponse(
+    apiClient.GET('/api/v1/procurement/goods-receipts/{id}/acceptance-protocol', {
+      headers: authorizationHeaders(token),
+      params: { path: { id: goodsReceiptId } },
+    }),
+  );
+}
+
+export function createAcceptanceProtocol(
+  token: string,
+  goodsReceiptId: string,
+  idempotencyKey: string,
+  input: CreateAcceptanceProtocolRequest,
+): Promise<AcceptanceProtocol> {
+  return unwrapApiResponse(
+    apiClient.POST('/api/v1/procurement/goods-receipts/{id}/acceptance-protocol', {
+      body: input,
+      headers: authorizationHeaders(token),
+      params: {
+        header: idempotencyParameters(idempotencyKey).header,
+        path: { id: goodsReceiptId },
       },
     }),
   );

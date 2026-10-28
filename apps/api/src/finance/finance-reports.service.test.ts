@@ -25,6 +25,10 @@ describe('Finance report aging buckets', () => {
       'vatRates',
       'total',
       'currencyCode',
+      'exchangeRate',
+      'eurNetTotal',
+      'eurVatTotal',
+      'eurTotal',
       'paymentDate',
     ];
     expect(financeReportColumns('finance.income').map((column) => column.key)).toEqual(

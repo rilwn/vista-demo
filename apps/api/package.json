@@ -15,7 +15,7 @@
     "db:rollback": "DOTENV_CONFIG_PATH=../../.env tsx src/database/migrate.ts down",
     "db:fixtures:dev": "DOTENV_CONFIG_PATH=../../.env tsx src/database/seed-dev.ts",
     "db:seed:dev": "npm run db:fixtures:dev",
-    "openapi:generate": "DOTENV_CONFIG_PATH=../../.env tsx src/generate-openapi.ts"
+    "openapi:generate": "DOTENV_CONFIG_PATH=../../.env node --import tsx src/generate-openapi.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1104.0",
@@ -25,6 +25,7 @@
     "@nestjs/platform-express": "^11.1.6",
     "@nestjs/swagger": "^11.2.0",
     "@nestjs/throttler": "^6.5.0",
+    "@node-saml/node-saml": "^5.2.0",
     "@vista/auth": "0.1.0",
     "@vista/config": "0.1.0",
     "@vista/contracts": "0.1.0",
@@ -35,12 +36,16 @@
     "dotenv": "^17.2.1",
     "exceljs": "^4.4.0",
     "helmet": "^8.1.0",
+    "imapflow": "^2.9.1",
     "ioredis": "^5.7.0",
+    "ldapts": "^9.2.0",
+    "openid-client": "^6.8.8",
     "pdfkit": "^0.20.1",
     "pg": "^8.16.3",
     "pino": "^10.3.1",
     "reflect-metadata": "^0.2.2",
-    "rxjs": "^7.8.2"
+    "rxjs": "^7.8.2",
+    "saxes": "^6.0.0"
   },
   "devDependencies": {
     "@nestjs/cli": "^11.0.10",

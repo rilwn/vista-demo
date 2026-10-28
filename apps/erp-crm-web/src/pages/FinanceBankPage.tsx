@@ -9,7 +9,14 @@ import type {
   FinanceSupplierBankMatchCandidate,
   FinanceSupplierReferenceData,
 } from '@vista/contracts';
-import { mapBankImportRows, parseCsv, type BankImportMapping } from './bank-import';
+import {
+  mapBankImportRows,
+  parseCamt053,
+  parseCsv,
+  parseMt940,
+  type BankImportMapping,
+  type ParsedBankStatementFile,
+} from './bank-import';
 import { type FormEvent, type ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
 
 import { ApiClientError } from '../api/client';
@@ -94,8 +101,8 @@ export function FinanceBankPage() {
 
       <InlineAlert tone="info">
         {bg
-          ? 'Импортирайте CSV или Excel извлечение и свържете колоните. Непотвърдените редове остават за преглед.'
-          : 'Import a CSV or Excel statement and map its columns. Unmatched rows stay available for review.'}
+          ? 'Импортирайте CAMT.053 или MT940 директно, или съпоставете колоните от CSV/Excel. Непотвърдените редове остават за преглед.'
+          : 'Import CAMT.053 or MT940 directly, or map a CSV/Excel statement. Unmatched rows stay available for review.'}
       </InlineAlert>
 
       <section aria-label="Bank reconciliation summary" className="bank-summary">
@@ -297,6 +304,22 @@ function CreateBankStatementDrawer({
     );
   }
 
+  function useParsedStatement(parsed: ParsedBankStatementFile) {
+    setImportHeaders(parsed.headers.map((header) => bankImportHeaderLabel(header, bg)));
+    setImportRows(parsed.rows);
+    setImportMapping(parsed.mapping);
+    setImportNotice(
+      bg
+        ? `Файлът ${parsed.format} е разчетен. Прегледайте редовете и баланса преди добавяне.`
+        : `${parsed.format} file read. Review the transactions and balances before adding it.`,
+    );
+    if (parsed.accountIban) setAccountIban(parsed.accountIban);
+    if (parsed.statementReference) setStatementReference(parsed.statementReference);
+    if (parsed.statementDate) setStatementDate(parsed.statementDate);
+    if (parsed.openingBalance) setOpeningBalance(parsed.openingBalance);
+    if (parsed.closingBalance) setClosingBalance(parsed.closingBalance);
+  }
+
   async function readStatementFile(file: File | undefined) {
     if (!file) return;
     setImportErrors([]);
@@ -312,7 +335,14 @@ function CreateBankStatementDrawer({
     }
     try {
       let table: string[][];
-      if (file.name.toLowerCase().endsWith('.csv')) table = parseCsv(await file.text());
+      const extension = file.name.toLowerCase().split('.').at(-1);
+      if (extension === 'xml') {
+        useParsedStatement(parseCamt053(await file.text()));
+        return;
+      } else if (extension === 'mt940' || extension === 'sta' || extension === 'txt') {
+        useParsedStatement(parseMt940(await file.text()));
+        return;
+      } else if (extension === 'csv') table = parseCsv(await file.text());
       else if (file.name.toLowerCase().endsWith('.xlsx')) {
         const ExcelJS = await import('exceljs');
         const workbook = new ExcelJS.Workbook();
@@ -327,7 +357,9 @@ function CreateBankStatementDrawer({
         });
       } else {
         throw new Error(
-          bg ? 'Изберете CSV или Excel файл (.xlsx).' : 'Choose a CSV or Excel workbook (.xlsx).',
+          bg
+            ? 'Изберете CSV, Excel (.xlsx), CAMT.053 (.xml) или MT940 (.sta, .mt940, .txt).'
+            : 'Choose CSV, Excel (.xlsx), CAMT.053 (.xml), or MT940 (.sta, .mt940, .txt).',
         );
       }
       const [headerRow, ...dataRows] = table;
@@ -356,7 +388,7 @@ function CreateBankStatementDrawer({
     } catch (caught) {
       setImportErrors([
         caught instanceof Error
-          ? caught.message
+          ? localizeBankImportError(caught.message, bg)
           : bg
             ? 'Файлът не може да бъде прочетен.'
             : 'The file could not be read.',
@@ -505,14 +537,21 @@ function CreateBankStatementDrawer({
               <h3>{bg ? 'Импорт на банков файл' : 'Import a bank file'}</h3>
               <p>
                 {bg
-                  ? 'Качете CSV или Excel файл, съпоставете колоните и проверете дублиращите се редове преди добавяне.'
-                  : 'Upload a CSV or Excel file, map its columns, and review duplicate-looking rows before adding them.'}
+                  ? 'Импортирайте CAMT.053 или MT940 директно, или качете CSV/Excel и съпоставете колоните. Проверете дублиращите се редове преди добавяне.'
+                  : 'Import CAMT.053 or MT940 directly, or upload CSV/Excel and map its columns. Review possible duplicates before adding them.'}
               </p>
             </div>
           </header>
-          <BankField label={bg ? 'CSV или Excel файл (.xlsx)' : 'CSV or Excel file (.xlsx)'} wide>
+          <BankField
+            label={
+              bg
+                ? 'Файл (.csv, .xlsx, .xml, .sta, .mt940, .txt)'
+                : 'Statement file (.csv, .xlsx, .xml, .sta, .mt940, .txt)'
+            }
+            wide
+          >
             <input
-              accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+              accept=".csv,.xlsx,.xml,.sta,.mt940,.txt,text/csv,text/xml,application/xml,text/plain,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
               onChange={(event) => void readStatementFile(event.target.files?.[0])}
               type="file"
             />
@@ -533,6 +572,7 @@ function CreateBankStatementDrawer({
                 {(
                   [
                     ['transactionDate', bg ? 'Дата на операцията' : 'Transaction date', true],
+                    ['valueDate', bg ? 'Вальор (по избор)' : 'Value date (optional)', false],
                     ['direction', bg ? 'Посока' : 'Direction', true],
                     ['amount', bg ? 'Сума' : 'Amount', true],
                     ['currency', bg ? 'Валута' : 'Currency', true],
@@ -854,11 +894,22 @@ function BankStatementDrawer({
                   </small>
                   {transaction.match ? (
                     <p>
-                      Matched to <strong>{transaction.match.documentNumber}</strong> ·{' '}
+                      {transaction.match.targetType === 'pos_account'
+                        ? bg
+                          ? 'Свързан с POS продажба'
+                          : 'Matched to POS sale'
+                        : bg
+                          ? 'Свързан с'
+                          : 'Matched to'}{' '}
+                      <strong>{transaction.match.documentNumber}</strong> ·{' '}
                       {transaction.match.paymentNumber} ·{' '}
                       {transaction.match.method === 'automatic_reference'
-                        ? 'Reference matched automatically'
-                        : 'Matched manually'}
+                        ? bg
+                          ? 'Съпоставен автоматично по основание'
+                          : 'Reference matched automatically'
+                        : bg
+                          ? 'Съпоставен ръчно'
+                          : 'Matched manually'}
                     </p>
                   ) : null}
                   {transaction.supplierMatch ? (
@@ -930,7 +981,7 @@ function BankMatchDrawer({
       .then((items) => {
         if (active) {
           setCandidates(items);
-          setSelectedId(items[0]?.customerDocumentId ?? '');
+          setSelectedId(items[0]?.targetId ?? '');
         }
       })
       .catch((caught) => {
@@ -944,13 +995,16 @@ function BankMatchDrawer({
     };
   }, [token, transaction.id]);
   async function match() {
-    if (!selectedId) return;
+    const candidate = candidates.find((item) => item.targetId === selectedId);
+    if (!candidate) return;
     setBusy(true);
     setError(null);
     try {
       onSaved(
         await matchFinanceBankTransaction(token, transaction.id, crypto.randomUUID(), {
-          customerDocumentId: selectedId,
+          ...(candidate.targetType === 'collection'
+            ? { customerDocumentId: candidate.targetId }
+            : { posSaleId: candidate.targetId }),
           expectedVersion: transaction.version,
           ...(transaction.possibleDuplicate ? { reviewPossibleDuplicate: duplicateReviewed } : {}),
         }),
@@ -966,7 +1020,7 @@ function BankMatchDrawer({
       busy={busy}
       onBack={onBack}
       subtitle={`${transaction.counterpartyName} · ${formatMoney(transaction.amount)}`}
-      title="Review transfer match"
+      title={bg ? 'Преглед на съпоставянето' : 'Review transfer match'}
     >
       <div className="bank-match-review">
         {error ? <InlineAlert tone="error">{error}</InlineAlert> : null}
@@ -978,15 +1032,15 @@ function BankMatchDrawer({
           </InlineAlert>
         ) : null}
         <section className="bank-match-source">
-          <span>Payment reference</span>
+          <span>{bg ? 'Основание за плащане' : 'Payment reference'}</span>
           <strong>{transaction.paymentReference}</strong>
           <dl>
             <div>
-              <dt>Amount</dt>
+              <dt>{bg ? 'Сума' : 'Amount'}</dt>
               <dd>{formatMoney(transaction.amount)}</dd>
             </div>
             <div>
-              <dt>Value date</dt>
+              <dt>{bg ? 'Вальор' : 'Value date'}</dt>
               <dd>{formatDate(transaction.valueDate)}</dd>
             </div>
           </dl>
@@ -1007,49 +1061,68 @@ function BankMatchDrawer({
         ) : null}
         <section className="bank-match-candidates">
           <header>
-            <h3>Possible collection records</h3>
+            <h3>{bg ? 'Възможни съпоставяния' : 'Possible matches'}</h3>
             <p>
-              Reference, customer, and amount are used only to rank suggestions. You confirm the
-              allocation.
+              {bg
+                ? 'Основанието, клиентът и сумата подреждат предложенията. Вие потвърждавате съпоставянето.'
+                : 'Reference, customer, and amount rank suggestions. You confirm the match.'}
             </p>
           </header>
           {loading ? (
-            <p>Loading suggestions…</p>
+            <p>{bg ? 'Зареждане…' : 'Loading suggestions…'}</p>
           ) : candidates.length ? (
             candidates.map((candidate) => (
               <label
-                className={selectedId === candidate.customerDocumentId ? 'is-selected' : undefined}
-                key={candidate.customerDocumentId}
+                className={selectedId === candidate.targetId ? 'is-selected' : undefined}
+                key={`${candidate.targetType}:${candidate.targetId}`}
               >
                 <input
-                  checked={selectedId === candidate.customerDocumentId}
+                  checked={selectedId === candidate.targetId}
                   name="candidate"
-                  onChange={() => setSelectedId(candidate.customerDocumentId)}
+                  onChange={() => setSelectedId(candidate.targetId)}
                   type="radio"
                 />
                 <div>
-                  <strong>{candidate.documentNumber}</strong>
+                  <strong>
+                    {candidate.targetType === 'pos_account'
+                      ? bg
+                        ? `POS продажба ${candidate.documentNumber}`
+                        : `POS sale ${candidate.documentNumber}`
+                      : candidate.documentNumber}
+                  </strong>
                   <span>
-                    {candidate.customerName} · From {candidate.sourceInvoiceNumber}
+                    {candidate.customerName}
+                    {candidate.sourceInvoiceNumber
+                      ? bg
+                        ? ` · Документ ${candidate.sourceInvoiceNumber}`
+                        : ` · From ${candidate.sourceInvoiceNumber}`
+                      : ''}
                   </span>
                   <small>
-                    Due {formatDate(candidate.dueDate)} · {formatMoney(candidate.outstandingTotal)}{' '}
-                    outstanding
+                    {bg ? 'Падеж' : 'Due'} {formatDate(candidate.dueDate)} ·{' '}
+                    {formatMoney(candidate.outstandingTotal)} {bg ? 'остатък' : 'outstanding'}
                   </small>
                 </div>
                 <span>
                   {candidate.referenceMatched
-                    ? 'Reference match'
+                    ? bg
+                      ? 'Съвпадащо основание'
+                      : 'Reference match'
                     : candidate.score > 0
-                      ? `${candidate.score}% match`
-                      : 'Manual review'}
+                      ? bg
+                        ? `Съвпадение ${candidate.score}%`
+                        : `${candidate.score}% match`
+                      : bg
+                        ? 'Ръчна проверка'
+                        : 'Manual review'}
                 </span>
               </label>
             ))
           ) : (
             <InlineAlert tone="warning">
-              No open collection can accept this amount. Check the payment reference or create the
-              collection record first.
+              {bg
+                ? 'Няма отворено вземане или POS задължение за тази сума. Проверете основанието или първо създайте задължението.'
+                : 'No open collection or POS balance can accept this amount. Check the payment reference or create the balance first.'}
             </InlineAlert>
           )}
         </section>
@@ -1481,4 +1554,79 @@ function formatMoney(value: string) {
 }
 function maskIban(value: string) {
   return value.length > 8 ? `${value.slice(0, 4)} ···· ${value.slice(-4)}` : value;
+}
+
+function bankImportHeaderLabel(header: string, bg: boolean) {
+  if (!bg) return header;
+  const labels: Record<string, string> = {
+    'Transaction date': 'Дата на операцията',
+    'Value date': 'Вальор',
+    Direction: 'Посока',
+    Amount: 'Сума',
+    Currency: 'Валута',
+    'Payment reference': 'Основание',
+    Counterparty: 'Насрещна страна',
+  };
+  return labels[header] ?? header;
+}
+
+function localizeBankImportError(message: string, bg: boolean) {
+  if (!bg) return message;
+  const translations: Array<[string, string]> = [
+    ['The CAMT.053 file is too large.', 'Файлът CAMT.053 е твърде голям.'],
+    ['The CAMT.053 XML is not valid.', 'XML файлът CAMT.053 е невалиден.'],
+    ['The XML file is not a CAMT.053 customer statement.', 'XML файлът не е извлечение CAMT.053.'],
+    ['Upload one CAMT.053 statement at a time.', 'Качвайте по едно извлечение CAMT.053.'],
+    [
+      'Only EUR CAMT.053 statements can be imported.',
+      'Могат да се импортират само извлечения CAMT.053 в EUR.',
+    ],
+    ['The CAMT.053 statement contains no transactions.', 'Извлечението CAMT.053 няма операции.'],
+    ['The MT940 file is too large.', 'Файлът MT940 е твърде голям.'],
+    ['The MT940 file contains an unsupported line.', 'Файлът MT940 съдържа неподдържан ред.'],
+    ['Upload one MT940 statement at a time.', 'Качвайте по едно извлечение MT940.'],
+    [
+      'Upload one MT940 account statement at a time.',
+      'Качвайте извлечение само за една MT940 сметка.',
+    ],
+    [
+      'The MT940 file must include opening and closing balances.',
+      'Файлът MT940 трябва да съдържа начално и крайно салдо.',
+    ],
+    [
+      'Only EUR MT940 statements can be imported.',
+      'Могат да се импортират само извлечения MT940 в EUR.',
+    ],
+    ['The MT940 statement contains no transactions.', 'Извлечението MT940 няма операции.'],
+    [
+      'A bank statement can contain up to 200 transactions.',
+      'Извлечението може да съдържа до 200 операции.',
+    ],
+  ];
+  const exact = translations.find(([english]) => english === message);
+  if (exact) return exact[1];
+  if (message.startsWith('CAMT.053 entry ') && message.endsWith(' is incomplete.'))
+    return message
+      .replace('CAMT.053 entry ', 'Операция CAMT.053 ')
+      .replace(' is incomplete.', ' е непълна.');
+  if (message.startsWith('CAMT.053 entry ') && message.endsWith(' is not in EUR.'))
+    return message
+      .replace('CAMT.053 entry ', 'Операция CAMT.053 ')
+      .replace(' is not in EUR.', ' не е в EUR.');
+  if (message.startsWith('MT940 transaction ') && message.endsWith(' has an invalid :61: line.'))
+    return message
+      .replace('MT940 transaction ', 'Операция MT940 ')
+      .replace(' has an invalid :61: line.', ' има невалиден ред :61:.');
+  if (
+    message.startsWith('MT940 transaction ') &&
+    message.endsWith(' has an invalid date or amount.')
+  )
+    return message
+      .replace('MT940 transaction ', 'Операция MT940 ')
+      .replace(' has an invalid date or amount.', ' има невалидна дата или сума.');
+  if (message.startsWith('MT940 transaction ') && message.endsWith(' has an invalid value date.'))
+    return message
+      .replace('MT940 transaction ', 'Операция MT940 ')
+      .replace(' has an invalid value date.', ' има невалиден вальор.');
+  return 'Банковият файл не може да бъде прочетен. Проверете формата и съдържанието му.';
 }

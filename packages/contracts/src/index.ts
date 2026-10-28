@@ -106,6 +106,7 @@ export interface NotificationPage {
 }
 
 export const managedFileParentTypes = [
+  'backup_dr_test',
   'partner',
   'warranty_claim',
   'crm_interaction',
@@ -368,6 +369,29 @@ export interface AuditIntegrityResult {
 export interface LoginRequest {
   email: string;
   password: string;
+  totpCode?: string;
+  emergencyAccessReason?: string;
+}
+
+export type DirectoryApplication = 'operations' | 'pos' | 'recovery';
+export type DirectoryProvider = 'ldap' | 'oidc' | 'saml';
+
+export interface DirectorySignInOptions {
+  enabled: boolean;
+  emergencyAccessAvailable: boolean;
+  method: DirectoryProvider | null;
+}
+
+export interface DirectoryLoginStartRequest {
+  app: DirectoryApplication;
+}
+
+export interface DirectoryLoginStartResponse {
+  authorizationUrl: string;
+}
+
+export interface DirectoryLoginExchangeRequest {
+  ticket: string;
   totpCode?: string;
 }
 
@@ -1003,6 +1027,11 @@ export interface CreatePosAccountPaymentRequest {
   paymentDate: string;
   paymentReference?: string;
 }
+export interface ApplyCustomerAdvanceToPosSaleRequest {
+  amount: string;
+  customerAdvanceId: string;
+  expectedOutstanding: string;
+}
 export interface ReversePosAccountPaymentRequest {
   reason: string;
   expectedOutstanding: string;
@@ -1085,6 +1114,40 @@ export interface CustomerOpenReceivable {
   total: string;
 }
 
+export type CustomerPaymentStatusFilter = Exclude<FinancePaymentStatus, 'cancelled'>;
+export type CustomerReceivableSourceType = 'issued_document' | 'pos_sale';
+
+export interface CustomerPaymentStatusRecord {
+  creditTotal: string;
+  currencyCode: string;
+  customerName: string;
+  customerPartnerId: string;
+  dueDate: string;
+  id: string;
+  number: string;
+  outstandingTotal: string;
+  paidTotal: string;
+  paymentStatus: CustomerPaymentStatusFilter;
+  referenceNumber?: string;
+  sourceType: CustomerReceivableSourceType;
+  total: string;
+}
+
+export interface CustomerPaymentStatusPage {
+  items: CustomerPaymentStatusRecord[];
+  page: number;
+  pageSize: number;
+  totalItems: number;
+  totalPages: number;
+}
+
+export interface CustomerPaymentStatusQuery {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+  status?: CustomerPaymentStatusFilter;
+}
+
 export interface CustomerPaymentAccountReferenceData {
   businessTimezone?: string;
   customers: Array<{ id: string; name: string; uic?: string }>;
@@ -1137,6 +1200,127 @@ export interface CreatePosSaleRequest {
   manualDiscount?: PosManualDiscountRequest;
   payments: CreatePosSalePaymentRequest[];
   shiftId: string;
+}
+
+export interface PreparePosFiscalSaleRequest extends CreatePosSaleRequest {
+  deviceSerial: string;
+  operatorIdentifier: string;
+  /** A one-use DATECS identifier pre-reserved for this POS register. */
+  uniqueSaleId?: string;
+}
+
+export interface ReservePosDatecsUnpLeaseRequest {
+  deviceSerial: string;
+  operatorIdentifier: string;
+  shiftId: string;
+}
+
+export interface PosDatecsUnpLease {
+  cashRegisterId: string;
+  deviceSerial: string;
+  operatorIdentifier: string;
+  uniqueSaleIds: string[];
+}
+
+export type PosOfflineSyncEventKind = 'conflict' | 'retry';
+export type PosOfflineSyncEventReason = 'receipt_mismatch' | 'server_rejected' | 'sync_interrupted';
+
+export interface ReportPosOfflineSyncEventRequest {
+  cashRegisterId: string;
+  clientEventId: string;
+  clientTransactionId: string;
+  deviceSerial: string;
+  occurredAt: string;
+  operatorIdentifier: string;
+  reasonCode: PosOfflineSyncEventReason;
+  type: PosOfflineSyncEventKind;
+  uniqueSaleId: string;
+}
+
+export interface PosOfflineSyncEventResponse {
+  auditEventId: string;
+  clientEventId: string;
+  duplicate: boolean;
+}
+
+export interface PosFiscalReceiptLine {
+  description: string;
+  discountEur?: string;
+  grossTotalEur: string;
+  quantity: string;
+  unitCode?: string;
+  unitPriceEur: string;
+  vatTreatment: PosVatTreatment;
+}
+
+export type PosFiscalSalePreparationStatus =
+  'cancelled' | 'finalized' | 'outcome_unknown' | 'prepared' | 'printing' | 'receipt_confirmed';
+
+export interface PosFiscalSalePreparation {
+  cashTenderedEur: string;
+  changeEur: string;
+  deviceSerial: string;
+  fiscalDocumentNumber?: string;
+  fiscalReceiptNumber?: string;
+  id: string;
+  lines: PosFiscalReceiptLine[];
+  status: PosFiscalSalePreparationStatus;
+  totalGrossEur: string;
+  uniqueSaleId: string;
+}
+
+export interface ConfirmPosFiscalSaleReceiptRequest {
+  changeEur: string;
+  fiscalDocumentNumber: string;
+  fiscalReceiptsSinceDailyReport?: string;
+  uniqueSaleId: string;
+}
+
+export interface MarkPosFiscalSaleOutcomeUnknownRequest {
+  commandCode: number;
+}
+
+export type PosFiscalDailyReportType = 'x' | 'z';
+export type PosFiscalDailyReportStatus =
+  'completed' | 'failed' | 'outcome_unknown' | 'prepared' | 'printing';
+
+export interface PosFiscalDailyReport {
+  closingCashEur?: string;
+  completedAt?: string;
+  createdAt: string;
+  fiscalRecordNumber?: string;
+  id: string;
+  nonVatSalesTotalEur?: string;
+  reportType: PosFiscalDailyReportType;
+  shiftId: string;
+  shiftNumber: string;
+  status: PosFiscalDailyReportStatus;
+  taxGroupTotals?: Record<'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H', string>;
+}
+
+export interface CreatePosFiscalDailyReportRequest {
+  closingCashEur?: string;
+  shiftId: string;
+  shiftVersion?: number;
+  type: PosFiscalDailyReportType;
+}
+
+export interface PosFiscalDailyReportActiveResponse {
+  report: PosFiscalDailyReport | null;
+}
+
+export interface ConfirmPosFiscalDailyReportRequest {
+  fiscalRecordNumber: string;
+  nonVatSalesTotalEur: string;
+  taxGroupTotals: Record<'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H', string>;
+}
+
+export interface FailPosFiscalDailyReportRequest {
+  reason: 'printer_rejected';
+}
+
+export interface ConfirmPosFiscalSaleCancellationRequest {
+  evidence: 'before_printing' | 'printer_open_rejected' | 'printer_receipt_cancelled';
 }
 
 export interface PosSaleLine {
@@ -1252,6 +1436,38 @@ export interface CreatePosReturnRequest {
   shiftId: string;
 }
 
+export interface PreparePosFiscalReturnRequest extends CreatePosReturnRequest {
+  deviceSerial: string;
+  operatorIdentifier: string;
+}
+
+export type PosFiscalReturnPreparationStatus =
+  'cancelled' | 'completed' | 'outcome_unknown' | 'prepared' | 'printing' | 'rejected';
+
+export interface PosFiscalReturnPreparation {
+  deviceSerial: string;
+  fiscalDocumentNumber?: string;
+  fiscalReversalsSinceDailyReport?: string;
+  id: string;
+  operatorIdentifier: string;
+  originalFiscalDocumentNumber: string;
+  originalSaleId: string;
+  originalUniqueSaleId: string;
+  request: CreatePosReturnRequest;
+  status: PosFiscalReturnPreparationStatus;
+  uniqueReversalId: string;
+}
+
+export interface ConfirmPosFiscalReturnRequest {
+  fiscalDocumentNumber: string;
+  fiscalReversalsSinceDailyReport?: string;
+  uniqueReversalId: string;
+}
+
+export interface ResolvePosFiscalReturnRequest {
+  evidence: 'before_printing' | 'printer_rejected';
+}
+
 export interface CreatePosReturnRefundRequest {
   amount: string;
   method: PosPaymentMethod;
@@ -1277,7 +1493,9 @@ export interface PosReturnLine {
 export interface PosReturn {
   completedAt: string;
   fiscalAdapter: string;
+  fiscalDocumentNumber?: string;
   fiscalReversalNumber: string;
+  fiscalReversalsSinceDailyReport?: string;
   grossTotal: string;
   id: string;
   lines: PosReturnLine[];
@@ -1687,7 +1905,68 @@ export interface GoodsReceiptLine {
   unitCostEur: string;
 }
 
+export interface AcceptanceProtocolDiscrepancy {
+  claimId: string;
+  claimType: 'damaged' | 'non_conforming';
+  description: string;
+  quantity: string;
+  status: 'open' | 'submitted' | 'resolved' | 'closed';
+}
+
+export interface AcceptanceProtocolLine {
+  acceptedQuantity: string;
+  batchNumber?: string;
+  currencyCode: string;
+  cumulativeReceivedQuantity: string;
+  discrepancies: AcceptanceProtocolDiscrepancy[];
+  expiresAt?: string;
+  goodsReceiptLineId: string;
+  id: string;
+  orderLineId: string;
+  orderedQuantity: string;
+  outstandingQuantity: string;
+  previouslyReceivedQuantity: string;
+  productCode: string;
+  productId: string;
+  productName: string;
+  serialNumbers: string[];
+  unitPrice: string;
+}
+
+export interface AcceptanceProtocolSummary {
+  id: string;
+  protocolNumber: string;
+}
+
+export interface AcceptanceProtocol {
+  createdAt: string;
+  goodsReceiptId: string;
+  id: string;
+  lines: AcceptanceProtocolLine[];
+  numberSequence: number;
+  numberYear: number;
+  preparedByName: string;
+  protocolNumber: string;
+  purchaseOrderId: string;
+  receivedAt: string;
+  receivedByName: string;
+  supplierDeliveryReference?: string;
+  supplierInvoice?: {
+    id: string;
+    invoiceDate: string;
+    invoiceNumber: string;
+  };
+  supplierName: string;
+  supplierPartnerId: string;
+  warehouseName: string;
+}
+
+export interface CreateAcceptanceProtocolRequest {
+  supplierInvoiceId?: string;
+}
+
 export interface GoodsReceipt {
+  acceptanceProtocol?: AcceptanceProtocolSummary;
   id: string;
   lines: GoodsReceiptLine[];
   purchaseOrderId: string;
@@ -1814,12 +2093,15 @@ export interface SupplierInvoiceLine {
 
 export interface SupplierInvoice {
   currencyCode: string;
+  exchangeRate?: string;
   id: string;
   invoiceDate: string;
   invoiceNumber: string;
   lines: SupplierInvoiceLine[];
   netTotal: string;
   purchaseOrderId: string;
+  rateDate?: string;
+  rateSource?: 'BNB' | 'internal_eur';
   recordedAt: string;
   supplierName: string;
   supplierPartnerId: string;
@@ -2459,10 +2741,31 @@ export interface LogisticsDeliveryHistoryEntry {
   previousStatus?: LogisticsDeliveryStatus;
 }
 
+export interface LogisticsCourierTrackingEvent {
+  description: string;
+  occurredAt: string;
+  place?: string;
+  status: string;
+}
+
+export interface LogisticsCourierBooking {
+  attemptCount: number;
+  events: LogisticsCourierTrackingEvent[];
+  lastCheckedAt?: string;
+  lastError?: string;
+  provider: 'econt' | 'speedy';
+  providerReference?: string;
+  providerStatus?: string;
+  status: 'pending' | 'booking' | 'booked' | 'failed' | 'needs_review';
+}
+
 export interface LogisticsDelivery {
   addressLine1: string;
   addressLine2?: string;
   city: string;
+  courierBooking?: LogisticsCourierBooking;
+  courierRecipientName?: string;
+  courierRecipientPhone?: string;
   countryCode: string;
   createdAt: string;
   customerId: string;
@@ -2478,6 +2781,8 @@ export interface LogisticsDelivery {
   id: string;
   instructions?: string;
   number: string;
+  parcelCount?: number;
+  parcelWeightKg?: string;
   postalCode?: string;
   proofNotes?: string;
   recipientName?: string;
@@ -2501,9 +2806,17 @@ export interface CreateLogisticsDeliveryRequest {
   customerLocationId: string;
   deliveryMethod: LogisticsDeliveryMethod;
   instructions?: string;
+  parcelCount?: number;
+  parcelWeightKg?: string;
+  recipientName?: string;
+  recipientPhone?: string;
   scheduledEnd: string;
   scheduledStart: string;
   shipmentId: string;
+}
+
+export interface ReconcileLogisticsCourierBookingRequest {
+  providerReference: string;
 }
 
 export interface UpdateLogisticsDeliveryStatusRequest {
@@ -2971,12 +3284,16 @@ export interface FinanceSupplierReference {
 export interface FinanceOffsetReceivableReference {
   customerName: string;
   customerPartnerId: string;
+  currencyCode: string;
   dueDate: string;
   id: string;
   number: string;
   outstandingTotal: string;
-  sourceInvoiceNumber: string;
-  version: number;
+  sourceType: 'customer_document' | 'pos_account';
+  sourceInvoiceNumber?: string;
+  saleNumber?: string;
+  posSaleId?: string;
+  version?: number;
 }
 
 export interface FinanceSupplierReferenceData {
@@ -3012,10 +3329,12 @@ export interface AllocateFinanceSupplierAdvanceRequest {
 
 export interface CreateFinanceSupplierOffsetRequest {
   amount: string;
-  customerDocumentId: string;
-  expectedCustomerDocumentVersion: number;
+  customerDocumentId?: string;
+  expectedCustomerDocumentVersion?: number;
+  expectedPosOutstanding?: string;
   expectedSupplierPayableVersion: number;
   offsetDate: string;
+  posSaleId?: string;
   reason: string;
   supplierPayableId: string;
 }
@@ -3090,13 +3409,15 @@ export interface FinanceSupplierAdvancePage {
 export interface FinanceSupplierOffset {
   amount: string;
   createdAt: string;
-  customerDocumentId: string;
-  customerDocumentNumber: string;
+  customerDocumentId?: string;
+  customerDocumentNumber?: string;
   id: string;
   number: string;
   offsetDate: string;
   partnerId: string;
   partnerName: string;
+  posSaleId?: string;
+  posSaleNumber?: string;
   reason: string;
   supplierPayableId: string;
   supplierPayableNumber: string;
@@ -3156,18 +3477,21 @@ export interface CreateFinanceBankStatementRequest {
 }
 
 export interface MatchFinanceBankTransactionRequest {
-  customerDocumentId: string;
+  customerDocumentId?: string;
   expectedVersion: number;
+  posSaleId?: string;
   reviewPossibleDuplicate?: boolean;
 }
 
 export interface FinanceBankTransactionMatch {
-  customerDocumentId: string;
   customerName: string;
   documentNumber: string;
   matchedAt: string;
   method: 'automatic_reference' | 'manual';
   paymentNumber: string;
+  targetType: 'collection' | 'pos_account';
+  customerDocumentId?: string;
+  posSaleId?: string;
 }
 
 export interface FinanceSupplierBankTransactionMatch {
@@ -3233,14 +3557,17 @@ export interface FinanceBankStatementPage {
 }
 
 export interface FinanceBankMatchCandidate {
-  customerDocumentId: string;
+  targetId: string;
+  targetType: 'collection' | 'pos_account';
   customerName: string;
   documentNumber: string;
   dueDate: string;
   outstandingTotal: string;
   referenceMatched: boolean;
   score: number;
-  sourceInvoiceNumber: string;
+  customerDocumentId?: string;
+  posSaleId?: string;
+  sourceInvoiceNumber?: string;
 }
 
 export const financeCashVoucherDirections = ['receipt', 'payment'] as const;
@@ -3280,10 +3607,20 @@ export interface FinanceCashCollectionReference {
   sourceInvoiceNumber: string;
 }
 
+export interface FinanceCashPosAccountReference {
+  customerName: string;
+  customerPartnerId: string;
+  dueDate: string;
+  outstandingTotal: string;
+  saleId: string;
+  saleNumber: string;
+}
+
 export interface FinanceCashReferenceData {
   businessDate: string;
   cashRegisters: FinanceCashRegisterReference[];
   openCollections: FinanceCashCollectionReference[];
+  openPosAccounts: FinanceCashPosAccountReference[];
   partners: FinanceCashPartnerReference[];
 }
 
@@ -3293,6 +3630,7 @@ export interface CreateFinanceCashVoucherRequest {
   counterpartyName?: string;
   counterpartyPartnerId?: string;
   customerDocumentId?: string;
+  posSaleId?: string;
   direction: FinanceCashVoucherDirection;
   notes?: string;
   operatorId: string;
@@ -3322,6 +3660,8 @@ export interface FinanceCashVoucher {
   createdAt: string;
   currencyCode: string;
   customerDocumentId?: string;
+  posSaleId?: string;
+  posSaleNumber?: string;
   direction: FinanceCashVoucherDirection;
   id: string;
   issuedByName: string;
@@ -4359,6 +4699,53 @@ export interface UpdateCrmWarrantyOfferRequest {
   offerStatus: CrmWarrantyOfferStatus;
 }
 
+export const crmWarrantyCoverageOfferTypes = ['extended_warranty', 'service_plan'] as const;
+export type CrmWarrantyCoverageOfferType = (typeof crmWarrantyCoverageOfferTypes)[number];
+
+export const crmWarrantyCoverageOfferStatuses = [
+  'draft',
+  'offered',
+  'accepted',
+  'declined',
+  'expired',
+] as const;
+export type CrmWarrantyCoverageOfferStatus = (typeof crmWarrantyCoverageOfferStatuses)[number];
+
+export interface CrmWarrantyCoverageOffer {
+  coverageStartsOn: string;
+  customerName: string;
+  customerPartnerId: string;
+  createdAt: string;
+  currencyCode: 'EUR';
+  deviceName: string;
+  durationMonths: number;
+  id: string;
+  number: string;
+  offerType: CrmWarrantyCoverageOfferType;
+  quotedAmount: string;
+  serialNumber: string;
+  status: CrmWarrantyCoverageOfferStatus;
+  terms: string;
+  validUntil: string;
+  visitFrequencyMonths?: number;
+  warrantyCardId: string;
+  warrantyEndsOn: string;
+}
+
+export interface CreateCrmWarrantyCoverageOfferRequest {
+  coverageStartsOn: string;
+  durationMonths: number;
+  offerType: CrmWarrantyCoverageOfferType;
+  quotedAmount: string;
+  terms: string;
+  validUntil: string;
+  visitFrequencyMonths?: number;
+}
+
+export interface TransitionCrmWarrantyCoverageOfferRequest {
+  nextStatus: Exclude<CrmWarrantyCoverageOfferStatus, 'draft' | 'expired'>;
+}
+
 export const crmSurveySourceKinds = ['delivery', 'service'] as const;
 export type CrmSurveySourceKind = (typeof crmSurveySourceKinds)[number];
 
@@ -4366,15 +4753,26 @@ export interface CrmSurveySourceReference {
   customerLocationId: string;
   customerName: string;
   customerPartnerId: string;
+  recipientEmails: string[];
   id: string;
   label: string;
   sourceKind: CrmSurveySourceKind;
+}
+
+export interface CrmPublicSurvey {
+  expiresAt: string;
+  number: string;
+  score?: number;
+  sourceKind: CrmSurveySourceKind;
+  status: 'awaiting_response' | 'responded' | 'expired';
 }
 
 export interface CrmCustomerSurvey {
   comment?: string;
   customerName: string;
   customerPartnerId: string;
+  deliveryStatus?: 'pending' | 'processing' | 'delivered' | 'failed' | 'cancelled';
+  recipientEmail?: string;
   id: string;
   number: string;
   respondedAt?: string;
@@ -4386,6 +4784,7 @@ export interface CrmCustomerSurvey {
 }
 
 export interface SendCrmCustomerSurveyRequest {
+  recipientEmail: string;
   sourceId: string;
   sourceKind: CrmSurveySourceKind;
 }
@@ -4434,6 +4833,7 @@ export interface CrmAfterSalesOverview {
   businessTimezone: string;
   claims: WarrantyClaim[];
   customers: ServiceCustomerReference[];
+  coverageOffers: CrmWarrantyCoverageOffer[];
   nps: CrmNpsSummary;
   referrals: CrmReferral[];
   surveySources: CrmSurveySourceReference[];
@@ -4760,6 +5160,7 @@ export interface ServiceWorkOrder {
   deviceName: string;
   financialDocumentId?: string;
   financialDocumentNumber?: string;
+  financialDocumentStatus?: 'draft' | 'issued';
   history: ServiceWorkOrderHistoryEntry[];
   id: string;
   isOverdue: boolean;
@@ -5466,6 +5867,428 @@ export interface ReplenishmentStatus {
   reservedQuantity: string;
   targetQuantity: string;
   warehouseId: string;
+}
+
+export type BackupSourceType =
+  | 'cloud_service'
+  | 'database'
+  | 'email'
+  | 'file'
+  | 'file_share'
+  | 'mobile_device'
+  | 'object_storage'
+  | 'other'
+  | 'server'
+  | 'workstation';
+
+export type BackupDataClassification = 'critical' | 'important' | 'standard';
+
+export interface BackupEmployeeOption {
+  displayName: string;
+  employeeNumber: string;
+  id: string;
+}
+
+export interface BackupReferenceData {
+  employees: BackupEmployeeOption[];
+}
+
+export interface BackupProtectedSource {
+  annualGrowthPercent?: string;
+  createdAt: string;
+  credentialCustody: string;
+  dataClassification: BackupDataClassification;
+  dataStewardEmployeeId?: string;
+  dataStewardName?: string;
+  dependencies: string;
+  encryptedAtSource: boolean;
+  estimatedSizeGib?: string;
+  id: string;
+  location: string;
+  name: string;
+  ownerEmployeeId?: string;
+  ownerName?: string;
+  restorePrerequisites: string;
+  sourceCode: string;
+  sourceType: BackupSourceType;
+  status: 'active' | 'inactive';
+  updatedAt: string;
+  version: number;
+}
+
+export interface BackupProtectedSourceInput {
+  annualGrowthPercent?: string;
+  credentialCustody?: string;
+  dataClassification: BackupDataClassification;
+  dataStewardEmployeeId?: string;
+  dependencies?: string;
+  encryptedAtSource: boolean;
+  estimatedSizeGib?: string;
+  location: string;
+  name: string;
+  ownerEmployeeId?: string;
+  restorePrerequisites?: string;
+  sourceCode: string;
+  sourceType: BackupSourceType;
+}
+
+export type CreateBackupProtectedSourceRequest = BackupProtectedSourceInput;
+
+export interface UpdateBackupProtectedSourceRequest extends BackupProtectedSourceInput {
+  expectedVersion: number;
+}
+
+export interface BackupPolicy {
+  backupType: 'database_snapshot' | 'differential' | 'full' | 'incremental' | 'system_image';
+  compressionEnabled: boolean;
+  createdAt: string;
+  dayOfMonth?: number;
+  dayOfWeek?: number;
+  encryptionRequired: boolean;
+  frequency: 'daily' | 'hourly' | 'monthly' | 'weekly';
+  id: string;
+  name: string;
+  pauseRequestPending?: boolean;
+  retentionReductionRequestPending?: boolean;
+  policyCode: string;
+  retentionDailyCopies: number;
+  retentionMonthlyCopies: number;
+  rpoMinutes: number;
+  rtoMinutes: number;
+  runTimeLocal?: string;
+  sources: Array<{ id: string; name: string; sourceCode: string }>;
+  status: 'active' | 'approved' | 'draft' | 'paused' | 'pending_approval';
+  updatedAt: string;
+  verificationRequired: boolean;
+  version: number;
+}
+
+export interface BackupExecutionRun {
+  artifactAvailable: boolean;
+  artifactDeletedReason?: 'approved_retention_policy' | 'approved_restore_point_deletion';
+  artifactSizeBytes?: string;
+  artifactDeletionStatus?:
+    'approved' | 'completed' | 'expired' | 'failed' | 'pending_approval' | 'rejected' | 'running';
+  attemptCount: number;
+  backupType: BackupPolicy['backupType'];
+  compressionAlgorithm: 'gzip' | 'none' | 'postgres_custom';
+  errorCode?: string;
+  id: string;
+  independentCopyStatus: 'failed' | 'not_configured' | 'pending' | 'running' | 'verified';
+  independentCopyTargetCode?: string;
+  independentCopyErrorCode?: string;
+  independentCopyVerifiedAt?: string;
+  policyCode: string;
+  policyName: string;
+  restoreAvailable: boolean;
+  scheduledFor: string;
+  sourceType: 'cloud_service' | 'database' | 'email' | 'file' | 'file_share' | 'object_storage';
+  startedAt: string;
+  status: 'failed' | 'running' | 'stored' | 'verified';
+  storedAt?: string;
+  verificationAttemptCount: number;
+  verificationStatus: 'failed' | 'pending' | 'running' | 'verified';
+  uncompressedSizeBytes?: string;
+  verifiedAt?: string;
+}
+
+export interface BackupExecutionRunPage {
+  items: BackupExecutionRun[];
+  page: number;
+  pageSize: number;
+  restoreAvailable: boolean;
+  total: number;
+}
+
+export interface BackupFileRestoreOption {
+  key: string;
+  label?: string;
+  sizeBytes: string;
+}
+
+export interface BackupFileRestoreOptions {
+  items: BackupFileRestoreOption[];
+  total: number;
+}
+
+export interface BackupDatabaseRecoveryTable {
+  name: string;
+  primaryKeyColumns: string[];
+}
+
+export interface BackupDatabaseRecoveryTablePage {
+  items: BackupDatabaseRecoveryTable[];
+}
+
+export interface BackupDatabaseRecordRecoveryRequest {
+  primaryKey: Record<string, string>;
+  tableName: string;
+}
+
+export interface BackupDatabaseRecordRecovery {
+  format: 'vista-database-record-recovery-v1';
+  databaseEngine: 'mariadb' | 'postgresql';
+  primaryKey: Record<string, string>;
+  recoveredAt: string;
+  record: Record<string, unknown>;
+  restoreRequestId: string;
+  sourceRunId: string;
+  tableName: string;
+}
+
+export interface BackupRestoreRequest {
+  approvedByName?: string;
+  attemptCount: number;
+  completedAt?: string;
+  createdAt: string;
+  errorCode?: string;
+  id: string;
+  policyCode: string;
+  policyName: string;
+  reason: string;
+  restoreObjectKey?: string;
+  requestedBy: string;
+  requestedByName: string;
+  runId: string;
+  scheduledFor: string;
+  sourceType: 'cloud_service' | 'database' | 'email' | 'file' | 'file_share' | 'object_storage';
+  status:
+    'approved' | 'completed' | 'expired' | 'failed' | 'pending_approval' | 'rejected' | 'running';
+  targetDatabaseName?: string;
+  targetStorageBucket?: string;
+  targetStoragePrefix?: string;
+}
+
+export interface BackupRestoreRequestPage {
+  items: BackupRestoreRequest[];
+  total: number;
+}
+
+export interface BackupArtifactDeletionRequest {
+  approvedByName?: string;
+  completedAt?: string;
+  createdAt: string;
+  errorCode?: string;
+  expiresAt: string;
+  id: string;
+  policyCode: string;
+  policyName: string;
+  reason: string;
+  requestedBy: string;
+  requestedByName: string;
+  runId: string;
+  scheduledFor: string;
+  status:
+    'approved' | 'completed' | 'expired' | 'failed' | 'pending_approval' | 'rejected' | 'running';
+}
+
+export interface BackupArtifactDeletionRequestPage {
+  items: BackupArtifactDeletionRequest[];
+  total: number;
+}
+
+export interface RequestBackupArtifactDeletionRequest {
+  reason: string;
+}
+
+export interface DecideBackupArtifactDeletionRequest {
+  comment?: string;
+  decision: 'approve' | 'reject';
+}
+
+export interface BackupDrTest {
+  backupRunId: string;
+  backupScheduledFor: string;
+  completedAt?: string;
+  correctiveActions?: string;
+  createdAt: string;
+  createdByName: string;
+  evidenceFileId?: string;
+  id: string;
+  nonConformities?: string;
+  outcome?: 'failed' | 'passed';
+  plannedFor: string;
+  policyCode: string;
+  policyName: string;
+  protocolSignedAt?: string;
+  protocolSignedBy?: string;
+  restoreRequestId?: string;
+  restoreStatus?: BackupRestoreRequest['status'];
+  resultSummary?: string;
+  rpoMet?: boolean;
+  rpoTargetMinutes: number;
+  rtoMet?: boolean;
+  rtoTargetMinutes: number;
+  scope: string;
+  status: 'planned' | 'recorded';
+  testCode: string;
+  actualRpoMinutes?: number;
+  actualRtoMinutes?: number;
+}
+
+export interface BackupDrTestPage {
+  items: BackupDrTest[];
+  total: number;
+}
+
+export interface BackupPlanReview {
+  correctiveActions?: string;
+  id: string;
+  nextReviewDueAt: string;
+  outcome: 'approved' | 'changes_required';
+  planSnapshot: {
+    policies: Array<{
+      backupType: string;
+      compressionEnabled: boolean;
+      dayOfMonth?: number;
+      dayOfWeek?: number;
+      encryptionRequired: boolean;
+      frequency: string;
+      policyCode: string;
+      retentionDailyCopies: number;
+      retentionMonthlyCopies: number;
+      rpoMinutes: number;
+      rtoMinutes: number;
+      runTimeLocal?: string;
+      sourceCodes: string[];
+      status: string;
+      verificationRequired: boolean;
+      version: number;
+    }>;
+    protectedSources: Array<{
+      classification: string;
+      location: string;
+      name: string;
+      ownerName?: string;
+      sourceCode: string;
+      sourceType: string;
+      status: string;
+      stewardName?: string;
+      version: number;
+    }>;
+    storageTarget: string;
+  };
+  policyCount: number;
+  protectedSourceCount: number;
+  reviewCode: string;
+  reviewedAt: string;
+  reviewedByName: string;
+  snapshotSha256: string;
+  summary: string;
+}
+
+export interface BackupPlanReviewPage {
+  currentPlanSnapshot: BackupPlanReview['planSnapshot'];
+  currentSnapshotSha256: string;
+  items: BackupPlanReview[];
+  reviewRequired: boolean;
+  total: number;
+}
+
+export interface RecordBackupPlanReviewRequest {
+  correctiveActions?: string;
+  outcome: BackupPlanReview['outcome'];
+  summary: string;
+}
+
+export interface PlanBackupDrTestRequest {
+  plannedFor: string;
+  runId: string;
+  scope: string;
+}
+
+export interface RecordBackupDrTestRequest {
+  actualRpoMinutes: number;
+  actualRtoMinutes: number;
+  correctiveActions?: string;
+  evidenceFileId: string;
+  nonConformities?: string;
+  protocolSignedAt: string;
+  protocolSignedBy: string;
+  restoreRequestId: string;
+  resultSummary: string;
+}
+
+export interface RequestBackupRestoreRequest {
+  objectKey?: string;
+  reason: string;
+}
+
+export interface DecideBackupRestoreApprovalRequest {
+  comment?: string;
+  decision: 'approve' | 'reject';
+}
+
+export interface BackupPolicyApprovalRequest {
+  action: 'disable_job' | 'modify_policy' | 'reduce_retention';
+  createdAt: string;
+  expiresAt: string;
+  id: string;
+  justification: string;
+  policyCode: string;
+  policyId: string;
+  policyName: string;
+  requestedBy: string;
+  requestedByName: string;
+  previousDailyCopies?: number;
+  previousMonthlyCopies?: number;
+  proposedDailyCopies?: number;
+  proposedMonthlyCopies?: number;
+  status: 'pending';
+  version: number;
+}
+
+export interface BackupPolicyApprovalPage {
+  items: BackupPolicyApprovalRequest[];
+  total: number;
+}
+
+export interface RequestBackupPolicyApprovalRequest {
+  expectedVersion: number;
+  justification: string;
+}
+
+export interface RequestBackupRetentionReductionRequest extends RequestBackupPolicyApprovalRequest {
+  retentionDailyCopies: number;
+  retentionMonthlyCopies: number;
+}
+
+export interface DecideBackupPolicyApprovalRequest {
+  comment?: string;
+  decision: 'approve' | 'reject';
+}
+
+export interface ActivateBackupPolicyRequest {
+  expectedVersion: number;
+}
+
+export interface CreateBackupPolicyRequest {
+  backupType: BackupPolicy['backupType'];
+  compressionEnabled?: boolean;
+  dayOfMonth?: number;
+  dayOfWeek?: number;
+  encryptionRequired?: boolean;
+  frequency: BackupPolicy['frequency'];
+  name: string;
+  policyCode: string;
+  retentionDailyCopies?: number;
+  retentionMonthlyCopies?: number;
+  rpoMinutes: number;
+  rtoMinutes: number;
+  runTimeLocal?: string;
+  sourceIds: string[];
+  verificationRequired?: boolean;
+}
+
+export interface UpdateBackupPolicyRequest extends CreateBackupPolicyRequest {
+  expectedVersion: number;
+}
+
+export interface BackupRecordPage<T> {
+  items: T[];
+  page: number;
+  pageSize: number;
+  total: number;
 }
 
 export type SerialTraceEventType =

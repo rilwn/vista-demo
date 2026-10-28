@@ -5,6 +5,7 @@ import { AuditModule } from '../audit/audit.module.js';
 import { DatabaseModule } from '../database/database.module.js';
 import { RedisModule } from '../database/redis.module.js';
 import { AuthController } from './auth.controller.js';
+import { DirectoryAuthenticationService } from './directory-authentication.service.js';
 import { AccountRecoveryService } from './account-recovery.service.js';
 import { AuthService } from './auth.service.js';
 import { LoginRateLimitGuard } from './login-rate-limit.guard.js';
@@ -20,6 +21,7 @@ import { TotpService } from './totp.service.js';
   providers: [
     AuthService,
     AccountRecoveryService,
+    DirectoryAuthenticationService,
     LoginRateLimitGuard,
     PasswordService,
     SessionAuthenticationGuard,

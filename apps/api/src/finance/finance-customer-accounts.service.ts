@@ -12,6 +12,10 @@ import type {
   CreatePosAccountPaymentRequest,
   ReversePosAccountPaymentRequest,
   CreatePosAccountRefundRequest,
+  ApplyCustomerAdvanceToPosSaleRequest,
+  CustomerPaymentStatusPage,
+  CustomerPaymentStatusQuery,
+  CustomerPaymentStatusRecord,
 } from '@vista/contracts';
 import type { PoolClient } from 'pg';
 
@@ -49,6 +53,22 @@ interface AdvanceRow {
   payment_method: CustomerAdvance['paymentMethod'];
   payment_reference: string | null;
   received_on: string;
+}
+
+interface CustomerPaymentStatusRow {
+  creditTotal: string;
+  currencyCode: string;
+  customerName: string;
+  customerPartnerId: string;
+  dueDate: string;
+  id: string;
+  number: string;
+  outstandingTotal: string;
+  paidTotal: string;
+  paymentStatus: CustomerPaymentStatusRecord['paymentStatus'];
+  referenceNumber: string | null;
+  sourceType: CustomerPaymentStatusRecord['sourceType'];
+  total: string;
 }
 
 @Injectable()
@@ -101,6 +121,162 @@ export class FinanceCustomerAccountsService {
        ORDER BY partner.normalized_name, partner.id`,
     );
     return Promise.all(rows.rows.map((row) => this.account(row.customer_partner_id)));
+  }
+
+  async paymentStatus(query: CustomerPaymentStatusQuery): Promise<CustomerPaymentStatusPage> {
+    const page = Number(query.page ?? 1);
+    const pageSize = Number(query.pageSize ?? 25);
+    const search = query.search?.trim().toLocaleLowerCase('en-US');
+    const searchPattern = search ? `${search.replace(/[\\%_]/gu, '\\$&')}%` : null;
+    const status = query.status ?? null;
+    const sql = `WITH records AS (
+      SELECT document.id,
+        'issued_document'::text AS source_type,
+        document.customer_partner_id,
+        customer.display_name AS customer_name,
+        customer.normalized_name AS normalized_customer_name,
+        coalesce(financial.official_number, financial.draft_number, source.invoice_number,
+          document.document_number)::text AS number,
+        source.invoice_number::text AS reference_number,
+        document.due_date::text AS due_date,
+        document.currency_code::text AS currency_code,
+        document.adjusted_total::numeric(18,4)::text AS total,
+        document.allocated_total::numeric(18,4)::text AS paid_total,
+        document.credit_total::numeric(18,4)::text AS credit_total,
+        document.outstanding_total::numeric(18,4)::text AS outstanding_total,
+        CASE WHEN document.outstanding_total = 0 THEN 'paid'
+          WHEN document.due_date < (now() AT TIME ZONE $1)::date THEN 'overdue'
+          WHEN document.allocated_total > 0 THEN 'partially_paid'
+          ELSE 'unpaid' END AS payment_status
+      FROM finance.customer_documents document
+      JOIN finance.financial_documents financial
+        ON financial.id = document.financial_document_id
+       AND financial.status = 'issued'
+       AND financial.document_type IN ('invoice', 'proforma')
+       AND financial.source_pos_sale_id IS NULL
+      LEFT JOIN finance.financial_documents converted_from
+        ON converted_from.id = financial.converted_from_document_id
+      LEFT JOIN sales.invoices source ON source.id = document.source_sales_invoice_id
+      JOIN master_data.partners customer ON customer.id = document.customer_partner_id
+      WHERE document.review_state <> 'cancelled'
+        AND ($2::text IS NULL OR customer.normalized_name LIKE $2 ESCAPE E'\\\\'
+          OR lower(financial.official_number) LIKE $2 ESCAPE E'\\\\'
+          OR lower(financial.draft_number) LIKE $2 ESCAPE E'\\\\'
+          OR lower(converted_from.official_number) LIKE $2 ESCAPE E'\\\\'
+          OR lower(converted_from.draft_number) LIKE $2 ESCAPE E'\\\\'
+          OR lower(source.invoice_number) LIKE $2 ESCAPE E'\\\\'
+          OR lower(document.document_number) LIKE $2 ESCAPE E'\\\\')
+
+      UNION ALL
+
+      SELECT sale.id,
+        'pos_sale'::text AS source_type,
+        sale.customer_partner_id,
+        customer.display_name AS customer_name,
+        customer.normalized_name AS normalized_customer_name,
+        coalesce(invoice.official_number, sale.sale_number)::text AS number,
+        sale.fiscal_receipt_number::text AS reference_number,
+        coalesce(ledger.due_on, tender.due_on, (sale.completed_at AT TIME ZONE $1)::date)::text AS due_date,
+        'EUR'::text AS currency_code,
+        greatest(sale.gross_total - returns.credit_total, 0)::numeric(18,4)::text AS total,
+        greatest(sale.gross_total - returns.credit_total - ledger.outstanding_total, 0)::numeric(18,4)::text AS paid_total,
+        returns.credit_total::numeric(18,4)::text AS credit_total,
+        ledger.outstanding_total::numeric(18,4)::text AS outstanding_total,
+        CASE WHEN ledger.outstanding_total = 0 THEN 'paid'
+          WHEN coalesce(ledger.due_on, tender.due_on, (sale.completed_at AT TIME ZONE $1)::date)
+            < (now() AT TIME ZONE $1)::date THEN 'overdue'
+          WHEN sale.gross_total - returns.credit_total - ledger.outstanding_total > 0 THEN 'partially_paid'
+          ELSE 'unpaid' END AS payment_status
+      FROM pos.sales sale
+      JOIN master_data.partners customer ON customer.id = sale.customer_partner_id
+      LEFT JOIN LATERAL (
+        SELECT document.id, document.official_number
+        FROM finance.financial_documents document
+        WHERE document.source_pos_sale_id = sale.id
+          AND document.document_type IN ('invoice', 'proforma')
+          AND document.status = 'issued'
+        ORDER BY document.issued_at DESC NULLS LAST, document.id DESC
+        LIMIT 1
+      ) invoice ON true
+      CROSS JOIN LATERAL (
+        SELECT
+          greatest(coalesce(sum(CASE WHEN entry.entry_type IN ('charge', 'payment_reversal')
+            THEN entry.amount ELSE -entry.amount END), 0), 0) AS outstanding_total,
+          max(entry.due_on) FILTER (WHERE entry.entry_type = 'charge') AS due_on,
+          count(*) FILTER (WHERE entry.entry_type = 'charge') AS charge_count
+        FROM finance.customer_account_entries entry
+        WHERE entry.pos_sale_id = sale.id
+      ) ledger
+      CROSS JOIN LATERAL (
+        SELECT max(payment.account_due_on) AS due_on
+        FROM pos.payments payment
+        WHERE payment.sale_id = sale.id AND payment.payment_method = 'on_account'
+      ) tender
+      CROSS JOIN LATERAL (
+        SELECT coalesce(sum(returned.gross_total), 0) AS credit_total
+        FROM pos.returns returned
+        WHERE returned.original_sale_id = sale.id
+      ) returns
+      WHERE sale.customer_partner_id IS NOT NULL
+        AND sale.status <> 'reversed'
+        AND (invoice.id IS NOT NULL OR ledger.charge_count > 0)
+        AND ($2::text IS NULL OR customer.normalized_name LIKE $2 ESCAPE E'\\\\'
+          OR lower(sale.sale_number) LIKE $2 ESCAPE E'\\\\'
+          OR lower(sale.fiscal_receipt_number) LIKE $2 ESCAPE E'\\\\'
+          OR lower(invoice.official_number) LIKE $2 ESCAPE E'\\\\')
+    ), filtered AS (
+      SELECT * FROM records
+      WHERE ($3::text IS NULL OR payment_status = $3)
+    )`;
+    const client = await this.database.getPool().connect();
+    try {
+      await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+      const values = [this.environment.BUSINESS_TIMEZONE, searchPattern, status];
+      const count = await client.query<{ total_items: string }>(
+        `${sql} SELECT count(*)::text AS total_items FROM filtered`,
+        values,
+      );
+      const totalItems = Number(count.rows[0]?.total_items ?? 0);
+      const records = await client.query<CustomerPaymentStatusRow>(
+        `${sql}
+         SELECT id, source_type AS "sourceType", customer_partner_id AS "customerPartnerId",
+           customer_name AS "customerName", number, reference_number AS "referenceNumber",
+           due_date AS "dueDate", currency_code AS "currencyCode", total, paid_total AS "paidTotal",
+           credit_total AS "creditTotal", outstanding_total AS "outstandingTotal",
+           payment_status AS "paymentStatus"
+         FROM filtered
+         ORDER BY due_date ASC, normalized_customer_name ASC, number ASC, source_type ASC, id ASC
+         LIMIT $4 OFFSET $5`,
+        [...values, pageSize, (page - 1) * pageSize],
+      );
+      await client.query('COMMIT');
+      return {
+        items: records.rows.map((row) => ({
+          creditTotal: row.creditTotal,
+          currencyCode: row.currencyCode.trim(),
+          customerName: row.customerName,
+          customerPartnerId: row.customerPartnerId,
+          dueDate: row.dueDate,
+          id: row.id,
+          number: row.number,
+          outstandingTotal: row.outstandingTotal,
+          paidTotal: row.paidTotal,
+          paymentStatus: row.paymentStatus,
+          ...(row.referenceNumber ? { referenceNumber: row.referenceNumber } : {}),
+          sourceType: row.sourceType,
+          total: row.total,
+        })),
+        page,
+        pageSize,
+        totalItems,
+        totalPages: Math.max(1, Math.ceil(totalItems / pageSize)),
+      };
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 
   async account(customerPartnerId: string): Promise<CustomerPaymentAccount> {
@@ -402,6 +578,151 @@ export class FinanceCustomerAccountsService {
           refund.id,
           'finance.pos-account.refund-recorded',
           refund,
+          auth,
+          metadata,
+          commandKey,
+        );
+        return this.loadAccount(client, customerId);
+      },
+    );
+  }
+
+  async allocateAdvanceToPosBalance(
+    customerId: string,
+    saleId: string,
+    input: ApplyCustomerAdvanceToPosSaleRequest,
+    key: string | undefined,
+    auth: AuthenticationContext,
+    metadata: RequestSecurityMetadata,
+  ): Promise<CustomerPaymentAccount> {
+    const normalized = {
+      amount: decimal(input.amount, true),
+      customerAdvanceId: input.customerAdvanceId,
+      expectedOutstanding: decimal(input.expectedOutstanding, false),
+    };
+    return this.command(
+      `finance.pos-account.advance-allocation:${customerId}:${saleId}`,
+      key,
+      normalized,
+      201,
+      async (client, commandKey) => {
+        const charge = await this.lockPosCharge(
+          client,
+          customerId,
+          saleId,
+          normalized.expectedOutstanding,
+        );
+        if (units(normalized.amount) > units(charge.balance))
+          throw new ApiErrorException(
+            'POS_ACCOUNT_PAYMENT_EXCEEDS_BALANCE',
+            'The advance amount exceeds the remaining POS balance.',
+            HttpStatus.CONFLICT,
+          );
+        const advance = (
+          await client.query<{
+            advance_number: string;
+            customer_partner_id: string;
+            currency_code: string;
+            payment_method: CustomerAdvance['paymentMethod'];
+            payment_reference: string | null;
+            received_on: string;
+          }>(
+            `SELECT advance_number,customer_partner_id,currency_code,payment_method,
+                    payment_reference,received_on::text
+             FROM finance.customer_advances WHERE id=$1 FOR UPDATE`,
+            [normalized.customerAdvanceId],
+          )
+        ).rows[0];
+        if (
+          !advance ||
+          advance.customer_partner_id !== customerId ||
+          advance.currency_code !== 'EUR'
+        )
+          throw new ApiErrorException(
+            'FINANCE_ADVANCE_NOT_AVAILABLE',
+            'Choose an available EUR advance belonging to this customer.',
+            HttpStatus.CONFLICT,
+          );
+        const available =
+          (
+            await client.query<{ amount: string }>(
+              `SELECT coalesce(sum(CASE entry_type WHEN 'applied' THEN -amount ELSE amount END),0)::text AS amount
+             FROM finance.customer_advance_entries WHERE advance_id=$1`,
+              [normalized.customerAdvanceId],
+            )
+          ).rows[0]?.amount ?? '0';
+        if (units(normalized.amount) > units(available))
+          throw new ApiErrorException(
+            'FINANCE_ADVANCE_ALLOCATION_EXCEEDS_BALANCE',
+            'The allocation exceeds the available customer advance.',
+            HttpStatus.CONFLICT,
+          );
+        if (advance.received_on > (await this.businessDate(client)))
+          throw new ApiErrorException(
+            'FINANCE_PAYMENT_FUTURE_DATE_INVALID',
+            'The advance date cannot be after the current business date.',
+            HttpStatus.CONFLICT,
+          );
+        const advanceEntryId = randomUUID();
+        await client.query(
+          `INSERT INTO finance.customer_advance_entries (
+             id, advance_id, entry_type, amount, pos_sale_id, actor_account_id, correlation_id
+           ) VALUES ($1,$2,'applied',$3,$4,$5,$6)`,
+          [
+            advanceEntryId,
+            normalized.customerAdvanceId,
+            normalized.amount,
+            saleId,
+            auth.accountId,
+            metadata.correlationId,
+          ],
+        );
+        const paymentId = randomUUID();
+        const paymentNumber = await this.nextNumber(client, 'payment', 'PAY');
+        await client.query(
+          `INSERT INTO finance.payments (
+             id,payment_number,customer_partner_id,payment_date,payment_method,currency_code,amount,
+             payment_reference,notes,recorded_by,source_pos_sale_id,source_customer_advance_id,
+             source_customer_advance_entry_id
+           ) VALUES ($1,$2,$3,$4,$5,'EUR',$6,$7,$8,$9,$10,$11,$12)`,
+          [
+            paymentId,
+            paymentNumber,
+            customerId,
+            advance.received_on,
+            advance.payment_method,
+            normalized.amount,
+            advance.payment_reference,
+            `Applied from customer advance ${advance.advance_number}.`,
+            auth.accountId,
+            saleId,
+            normalized.customerAdvanceId,
+            advanceEntryId,
+          ],
+        );
+        await this.appendPosPaymentEntry(
+          client,
+          charge,
+          'payment',
+          paymentId,
+          normalized.amount,
+          charge.id,
+          auth,
+          metadata,
+        );
+        await this.sideEffects(
+          client,
+          'payment',
+          paymentId,
+          'finance.pos-account.advance-applied',
+          {
+            advanceId: normalized.customerAdvanceId,
+            advanceNumber: advance.advance_number,
+            amount: normalized.amount,
+            customerId,
+            paymentNumber,
+            saleId,
+          },
           auth,
           metadata,
           commandKey,

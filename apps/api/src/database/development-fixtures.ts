@@ -23,6 +23,8 @@ export const developmentFixtureAccountKeys = [
   'technician',
   'pos-operator',
   'backup-operator',
+  'backup-administrator',
+  'security-officer',
   'viewer',
 ] as const;
 
@@ -268,6 +270,22 @@ export const developmentFixtureAccounts: readonly DevelopmentFixtureAccount[] = 
     'backup.operator@vista.local',
     [grant('backup', 'view')],
     'Reviews backup jobs, protected sources, and recovery readiness.',
+  ),
+  account(
+    'backup-administrator',
+    'DEV-BACKUP-ADMIN',
+    'Vista Demo Backup Administrator',
+    'backup.administrator@vista.local',
+    [grant('backup', 'view'), grant('backup', 'create'), grant('backup', 'edit')],
+    'Maintains backup source inventory and prepares draft protection policies.',
+  ),
+  account(
+    'security-officer',
+    'DEV-SECURITY-OFFICER',
+    'Vista Demo Security Officer',
+    'security.officer@vista.local',
+    [grant('backup', 'view'), grant('backup', 'approve')],
+    'Reviews and approves critical backup and recovery actions independently.',
   ),
   account(
     'viewer',

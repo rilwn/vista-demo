@@ -1,11 +1,13 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type {
   CrmAnalyticsOverview,
+  CrmAfterSalesOverview,
   CrmLead,
   CrmOpportunity,
   CrmReportDefinition,
   CrmReportExport,
   CrmTicket,
+  CrmWarrantyCoverageOffer,
   CustomerPaymentAccount,
   CustomerOperationalOverview,
   FinanceAgingReport,
@@ -27,6 +29,7 @@ import type {
   ServiceInspectionPlan,
   ServiceReportDefinition,
   ServiceReportOverview,
+  ServiceWorkOrder,
   StockMovementJournalPage,
   WarrantyClaim,
 } from '@vista/contracts';
@@ -235,6 +238,9 @@ describe('ERP and CRM authenticated workspace', () => {
   it('creates a session and shows only modules granted by the backend', async () => {
     const fetchMock = vi
       .fn()
+      .mockResolvedValueOnce(
+        jsonResponse({ enabled: false, emergencyAccessAvailable: false, method: null }),
+      )
       .mockResolvedValueOnce(jsonResponse(loginResponse))
       .mockResolvedValueOnce(jsonResponse(authenticationContext));
     vi.stubGlobal('fetch', fetchMock);
@@ -256,9 +262,9 @@ describe('ERP and CRM authenticated workspace', () => {
     expect(screen.getAllByText(moduleMessages['erp.warehouse'].label).length).toBeGreaterThan(0);
     expect(screen.getAllByText(moduleMessages.crm.label).length).toBeGreaterThan(0);
     expect(screen.queryByText(moduleMessages['erp.finance'].label)).toBeNull();
-    expect(fetchMock.mock.calls.filter(([url]) => String(url).includes('/auth/'))).toHaveLength(2);
+    expect(fetchMock.mock.calls.filter(([url]) => String(url).includes('/auth/'))).toHaveLength(3);
 
-    const currentAccountRequest = fetchMock.mock.calls[1]?.[1] as RequestInit;
+    const currentAccountRequest = fetchMock.mock.calls[2]?.[1] as RequestInit;
     expect(new Headers(currentAccountRequest.headers).get('Authorization')).toBe(
       `Bearer ${loginResponse.sessionToken}`,
     );
@@ -377,6 +383,9 @@ describe('ERP and CRM authenticated workspace', () => {
     };
     const fetchMock = vi
       .fn()
+      .mockResolvedValueOnce(
+        jsonResponse({ enabled: false, emergencyAccessAvailable: false, method: null }),
+      )
       .mockResolvedValueOnce(jsonResponse(loginResponse))
       .mockResolvedValueOnce(jsonResponse(warehouseOnlyContext));
     vi.stubGlobal('fetch', fetchMock);
@@ -401,6 +410,9 @@ describe('ERP and CRM authenticated workspace', () => {
   it('uses a focused second step when the API requires TOTP', async () => {
     const fetchMock = vi
       .fn()
+      .mockResolvedValueOnce(
+        jsonResponse({ enabled: false, emergencyAccessAvailable: false, method: null }),
+      )
       .mockResolvedValueOnce(
         jsonResponse(
           {
@@ -436,12 +448,12 @@ describe('ERP and CRM authenticated workspace', () => {
 
     await waitFor(() =>
       expect(fetchMock.mock.calls.filter(([url]) => String(url).includes('/auth/'))).toHaveLength(
-        3,
+        4,
       ),
     );
     expect(await screen.findByRole('heading', { name: messages.home.title })).toBeTruthy();
     expect(fetchMock).toHaveBeenNthCalledWith(
-      2,
+      3,
       '/api/v1/auth/login',
       expect.objectContaining({
         body: JSON.stringify({
@@ -664,11 +676,23 @@ describe('ERP and CRM authenticated workspace', () => {
       templateKey: 'finance.payment.upcoming',
       templateVersion: 1,
     };
+    const drTestNotification = {
+      channel: 'in_system' as const,
+      createdAt: '2026-08-21T10:00:00.000Z',
+      deliveredAt: '2026-08-21T10:01:00.000Z',
+      id: '53b9c3c9-845c-4bd6-97dd-36fcb38dfac2',
+      payload: { dueDate: '2026-08-27', reminderState: 'overdue' },
+      templateKey: 'backup.dr-test.due',
+      templateVersion: 1,
+    };
     const fetchMock = vi.fn((input: string, options?: RequestInit) => {
       if (input.endsWith('/auth/me')) return Promise.resolve(jsonResponse(authenticationContext));
       if (input.includes('/notifications?'))
         return Promise.resolve(
-          jsonResponse({ items: [paymentNotification, notification], unreadCount: 2 }),
+          jsonResponse({
+            items: [paymentNotification, drTestNotification, notification],
+            unreadCount: 3,
+          }),
         );
       if (input.endsWith(`/notifications/${notification.id}/read`) && options?.method === 'POST')
         return Promise.resolve(
@@ -683,6 +707,8 @@ describe('ERP and CRM authenticated workspace', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Open notifications' }));
     expect(await screen.findByText('Low stock needs attention')).toBeTruthy();
     expect(screen.getByText('Payment is due soon')).toBeTruthy();
+    expect(screen.getByText('Disaster-recovery test overdue')).toBeTruthy();
+    expect(screen.getByText(/Complete the overdue test by/u)).toBeTruthy();
     expect(screen.getByText(/FIN-REV-2026-000005 · Alfa Market Demo Ltd\./u)).toBeTruthy();
     expect(screen.getByText(/60\.00 EUR/u)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: /Low stock needs attention/u }));
@@ -694,6 +720,8 @@ describe('ERP and CRM authenticated workspace', () => {
     );
     fireEvent.click(screen.getByRole('button', { name: 'BG' }));
     expect(await screen.findByText(/60,00 EUR/u)).toBeTruthy();
+    expect(await screen.findByText('Просрочен тест за възстановяване след бедствие')).toBeTruthy();
+    expect(screen.getByText(/Завършете просрочения тест до/u)).toBeTruthy();
   });
 
   it('shows a safe notification error code and copyable support reference', async () => {
@@ -742,19 +770,24 @@ describe('ERP and CRM authenticated workspace', () => {
   it('shows a safe API error and keeps its full correlation reference copyable', async () => {
     vi.stubGlobal(
       'fetch',
-      vi.fn().mockResolvedValueOnce(
-        jsonResponse(
-          {
-            error: {
-              code: 'AUTHENTICATION_FAILED',
-              correlationId: '12345678-90ab-cdef-1234-567890abcdef',
-              message: 'The supplied credentials are invalid',
-              timestamp: '2026-08-06T12:00:00.000Z',
+      vi
+        .fn()
+        .mockResolvedValueOnce(
+          jsonResponse({ enabled: false, emergencyAccessAvailable: false, method: null }),
+        )
+        .mockResolvedValueOnce(
+          jsonResponse(
+            {
+              error: {
+                code: 'AUTHENTICATION_FAILED',
+                correlationId: '12345678-90ab-cdef-1234-567890abcdef',
+                message: 'The supplied credentials are invalid',
+                timestamp: '2026-08-06T12:00:00.000Z',
+              },
             },
-          },
-          401,
+            401,
+          ),
         ),
-      ),
     );
     renderApplication(['/login']);
 
@@ -3812,6 +3845,9 @@ describe('ERP and CRM authenticated workspace', () => {
     const supplierId = '124bfcea-275e-4d7f-8aed-e9901f79090f';
     const orderId = '49ff6a7b-d4d4-4ce0-aa11-b5214017dd19';
     const orderLineId = '6899d2ed-a9fe-4274-9955-a6c391f1c7da';
+    const receiptId = '776fd1d4-d58e-45b9-ad95-46f8f4ee0fd8';
+    const protocolId = '31d37e91-bc8a-41aa-a9b7-17c61aec837a';
+    const invoiceId = '9b2e02a3-a213-494c-9d0f-047c58a74177';
     const references = {
       products: [
         {
@@ -3826,6 +3862,7 @@ describe('ERP and CRM authenticated workspace', () => {
       warehouses: [{ id: warehouseFixture.id, name: warehouseFixture.name }],
     };
     let orders: unknown[] = [];
+    let savedAcceptanceProtocol: Record<string, unknown> | null = null;
     const fetchMock = vi.fn((input: string, options?: RequestInit) => {
       if (input.endsWith('/auth/me')) return Promise.resolve(jsonResponse(procurementContext));
       if (input.endsWith('/procurement/reference-data')) {
@@ -3860,6 +3897,23 @@ describe('ERP and CRM authenticated workspace', () => {
             },
           ],
           receipts: [],
+          supplierInvoices: [
+            {
+              currencyCode: 'EUR',
+              id: invoiceId,
+              invoiceDate: '2026-08-10',
+              invoiceNumber: 'SUP-2026-0042',
+              lines: [],
+              netTotal: '251.0000',
+              purchaseOrderId: orderId,
+              recordedAt: '2026-08-11T12:00:00.000Z',
+              supplierName: references.suppliers[0]!.name,
+              supplierPartnerId: supplierId,
+              taxBreakdownComplete: true,
+              total: '301.2000',
+              vatTotal: '50.2000',
+            },
+          ],
           status: 'open',
           supplierName: references.suppliers[0]!.name,
           supplierPartnerId: supplierId,
@@ -3876,7 +3930,7 @@ describe('ERP and CRM authenticated workspace', () => {
         options?.method === 'POST'
       ) {
         const receipt = {
-          id: '776fd1d4-d58e-45b9-ad95-46f8f4ee0fd8',
+          id: receiptId,
           lines: [
             {
               id: 'e7b1d91c-20a0-4bbb-8a40-a53e09cd4e2a',
@@ -3909,6 +3963,76 @@ describe('ERP and CRM authenticated workspace', () => {
           },
         ];
         return Promise.resolve(jsonResponse(receipt, 201));
+      }
+      if (
+        input.endsWith(`/procurement/goods-receipts/${receiptId}/acceptance-protocol`) &&
+        options?.method === 'POST'
+      ) {
+        const protocol = {
+          createdAt: '2026-08-11T12:15:00.000Z',
+          goodsReceiptId: receiptId,
+          id: protocolId,
+          lines: [
+            {
+              acceptedQuantity: '2.0000',
+              currencyCode: 'EUR',
+              cumulativeReceivedQuantity: '2.0000',
+              discrepancies: [],
+              goodsReceiptLineId: 'e7b1d91c-20a0-4bbb-8a40-a53e09cd4e2a',
+              id: 'a0a6d118-e042-4c18-9af3-9923bca4d56f',
+              orderLineId,
+              orderedQuantity: '2.0000',
+              outstandingQuantity: '0.0000',
+              previouslyReceivedQuantity: '0.0000',
+              productCode: inventoryProductFixture.productCode,
+              productId: inventoryProductFixture.id,
+              productName: inventoryProductFixture.name,
+              serialNumbers: [],
+              unitPrice: '125.5000',
+            },
+          ],
+          numberSequence: 1,
+          numberYear: 2026,
+          preparedByName: 'Mila Petrova',
+          protocolNumber: 'GRP-2026-000001',
+          purchaseOrderId: orderId,
+          receivedAt: '2026-08-11T12:10:00.000Z',
+          receivedByName: 'Mila Petrova',
+          supplierDeliveryReference: 'DEL-2026-42',
+          supplierInvoice: {
+            id: invoiceId,
+            invoiceDate: '2026-08-10',
+            invoiceNumber: 'SUP-2026-0042',
+          },
+          supplierName: references.suppliers[0]!.name,
+          supplierPartnerId: supplierId,
+          warehouseName: warehouseFixture.name,
+        };
+        savedAcceptanceProtocol = protocol;
+        const receivedOrder = orders[0] as {
+          receipts: Array<Record<string, unknown>>;
+          [key: string]: unknown;
+        };
+        orders = [
+          {
+            ...receivedOrder,
+            receipts: receivedOrder.receipts.map((receipt) =>
+              receipt['id'] === receiptId
+                ? {
+                    ...receipt,
+                    acceptanceProtocol: { id: protocolId, protocolNumber: 'GRP-2026-000001' },
+                  }
+                : receipt,
+            ),
+          },
+        ];
+        return Promise.resolve(jsonResponse(protocol, 201));
+      }
+      if (
+        input.endsWith(`/procurement/goods-receipts/${receiptId}/acceptance-protocol`) &&
+        options?.method !== 'POST'
+      ) {
+        return Promise.resolve(jsonResponse(savedAcceptanceProtocol ?? {}));
       }
       return Promise.resolve(jsonResponse({}));
     });
@@ -4013,6 +4137,61 @@ describe('ERP and CRM authenticated workspace', () => {
       within(goodsReceiptWorkspace).queryByText('776fd1d4-d58e-45b9-ad95-46f8f4ee0fd8'),
     ).toBeNull();
 
+    fireEvent.click(
+      within(goodsReceiptWorkspace).getByRole('button', {
+        name: messages.procurement.protocolCreate,
+      }),
+    );
+    const protocolDialog = screen.getByRole('dialog', {
+      name: messages.procurement.acceptanceProtocol,
+    });
+    expect(
+      within(protocolDialog).getByLabelText<HTMLSelectElement>(messages.procurement.invoice),
+    ).toHaveProperty('value', invoiceId);
+    expect(within(protocolDialog).getByText(messages.procurement.protocolInvoiceHint)).toBeTruthy();
+    fireEvent.click(
+      within(protocolDialog).getByRole('button', {
+        name: messages.procurement.protocolCreate,
+      }),
+    );
+    expect(
+      await within(protocolDialog).findByRole('heading', { name: 'GRP-2026-000001' }),
+    ).toBeTruthy();
+    expect(
+      within(protocolDialog).getByText(messages.procurement.protocolNoDiscrepancies),
+    ).toBeTruthy();
+    expect(
+      within(protocolDialog).getByRole('button', { name: messages.procurement.printProtocol }),
+    ).toBeTruthy();
+    const printSpy = vi.spyOn(window, 'print').mockImplementation(() => undefined);
+    fireEvent.click(
+      within(protocolDialog).getByRole('button', { name: messages.procurement.printProtocol }),
+    );
+    expect(printSpy).toHaveBeenCalledOnce();
+    fireEvent.click(
+      within(protocolDialog).getByRole('button', { name: messages.procurement.back }),
+    );
+    expect(
+      await within(goodsReceiptWorkspace).findByRole('button', {
+        name: messages.procurement.viewAcceptanceProtocol,
+      }),
+    ).toBeTruthy();
+    fireEvent.click(
+      within(goodsReceiptWorkspace).getByRole('button', {
+        name: messages.procurement.viewAcceptanceProtocol,
+      }),
+    );
+    expect(
+      await screen.findByRole('dialog', { name: messages.procurement.acceptanceProtocol }),
+    ).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: 'GRP-2026-000001' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'BG' }));
+    const bulgarianProtocolDialog = await screen.findByRole('dialog', {
+      name: 'Протокол за приемане',
+    });
+    expect(within(bulgarianProtocolDialog).getByText('Получено сега')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'EN' }));
+
     const createCall = fetchMock.mock.calls.find(
       ([url, options]) =>
         url.endsWith('/procurement/purchase-orders') && options?.method === 'POST',
@@ -4038,6 +4217,14 @@ describe('ERP and CRM authenticated workspace', () => {
     expect(JSON.parse((receiveCall?.[1] as RequestInit).body as string)).toMatchObject({
       lines: [{ orderLineId, quantity: '2.0000', unitCostEur: '140' }],
       supplierDeliveryReference: 'DEL-2026-42',
+    });
+    const protocolCall = fetchMock.mock.calls.find(
+      ([url, options]) =>
+        url.endsWith(`/procurement/goods-receipts/${receiptId}/acceptance-protocol`) &&
+        options?.method === 'POST',
+    );
+    expect(JSON.parse((protocolCall?.[1] as RequestInit).body as string)).toEqual({
+      supplierInvoiceId: invoiceId,
     });
   });
 
@@ -4993,7 +5180,7 @@ describe('ERP and CRM authenticated workspace', () => {
     fireEvent.click(screen.getByRole('link', { name: /Quotations Prepare time-bounded/u }));
     expect(await screen.findByRole('heading', { name: 'Sales workflow' })).toBeTruthy();
     expect(screen.getByLabelText('Current stage: Expired')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Preview' }));
     const expiredPreview = await screen.findByRole('dialog', { name: 'Q-2026-000001' });
     expect(within(expiredPreview).getByText('Expired')).toBeTruthy();
     expect(
@@ -5518,6 +5705,10 @@ describe('ERP and CRM authenticated workspace', () => {
             customers: [{ id: customerId, name: account.customerName, uic: account.uic }],
           }),
         );
+      if (input.includes('/finance/customer-accounts/payment-status'))
+        return Promise.resolve(
+          jsonResponse({ items: [], page: 1, pageSize: 25, totalItems: 0, totalPages: 1 }),
+        );
       if (
         input.endsWith('/finance/customer-accounts') &&
         (!options?.method || options.method === 'GET')
@@ -5592,7 +5783,7 @@ describe('ERP and CRM authenticated workspace', () => {
 
     renderApplication(['/modules/erp.finance/customer-accounts']);
     expect(await screen.findByRole('heading', { name: 'Customer payment accounts' })).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Preview' }));
     let dialog = await screen.findByRole('dialog', { name: 'Alfa Market Demo Ltd.' });
     expect(within(dialog).getByText('DEV-ADV-ALFA-001')).toBeTruthy();
     fireEvent.click(within(dialog).getByRole('button', { name: 'Edit terms' }));
@@ -5644,18 +5835,33 @@ describe('ERP and CRM authenticated workspace', () => {
     const supplierInvoiceId = '1956c116-32ad-4c92-a2c2-7de4e0732fee';
     const payableId = '888f4b93-7c3c-47b4-9b94-075ae83891a8';
     const receivableId = 'b17772ac-4e25-4ab2-81fa-c566bb01673b';
+    const posSaleId = '224f58ad-3617-4428-b8e5-03da8e7e6a64';
     const references = {
       businessDate: '2026-08-20',
       openReceivables: [
         {
           customerName: 'Dual-role Technical Supply Ltd.',
           customerPartnerId: supplierId,
+          currencyCode: 'EUR',
           dueDate: '2026-09-03',
           id: receivableId,
           number: 'FIN-REV-2026-000041',
           outstandingTotal: '24.0000',
+          sourceType: 'customer_document',
           sourceInvoiceNumber: 'INV-DRAFT-2026-000041',
           version: 1,
+        },
+        {
+          customerName: 'Dual-role Technical Supply Ltd.',
+          customerPartnerId: supplierId,
+          currencyCode: 'EUR',
+          dueDate: '2026-09-03',
+          id: posSaleId,
+          number: 'SALE-2026-000011',
+          outstandingTotal: '30.0000',
+          sourceType: 'pos_account',
+          saleNumber: 'SALE-2026-000011',
+          posSaleId,
         },
       ],
       supplierInvoices: [
@@ -5800,17 +6006,22 @@ describe('ERP and CRM authenticated workspace', () => {
         return Promise.resolve(jsonResponse(advances[0]));
       }
       if (input.endsWith('/finance/supplier-offsets') && options?.method === 'POST') {
+        if (typeof options.body !== 'string') throw new Error('Expected a JSON offset request');
+        const submittedOffset = JSON.parse(options.body) as {
+          posSaleId?: string;
+          expectedPosOutstanding?: string;
+        };
         offsets = [
           {
             amount: '10.0000',
             createdAt: '2026-08-20T10:15:00.000Z',
-            customerDocumentId: receivableId,
-            customerDocumentNumber: 'FIN-REV-2026-000041',
             id: 'c0dc3143-9926-4788-a54b-ddaf856349fb',
             number: 'OFF-2026-000001',
             offsetDate: '2026-08-20',
             partnerId: supplierId,
             partnerName: 'Dual-role Technical Supply Ltd.',
+            ...(submittedOffset.posSaleId ? { posSaleId: submittedOffset.posSaleId } : {}),
+            posSaleNumber: 'SALE-2026-000011',
             reason: 'Mutual balance compensation',
             supplierPayableId: payableId,
             supplierPayableNumber: 'SP-2026-000001',
@@ -5869,11 +6080,24 @@ describe('ERP and CRM authenticated workspace', () => {
     dialog = await screen.findByRole('dialog', { name: 'SP-2026-000001' });
     fireEvent.click(within(dialog).getByRole('button', { name: 'Create offset' }));
     dialog = await screen.findByRole('dialog', { name: 'New compensation offset' });
+    fireEvent.change(within(dialog).getByLabelText('Customer balance'), {
+      target: { value: posSaleId },
+    });
     fireEvent.change(within(dialog).getByLabelText('Offset amount'), {
       target: { value: '10' },
     });
     fireEvent.click(within(dialog).getByRole('button', { name: 'Create offset' }));
     expect(await screen.findByText('OFF-2026-000001 settled both partner balances.')).toBeTruthy();
+    const createOffsetCall = fetchMock.mock.calls.find(
+      ([input, options]) =>
+        input.endsWith('/finance/supplier-offsets') && options?.method === 'POST',
+    );
+    const createOffsetBody = createOffsetCall?.[1]?.body;
+    if (typeof createOffsetBody !== 'string') throw new Error('Expected a JSON offset request');
+    expect(JSON.parse(createOffsetBody) as Record<string, unknown>).toMatchObject({
+      expectedPosOutstanding: '30.0000',
+      posSaleId,
+    });
   });
 
   it('prepares and reviews a structured financial document from a Sales draft', async () => {
@@ -6212,7 +6436,7 @@ describe('ERP and CRM authenticated workspace', () => {
     const workOrderId = '6ea32bc2-3df9-428e-8c0c-d16d5b1089c8';
     const locationId = 'ae8242a7-1744-4d0e-8ac1-32776f479672';
     const entityId = 'd3695a90-2eb1-45f3-ad1d-a129ec31d983';
-    const workOrder = {
+    const workOrder: ServiceWorkOrder = {
       assignedTechnician: {
         accountId: loginResponse.account.id,
         displayName: 'Mila Petrova',
@@ -6243,6 +6467,7 @@ describe('ERP and CRM authenticated workspace', () => {
         },
       ],
       id: workOrderId,
+      isOverdue: false,
       laborCostEur: '75.0000',
       laborMinutes: 90,
       number: 'DEV-WO-FIN-0001',
@@ -6364,6 +6589,7 @@ describe('ERP and CRM authenticated workspace', () => {
       vatTotal: '16.0000',
       version: 1,
     };
+    let currentWorkOrder = workOrder;
     let documents: unknown[] = [];
     const fetchMock = vi.fn((input: string, options?: RequestInit) => {
       if (input.endsWith('/auth/me')) return Promise.resolve(jsonResponse(context));
@@ -6391,11 +6617,11 @@ describe('ERP and CRM authenticated workspace', () => {
           }),
         );
       if (input.endsWith(`/service/work-orders/${workOrderId}`))
-        return Promise.resolve(jsonResponse(workOrder));
+        return Promise.resolve(jsonResponse(currentWorkOrder));
       if (input.includes('/service/work-orders'))
         return Promise.resolve(
           jsonResponse({
-            items: [{ ...workOrder, status: 'scheduled' }],
+            items: [{ ...currentWorkOrder, status: 'scheduled' }],
             page: 1,
             pageSize: 25,
             total: 1,
@@ -6446,6 +6672,41 @@ describe('ERP and CRM authenticated workspace', () => {
       lines: serviceLines,
       sourceServiceWorkOrderId: workOrderId,
     });
+
+    const issuedFinancialDocument = {
+      ...financialDocument,
+      collection: {
+        id: 'c4729396-e8a6-4da5-9c80-849c81e65a26',
+        number: 'FIN-REV-2026-000321',
+      },
+      number: 'INV-VRATSA-2026-000321',
+      officialNumber: 'INV-VRATSA-2026-000321',
+      status: 'issued',
+      version: 2,
+    };
+    currentWorkOrder = {
+      ...workOrder,
+      financialDocumentId: financialDocument.id,
+      financialDocumentNumber: issuedFinancialDocument.officialNumber,
+      financialDocumentStatus: 'issued',
+    };
+    documents = [issuedFinancialDocument];
+    cleanup();
+    fetchMock.mockClear();
+    renderApplication(['/modules/erp.service/work-orders']);
+    fireEvent.click(await screen.findByRole('button', { name: /DEV-WO-FIN-0001/u }));
+    dialog = await screen.findByRole('dialog', { name: 'DEV-WO-FIN-0001' });
+    expect(within(dialog).getByText('Invoice issued')).toBeTruthy();
+    expect(within(dialog).queryByRole('button', { name: 'Prepare invoice draft' })).toBeNull();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Open invoice' }));
+
+    const issuedPreview = await screen.findByRole('dialog', {
+      name: 'INV-VRATSA-2026-000321',
+    });
+    expect(within(issuedPreview).getByText('DEV-WO-FIN-0001')).toBeTruthy();
+    expect(
+      within(issuedPreview).getByRole('button', { name: 'Collections & payments' }),
+    ).toBeTruthy();
   });
 
   it('issues a collection-linked cash receipt and shows it in the daily cash report', async () => {
@@ -6487,6 +6748,7 @@ describe('ERP and CRM authenticated workspace', () => {
           sourceInvoiceNumber: 'INV-DRAFT-2026-000002',
         },
       ],
+      openPosAccounts: [],
       partners: [{ id: customerId, name: 'Balkan Retail Demo Ltd.', roles: ['customer'] }],
     };
     const voucher: FinanceCashVoucher = {
@@ -6566,8 +6828,8 @@ describe('ERP and CRM authenticated workspace', () => {
     expect(await screen.findByRole('heading', { name: 'Cash operations' })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: /New cash voucher/u }));
     const dialog = await screen.findByRole('dialog', { name: 'New cash voucher' });
-    fireEvent.change(within(dialog).getByLabelText('Customer collection (optional)'), {
-      target: { value: collectionId },
+    fireEvent.change(within(dialog).getByLabelText('Customer balance (optional)'), {
+      target: { value: `collection:${collectionId}` },
     });
     fireEvent.change(within(dialog).getByLabelText('Reason'), {
       target: { value: 'Customer cash payment' },
@@ -6634,6 +6896,7 @@ describe('ERP and CRM authenticated workspace', () => {
             matchedAt: '2026-08-19T09:00:00.000Z',
             method: 'automatic_reference',
             paymentNumber: 'PAY-2026-000002',
+            targetType: 'collection',
           },
           matchStatus: 'matched',
           paymentReference: 'Payment for DEV-FIN-REV-0001',
@@ -6744,6 +7007,111 @@ describe('ERP and CRM authenticated workspace', () => {
     ).toBeTruthy();
     expect(within(preview).getByText('PAY-2026-000002', { exact: false })).toBeTruthy();
     expect(within(preview).getByText('Needs review')).toBeTruthy();
+  });
+
+  it('imports an MT940 file in the bank statement drawer and saves its value dates', async () => {
+    const financeContext = {
+      ...authenticationContext,
+      permissions: [
+        ...authenticationContext.permissions,
+        { action: 'view', module: 'erp.finance' },
+        { action: 'create', module: 'erp.finance' },
+      ],
+    };
+    storeAuthenticatedSession(financeContext);
+    const statement: FinanceBankStatement = {
+      accountIban: 'BG80BNBG96611020345678',
+      bankName: 'Demo Bank',
+      closingBalance: '1045.0000',
+      createdAt: '2026-10-27T09:00:00.000Z',
+      currencyCode: 'EUR',
+      id: 'a86dd951-9a92-4b95-a0d6-d52b3f3f8c0c',
+      incomingTotal: '60.0000',
+      matchedIncomingCount: 0,
+      matchedOutgoingCount: 0,
+      number: 'BST-2026-000010',
+      openingBalance: '1000.0000',
+      outgoingTotal: '15.0000',
+      statementDate: '2026-10-27',
+      statementReference: 'STMT-940-10',
+      status: 'open',
+      transactionCount: 2,
+      transactions: [],
+      unmatchedIncomingCount: 1,
+      unmatchedOutgoingCount: 1,
+      version: 1,
+    };
+    let submitted: unknown;
+    const fetchMock = vi.fn((input: string, options?: RequestInit) => {
+      if (input.endsWith('/auth/me')) return Promise.resolve(jsonResponse(financeContext));
+      if (input.endsWith('/finance/bank-statements') && options?.method === 'POST') {
+        if (typeof options.body !== 'string') throw new Error('Expected a JSON request body');
+        submitted = JSON.parse(options.body);
+        return Promise.resolve(jsonResponse(statement, 201));
+      }
+      if (input.endsWith('/finance/bank-statements'))
+        return Promise.resolve(
+          jsonResponse({ items: [], page: 1, pageSize: 20, totalItems: 0, totalPages: 1 }),
+        );
+      return Promise.resolve(jsonResponse({}));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderApplication(['/modules/erp.finance/cash-bank']);
+    fireEvent.click(await screen.findByRole('button', { name: 'New statement' }));
+    const dialog = await screen.findByRole('dialog', { name: 'New bank statement' });
+    const mt940 = [
+      ':20:STMT-940-10',
+      ':25:BG80BNBG96611020345678',
+      ':28C:010/001',
+      ':60F:C261026EUR1000,00',
+      ':61:2610261027C60,00NTRFNONREF//ORDER-123',
+      ':86:?00Alfa Market?20INV-2026-001',
+      ':61:2610261027D15,00NCHGCHARGE',
+      ':86:/ORDER/TechSupply',
+      ':62F:C261027EUR1045,00',
+    ].join('\n');
+    const file = new File([mt940], 'statement.sta', { type: 'text/plain' });
+    Object.defineProperty(file, 'text', { value: () => Promise.resolve(mt940) });
+    fireEvent.change(within(dialog).getByLabelText(/Statement file/u), {
+      target: { files: [file] },
+    });
+    expect(
+      await within(dialog).findByText(
+        'MT940 file read. Review the transactions and balances before adding it.',
+      ),
+    ).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Use these transactions' }));
+    fireEvent.change(within(dialog).getByLabelText('Bank name'), {
+      target: { value: 'Demo Bank' },
+    });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Add statement' }));
+
+    await waitFor(() => expect(submitted).toBeTruthy());
+    expect(submitted).toMatchObject({
+      accountIban: 'BG80BNBG96611020345678',
+      bankName: 'Demo Bank',
+      closingBalance: '1045.00',
+      currencyCode: 'EUR',
+      openingBalance: '1000.00',
+      statementDate: '2026-10-27',
+      statementReference: 'STMT-940-10',
+      lines: [
+        expect.objectContaining({
+          amount: '60.00',
+          counterpartyName: 'Alfa Market',
+          paymentReference: 'INV-2026-001',
+          transactionDate: '2026-10-26',
+          valueDate: '2026-10-27',
+        }),
+        expect.objectContaining({
+          amount: '15.00',
+          direction: 'outgoing',
+          transactionDate: '2026-10-26',
+          valueDate: '2026-10-27',
+        }),
+      ],
+    });
   });
 
   it('confirms an outgoing bank transfer against a supplier payable', async () => {
@@ -8019,11 +8387,12 @@ describe('ERP and CRM authenticated workspace', () => {
       ],
     };
     storeAuthenticatedSession(crmContext);
-    let overview = {
+    let overview: CrmAfterSalesOverview = {
       assignees: [{ displayName: 'Mila Petrova', id: loginResponse.account.id }],
       businessTimezone: 'Europe/Sofia',
       claims: [],
       customers: [{ id: partner.id, name: partner.displayName }],
+      coverageOffers: [],
       nps: { detractors: 0, passives: 0, promoters: 0, responses: 0, trend: [] },
       referrals: [],
       surveySources: [
@@ -8033,6 +8402,7 @@ describe('ERP and CRM authenticated workspace', () => {
           customerPartnerId: partner.id,
           id: 'f3e45425-7e87-4449-aa56-7b2bbf4da71b',
           label: 'DEV-WO-0001 · completed Service job',
+          recipientEmails: ['contact@vista-demo.example'],
           sourceKind: 'service',
         },
       ],
@@ -8063,6 +8433,7 @@ describe('ERP and CRM authenticated workspace', () => {
         },
       ],
     };
+    let savedCoverageOffer: CrmWarrantyCoverageOffer | null = null;
     const fetchMock = vi.fn((input: string, options?: RequestInit) => {
       if (input.endsWith('/auth/me')) return Promise.resolve(jsonResponse(crmContext));
       if (input.endsWith('/crm/after-sales')) return Promise.resolve(jsonResponse(overview));
@@ -8082,13 +8453,47 @@ describe('ERP and CRM authenticated workspace', () => {
       }
       if (
         input.endsWith(
-          '/crm/after-sales/warranty-cards/76d38aa6-ada6-8b23-3c5b-c15be78edc09/offer',
+          '/crm/after-sales/warranty-cards/76d38aa6-ada6-8b23-3c5b-c15be78edc09/coverage-offers',
         ) &&
         options?.method === 'POST'
-      )
-        return Promise.resolve(
-          jsonResponse({ ...overview.warrantyCards[0], offerStatus: 'offered' }),
-        );
+      ) {
+        savedCoverageOffer = {
+          coverageStartsOn: '2028-08-21',
+          createdAt: '2026-10-26T09:00:00.000Z',
+          currencyCode: 'EUR',
+          customerName: partner.displayName,
+          customerPartnerId: partner.id,
+          deviceName: 'Fiscal Register X1',
+          durationMonths: 12,
+          id: 'edbd4e6d-cad5-4275-b0eb-265752825af5',
+          number: 'WOF-2026-000001',
+          offerType: 'extended_warranty',
+          quotedAmount: '240.00',
+          serialNumber: 'TRACE-FR-0001',
+          status: 'draft',
+          terms: 'Coverage includes parts and labour for the extended period.',
+          validUntil: '2026-11-25',
+          warrantyCardId: '76d38aa6-ada6-8b23-3c5b-c15be78edc09',
+          warrantyEndsOn: '2028-08-20',
+        };
+        overview = { ...overview, coverageOffers: [savedCoverageOffer] };
+        return Promise.resolve(jsonResponse(savedCoverageOffer));
+      }
+      if (
+        input.endsWith(
+          '/crm/after-sales/coverage-offers/edbd4e6d-cad5-4275-b0eb-265752825af5/status',
+        ) &&
+        options?.method === 'POST' &&
+        savedCoverageOffer
+      ) {
+        if (typeof options.body !== 'string') throw new Error('Expected a JSON request body');
+        const nextStatus = (
+          JSON.parse(options.body) as { nextStatus: CrmWarrantyCoverageOffer['status'] }
+        ).nextStatus;
+        savedCoverageOffer = { ...savedCoverageOffer, status: nextStatus };
+        overview = { ...overview, coverageOffers: [savedCoverageOffer] };
+        return Promise.resolve(jsonResponse(savedCoverageOffer));
+      }
       return Promise.resolve(jsonResponse({}));
     });
     vi.stubGlobal('fetch', fetchMock);
@@ -8122,20 +8527,36 @@ describe('ERP and CRM authenticated workspace', () => {
 
     fireEvent.click(screen.getByText('WCR-2026-000001'));
     warrantyDialog = await screen.findByRole('dialog', { name: 'WCR-2026-000001' });
-    const offerSelect = warrantyDialog.querySelector('select');
-    expect(offerSelect).toBeTruthy();
-    fireEvent.change(offerSelect!, { target: { value: 'offered' } });
-    fireEvent.click(within(warrantyDialog).getByRole('button', { name: 'Save status' }));
+    fireEvent.click(within(warrantyDialog).getByRole('button', { name: 'New coverage offer' }));
+    const coverageOfferDialog = await screen.findByRole('dialog', { name: 'New coverage offer' });
+    fireEvent.change(within(coverageOfferDialog).getByLabelText('Offer type'), {
+      target: { value: 'extended_warranty' },
+    });
+    fireEvent.change(within(coverageOfferDialog).getByLabelText('Quoted total (EUR)'), {
+      target: { value: '240.00' },
+    });
+    fireEvent.change(within(coverageOfferDialog).getByLabelText('Offer terms'), {
+      target: { value: 'Coverage includes parts and labour for the extended period.' },
+    });
+    fireEvent.click(within(coverageOfferDialog).getByRole('button', { name: 'Save offer' }));
     await waitFor(() =>
       expect(
         fetchMock.mock.calls.some(
           ([url, options]) =>
             url.endsWith(
-              '/crm/after-sales/warranty-cards/76d38aa6-ada6-8b23-3c5b-c15be78edc09/offer',
+              '/crm/after-sales/warranty-cards/76d38aa6-ada6-8b23-3c5b-c15be78edc09/coverage-offers',
             ) && options?.method === 'POST',
         ),
       ).toBe(true),
     );
+    warrantyDialog = await screen.findByRole('dialog', { name: 'WCR-2026-000001' });
+    expect(within(warrantyDialog).getByText(/WOF-2026-000001/u)).toBeTruthy();
+    fireEvent.click(within(warrantyDialog).getByRole('button', { name: 'Mark as shared' }));
+    await waitFor(() =>
+      expect(within(warrantyDialog).getByText('Shared with customer')).toBeTruthy(),
+    );
+    fireEvent.click(within(warrantyDialog).getByRole('button', { name: 'Record acceptance' }));
+    await waitFor(() => expect(within(warrantyDialog).getByText('Accepted')).toBeTruthy());
 
     const feedbackTab = await screen.findByRole('tab', { name: 'Feedback & NPS' });
     fireEvent.click(feedbackTab);
@@ -8153,17 +8574,43 @@ describe('ERP and CRM authenticated workspace', () => {
       'value',
       'service:f3e45425-7e87-4449-aa56-7b2bbf4da71b',
     );
-    expect(within(surveyDialog).getByText(/Share this question with the customer/u)).toBeTruthy();
+    expect(within(surveyDialog).getByText(/customer will receive an email/u)).toBeTruthy();
+    expect(within(surveyDialog).getByLabelText('Send to')).toHaveProperty(
+      'value',
+      'contact@vista-demo.example',
+    );
     expect(surveyDialog).toBeTruthy();
-    expect(
-      within(surveyDialog).getByRole('button', { name: 'Record invitation shared' }),
-    ).toBeTruthy();
+    expect(within(surveyDialog).getByRole('button', { name: 'Send survey' })).toBeTruthy();
     fireEvent.click(within(surveyDialog).getByRole('button', { name: 'Close panel' }));
 
     fireEvent.click(screen.getByRole('tab', { name: 'Referrals' }));
     fireEvent.click(screen.getByRole('button', { name: /Record referral/u }));
     expect(await screen.findByRole('dialog', { name: 'Record referral' })).toBeTruthy();
     expect(screen.getByText('A new referral lead will be created automatically.')).toBeTruthy();
+  });
+
+  it('opens a public customer survey without requiring an employee sign-in', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve(
+          jsonResponse({
+            expiresAt: '2026-12-31T00:00:00.000Z',
+            number: 'SUR-2026-000001',
+            sourceKind: 'service',
+            status: 'awaiting_response',
+          }),
+        ),
+      ),
+    );
+
+    const token = 'A'.repeat(43);
+    window.history.replaceState({}, '', `/survey/${token}?lang=bg`);
+    renderApplication([`/survey/${token}`]);
+
+    expect(await screen.findByRole('heading', { name: 'Обратна връзка от клиент' })).toBeTruthy();
+    expect(screen.queryByLabelText(messages.auth.emailLabel)).toBeNull();
+    expect(screen.getByRole('button', { name: 'Изпрати отговор' })).toBeTruthy();
   });
 });
 

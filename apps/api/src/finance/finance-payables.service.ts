@@ -34,6 +34,7 @@ import { DatabaseService } from '../database/database.service.js';
 import type { FinanceSupplierListQueryDto } from './finance-payables.dto.js';
 import { FinanceService } from './finance.service.js';
 import { BnbCurrencyRatesService } from './bnb-currency-rates.service.js';
+import { appendPosAccountPaymentEntry, lockPosAccountCharge } from './pos-account-collection.js';
 
 interface PayableRow {
   allocated_total: string;
@@ -96,7 +97,7 @@ export class FinancePayablesService {
   ) {}
 
   async referenceData(): Promise<FinanceSupplierReferenceData> {
-    const [invoices, suppliers, receivables, businessDate] = await Promise.all([
+    const [invoices, suppliers, receivables, posReceivables, businessDate] = await Promise.all([
       this.database.getPool().query<{
         currency_code: string;
         id: string;
@@ -140,6 +141,7 @@ export class FinancePayablesService {
       this.database.getPool().query<{
         customer_name: string;
         customer_partner_id: string;
+        currency_code: string;
         due_date: string;
         id: string;
         number: string;
@@ -149,7 +151,7 @@ export class FinancePayablesService {
       }>(
         `SELECT document.id, document.document_number AS number,
                 document.customer_partner_id, customer.display_name AS customer_name,
-                document.due_date::text, document.outstanding_total::text,
+                document.currency_code, document.due_date::text, document.outstanding_total::text,
                 coalesce(financial.official_number, financial.draft_number, source.invoice_number, document.document_number) AS source_invoice_number, document.version
          FROM finance.customer_documents document
          JOIN master_data.partners customer ON customer.id = document.customer_partner_id
@@ -162,20 +164,61 @@ export class FinancePayablesService {
            AND document.outstanding_total > 0
          ORDER BY document.due_date, document.document_number, document.id`,
       ),
+      this.database.getPool().query<{
+        customer_name: string;
+        customer_partner_id: string;
+        due_date: string;
+        outstanding_total: string;
+        sale_id: string;
+        sale_number: string;
+      }>(
+        `SELECT sale.id AS sale_id, sale.sale_number, sale.customer_partner_id,
+                customer.display_name AS customer_name, charge.due_on::text AS due_date,
+                ledger.outstanding_total::text
+         FROM finance.customer_account_entries charge
+         JOIN pos.sales sale ON sale.id = charge.pos_sale_id
+         JOIN master_data.partners customer ON customer.id = sale.customer_partner_id
+         JOIN master_data.partner_roles supplier_role
+           ON supplier_role.partner_id = sale.customer_partner_id AND supplier_role.role = 'supplier'
+         CROSS JOIN LATERAL (
+           SELECT coalesce(sum(CASE WHEN entry.entry_type IN ('charge','payment_reversal')
+             THEN entry.amount ELSE -entry.amount END), 0) AS outstanding_total
+           FROM finance.customer_account_entries entry WHERE entry.pos_sale_id = sale.id
+         ) ledger
+         WHERE charge.entry_type = 'charge' AND sale.status = 'completed'
+           AND ledger.outstanding_total > 0
+         ORDER BY charge.due_on, sale.completed_at, sale.sale_number, sale.id`,
+      ),
       this.currentBusinessDate(),
     ]);
     return {
       businessDate,
-      openReceivables: receivables.rows.map((row) => ({
-        customerName: row.customer_name,
-        customerPartnerId: row.customer_partner_id,
-        dueDate: row.due_date,
-        id: row.id,
-        number: row.number,
-        outstandingTotal: row.outstanding_total,
-        sourceInvoiceNumber: row.source_invoice_number,
-        version: row.version,
-      })),
+      openReceivables: [
+        ...receivables.rows.map((row) => ({
+          customerName: row.customer_name,
+          customerPartnerId: row.customer_partner_id,
+          currencyCode: row.currency_code,
+          dueDate: row.due_date,
+          id: row.id,
+          number: row.number,
+          outstandingTotal: row.outstanding_total,
+          sourceType: 'customer_document' as const,
+          sourceInvoiceNumber: row.source_invoice_number,
+          version: row.version,
+        })),
+        ...posReceivables.rows.map((row) => ({
+          customerName: row.customer_name,
+          customerPartnerId: row.customer_partner_id,
+          currencyCode: 'EUR',
+          dueDate: row.due_date,
+          id: row.sale_id,
+          number: row.sale_number,
+          outstandingTotal: row.outstanding_total,
+          sourceType: 'pos_account' as const,
+          saleNumber: row.sale_number,
+          posSaleId: row.sale_id,
+        })),
+      ],
       supplierInvoices: invoices.rows.map((row) => ({
         currencyCode: row.currency_code,
         id: row.id,
@@ -275,13 +318,15 @@ export class FinancePayablesService {
     const rows = await this.database.getPool().query<{
       amount: string;
       created_at: string | Date;
-      customer_document_id: string;
-      customer_document_number: string;
+      customer_document_id: string | null;
+      customer_document_number: string | null;
       id: string;
       offset_date: string;
       offset_number: string;
       partner_id: string;
       partner_name: string;
+      pos_sale_id: string | null;
+      pos_sale_number: string | null;
       reason: string;
       supplier_payable_id: string;
       supplier_payable_number: string;
@@ -289,14 +334,16 @@ export class FinancePayablesService {
       `SELECT offset_record.id, offset_record.offset_number, offset_record.partner_id,
               partner.display_name AS partner_name, offset_record.customer_document_id,
               customer_document.document_number AS customer_document_number,
+              offset_record.pos_sale_id, sale.sale_number AS pos_sale_number,
               offset_record.supplier_payable_id,
               payable.payable_number AS supplier_payable_number,
               offset_record.offset_date::text, offset_record.amount::text,
               offset_record.reason, offset_record.created_at
        FROM finance.supplier_offsets offset_record
        JOIN master_data.partners partner ON partner.id = offset_record.partner_id
-       JOIN finance.customer_documents customer_document
+       LEFT JOIN finance.customer_documents customer_document
          ON customer_document.id = offset_record.customer_document_id
+       LEFT JOIN pos.sales sale ON sale.id = offset_record.pos_sale_id
        JOIN finance.supplier_payables payable
          ON payable.id = offset_record.supplier_payable_id
        ${where}
@@ -328,12 +375,16 @@ export class FinancePayablesService {
       async (client, idempotencyKey) => {
         const source = await client.query<{
           currency_code: string;
+          exchange_rate: string | null;
           invoice_date: string;
           invoice_number: string;
+          rate_date: string | null;
+          rate_source: 'BNB' | 'internal_eur' | null;
           supplier_partner_id: string;
         }>(
           `SELECT invoice.supplier_partner_id, invoice.supplier_invoice_number AS invoice_number,
-                invoice.invoice_date::text, invoice.currency_code
+                invoice.invoice_date::text, invoice.currency_code,
+                invoice.exchange_rate::text, invoice.rate_date::text, invoice.rate_source
          FROM procurement.supplier_invoices invoice
          WHERE invoice.id = $1
          FOR UPDATE OF invoice`,
@@ -351,10 +402,23 @@ export class FinancePayablesService {
           ...sourceInvoice,
           total: required(totalResult.rows[0], 'Supplier invoice total query failed').total,
         };
-        const rate = await this.currencyRates.latestRate(
-          invoice.currency_code,
-          invoice.invoice_date,
-        );
+        const rate =
+          sourceInvoice.exchange_rate && sourceInvoice.rate_date && sourceInvoice.rate_source
+            ? {
+                currencyCode: sourceInvoice.currency_code,
+                exchangeRate: sourceInvoice.exchange_rate,
+                rateDate: sourceInvoice.rate_date,
+                rateSource: sourceInvoice.rate_source,
+              }
+            : await this.currencyRates.latestRate(invoice.currency_code, invoice.invoice_date);
+        if (!sourceInvoice.exchange_rate) {
+          await client.query(
+            `UPDATE procurement.supplier_invoices
+             SET exchange_rate = $2, rate_date = $3, rate_source = $4
+             WHERE id = $1 AND exchange_rate IS NULL`,
+            [normalized.supplierInvoiceId, rate.exchangeRate, rate.rateDate, rate.rateSource],
+          );
+        }
         if (normalized.dueDate < invoice.invoice_date)
           throw badRequest(
             'FINANCE_SUPPLIER_DUE_DATE_INVALID',
@@ -620,25 +684,67 @@ export class FinancePayablesService {
   ): Promise<FinanceSupplierOffset> {
     const normalized = {
       amount: positiveAmount(input.amount),
-      customerDocumentId: input.customerDocumentId,
-      expectedCustomerDocumentVersion: input.expectedCustomerDocumentVersion,
+      ...(input.customerDocumentId ? { customerDocumentId: input.customerDocumentId } : {}),
+      ...(input.expectedCustomerDocumentVersion !== undefined
+        ? { expectedCustomerDocumentVersion: input.expectedCustomerDocumentVersion }
+        : {}),
+      ...(input.expectedPosOutstanding
+        ? { expectedPosOutstanding: positiveAmount(input.expectedPosOutstanding) }
+        : {}),
       expectedSupplierPayableVersion: input.expectedSupplierPayableVersion,
       offsetDate: date(input.offsetDate),
+      ...(input.posSaleId ? { posSaleId: input.posSaleId } : {}),
       reason: requiredText(input.reason, 'Enter the compensation reason.'),
       supplierPayableId: input.supplierPayableId,
     };
+    if (Boolean(normalized.customerDocumentId) === Boolean(normalized.posSaleId))
+      throw badRequest(
+        'FINANCE_OFFSET_SOURCE_REQUIRED',
+        'Choose exactly one customer receivable or POS account sale.',
+      );
+    if (
+      (normalized.posSaleId && !normalized.expectedPosOutstanding) ||
+      (normalized.customerDocumentId && normalized.expectedCustomerDocumentVersion === undefined)
+    )
+      throw badRequest(
+        'FINANCE_OFFSET_VERSION_REQUIRED',
+        'Refresh the selected customer balance before creating the offset.',
+      );
     return this.command(
       'finance.supplier-offset.create',
       key,
       normalized,
       201,
       async (client, idempotencyKey) => {
-        const customerDocument = await this.lockCustomerDocument(
-          client,
-          normalized.customerDocumentId,
-        );
+        const customerDocument = normalized.customerDocumentId
+          ? await this.lockCustomerDocument(client, normalized.customerDocumentId)
+          : undefined;
+        let posCharge: Awaited<ReturnType<typeof lockPosAccountCharge>> | undefined;
+        if (normalized.posSaleId) {
+          const sale = await client.query<{ customer_partner_id: string }>(
+            'SELECT customer_partner_id FROM pos.sales WHERE id = $1',
+            [normalized.posSaleId],
+          );
+          const customerPartnerId = sale.rows[0]?.customer_partner_id;
+          if (!customerPartnerId)
+            throw notFound('POS_SALE_NOT_FOUND', 'The selected POS sale could not be found.');
+          posCharge = await lockPosAccountCharge(
+            client,
+            customerPartnerId,
+            normalized.posSaleId,
+            this.environment.BUSINESS_TIMEZONE,
+          );
+          if (decimalUnits(posCharge.balance) !== decimalUnits(normalized.expectedPosOutstanding!))
+            throw conflict(
+              'FINANCE_POS_RECEIVABLE_VERSION_CONFLICT',
+              'The POS account balance changed. Refresh and try again.',
+            );
+        }
         const payable = await this.lockPayable(client, normalized.supplierPayableId);
-        if (customerDocument.version !== normalized.expectedCustomerDocumentVersion)
+        if (
+          customerDocument &&
+          customerDocument.version !== normalized.expectedCustomerDocumentVersion
+        )
           throw conflict(
             'FINANCE_RECEIVABLE_VERSION_CONFLICT',
             'The customer balance changed. Refresh and try again.',
@@ -648,22 +754,29 @@ export class FinancePayablesService {
             'FINANCE_SUPPLIER_PAYABLE_VERSION_CONFLICT',
             'The supplier balance changed. Refresh and try again.',
           );
-        if (customerDocument.review_state !== 'pending_finance_review')
+        if (customerDocument && customerDocument.review_state !== 'pending_finance_review')
           throw conflict(
             'FINANCE_RECEIVABLE_CANCELLED',
             'Cancelled customer records cannot be offset.',
           );
-        if (customerDocument.customer_partner_id !== payable.supplier_partner_id)
+        const receivablePartnerId =
+          customerDocument?.customer_partner_id ?? posCharge?.customer_partner_id;
+        if (receivablePartnerId !== payable.supplier_partner_id)
           throw conflict(
             'FINANCE_OFFSET_PARTNER_MISMATCH',
             'Both balances must belong to the same partner.',
           );
-        if (customerDocument.currency_code !== payable.currency_code)
+        const receivableCurrencyCode = customerDocument?.currency_code ?? 'EUR';
+        if (receivableCurrencyCode !== payable.currency_code)
           throw conflict(
             'FINANCE_OFFSET_CURRENCY_MISMATCH',
             'Customer and supplier balances must use the same currency for an offset.',
           );
-        if (decimalUnits(normalized.amount) > decimalUnits(customerDocument.outstanding_total))
+        const receivableOutstanding = customerDocument?.outstanding_total ?? posCharge?.balance;
+        if (
+          !receivableOutstanding ||
+          decimalUnits(normalized.amount) > decimalUnits(receivableOutstanding)
+        )
           throw conflict(
             'FINANCE_OFFSET_RECEIVABLE_EXCEEDED',
             'Offset exceeds the customer receivable balance.',
@@ -679,26 +792,44 @@ export class FinancePayablesService {
         await client.query(
           `INSERT INTO finance.payments (
            id, payment_number, customer_partner_id, payment_date, payment_method,
-           currency_code, amount, payment_reference, notes, recorded_by
-         ) VALUES ($1,$2,$3,$4,'offset',$5,$6,$7,$8,$9)`,
+           currency_code, amount, payment_reference, notes, recorded_by, source_pos_sale_id
+         ) VALUES ($1,$2,$3,$4,'offset',$5,$6,$7,$8,$9,$10)`,
           [
             customerPaymentId,
             customerPaymentNumber,
-            customerDocument.customer_partner_id,
+            receivablePartnerId,
             normalized.offsetDate,
-            customerDocument.currency_code,
+            receivableCurrencyCode,
             normalized.amount,
             null,
             normalized.reason,
             auth.accountId,
+            normalized.posSaleId ?? null,
           ],
         );
-        await client.query(
-          `INSERT INTO finance.payment_allocations (
-           id, payment_id, customer_document_id, amount, allocated_by
-         ) VALUES ($1,$2,$3,$4,$5)`,
-          [randomUUID(), customerPaymentId, customerDocument.id, normalized.amount, auth.accountId],
-        );
+        if (customerDocument) {
+          await client.query(
+            `INSERT INTO finance.payment_allocations (
+             id, payment_id, customer_document_id, amount, allocated_by
+           ) VALUES ($1,$2,$3,$4,$5)`,
+            [
+              randomUUID(),
+              customerPaymentId,
+              customerDocument.id,
+              normalized.amount,
+              auth.accountId,
+            ],
+          );
+        } else if (posCharge) {
+          await appendPosAccountPaymentEntry(
+            client,
+            posCharge,
+            customerPaymentId,
+            normalized.amount,
+            auth.accountId,
+            metadata.correlationId,
+          );
+        }
         const supplierPayment = await this.insertSupplierPayment(client, {
           amount: normalized.amount,
           auth,
@@ -717,38 +848,41 @@ export class FinancePayablesService {
           auth.accountId,
         );
 
-        const customerAllocated = decimalString(
-          decimalUnits(customerDocument.allocated_total) + decimalUnits(normalized.amount),
-        );
-        const customerOutstanding = decimalString(
-          decimalUnits(customerDocument.total) - decimalUnits(customerAllocated),
-        );
-        const customerStatus = customerPaymentStatus(
-          customerDocument.total,
-          customerAllocated,
-          customerDocument.due_date,
-          await this.businessDate(client),
-        );
-        await client.query(
-          `UPDATE finance.customer_documents
-         SET allocated_total = $2, outstanding_total = $3, payment_status = $4,
-             version = version + 1, updated_at = now()
-         WHERE id = $1`,
-          [customerDocument.id, customerAllocated, customerOutstanding, customerStatus],
-        );
-        if (customerStatus !== customerDocument.payment_status)
-          await client.query(
-            `INSERT INTO finance.payment_status_history (
-             id, customer_document_id, previous_status, next_status, reason, changed_by
-           ) VALUES ($1,$2,$3,$4,'supplier_offset_created',$5)`,
-            [
-              randomUUID(),
-              customerDocument.id,
-              customerDocument.payment_status,
-              customerStatus,
-              auth.accountId,
-            ],
+        let customerStatus: FinancePaymentStatus | undefined;
+        if (customerDocument) {
+          const customerAllocated = decimalString(
+            decimalUnits(customerDocument.allocated_total) + decimalUnits(normalized.amount),
           );
+          const customerOutstanding = decimalString(
+            decimalUnits(customerDocument.total) - decimalUnits(customerAllocated),
+          );
+          customerStatus = customerPaymentStatus(
+            customerDocument.total,
+            customerAllocated,
+            customerDocument.due_date,
+            await this.businessDate(client),
+          );
+          await client.query(
+            `UPDATE finance.customer_documents
+           SET allocated_total = $2, outstanding_total = $3, payment_status = $4,
+               version = version + 1, updated_at = now()
+           WHERE id = $1`,
+            [customerDocument.id, customerAllocated, customerOutstanding, customerStatus],
+          );
+          if (customerStatus !== customerDocument.payment_status)
+            await client.query(
+              `INSERT INTO finance.payment_status_history (
+               id, customer_document_id, previous_status, next_status, reason, changed_by
+             ) VALUES ($1,$2,$3,$4,'supplier_offset_created',$5)`,
+              [
+                randomUUID(),
+                customerDocument.id,
+                customerDocument.payment_status,
+                customerStatus,
+                auth.accountId,
+              ],
+            );
+        }
         await this.applyPayableAllocation(
           client,
           payable,
@@ -756,7 +890,7 @@ export class FinancePayablesService {
           'supplier_offset_created',
           auth.accountId,
         );
-        if (customerStatus === 'paid')
+        if (customerDocument && customerStatus === 'paid')
           await this.finance.settlePaidProforma(
             client,
             normalized.offsetDate,
@@ -770,14 +904,15 @@ export class FinancePayablesService {
         const number = await this.nextNumber(client, 'supplier_offset', 'OFF');
         await client.query(
           `INSERT INTO finance.supplier_offsets (
-           id, offset_number, partner_id, customer_document_id, supplier_payable_id,
+           id, offset_number, partner_id, customer_document_id, pos_sale_id, supplier_payable_id,
            customer_payment_id, supplier_payment_id, offset_date, amount, reason, created_by
-         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
           [
             id,
             number,
             payable.supplier_partner_id,
-            customerDocument.id,
+            customerDocument?.id ?? null,
+            normalized.posSaleId ?? null,
             payable.id,
             customerPaymentId,
             supplierPayment.id,
@@ -1103,13 +1238,15 @@ export class FinancePayablesService {
     const rows = await client.query<{
       amount: string;
       created_at: string | Date;
-      customer_document_id: string;
-      customer_document_number: string;
+      customer_document_id: string | null;
+      customer_document_number: string | null;
       id: string;
       offset_date: string;
       offset_number: string;
       partner_id: string;
       partner_name: string;
+      pos_sale_id: string | null;
+      pos_sale_number: string | null;
       reason: string;
       supplier_payable_id: string;
       supplier_payable_number: string;
@@ -1117,14 +1254,16 @@ export class FinancePayablesService {
       `SELECT offset_record.id, offset_record.offset_number, offset_record.partner_id,
               partner.display_name AS partner_name, offset_record.customer_document_id,
               customer_document.document_number AS customer_document_number,
+              offset_record.pos_sale_id, sale.sale_number AS pos_sale_number,
               offset_record.supplier_payable_id,
               payable.payable_number AS supplier_payable_number,
               offset_record.offset_date::text, offset_record.amount::text,
               offset_record.reason, offset_record.created_at
        FROM finance.supplier_offsets offset_record
        JOIN master_data.partners partner ON partner.id = offset_record.partner_id
-       JOIN finance.customer_documents customer_document
+       LEFT JOIN finance.customer_documents customer_document
          ON customer_document.id = offset_record.customer_document_id
+       LEFT JOIN pos.sales sale ON sale.id = offset_record.pos_sale_id
        JOIN finance.supplier_payables payable ON payable.id = offset_record.supplier_payable_id
        WHERE offset_record.id = $1`,
       [id],
@@ -1532,13 +1671,15 @@ function mapPayment(
 function mapOffset(row: {
   amount: string;
   created_at: string | Date;
-  customer_document_id: string;
-  customer_document_number: string;
+  customer_document_id: string | null;
+  customer_document_number: string | null;
   id: string;
   offset_date: string;
   offset_number: string;
   partner_id: string;
   partner_name: string;
+  pos_sale_id: string | null;
+  pos_sale_number: string | null;
   reason: string;
   supplier_payable_id: string;
   supplier_payable_number: string;
@@ -1546,13 +1687,17 @@ function mapOffset(row: {
   return {
     amount: row.amount,
     createdAt: asIso(row.created_at),
-    customerDocumentId: row.customer_document_id,
-    customerDocumentNumber: row.customer_document_number,
+    ...(row.customer_document_id ? { customerDocumentId: row.customer_document_id } : {}),
+    ...(row.customer_document_number
+      ? { customerDocumentNumber: row.customer_document_number }
+      : {}),
     id: row.id,
     number: row.offset_number,
     offsetDate: row.offset_date,
     partnerId: row.partner_id,
     partnerName: row.partner_name,
+    ...(row.pos_sale_id ? { posSaleId: row.pos_sale_id } : {}),
+    ...(row.pos_sale_number ? { posSaleNumber: row.pos_sale_number } : {}),
     reason: row.reason,
     supplierPayableId: row.supplier_payable_id,
     supplierPayableNumber: row.supplier_payable_number,

@@ -1,6 +1,9 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
 import type {
+  AcceptanceProtocol,
+  AcceptanceProtocolLine,
+  CreateAcceptanceProtocolRequest,
   CreatePurchaseOrderRequest,
   GoodsReceipt,
   GoodsReceiptLine,
@@ -20,6 +23,8 @@ import type {
 import { ApiErrorException } from '../common/api-error.exception.js';
 import { DatabaseService } from '../database/database.service.js';
 import { InventoryService } from '../inventory/inventory.service.js';
+import { APP_ENVIRONMENT } from '../config/config.module.js';
+import type { AppEnvironment } from '@vista/config';
 import type { ListPurchaseOrdersQueryDto } from './procurement.dto.js';
 import { SupplierProcurementService } from './supplier-procurement.service.js';
 
@@ -71,6 +76,46 @@ type ReceiptLineRow = {
   unit_cost_eur: string;
 };
 
+type AcceptanceProtocolHeaderRow = {
+  created_at: string;
+  goods_receipt_id: string;
+  id: string;
+  invoice_date: string | null;
+  invoice_number: string | null;
+  number_sequence: number;
+  number_year: number;
+  prepared_by_name: string;
+  protocol_number: string;
+  purchase_order_id: string;
+  received_at: string;
+  received_by_name: string;
+  supplier_delivery_reference: string | null;
+  supplier_invoice_id: string | null;
+  supplier_name: string;
+  supplier_partner_id: string;
+  warehouse_name: string;
+};
+
+type AcceptanceProtocolLineRow = {
+  accepted_quantity: string;
+  batch_number: string | null;
+  currency_code: string;
+  cumulative_received_quantity: string;
+  discrepancies: AcceptanceProtocolLine['discrepancies'] | string;
+  expires_at: string | null;
+  goods_receipt_line_id: string;
+  id: string;
+  order_line_id: string;
+  ordered_quantity: string;
+  outstanding_quantity: string;
+  previously_received_quantity: string;
+  product_code: string;
+  product_id: string;
+  product_name: string;
+  serial_numbers: string[];
+  unit_price: string;
+};
+
 type ClaimedCommand = { request_hash: string; response_body: unknown; status: string };
 
 @Injectable()
@@ -81,6 +126,7 @@ export class ProcurementService {
     @Inject(InventoryService) private readonly inventory: InventoryService,
     @Inject(SupplierProcurementService)
     private readonly supplierProcurement: SupplierProcurementService,
+    @Inject(APP_ENVIRONMENT) private readonly environment: AppEnvironment,
   ) {}
 
   async referenceData(): Promise<ProcurementReferenceData> {
@@ -435,6 +481,250 @@ export class ProcurementService {
     );
   }
 
+  async acceptanceProtocol(receiptId: string): Promise<AcceptanceProtocol> {
+    const client = await this.database.getPool().connect();
+    try {
+      const protocol = await this.loadAcceptanceProtocolByReceipt(client, receiptId);
+      if (!protocol)
+        throw new ApiErrorException(
+          'PROCUREMENT_ACCEPTANCE_PROTOCOL_NOT_FOUND',
+          'No acceptance protocol has been created for this delivery.',
+          HttpStatus.NOT_FOUND,
+        );
+      return protocol;
+    } finally {
+      client.release();
+    }
+  }
+
+  createAcceptanceProtocol(
+    receiptId: string,
+    input: CreateAcceptanceProtocolRequest,
+    key: string | undefined,
+    auth: AuthenticationContext,
+    metadata: RequestSecurityMetadata,
+  ): Promise<AcceptanceProtocol> {
+    const normalized = input.supplierInvoiceId
+      ? { supplierInvoiceId: input.supplierInvoiceId }
+      : {};
+    return this.command(
+      'procurement.acceptance-protocol.create',
+      key,
+      { receiptId, ...normalized },
+      async (client, idempotencyKey) => {
+        const receiptResult = await client.query<{
+          currency_code: string;
+          goods_receipt_id: string;
+          purchase_order_id: string;
+          received_at: string;
+          received_by: string;
+          supplier_delivery_reference: string | null;
+          supplier_partner_id: string;
+          warehouse_id: string;
+        }>(
+          `SELECT receipt.id AS goods_receipt_id, receipt.purchase_order_id,
+                  receipt.supplier_partner_id, receipt.warehouse_id,
+                  receipt.received_at::text, receipt.supplier_delivery_reference,
+                  receipt.received_by, purchase_order.currency_code
+           FROM procurement.goods_receipts receipt
+           JOIN procurement.purchase_orders purchase_order
+             ON purchase_order.id = receipt.purchase_order_id
+           WHERE receipt.id = $1
+           FOR UPDATE OF receipt`,
+          [receiptId],
+        );
+        const receipt = receiptResult.rows[0];
+        if (!receipt)
+          throw new ApiErrorException(
+            'GOODS_RECEIPT_NOT_FOUND',
+            'The supplier delivery could not be found.',
+            HttpStatus.NOT_FOUND,
+          );
+
+        const existing = await this.loadAcceptanceProtocolByReceipt(client, receiptId);
+        if (existing) return existing;
+
+        if (normalized.supplierInvoiceId) {
+          const invoice = await client.query(
+            `SELECT id FROM procurement.supplier_invoices
+             WHERE id = $1 AND purchase_order_id = $2 AND supplier_partner_id = $3
+             FOR KEY SHARE`,
+            [normalized.supplierInvoiceId, receipt.purchase_order_id, receipt.supplier_partner_id],
+          );
+          if (!invoice.rowCount)
+            throw new ApiErrorException(
+              'SUPPLIER_INVOICE_NOT_FOUND',
+              'Choose an invoice recorded for this purchase order.',
+              HttpStatus.NOT_FOUND,
+            );
+        }
+
+        const yearResult = await client.query<{ sequence_year: number }>(
+          `SELECT EXTRACT(YEAR FROM $1::timestamptz AT TIME ZONE $2)::integer AS sequence_year`,
+          [receipt.received_at, this.environment.BUSINESS_TIMEZONE],
+        );
+        const sequenceYear = yearResult.rows[0]?.sequence_year;
+        if (!sequenceYear) throw new Error('Protocol year could not be resolved');
+        await client.query(
+          `INSERT INTO procurement.acceptance_protocol_sequences (sequence_year, next_value)
+           VALUES ($1, 1) ON CONFLICT (sequence_year) DO NOTHING`,
+          [sequenceYear],
+        );
+        const sequenceResult = await client.query<{ sequence_number: number }>(
+          `UPDATE procurement.acceptance_protocol_sequences
+           SET next_value = next_value + 1
+           WHERE sequence_year = $1
+           RETURNING next_value - 1 AS sequence_number`,
+          [sequenceYear],
+        );
+        const sequenceNumber = sequenceResult.rows[0]?.sequence_number;
+        if (!sequenceNumber) throw new Error('Acceptance protocol number could not be allocated');
+        const protocolId = randomUUID();
+        const protocolNumber = `GRP-${sequenceYear}-${String(sequenceNumber).padStart(6, '0')}`;
+        const linesResult = await client.query<{
+          accepted_quantity: string;
+          batch_number: string | null;
+          cumulative_received_quantity: string;
+          discrepancies: AcceptanceProtocolLine['discrepancies'];
+          expires_at: string | null;
+          goods_receipt_line_id: string;
+          order_line_id: string;
+          ordered_quantity: string;
+          outstanding_quantity: string;
+          previously_received_quantity: string;
+          product_code: string;
+          product_id: string;
+          product_name: string;
+          serial_numbers: string[];
+          unit_price: string;
+        }>(
+          `SELECT receipt_line.id AS goods_receipt_line_id, order_line.id AS order_line_id,
+                  order_line.product_id, product.product_code, product.name AS product_name,
+                  purchase_order.currency_code, order_line.ordered_quantity::text,
+                  coalesce(previous_receipts.quantity, 0)::text AS previously_received_quantity,
+                  receipt_line.quantity::text AS accepted_quantity,
+                  (coalesce(previous_receipts.quantity, 0) + receipt_line.quantity)::text
+                    AS cumulative_received_quantity,
+                  (order_line.ordered_quantity - coalesce(previous_receipts.quantity, 0)
+                    - receipt_line.quantity)::text AS outstanding_quantity,
+                  order_line.unit_price::text, batch.batch_number, batch.expires_at::text,
+                  coalesce(serials.serial_numbers, ARRAY[]::text[]) AS serial_numbers,
+                  coalesce(claims.discrepancies, '[]'::jsonb) AS discrepancies
+           FROM procurement.goods_receipt_lines receipt_line
+           JOIN procurement.purchase_order_lines order_line
+             ON order_line.id = receipt_line.purchase_order_line_id
+           JOIN procurement.purchase_orders purchase_order
+             ON purchase_order.id = order_line.purchase_order_id
+           JOIN master_data.products product ON product.id = order_line.product_id
+           JOIN inventory.stock_movements movement
+             ON movement.id = receipt_line.stock_movement_id
+           LEFT JOIN inventory.batches batch ON batch.id = movement.batch_id
+           LEFT JOIN LATERAL (
+             SELECT sum(prior_line.quantity) AS quantity
+             FROM procurement.goods_receipt_lines prior_line
+             JOIN procurement.goods_receipts prior_receipt
+               ON prior_receipt.id = prior_line.goods_receipt_id
+             JOIN procurement.goods_receipts current_receipt
+               ON current_receipt.id = receipt_line.goods_receipt_id
+             WHERE prior_line.purchase_order_line_id = order_line.id
+               AND (prior_receipt.received_at, prior_receipt.id)
+                   < (current_receipt.received_at, current_receipt.id)
+           ) previous_receipts ON true
+           LEFT JOIN LATERAL (
+             SELECT array_agg(item.serial_number ORDER BY item.serial_number) AS serial_numbers
+             FROM inventory.serialized_items item
+             WHERE item.received_movement_id = movement.id
+           ) serials ON true
+           LEFT JOIN LATERAL (
+             SELECT jsonb_agg(jsonb_build_object(
+                      'claimId', claim.id::text, 'claimType', claim.claim_type,
+                      'description', claim.description, 'quantity', claim.quantity::text,
+                      'status', claim.status
+                    ) ORDER BY claim.created_at, claim.id) AS discrepancies
+             FROM procurement.supplier_claims claim
+             WHERE claim.goods_receipt_line_id = receipt_line.id
+           ) claims ON true
+           WHERE receipt_line.goods_receipt_id = $1
+           ORDER BY product.name, product.product_code, receipt_line.id`,
+          [receiptId],
+        );
+        if (linesResult.rowCount === 0)
+          throw new ApiErrorException(
+            'GOODS_RECEIPT_LINES_NOT_FOUND',
+            'The delivery has no recorded product lines.',
+            HttpStatus.CONFLICT,
+          );
+
+        await client.query(
+          `INSERT INTO procurement.acceptance_protocols (
+             id, protocol_number, sequence_year, sequence_number, goods_receipt_id,
+             purchase_order_id, supplier_partner_id, warehouse_id, supplier_invoice_id,
+             received_at, supplier_delivery_reference, received_by, prepared_by
+           ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+          [
+            protocolId,
+            protocolNumber,
+            sequenceYear,
+            sequenceNumber,
+            receipt.goods_receipt_id,
+            receipt.purchase_order_id,
+            receipt.supplier_partner_id,
+            receipt.warehouse_id,
+            normalized.supplierInvoiceId ?? null,
+            receipt.received_at,
+            receipt.supplier_delivery_reference,
+            receipt.received_by,
+            auth.accountId,
+          ],
+        );
+        for (const line of linesResult.rows) {
+          await client.query(
+            `INSERT INTO procurement.acceptance_protocol_lines (
+               id, acceptance_protocol_id, goods_receipt_line_id, purchase_order_line_id,
+               product_id, product_code, product_name, currency_code, ordered_quantity,
+               previously_received_quantity, accepted_quantity, cumulative_received_quantity,
+               outstanding_quantity, unit_price, batch_number, expires_at, serial_numbers,
+               discrepancies
+             ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)`,
+            [
+              randomUUID(),
+              protocolId,
+              line.goods_receipt_line_id,
+              line.order_line_id,
+              line.product_id,
+              line.product_code,
+              line.product_name,
+              receipt.currency_code,
+              line.ordered_quantity,
+              line.previously_received_quantity,
+              line.accepted_quantity,
+              line.cumulative_received_quantity,
+              line.outstanding_quantity,
+              line.unit_price,
+              line.batch_number,
+              line.expires_at,
+              line.serial_numbers,
+              JSON.stringify(line.discrepancies),
+            ],
+          );
+        }
+        const result = await this.loadAcceptanceProtocolByReceipt(client, receiptId);
+        if (!result) throw new Error('Acceptance protocol could not be loaded after creation');
+        await this.sideEffects(
+          client,
+          'procurement_acceptance_protocol',
+          result.id,
+          'procurement.acceptance_protocol.created',
+          result,
+          auth,
+          metadata,
+          idempotencyKey,
+        );
+        return result;
+      },
+    );
+  }
+
   private async loadPurchaseOrder(client: PoolClient, id: string): Promise<PurchaseOrder> {
     const header = await client.query<OrderRow>(
       `SELECT orders.id, orders.supplier_partner_id, supplier.display_name AS supplier_name,
@@ -492,6 +782,19 @@ export class ProcurementService {
        WHERE purchase_order_id = $1 ORDER BY received_at, id`,
       [id],
     );
+    const protocolSummaries = await client.query<{
+      goods_receipt_id: string;
+      id: string;
+      protocol_number: string;
+    }>(
+      `SELECT goods_receipt_id, id, protocol_number
+       FROM procurement.acceptance_protocols
+       WHERE goods_receipt_id = ANY($1::uuid[])`,
+      [receipts.rows.map((receipt) => receipt.id)],
+    );
+    const protocolsByReceipt = new Map(
+      protocolSummaries.rows.map((protocol) => [protocol.goods_receipt_id, protocol]),
+    );
     const receiptLines = await client.query<ReceiptLineRow>(
       `SELECT receipt_line.id, receipt_line.goods_receipt_id,
               receipt_line.purchase_order_line_id AS order_line_id,
@@ -520,6 +823,14 @@ export class ProcurementService {
       id: row.id,
       lines: lines.rows.map(orderLine),
       receipts: receipts.rows.map((receipt) => ({
+        ...(protocolsByReceipt.has(receipt.id)
+          ? {
+              acceptanceProtocol: {
+                id: protocolsByReceipt.get(receipt.id)!.id,
+                protocolNumber: protocolsByReceipt.get(receipt.id)!.protocol_number,
+              },
+            }
+          : {}),
         id: receipt.id,
         lines: receiptLines.rows
           .filter((line) => line.goods_receipt_id === receipt.id)
@@ -539,6 +850,100 @@ export class ProcurementService {
       version: row.version,
       warehouseId: row.warehouse_id,
       warehouseName: row.warehouse_name,
+    };
+  }
+
+  private async loadAcceptanceProtocolByReceipt(
+    client: PoolClient,
+    receiptId: string,
+  ): Promise<AcceptanceProtocol | undefined> {
+    const headerResult = await client.query<AcceptanceProtocolHeaderRow>(
+      `SELECT protocol.id, protocol.protocol_number, protocol.sequence_year AS number_year,
+              protocol.sequence_number AS number_sequence, protocol.goods_receipt_id,
+              protocol.purchase_order_id, protocol.supplier_partner_id,
+              protocol.created_at::text, receipt.received_at::text,
+              receipt.supplier_delivery_reference, supplier.display_name AS supplier_name,
+              warehouse.name AS warehouse_name,
+              received_employee.display_name AS received_by_name,
+              prepared_employee.display_name AS prepared_by_name,
+              invoice.id AS supplier_invoice_id,
+              invoice.supplier_invoice_number AS invoice_number,
+              invoice.invoice_date::text AS invoice_date
+       FROM procurement.acceptance_protocols protocol
+       JOIN procurement.goods_receipts receipt ON receipt.id = protocol.goods_receipt_id
+       JOIN master_data.partners supplier ON supplier.id = protocol.supplier_partner_id
+       JOIN master_data.warehouses warehouse ON warehouse.id = protocol.warehouse_id
+       JOIN identity.user_accounts received_by ON received_by.id = protocol.received_by
+       JOIN identity.employees received_employee ON received_employee.id = received_by.employee_id
+       JOIN identity.user_accounts prepared_by ON prepared_by.id = protocol.prepared_by
+       JOIN identity.employees prepared_employee ON prepared_employee.id = prepared_by.employee_id
+       LEFT JOIN procurement.supplier_invoices invoice
+         ON invoice.id = protocol.supplier_invoice_id
+       WHERE protocol.goods_receipt_id = $1`,
+      [receiptId],
+    );
+    const header = headerResult.rows[0];
+    if (!header) return undefined;
+    const linesResult = await client.query<AcceptanceProtocolLineRow>(
+      `SELECT line.id, line.goods_receipt_line_id, line.purchase_order_line_id AS order_line_id,
+              line.product_id, line.product_code, line.product_name, line.currency_code,
+              line.ordered_quantity::text, line.previously_received_quantity::text,
+              line.accepted_quantity::text, line.cumulative_received_quantity::text,
+              line.outstanding_quantity::text, line.unit_price::text, line.batch_number,
+              line.expires_at::text, line.serial_numbers, line.discrepancies
+       FROM procurement.acceptance_protocol_lines line
+       WHERE line.acceptance_protocol_id = $1
+       ORDER BY line.product_name, line.product_code, line.id`,
+      [header.id],
+    );
+    return {
+      createdAt: header.created_at,
+      goodsReceiptId: header.goods_receipt_id,
+      id: header.id,
+      lines: linesResult.rows.map((line) => ({
+        acceptedQuantity: line.accepted_quantity,
+        ...(line.batch_number ? { batchNumber: line.batch_number } : {}),
+        currencyCode: line.currency_code,
+        cumulativeReceivedQuantity: line.cumulative_received_quantity,
+        discrepancies:
+          typeof line.discrepancies === 'string'
+            ? (JSON.parse(line.discrepancies) as AcceptanceProtocolLine['discrepancies'])
+            : line.discrepancies,
+        ...(line.expires_at ? { expiresAt: line.expires_at } : {}),
+        goodsReceiptLineId: line.goods_receipt_line_id,
+        id: line.id,
+        orderLineId: line.order_line_id,
+        orderedQuantity: line.ordered_quantity,
+        outstandingQuantity: line.outstanding_quantity,
+        previouslyReceivedQuantity: line.previously_received_quantity,
+        productCode: line.product_code,
+        productId: line.product_id,
+        productName: line.product_name,
+        serialNumbers: line.serial_numbers,
+        unitPrice: line.unit_price,
+      })),
+      numberSequence: header.number_sequence,
+      numberYear: header.number_year,
+      preparedByName: header.prepared_by_name,
+      protocolNumber: header.protocol_number,
+      purchaseOrderId: header.purchase_order_id,
+      receivedAt: header.received_at,
+      receivedByName: header.received_by_name,
+      ...(header.supplier_delivery_reference
+        ? { supplierDeliveryReference: header.supplier_delivery_reference }
+        : {}),
+      ...(header.supplier_invoice_id && header.invoice_date && header.invoice_number
+        ? {
+            supplierInvoice: {
+              id: header.supplier_invoice_id,
+              invoiceDate: header.invoice_date,
+              invoiceNumber: header.invoice_number,
+            },
+          }
+        : {}),
+      supplierName: header.supplier_name,
+      supplierPartnerId: header.supplier_partner_id,
+      warehouseName: header.warehouse_name,
     };
   }
 

@@ -17,7 +17,7 @@ describe('development fixtures', () => {
       ({ roleDescription }) => roleDescription,
     );
 
-    expect(developmentFixtureAccounts).toHaveLength(12);
+    expect(developmentFixtureAccounts).toHaveLength(14);
     expect(new Set(emails).size).toBe(emails.length);
     expect(new Set(employeeNumbers).size).toBe(employeeNumbers.length);
     expect(new Set(roleCodes).size).toBe(roleCodes.length);
@@ -29,6 +29,8 @@ describe('development fixtures', () => {
     expect(emails).toContain('technician@vista.local');
     expect(emails).toContain('pos.operator@vista.local');
     expect(emails).toContain('backup.operator@vista.local');
+    expect(emails).toContain('backup.administrator@vista.local');
+    expect(emails).toContain('security.officer@vista.local');
     for (const key of ['manager', 'platform-manager'] as const) {
       expect(
         developmentFixtureAccounts
@@ -47,6 +49,20 @@ describe('development fixtures', () => {
     expect(
       developmentFixtureAccounts.find((account) => account.key === 'backup-operator')?.permissions,
     ).toEqual([{ action: 'view', module: 'backup' }]);
+    expect(
+      developmentFixtureAccounts.find((account) => account.key === 'backup-administrator')
+        ?.permissions,
+    ).toEqual([
+      { action: 'view', module: 'backup' },
+      { action: 'create', module: 'backup' },
+      { action: 'edit', module: 'backup' },
+    ]);
+    expect(
+      developmentFixtureAccounts.find((account) => account.key === 'security-officer')?.permissions,
+    ).toEqual([
+      { action: 'view', module: 'backup' },
+      { action: 'approve', module: 'backup' },
+    ]);
     expect(
       developmentFixtureAccounts
         .find((account) => account.key === 'manager')

@@ -1,0 +1,19 @@
+DROP TABLE logistics.delivery_courier_tracking_events;
+
+ALTER TABLE logistics.deliveries
+  DROP CONSTRAINT logistics_delivery_courier_weight_valid,
+  DROP CONSTRAINT logistics_delivery_courier_parcels_valid,
+  DROP CONSTRAINT logistics_delivery_courier_attempts_nonnegative,
+  DROP CONSTRAINT logistics_delivery_courier_method_status_valid,
+  DROP CONSTRAINT logistics_delivery_courier_status_valid,
+  DROP COLUMN courier_weight_kg,
+  DROP COLUMN courier_parcel_count,
+  DROP COLUMN courier_recipient_phone,
+  DROP COLUMN courier_recipient_name,
+  DROP COLUMN courier_attempt_started_at,
+  DROP COLUMN courier_attempt_count,
+  DROP COLUMN courier_last_error,
+  DROP COLUMN courier_last_checked_at,
+  DROP COLUMN courier_provider_status,
+  DROP COLUMN courier_external_reference,
+  DROP COLUMN courier_booking_status;

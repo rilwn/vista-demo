@@ -2,6 +2,7 @@ import type {
   ApiErrorResponse,
   CancelFinanceCustomerDocumentRequest,
   AllocateCustomerAdvanceRequest,
+  ApplyCustomerAdvanceToPosSaleRequest,
   CancelFinanceCashVoucherRequest,
   CreateFinanceCustomerDocumentRequest,
   CreateCustomerAdvanceRequest,
@@ -23,6 +24,8 @@ import type {
   CustomerAdvance,
   CustomerPaymentAccount,
   CustomerPaymentAccountReferenceData,
+  CustomerPaymentStatusPage,
+  CustomerPaymentStatusQuery,
   UpsertCustomerPaymentTermsRequest,
   FinancialDocument,
   FinancialDocumentPage,
@@ -186,6 +189,25 @@ export function listCustomerPaymentAccounts(token: string): Promise<CustomerPaym
   return unwrapApiResponse(
     apiClient.GET('/api/v1/finance/customer-accounts', {
       headers: authorizationHeaders(token),
+    }),
+  );
+}
+
+export function listCustomerPaymentStatus(
+  token: string,
+  query: CustomerPaymentStatusQuery = {},
+): Promise<CustomerPaymentStatusPage> {
+  return unwrapApiResponse(
+    apiClient.GET('/api/v1/finance/customer-accounts/payment-status', {
+      headers: authorizationHeaders(token),
+      params: {
+        query: {
+          ...(query.page !== undefined ? { page: query.page } : {}),
+          ...(query.pageSize !== undefined ? { pageSize: query.pageSize } : {}),
+          ...(query.search ? { search: query.search } : {}),
+          ...(query.status ? { status: query.status } : {}),
+        },
+      },
     }),
   );
 }
@@ -432,6 +454,28 @@ export function allocateCustomerAdvance(
       headers: authorizationHeaders(token),
       params: { header: idempotencyParameters(key).header, path: { id: documentId } },
     }),
+  );
+}
+
+export function applyCustomerAdvanceToPosSale(
+  token: string,
+  customerPartnerId: string,
+  saleId: string,
+  key: string,
+  input: ApplyCustomerAdvanceToPosSaleRequest,
+): Promise<CustomerPaymentAccount> {
+  return unwrapApiResponse(
+    apiClient.POST(
+      '/api/v1/finance/customer-accounts/{customerPartnerId}/pos-sales/{saleId}/advance-allocations',
+      {
+        body: input,
+        headers: authorizationHeaders(token),
+        params: {
+          header: idempotencyParameters(key).header,
+          path: { customerPartnerId, saleId },
+        },
+      },
+    ),
   );
 }
 

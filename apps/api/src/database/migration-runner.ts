@@ -84,6 +84,13 @@ export async function migrateDown(pool: Pool, directory: string): Promise<string
 
     await client.query('BEGIN');
     try {
+      // Migration 0101 created an index in the backup schema but its immutable
+      // down script drops it without a schema qualifier. Give that legacy
+      // rollback a transaction-local path instead of rewriting an applied
+      // migration and invalidating deployed checksums.
+      if (migration.id === '0101_backup_policy_approval') {
+        await client.query('SET LOCAL search_path TO backup, public');
+      }
       await client.query(migration.sql);
       await client.query('DELETE FROM platform.schema_migrations WHERE id = $1', [latest.id]);
       await client.query('COMMIT');

@@ -27,7 +27,13 @@ async function run(): Promise<void> {
       process.env['S3_REGION'] || 'us-east-1',
       Number(process.env['DEPENDENCY_HEALTH_TIMEOUT_MS'] || 5_000),
     );
-    process.stdout.write('Private object-storage bucket is ready.\n');
+    await ensurePrivateBucket(
+      client,
+      process.env['BACKUP_S3_BUCKET'] || 'vista-backups',
+      process.env['S3_REGION'] || 'us-east-1',
+      Number(process.env['DEPENDENCY_HEALTH_TIMEOUT_MS'] || 5_000),
+    );
+    process.stdout.write('Private file and backup storage buckets are ready.\n');
   } finally {
     client.destroy();
   }

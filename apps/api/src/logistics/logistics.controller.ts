@@ -40,6 +40,7 @@ import {
   LogisticsReturnDto,
   LogisticsReturnPageDto,
   LogisticsRoutePlanDto,
+  ReconcileLogisticsCourierBookingDto,
   LogisticsRoutePlanPageDto,
   ReceiveLogisticsReturnDto,
   ReportLogisticsDeliveryExceptionDto,
@@ -97,6 +98,51 @@ export class LogisticsController {
     @Req() request: AuthenticatedRequest & CorrelatedRequest,
   ): Promise<LogisticsDeliveryDto> {
     return this.logistics.createDelivery(input, key, request.authentication, metadata(request));
+  }
+
+  @Post('deliveries/:id/courier-booking')
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissions({ action: 'edit', module: 'erp.logistics' })
+  @ApiHeader({ name: 'Idempotency-Key', required: true })
+  @ApiOkResponse({ type: LogisticsDeliveryDto })
+  @ApiParam({ format: 'uuid', name: 'id' })
+  bookCourierDelivery(
+    @Param('id') id: string,
+    @Headers('idempotency-key') key: string | undefined,
+    @Req() request: AuthenticatedRequest & CorrelatedRequest,
+  ): Promise<LogisticsDeliveryDto> {
+    return this.logistics.bookCourierDelivery(id, key, request.authentication, metadata(request));
+  }
+
+  @Post('deliveries/:id/courier-tracking')
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissions({ action: 'edit', module: 'erp.logistics' })
+  @ApiOkResponse({ type: LogisticsDeliveryDto })
+  @ApiParam({ format: 'uuid', name: 'id' })
+  refreshCourierTracking(
+    @Param('id') id: string,
+    @Req() request: AuthenticatedRequest & CorrelatedRequest,
+  ): Promise<LogisticsDeliveryDto> {
+    return this.logistics.refreshCourierTracking(id, request.authentication, metadata(request));
+  }
+
+  @Post('deliveries/:id/courier-booking/reconcile')
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissions({ action: 'edit', module: 'erp.logistics' })
+  @ApiBody({ type: ReconcileLogisticsCourierBookingDto })
+  @ApiOkResponse({ type: LogisticsDeliveryDto })
+  @ApiParam({ format: 'uuid', name: 'id' })
+  reconcileCourierBooking(
+    @Param('id') id: string,
+    @Body() input: ReconcileLogisticsCourierBookingDto,
+    @Req() request: AuthenticatedRequest & CorrelatedRequest,
+  ): Promise<LogisticsDeliveryDto> {
+    return this.logistics.reconcileCourierBooking(
+      id,
+      input,
+      request.authentication,
+      metadata(request),
+    );
   }
 
   @Post('deliveries/:id/dispatch')

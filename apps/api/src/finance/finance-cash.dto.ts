@@ -18,6 +18,7 @@ import {
   type CancelFinanceCashVoucherRequest,
   type CreateFinanceCashVoucherRequest,
   type FinanceCashCollectionReference,
+  type FinanceCashPosAccountReference,
   type FinanceCashDailyReport,
   type FinanceCashOperatorReference,
   type FinanceCashPartnerReference,
@@ -54,6 +55,11 @@ export class CreateFinanceCashVoucherDto implements CreateFinanceCashVoucherRequ
   @IsOptional()
   @IsUUID('loose')
   customerDocumentId?: string;
+
+  @ApiPropertyOptional({ format: 'uuid', type: String })
+  @IsOptional()
+  @IsUUID('loose')
+  posSaleId?: string;
 
   @ApiProperty({ enum: financeCashVoucherDirections })
   @IsIn(financeCashVoucherDirections)
@@ -182,12 +188,23 @@ class FinanceCashCollectionReferenceDto implements FinanceCashCollectionReferenc
   @ApiProperty({ type: String }) sourceInvoiceNumber!: string;
 }
 
+class FinanceCashPosAccountReferenceDto implements FinanceCashPosAccountReference {
+  @ApiProperty({ type: String }) customerName!: string;
+  @ApiProperty({ format: 'uuid', type: String }) customerPartnerId!: string;
+  @ApiProperty({ format: 'date', type: String }) dueDate!: string;
+  @ApiProperty({ type: String }) outstandingTotal!: string;
+  @ApiProperty({ format: 'uuid', type: String }) saleId!: string;
+  @ApiProperty({ type: String }) saleNumber!: string;
+}
+
 export class FinanceCashReferenceDataDto implements FinanceCashReferenceData {
   @ApiProperty({ format: 'date', type: String }) businessDate!: string;
   @ApiProperty({ isArray: true, type: FinanceCashRegisterReferenceDto })
   cashRegisters!: FinanceCashRegisterReference[];
   @ApiProperty({ isArray: true, type: FinanceCashCollectionReferenceDto })
   openCollections!: FinanceCashCollectionReference[];
+  @ApiProperty({ isArray: true, type: FinanceCashPosAccountReferenceDto })
+  openPosAccounts!: FinanceCashPosAccountReference[];
   @ApiProperty({ isArray: true, type: FinanceCashPartnerReferenceDto })
   partners!: FinanceCashPartnerReference[];
 }
@@ -208,6 +225,8 @@ export class FinanceCashVoucherDto implements FinanceCashVoucher {
   @ApiProperty({ format: 'date-time', type: String }) createdAt!: string;
   @ApiProperty({ type: String }) currencyCode!: string;
   @ApiPropertyOptional({ format: 'uuid', type: String }) customerDocumentId?: string;
+  @ApiPropertyOptional({ format: 'uuid', type: String }) posSaleId?: string;
+  @ApiPropertyOptional({ type: String }) posSaleNumber?: string;
   @ApiProperty({ enum: financeCashVoucherDirections })
   direction!: FinanceCashVoucher['direction'];
   @ApiProperty({ format: 'uuid', type: String }) id!: string;

@@ -1,6 +1,6 @@
 import 'reflect-metadata';
 
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 
@@ -8,11 +8,13 @@ import type { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import type { AppEnvironment } from '@vista/config';
 import type {
+  AcceptanceProtocol,
   ErpReportDefinition,
   ErpReportPreview,
   CustomerPriceGroup,
   CustomerOperationalOverview,
   PriceList,
+  PurchaseOrder,
   PromotionalCampaign,
   SalesPricingReferenceData,
   SalesReferenceData,
@@ -26,6 +28,7 @@ import type {
   FinanceCashDailyReport,
   FinanceCashReferenceData,
   FinanceCashVoucher,
+  CustomerPaymentStatusPage,
   FinanceCustomerDocument,
   FinanceJournalReport,
   FinanceReportDefinition,
@@ -54,6 +57,7 @@ import type {
   ServiceWorkOrderPhoto,
   ServiceWorkOrderPage,
   FinancialDocument,
+  SupplierInvoice,
   FinancialDocumentReferenceData,
   LogisticsDelivery,
   LogisticsReferenceData,
@@ -64,6 +68,7 @@ import type {
   ServiceInspectionPlan,
   WarrantyClaim,
   CrmAfterSalesOverview,
+  CrmWarrantyCoverageOffer,
   CrmTicket,
   CrmTicketReferenceData,
   CustomerAdvance,
@@ -83,10 +88,12 @@ import { APP_ENVIRONMENT } from '../src/config/config.module.js';
 import { migrateDown, migrateUp } from '../src/database/migration-runner.js';
 import { allocateOfficialNumber } from '../src/finance/official-numbering.js';
 import { FinancialDocumentsService } from '../src/finance/financial-documents.service.js';
+import { FinanceReportsService } from '../src/finance/finance-reports.service.js';
 import { SalesSubscriptionsService } from '../src/sales/sales-subscriptions.service.js';
 import { ApiErrorException } from '../src/common/api-error.exception.js';
 import { JobHandlerRegistry } from '../src/jobs/job-handler-registry.service.js';
 import { ReportingHubService } from '../src/jobs/reporting-hub.service.js';
+import { CourierAdapterService, CourierProviderError } from '../src/logistics/courier-adapters.js';
 import { NotificationDispatcherService } from '../src/notifications/notification-dispatcher.service.js';
 import { SmtpMailerService, type SmtpMessage } from '../src/notifications/smtp-mailer.service.js';
 import { ObjectStorageService } from '../src/storage/object-storage.service.js';
@@ -115,12 +122,22 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
   let technicianWarehouseId: string;
   let serialNumber: string;
   let salesInvoiceId: string;
+  let foreignSupplierInvoiceId: string | undefined;
+  let acceptanceProtocolPurchaseOrderId: string;
+  let acceptanceProtocolReceiptId: string;
+  let acceptanceProtocolOrderLineId: string;
+  let acceptanceProtocolSupplierInvoiceId: string;
   let salesShipmentId: string;
   let serialShipmentLineId: string;
   let registeredLogisticsReturnId: string;
   let registeredLogisticsReturnVersion: number;
   const storedObjects = new Map<string, Buffer>();
   const deliveredEmails: SmtpMessage[] = [];
+  const courierAdapter = {
+    create: vi.fn(),
+    isConfigured: vi.fn((provider: string) => provider === 'unconfigured-provider'),
+    track: vi.fn(),
+  };
   let failNextEmailDelivery = false;
   const runId = randomUUID().replaceAll('-', '');
 
@@ -142,6 +159,66 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
       new URL('../src/database/migrations', import.meta.url),
     );
     await migrateUp(database, migrationDirectory);
+    expect(await migrateDown(database, migrationDirectory)).toBe('0115_backup_independent_copies');
+    expect(await migrateDown(database, migrationDirectory)).toBe(
+      '0114_backup_retention_reduction_approval',
+    );
+    expect(await migrateDown(database, migrationDirectory)).toBe(
+      '0113_backup_restore_point_deletion',
+    );
+    expect(await migrateDown(database, migrationDirectory)).toBe(
+      '0112_backup_policy_disable_approval',
+    );
+    expect(await migrateDown(database, migrationDirectory)).toBe('0111_backup_file_share_source');
+    expect(await migrateDown(database, migrationDirectory)).toBe(
+      '0110_backup_granular_file_restore',
+    );
+    expect(await migrateDown(database, migrationDirectory)).toBe('0109_backup_compression');
+    expect(await migrateDown(database, migrationDirectory)).toBe(
+      '0108_backup_object_storage_restore',
+    );
+    expect(await migrateDown(database, migrationDirectory)).toBe('0107_backup_plan_reviews');
+    expect(await migrateDown(database, migrationDirectory)).toBe('0106_backup_dr_tests');
+    expect(await migrateDown(database, migrationDirectory)).toBe('0105_backup_missed_schedules');
+    expect(await migrateDown(database, migrationDirectory)).toBe('0104_backup_retention');
+    expect(await migrateDown(database, migrationDirectory)).toBe('0103_backup_restore_requests');
+    expect(await migrateDown(database, migrationDirectory)).toBe('0102_backup_execution_ledger');
+    expect(await migrateDown(database, migrationDirectory)).toBe('0101_backup_policy_approval');
+    expect(await migrateDown(database, migrationDirectory)).toBe('0100_backup_inventory_policies');
+    expect(await migrateDown(database, migrationDirectory)).toBe(
+      '0099_finance_bank_value_date_semantics',
+    );
+    expect(await migrateDown(database, migrationDirectory)).toBe('0098_pos_offline_sync_audit');
+    expect(await migrateDown(database, migrationDirectory)).toBe(
+      '0097_pos_card_authorization_lifecycle',
+    );
+    expect(await migrateDown(database, migrationDirectory)).toBe('0096_pos_datecs_unp_leases');
+    expect(await migrateDown(database, migrationDirectory)).toBe('0095_pos_fiscal_return_saga');
+    expect(await migrateDown(database, migrationDirectory)).toBe('0094_pos_fiscal_daily_reports');
+    expect(await migrateDown(database, migrationDirectory)).toBe('0093_pos_fiscal_sale_saga');
+    expect(await migrateDown(database, migrationDirectory)).toBe('0092_logistics_courier_bookings');
+    expect(await migrateDown(database, migrationDirectory)).toBe(
+      '0091_crm_customer_survey_delivery',
+    );
+    expect(await migrateDown(database, migrationDirectory)).toBe(
+      '0090_crm_warranty_coverage_offers',
+    );
+    expect(await migrateDown(database, migrationDirectory)).toBe(
+      '0089_procurement_acceptance_protocols',
+    );
+    expect(await migrateDown(database, migrationDirectory)).toBe(
+      '0088_supplier_invoice_rate_snapshots',
+    );
+    expect(await migrateDown(database, migrationDirectory)).toBe(
+      '0087_finance_payment_status_register',
+    );
+    expect(await migrateDown(database, migrationDirectory)).toBe(
+      '0086_pos_account_supplier_offsets',
+    );
+    expect(await migrateDown(database, migrationDirectory)).toBe(
+      '0085_pos_account_finance_collections',
+    );
+    expect(await migrateDown(database, migrationDirectory)).toBe('0084_pos_account_return_refunds');
     expect(await migrateDown(database, migrationDirectory)).toBe('0083_pos_account_collections');
     expect(await migrateDown(database, migrationDirectory)).toBe('0082_collection_corrections');
     expect(await migrateDown(database, migrationDirectory)).toBe(
@@ -183,6 +260,31 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
     expect(restoredMigrations).toContain('0076_financial_document_issuance');
     expect(restoredMigrations).toContain('0077_finance_income_outcome_exports');
     expect(restoredMigrations).toContain('0078_finance_proforma_conversion_link');
+    expect(restoredMigrations).toContain('0091_crm_customer_survey_delivery');
+    expect(restoredMigrations).toContain('0092_logistics_courier_bookings');
+    expect(restoredMigrations).toContain('0093_pos_fiscal_sale_saga');
+    expect(restoredMigrations).toContain('0094_pos_fiscal_daily_reports');
+    expect(restoredMigrations).toContain('0095_pos_fiscal_return_saga');
+    expect(restoredMigrations).toContain('0096_pos_datecs_unp_leases');
+    expect(restoredMigrations).toContain('0097_pos_card_authorization_lifecycle');
+    expect(restoredMigrations).toContain('0098_pos_offline_sync_audit');
+    expect(restoredMigrations).toContain('0099_finance_bank_value_date_semantics');
+    expect(restoredMigrations).toContain('0100_backup_inventory_policies');
+    expect(restoredMigrations).toContain('0101_backup_policy_approval');
+    expect(restoredMigrations).toContain('0102_backup_execution_ledger');
+    expect(restoredMigrations).toContain('0103_backup_restore_requests');
+    expect(restoredMigrations).toContain('0104_backup_retention');
+    expect(restoredMigrations).toContain('0105_backup_missed_schedules');
+    expect(restoredMigrations).toContain('0106_backup_dr_tests');
+    expect(restoredMigrations).toContain('0107_backup_plan_reviews');
+    expect(restoredMigrations).toContain('0108_backup_object_storage_restore');
+    expect(restoredMigrations).toContain('0109_backup_compression');
+    expect(restoredMigrations).toContain('0110_backup_granular_file_restore');
+    expect(restoredMigrations).toContain('0111_backup_file_share_source');
+    expect(restoredMigrations).toContain('0112_backup_policy_disable_approval');
+    expect(restoredMigrations).toContain('0113_backup_restore_point_deletion');
+    expect(restoredMigrations).toContain('0114_backup_retention_reduction_approval');
+    expect(restoredMigrations).toContain('0115_backup_independent_copies');
 
     Object.assign(process.env, {
       // This suite deliberately sends many invalid/replayed reporting commands.
@@ -207,6 +309,9 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
     });
     deliveredEmails.length = 0;
     failNextEmailDelivery = false;
+    courierAdapter.create.mockReset();
+    courierAdapter.isConfigured.mockReset().mockReturnValue(false);
+    courierAdapter.track.mockReset();
     const module = await Test.createTestingModule({ imports: [AppModule] })
       .overrideProvider(ObjectStorageService)
       .useValue({
@@ -236,6 +341,8 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
           return Promise.resolve();
         },
       })
+      .overrideProvider(CourierAdapterService)
+      .useValue(courierAdapter)
       .compile();
     application = module.createNestApplication();
     configureHttpApplication(application, application.get<AppEnvironment>(APP_ENVIRONMENT));
@@ -301,11 +408,13 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
       id: string;
       lines: Array<{ id: string; productId: string }>;
     };
+    acceptanceProtocolPurchaseOrderId = purchaseOrder.id;
     const orderLine = purchaseOrder.lines.find((line) => line.productId === serialProductId);
     if (!orderLine) throw new Error('Serial purchase-order line was not created');
+    acceptanceProtocolOrderLineId = orderLine.id;
 
     const deliveryReference = `WH01-${runId.slice(0, 12).toUpperCase()}`;
-    await request(application.getHttpServer())
+    const receiptResponse = await request(application.getHttpServer())
       .post(`/api/v1/procurement/purchase-orders/${purchaseOrder.id}/receipts`)
       .set('authorization', `Bearer ${token}`)
       .set('idempotency-key', `wh01-goods-receipt-${runId}`)
@@ -321,6 +430,7 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
         supplierDeliveryReference: deliveryReference,
       })
       .expect(201);
+    acceptanceProtocolReceiptId = (receiptResponse.body as { id: string }).id;
 
     const traceResponse = await request(application.getHttpServer())
       .get(`/api/v1/warehouse/serial-traceability/${encodeURIComponent(serialNumber)}`)
@@ -369,6 +479,125 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
       await adminDatabase.query(`DROP DATABASE IF EXISTS ${databaseName}`);
       await adminDatabase.end();
     }
+  });
+
+  it('creates a retry-safe, immutable acceptance protocol from the posted goods receipt', async () => {
+    const endpoint = `/api/v1/procurement/goods-receipts/${acceptanceProtocolReceiptId}/acceptance-protocol`;
+    await request(application.getHttpServer())
+      .post(endpoint)
+      .set('authorization', `Bearer ${viewerToken}`)
+      .set('idempotency-key', `acceptance-viewer-${runId}`)
+      .send({})
+      .expect(403);
+
+    const invoiceResponse = await request(application.getHttpServer())
+      .post('/api/v1/procurement/supplier-invoices')
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', `acceptance-protocol-invoice-${runId}`)
+      .send({
+        invoiceDate: '2099-12-31',
+        invoiceNumber: `ACCEPT-${runId.slice(0, 16)}`,
+        lines: [
+          {
+            orderLineId: acceptanceProtocolOrderLineId,
+            quantity: '1',
+            unitPrice: '200',
+            vatRate: '20',
+            vatTreatment: 'standard_20',
+          },
+        ],
+        purchaseOrderId: acceptanceProtocolPurchaseOrderId,
+      })
+      .expect(201);
+    acceptanceProtocolSupplierInvoiceId = (invoiceResponse.body as { id: string }).id;
+
+    const before = await database.query<{ quantity: string }>(
+      `SELECT quantity::text FROM inventory.stock_balances
+       WHERE warehouse_id = $1 AND product_id = $2`,
+      [warehouseId, serialProductId],
+    );
+    const [created, concurrentCreate] = await Promise.all([
+      request(application.getHttpServer())
+        .post(endpoint)
+        .set('authorization', `Bearer ${token}`)
+        .set('idempotency-key', `acceptance-protocol-${runId}`)
+        .send({ supplierInvoiceId: acceptanceProtocolSupplierInvoiceId })
+        .expect(201),
+      request(application.getHttpServer())
+        .post(endpoint)
+        .set('authorization', `Bearer ${token}`)
+        .set('idempotency-key', `acceptance-protocol-race-${runId}`)
+        .send({ supplierInvoiceId: acceptanceProtocolSupplierInvoiceId })
+        .expect(201),
+    ]);
+    const createdProtocol = created.body as AcceptanceProtocol;
+    const concurrentProtocol = concurrentCreate.body as AcceptanceProtocol;
+    expect(concurrentProtocol.id).toBe(createdProtocol.id);
+    expect(createdProtocol).toMatchObject({
+      goodsReceiptId: acceptanceProtocolReceiptId,
+      purchaseOrderId: acceptanceProtocolPurchaseOrderId,
+      supplierPartnerId: supplierId,
+      supplierInvoice: {
+        id: acceptanceProtocolSupplierInvoiceId,
+        invoiceDate: '2099-12-31',
+        invoiceNumber: `ACCEPT-${runId.slice(0, 16)}`,
+      },
+      lines: [
+        expect.objectContaining({
+          acceptedQuantity: '1.0000',
+          cumulativeReceivedQuantity: '1.0000',
+          outstandingQuantity: '0.0000',
+          previouslyReceivedQuantity: '0.0000',
+          productId: serialProductId,
+          serialNumbers: [serialNumber],
+        }),
+      ],
+    });
+    expect(createdProtocol.protocolNumber).toMatch(/^GRP-\d{4}-\d{6}$/u);
+
+    const retried = await request(application.getHttpServer())
+      .post(endpoint)
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', `acceptance-protocol-${runId}`)
+      .send({ supplierInvoiceId: acceptanceProtocolSupplierInvoiceId })
+      .expect(201);
+    expect((retried.body as AcceptanceProtocol).id).toBe(createdProtocol.id);
+
+    const secondKeyRetry = await request(application.getHttpServer())
+      .post(endpoint)
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', `acceptance-protocol-replay-${runId}`)
+      .send({ supplierInvoiceId: acceptanceProtocolSupplierInvoiceId })
+      .expect(201);
+    expect((secondKeyRetry.body as AcceptanceProtocol).id).toBe(createdProtocol.id);
+
+    const read = await request(application.getHttpServer())
+      .get(endpoint)
+      .set('authorization', `Bearer ${token}`)
+      .expect(200);
+    expect(read.body as AcceptanceProtocol).toEqual(createdProtocol);
+    await expect(
+      database.query(
+        'UPDATE procurement.acceptance_protocols SET protocol_number = $2 WHERE id = $1',
+        [createdProtocol.id, 'GRP-2099-999999'],
+      ),
+    ).rejects.toThrow('procurement acceptance protocols are immutable');
+    const after = await database.query<{ quantity: string }>(
+      `SELECT quantity::text FROM inventory.stock_balances
+       WHERE warehouse_id = $1 AND product_id = $2`,
+      [warehouseId, serialProductId],
+    );
+    expect(after.rows).toEqual(before.rows);
+
+    const order = await request(application.getHttpServer())
+      .get(`/api/v1/procurement/purchase-orders/${acceptanceProtocolPurchaseOrderId}`)
+      .set('authorization', `Bearer ${token}`)
+      .expect(200);
+    const createdOrder = order.body as PurchaseOrder;
+    expect(createdOrder.receipts[0]?.acceptanceProtocol).toEqual({
+      id: createdProtocol.id,
+      protocolNumber: createdProtocol.protocolNumber,
+    });
   });
 
   it('saves private report options safely and rejects unapproved fields and periods', async () => {
@@ -646,6 +875,98 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
     );
     expect(cardCount.rows[0]?.count).toBe('1');
 
+    const warrantyCard = reconciledWarrantyOverview.warrantyCards.find(
+      (card) => card.serialNumber === serialNumber,
+    );
+    expect(warrantyCard).toBeTruthy();
+    const contractsBeforeOffer = await database.query<{ count: string }>(
+      `SELECT count(*)::text AS count FROM sales.service_subscription_contracts
+       WHERE customer_partner_id = $1`,
+      [customerId],
+    );
+    const offerInput = {
+      coverageStartsOn: '2027-01-02',
+      durationMonths: 12,
+      offerType: 'extended_warranty',
+      quotedAmount: '240.00',
+      terms: 'Coverage includes parts and labour for the extended period.',
+      validUntil: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
+    };
+    await request(application.getHttpServer())
+      .post(`/api/v1/crm/after-sales/warranty-cards/${warrantyCard!.id}/coverage-offers`)
+      .set('authorization', `Bearer ${viewerToken}`)
+      .set('idempotency-key', `warranty-offer-denied-${runId}`)
+      .send(offerInput)
+      .expect(403);
+    const offerKey = `warranty-coverage-offer-${runId}`;
+    const offerResponse = await request(application.getHttpServer())
+      .post(`/api/v1/crm/after-sales/warranty-cards/${warrantyCard!.id}/coverage-offers`)
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', offerKey)
+      .send(offerInput)
+      .expect(201);
+    const coverageOffer = offerResponse.body as CrmWarrantyCoverageOffer;
+    expect(coverageOffer).toMatchObject({
+      coverageStartsOn: offerInput.coverageStartsOn,
+      currencyCode: 'EUR',
+      customerPartnerId: customerId,
+      durationMonths: 12,
+      offerType: 'extended_warranty',
+      quotedAmount: '240.00',
+      serialNumber,
+      status: 'draft',
+      validUntil: offerInput.validUntil,
+      warrantyCardId: warrantyCard!.id,
+      warrantyEndsOn: '2027-01-01',
+    });
+    expect(coverageOffer.number).toMatch(/^WOF-\d{4}-\d{6}$/u);
+    const offerReplay = await request(application.getHttpServer())
+      .post(`/api/v1/crm/after-sales/warranty-cards/${warrantyCard!.id}/coverage-offers`)
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', offerKey)
+      .send(offerInput)
+      .expect(201);
+    expect((offerReplay.body as CrmWarrantyCoverageOffer).id).toBe(coverageOffer.id);
+    const offerInOverview = await request(application.getHttpServer())
+      .get('/api/v1/crm/after-sales')
+      .set('authorization', `Bearer ${token}`)
+      .expect(200);
+    expect((offerInOverview.body as CrmAfterSalesOverview).coverageOffers).toEqual([
+      expect.objectContaining({ id: coverageOffer.id, status: 'draft' }),
+    ]);
+    const sharedOfferResponse = await request(application.getHttpServer())
+      .post(`/api/v1/crm/after-sales/coverage-offers/${coverageOffer.id}/status`)
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', `warranty-coverage-offer-share-${runId}`)
+      .send({ nextStatus: 'offered' })
+      .expect(200);
+    const sharedOffer = sharedOfferResponse.body as CrmWarrantyCoverageOffer;
+    expect(sharedOffer.status).toBe('offered');
+    const acceptedOfferResponse = await request(application.getHttpServer())
+      .post(`/api/v1/crm/after-sales/coverage-offers/${coverageOffer.id}/status`)
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', `warranty-coverage-offer-accept-${runId}`)
+      .send({ nextStatus: 'accepted' })
+      .expect(200);
+    expect((acceptedOfferResponse.body as CrmWarrantyCoverageOffer).status).toBe('accepted');
+    await request(application.getHttpServer())
+      .post(`/api/v1/crm/after-sales/coverage-offers/${coverageOffer.id}/status`)
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', `warranty-coverage-offer-invalid-${runId}`)
+      .send({ nextStatus: 'declined' })
+      .expect(409);
+    await expect(
+      database.query(`UPDATE crm.warranty_coverage_offers SET quoted_amount = 1 WHERE id = $1`, [
+        coverageOffer.id,
+      ]),
+    ).rejects.toThrow('immutable');
+    const contractsAfterOffer = await database.query<{ count: string }>(
+      `SELECT count(*)::text AS count FROM sales.service_subscription_contracts
+       WHERE customer_partner_id = $1`,
+      [customerId],
+    );
+    expect(contractsAfterOffer.rows[0]?.count).toBe(contractsBeforeOffer.rows[0]?.count);
+
     const invoicedResponse = await request(application.getHttpServer())
       .post(`/api/v1/sales/orders/${accepted.order?.id}/invoice-draft`)
       .set('authorization', `Bearer ${token}`)
@@ -915,11 +1236,32 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
       .send({})
       .expect(403);
 
+    courierAdapter.isConfigured.mockImplementation((provider: string) => provider === 'speedy');
+    courierAdapter.create.mockRejectedValueOnce(
+      new CourierProviderError('The booking result could not be confirmed.', 'uncertain'),
+    );
+    const courierEvents = [
+      {
+        description: 'Shipment accepted',
+        occurredAt: '2026-08-26T08:00:00+00:00',
+        place: 'Vratsa',
+        status: 'accepted',
+      },
+    ];
+    courierAdapter.track.mockResolvedValue({
+      events: courierEvents,
+      providerStatus: 'Shipment accepted',
+    });
+
     const deliveryKey = `logistics-delivery-${runId}`;
     const deliveryInput = {
       customerLocationId,
-      deliveryMethod: 'company_transport',
+      deliveryMethod: 'speedy',
       instructions: 'Call the customer before arrival.',
+      parcelCount: 1,
+      parcelWeightKg: '2.500',
+      recipientName: 'Customer Representative',
+      recipientPhone: '+359888123456',
       scheduledEnd: '2026-08-26T09:00:00.000Z',
       scheduledStart: '2026-08-26T07:00:00.000Z',
       shipmentId: salesShipmentId,
@@ -933,7 +1275,8 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
     const delivery = deliveryResponse.body as LogisticsDelivery;
     expect(delivery).toMatchObject({
       customerLocationId,
-      deliveryMethod: 'company_transport',
+      courierBooking: { status: 'pending' },
+      deliveryMethod: 'speedy',
       shipmentId: salesShipmentId,
       status: 'planned',
       version: 1,
@@ -945,6 +1288,90 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
       .send(deliveryInput)
       .expect(201);
     expect((deliveryReplay.body as LogisticsDelivery).id).toBe(delivery.id);
+
+    await request(application.getHttpServer())
+      .post(`/api/v1/logistics/deliveries/${delivery.id}/courier-booking`)
+      .set('authorization', `Bearer ${viewerToken}`)
+      .set('idempotency-key', `logistics-courier-viewer-${runId}`)
+      .expect(403);
+    const uncertainBookingResponse = await request(application.getHttpServer())
+      .post(`/api/v1/logistics/deliveries/${delivery.id}/courier-booking`)
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', `logistics-courier-book-${runId}`);
+    expect(uncertainBookingResponse.status, JSON.stringify(uncertainBookingResponse.body)).toBe(
+      200,
+    );
+    const uncertainBooking = uncertainBookingResponse;
+    expect(uncertainBooking.body as LogisticsDelivery).toMatchObject({
+      courierBooking: {
+        attemptCount: 1,
+        lastError: 'The booking result could not be confirmed.',
+        status: 'needs_review',
+      },
+    });
+    await request(application.getHttpServer())
+      .post(`/api/v1/logistics/deliveries/${delivery.id}/courier-booking`)
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', `logistics-courier-book-retry-${runId}`)
+      .expect(409);
+    expect(courierAdapter.create).toHaveBeenCalledTimes(1);
+
+    const reconciled = await request(application.getHttpServer())
+      .post(`/api/v1/logistics/deliveries/${delivery.id}/courier-booking/reconcile`)
+      .set('authorization', `Bearer ${token}`)
+      .send({ providerReference: 'SP-2026-000001' })
+      .expect(200);
+    expect(reconciled.body as LogisticsDelivery).toMatchObject({
+      courierBooking: {
+        events: courierEvents,
+        providerReference: 'SP-2026-000001',
+        status: 'booked',
+      },
+    });
+    await request(application.getHttpServer())
+      .post(`/api/v1/logistics/deliveries/${delivery.id}/courier-booking/reconcile`)
+      .set('authorization', `Bearer ${token}`)
+      .send({ providerReference: 'SP-2026-000001' })
+      .expect(200);
+    expect(courierAdapter.track).toHaveBeenCalledTimes(1);
+
+    const tracked = await request(application.getHttpServer())
+      .post(`/api/v1/logistics/deliveries/${delivery.id}/courier-tracking`)
+      .set('authorization', `Bearer ${token}`)
+      .expect(200);
+    expect(tracked.body as LogisticsDelivery).toMatchObject({
+      courierBooking: {
+        events: courierEvents,
+        providerStatus: 'Shipment accepted',
+        status: 'booked',
+      },
+    });
+    const eventCount = await database.query<{ count: string }>(
+      'SELECT count(*)::text AS count FROM logistics.delivery_courier_tracking_events WHERE delivery_id=$1',
+      [delivery.id],
+    );
+    expect(eventCount.rows[0]?.count).toBe('1');
+    courierAdapter.track.mockRejectedValueOnce(
+      new CourierProviderError('Tracking is temporarily unavailable.', 'unavailable'),
+    );
+    const failedTracking = await request(application.getHttpServer())
+      .post(`/api/v1/logistics/deliveries/${delivery.id}/courier-tracking`)
+      .set('authorization', `Bearer ${token}`)
+      .expect(409);
+    expect(failedTracking.body).toMatchObject({
+      error: { code: 'LOGISTICS_COURIER_TRACKING_FAILED' },
+    });
+    const storedTrackingFailure = await database.query<{
+      courier_last_checked_at: string | null;
+      courier_last_error: string | null;
+    }>(
+      'SELECT courier_last_checked_at::text, courier_last_error FROM logistics.deliveries WHERE id=$1',
+      [delivery.id],
+    );
+    expect(storedTrackingFailure.rows[0]).toMatchObject({
+      courier_last_error: 'Tracking is temporarily unavailable.',
+    });
+    expect(storedTrackingFailure.rows[0]?.courier_last_checked_at).toBeTruthy();
 
     const routeResponse = await request(application.getHttpServer())
       .post('/api/v1/logistics/routes')
@@ -1039,7 +1466,132 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
           WHERE aggregate_id IN ($1, $2, $3) AND event_type LIKE 'logistics.%') AS outbox_count`,
       [delivery.id, route.id, registeredReturn.id],
     );
-    expect(evidence.rows[0]).toEqual({ audit_count: '5', outbox_count: '5' });
+    expect(evidence.rows[0]).toEqual({ audit_count: '10', outbox_count: '10' });
+  });
+
+  it('uses each supplier invoice rate snapshot in EUR journals, VAT and finance exports', async () => {
+    const invoiceDate = '2099-09-03';
+    const dueDate = '2099-09-10';
+    await database.query(
+      `INSERT INTO finance.currency_rates (currency_code, rate_date, eur_per_unit)
+       VALUES ('USD', $1, 0.92000000)
+       ON CONFLICT (currency_code, rate_date) DO UPDATE
+       SET eur_per_unit = EXCLUDED.eur_per_unit`,
+      [invoiceDate],
+    );
+    const orderResponse = await request(application.getHttpServer())
+      .post('/api/v1/procurement/purchase-orders')
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', `foreign-purchase-order-${runId}`)
+      .send({
+        currencyCode: 'USD',
+        lines: [
+          {
+            expectedDeliveryDate: dueDate,
+            productId,
+            quantity: '2',
+            unitPrice: '10',
+          },
+        ],
+        supplierPartnerId: supplierId,
+        warehouseId,
+      })
+      .expect(201);
+    const purchaseOrder = orderResponse.body as {
+      id: string;
+      lines: Array<{ id: string; productId: string }>;
+    };
+    const orderLine = purchaseOrder.lines[0];
+    if (!orderLine) throw new Error('Foreign-currency order line was missing');
+    const invoiceResponse = await request(application.getHttpServer())
+      .post('/api/v1/procurement/supplier-invoices')
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', `foreign-supplier-invoice-${runId}`)
+      .send({
+        invoiceDate,
+        invoiceNumber: `USD-${runId.slice(0, 12)}`,
+        lines: [
+          {
+            orderLineId: orderLine.id,
+            quantity: '2',
+            unitPrice: '10',
+            vatRate: '20',
+            vatTreatment: 'standard_20',
+          },
+        ],
+        purchaseOrderId: purchaseOrder.id,
+      })
+      .expect(201);
+    const invoice = invoiceResponse.body as SupplierInvoice;
+    foreignSupplierInvoiceId = invoice.id;
+    expect(invoice).toMatchObject({
+      currencyCode: 'USD',
+      exchangeRate: '0.92000000',
+      rateDate: invoiceDate,
+      rateSource: 'BNB',
+      total: '24.0000',
+    });
+    await expect(
+      database.query(
+        `UPDATE procurement.supplier_invoices
+         SET exchange_rate = 0.93000000 WHERE id = $1`,
+        [invoice.id],
+      ),
+    ).rejects.toThrow('supplier invoice exchange-rate snapshots cannot be changed');
+
+    const journalResponse = await request(application.getHttpServer())
+      .get(
+        `/api/v1/finance/reports/journal?kind=purchase&dateFrom=${invoiceDate}&dateTo=${invoiceDate}`,
+      )
+      .set('authorization', `Bearer ${viewerToken}`)
+      .expect(200);
+    expect(journalResponse.body as FinanceJournalReport).toMatchObject({
+      items: [
+        expect.objectContaining({
+          exchangeRate: '0.92000000',
+          grossEurTotal: '22.0800',
+          netEurTotal: '18.4000',
+          number: invoice.invoiceNumber,
+          taxBreakdownComplete: true,
+          vatEurTotal: '3.6800',
+        }),
+      ],
+      totals: {
+        documentCount: 1,
+        grossEurTotal: '22.0800',
+        incompleteTaxDocuments: 0,
+        netEurTotal: '18.4000',
+        vatEurTotal: '3.6800',
+      },
+    });
+    const vatResponse = await request(application.getHttpServer())
+      .get(`/api/v1/finance/reports/vat-review?dateFrom=${invoiceDate}&dateTo=${invoiceDate}`)
+      .set('authorization', `Bearer ${viewerToken}`)
+      .expect(200);
+    expect(vatResponse.body as FinanceVatReviewReport).toMatchObject({
+      incompletePurchaseDocumentNumbers: [],
+      incompletePurchaseDocuments: 0,
+      recordedDifferenceEur: '-3.6800',
+      recordedInputVatEur: '3.6800',
+      recordedOutputVatEur: '0.0000',
+    });
+
+    const exportData = await application.get(FinanceReportsService).exportData('finance.outcome', {
+      dateFrom: invoiceDate,
+      dateTo: invoiceDate,
+    });
+    expect(exportData.rows).toEqual([
+      expect.objectContaining({
+        currencyCode: 'USD',
+        exchangeRate: '0.92000000',
+        eurNetTotal: '18.4000',
+        eurTotal: '22.0800',
+        eurVatTotal: '3.6800',
+        netTotal: '20.0000',
+        total: '24.0000',
+        vatTotal: '4.0000',
+      }),
+    ]);
   });
 
   it('allocates partial payments once, marks overdue balances, and preserves the collection trail', async () => {
@@ -1956,7 +2508,7 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
           .expect(200);
         if (format === 'csv') {
           expect(downloaded.text).toContain(
-            'Transaction number,Invoice number,Invoice date,Partner,Account code,Net amount,VAT amount,VAT rate(s),Total amount,Currency,Payment date',
+            'Transaction number,Invoice number,Invoice date,Partner,Account code,Net amount,VAT amount,VAT rate(s),Total amount,Currency,EUR rate,Net EUR,VAT EUR,Total EUR,Payment date',
           );
         } else {
           expect(Number(downloaded.headers['content-length'])).toBeGreaterThan(2_000);
@@ -2107,6 +2659,32 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
       statementDate: dueDate,
       statementReference: `STATEMENT-${runId}`,
     };
+    const priorValueDate = new Date(`${dueDate}T00:00:00.000Z`);
+    priorValueDate.setUTCDate(priorValueDate.getUTCDate() - 1);
+    const priorValueDateStatement = await request(application.getHttpServer())
+      .post('/api/v1/finance/bank-statements')
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', `prior-value-date-${runId}`)
+      .send({
+        ...statementInput,
+        closingBalance: '1001',
+        lines: [
+          {
+            amount: '1',
+            counterpartyName: 'Prior value date test',
+            direction: 'incoming',
+            paymentReference: `Prior value date ${runId}`,
+            transactionDate: dueDate,
+            valueDate: priorValueDate.toISOString().slice(0, 10),
+          },
+        ],
+        statementReference: `PRIOR-VALUE-${runId}`,
+      })
+      .expect(201);
+    expect((priorValueDateStatement.body as FinanceBankStatement).transactions[0]).toMatchObject({
+      transactionDate: dueDate,
+      valueDate: priorValueDate.toISOString().slice(0, 10),
+    });
     const futureStatementResponse = await request(application.getHttpServer())
       .post('/api/v1/finance/bank-statements')
       .set('authorization', `Bearer ${token}`)
@@ -2445,8 +3023,8 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
     );
     expect(evidence.rows[0]).toEqual({
       allocation_count: '8',
-      audit_count: '27',
-      outbox_count: '27',
+      audit_count: '28',
+      outbox_count: '28',
     });
   });
 
@@ -3079,6 +3657,25 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
       financialDocument: { id: issued.id },
     });
     expect(await readCollection()).not.toHaveProperty('sourceSalesInvoiceId');
+    const unpaidStatus = await request(application.getHttpServer())
+      .get(
+        `/api/v1/finance/customer-accounts/payment-status?search=${encodeURIComponent(issued.number)}&status=unpaid`,
+      )
+      .set('authorization', `Bearer ${token}`)
+      .expect(200);
+    expect(unpaidStatus.body as CustomerPaymentStatusPage).toMatchObject({
+      totalItems: 1,
+      items: [
+        expect.objectContaining({
+          id: collectionId,
+          number: issued.number,
+          sourceType: 'issued_document',
+          paymentStatus: 'unpaid',
+          paidTotal: '0.0000',
+          outstandingTotal: '24.0000',
+        }),
+      ],
+    });
     const staleLink = await request(application.getHttpServer())
       .post(`/api/v1/finance/financial-documents/${draft.id}/collection`)
       .set('authorization', `Bearer ${token}`)
@@ -3133,7 +3730,21 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
         .set('idempotency-key', key)
         .send(input)
         .expect(201);
-      expect((await readCollection()).paymentStatus).toBe(index === 0 ? 'partially_paid' : 'paid');
+      const collection = await readCollection();
+      expect(collection.paymentStatus).toBe(index === 0 ? 'partially_paid' : 'paid');
+      const status = index === 0 ? 'partially_paid' : 'paid';
+      const paymentStatus = await request(application.getHttpServer())
+        .get(
+          `/api/v1/finance/customer-accounts/payment-status?search=${encodeURIComponent(issued.number)}&status=${status}`,
+        )
+        .set('authorization', `Bearer ${token}`)
+        .expect(200);
+      expect((paymentStatus.body as CustomerPaymentStatusPage).items[0]).toMatchObject({
+        id: collectionId,
+        paymentStatus: status,
+        outstandingTotal: collection.outstandingTotal,
+        paidTotal: collection.allocatedTotal,
+      });
     }
     const paid = await readCollection();
     expect(paid).toMatchObject({
@@ -4226,18 +4837,41 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
       version: 2,
     });
 
+    const visitContractResponse = await request(application.getHttpServer())
+      .post('/api/v1/sales/subscriptions')
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', `service-visit-contract-${runId}`)
+      .send({
+        ...subscriptionInput(),
+        nextInvoiceDate: '2026-10-02',
+        validFrom: '2026-10-02',
+        validTo: '2026-10-02',
+      })
+      .expect(201);
+    const visitContract = visitContractResponse.body as ServiceSubscriptionContract;
+
     const planVisitJob = {
       attemptNumber: 1,
       correlationId: `plan-visit-${runId}`,
-      enqueuedAt: '2026-08-26T01:45:00.000Z',
-      idempotencyKey: `plan-visit-2026-08-26-${runId}`,
+      enqueuedAt: '2026-10-02T01:45:00.000Z',
+      idempotencyKey: `plan-visit-2026-10-02-${runId}`,
       jobId: `plan-visit-${runId}`,
       maxAttempts: 5,
       name: 'service.plan-visit.generate',
-      payload: { asOf: '2026-08-26' },
+      payload: { asOf: '2026-10-02' },
       retryAllowed: true,
     } as const;
-    await expect(handlers.execute(planVisitJob)).resolves.toMatchObject({ generatedCount: 1 });
+    const visitGeneration = await handlers.execute(planVisitJob);
+    expect(visitGeneration).toMatchObject({ generatedCount: 1 });
+    const generatedVisit = await database.query<{ count: string }>(
+      `SELECT count(*)::text AS count
+       FROM service.subscription_visit_generations
+       WHERE subscription_contract_id = $1
+         AND customer_equipment_id = $2
+         AND planned_date = '2026-10-02'`,
+      [visitContract.id, equipmentId],
+    );
+    expect(generatedVisit.rows[0]?.count).toBe('1');
     await expect(handlers.execute({ ...planVisitJob, attemptNumber: 2 })).resolves.toMatchObject({
       deduplicated: true,
       generatedCount: 0,
@@ -4302,7 +4936,11 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
       .expect(200);
     expect((requestPageResponse.body as ServiceRequestPage).items).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ plannedVisitDate: '2026-10-01', sourceChannel: 'service_plan' }),
+        expect.objectContaining({
+          plannedVisitDate: '2026-10-02',
+          sourceChannel: 'service_plan',
+          subscriptionContractId: visitContract.id,
+        }),
       ]),
     );
 
@@ -4803,8 +5441,8 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
       pageSize: 25,
       totalPages: 1,
     });
-    expect(requestPage.summary.new).toBeGreaterThanOrEqual(2);
-    expect(requestPage.total).toBeGreaterThanOrEqual(2);
+    expect(requestPage.summary.new).toBeGreaterThanOrEqual(1);
+    expect(requestPage.total).toBeGreaterThanOrEqual(1);
     expect(requestPage.items).toEqual(
       expect.arrayContaining([expect.objectContaining({ id: created.id })]),
     );
@@ -5286,8 +5924,16 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
         }),
       ]),
     );
+    expect(
+      afterServiceOverview.surveySources.find((source) => source.id === completed.id)
+        ?.recipientEmails,
+    ).toContain(`client-${runId}@example.test`);
     const surveyKey = `service-survey-${runId}`;
-    const surveyInput = { sourceId: completed.id, sourceKind: 'service' };
+    const surveyInput = {
+      recipientEmail: `client-${runId}@example.test`,
+      sourceId: completed.id,
+      sourceKind: 'service',
+    };
     const sentSurveyResponse = await request(application.getHttpServer())
       .post('/api/v1/crm/after-sales/surveys')
       .set('authorization', `Bearer ${token}`)
@@ -5300,7 +5946,9 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
       sourceKind: 'service',
       status: 'awaiting_response',
       sourceLabel: completed.number,
+      recipientEmail: surveyInput.recipientEmail,
     });
+    expect(['pending', 'processing', 'delivered']).toContain(sentSurvey.deliveryStatus);
     const surveyReplayResponse = await request(application.getHttpServer())
       .post('/api/v1/crm/after-sales/surveys')
       .set('authorization', `Bearer ${token}`)
@@ -5323,27 +5971,76 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
       .send(surveyInput)
       .expect(409);
     expect(duplicateSurveyResponse.body.error.code).toBe('CRM_SURVEY_ALREADY_SENT');
-    const surveyResponseKey = `service-survey-response-${runId}`;
-    const recordedSurveyResponse = await request(application.getHttpServer())
-      .post(`/api/v1/crm/after-sales/surveys/${sentSurvey.id}/response`)
-      .set('authorization', `Bearer ${token}`)
-      .set('idempotency-key', surveyResponseKey)
-      .send({ comment: 'The repair was handled well.', score: 9 })
-      .expect(200);
-    expect(recordedSurveyResponse.body).toMatchObject({
-      comment: 'The repair was handled well.',
-      score: 9,
-      status: 'responded',
-    });
-    const surveyResponseReplay = await request(application.getHttpServer())
-      .post(`/api/v1/crm/after-sales/surveys/${sentSurvey.id}/response`)
-      .set('authorization', `Bearer ${token}`)
-      .set('idempotency-key', surveyResponseKey)
-      .send({ comment: 'The repair was handled well.', score: 9 })
-      .expect(200);
-    expect((surveyResponseReplay.body as CrmAfterSalesOverview['surveys'][number]).id).toBe(
-      sentSurvey.id,
+    const queuedSurveyEmail = await database.query<{ payload: { text: string } }>(
+      `SELECT message.payload
+       FROM crm.customer_surveys survey
+       JOIN notifications.messages message ON message.id = survey.email_notification_id
+       WHERE survey.id = $1`,
+      [sentSurvey.id],
     );
+    const publicLink = queuedSurveyEmail.rows[0]?.payload.text.match(
+      /\/survey\/([A-Za-z0-9_-]{43})\?lang=bg/u,
+    );
+    const surveyToken = publicLink?.[1];
+    expect(surveyToken).toBeTruthy();
+    const storedToken = await database.query<{ response_token_hash: string }>(
+      'SELECT response_token_hash FROM crm.customer_surveys WHERE id = $1',
+      [sentSurvey.id],
+    );
+    expect(storedToken.rows[0]?.response_token_hash).toBe(
+      createHash('sha256')
+        .update(surveyToken ?? '')
+        .digest('hex'),
+    );
+    const publicSurveyResponse = await request(application.getHttpServer())
+      .get(`/api/v1/crm/public-surveys/${surveyToken}`)
+      .expect(200);
+    expect(publicSurveyResponse.body).toMatchObject({
+      number: sentSurvey.number,
+      sourceKind: 'service',
+      status: 'awaiting_response',
+    });
+    expect(publicSurveyResponse.body.customerName).toBeUndefined();
+    await database.query(
+      `UPDATE crm.customer_surveys
+       SET response_expires_at = now() - interval '1 minute'
+       WHERE id = $1`,
+      [sentSurvey.id],
+    );
+    const expiredSurveyRead = await request(application.getHttpServer())
+      .get(`/api/v1/crm/public-surveys/${surveyToken}`)
+      .expect(200);
+    expect(expiredSurveyRead.body.status).toBe('expired');
+    await request(application.getHttpServer())
+      .post(`/api/v1/crm/public-surveys/${surveyToken}/response`)
+      .send({ score: 8 })
+      .expect(410);
+    await database.query(
+      `UPDATE crm.customer_surveys
+       SET response_expires_at = now() + interval '1 day'
+       WHERE id = $1`,
+      [sentSurvey.id],
+    );
+    const recordedPublicSurvey = await request(application.getHttpServer())
+      .post(`/api/v1/crm/public-surveys/${surveyToken}/response`)
+      .send({ comment: 'The repair was handled well.', score: 9 })
+      .expect(200);
+    expect(recordedPublicSurvey.body).toMatchObject({ score: 9, status: 'responded' });
+    const publicSurveyReplay = await request(application.getHttpServer())
+      .post(`/api/v1/crm/public-surveys/${surveyToken}/response`)
+      .send({ comment: 'This replay must not replace the first answer.', score: 1 })
+      .expect(200);
+    expect(publicSurveyReplay.body).toMatchObject({ score: 9, status: 'responded' });
+    await request(application.getHttpServer())
+      .post(`/api/v1/crm/public-surveys/${'x'.repeat(43)}/response`)
+      .send({ score: 8 })
+      .expect(404);
+    await request(application.getHttpServer())
+      .post(`/api/v1/crm/after-sales/surveys/${sentSurvey.id}/response`)
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', `service-survey-response-after-public-${runId}`)
+      .send({ score: 1 })
+      .expect(409);
     const afterResponseOverview = (
       await request(application.getHttpServer())
         .get('/api/v1/crm/after-sales')
@@ -5669,6 +6366,114 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
     expect(linkedWorkOrder).toMatchObject({
       financialDocumentId: financeDraft.id,
       financialDocumentNumber: financeDraft.number,
+      financialDocumentStatus: 'draft',
+    });
+
+    const issuedServiceInvoice = (
+      await request(application.getHttpServer())
+        .post(`/api/v1/finance/financial-documents/${financeDraft.id}/issue`)
+        .set('authorization', `Bearer ${token}`)
+        .set('idempotency-key', `service-finance-issue-${runId}`)
+        .send({ expectedVersion: financeDraft.version })
+        .expect(200)
+    ).body as FinancialDocument;
+    expect(typeof issuedServiceInvoice.officialNumber).toBe('string');
+    expect(issuedServiceInvoice.sourceServiceWorkOrderId).toBe(completed.id);
+    expect(issuedServiceInvoice.status).toBe('issued');
+    expect(typeof issuedServiceInvoice.collection?.id).toBe('string');
+    expect(typeof issuedServiceInvoice.collection?.number).toBe('string');
+
+    const issuedServiceWorkOrder = (
+      await request(application.getHttpServer())
+        .get(`/api/v1/service/work-orders/${completed.id}`)
+        .set('authorization', `Bearer ${token}`)
+        .expect(200)
+    ).body as ServiceWorkOrder;
+    expect(issuedServiceWorkOrder).toMatchObject({
+      financialDocumentId: financeDraft.id,
+      financialDocumentNumber: issuedServiceInvoice.officialNumber,
+      financialDocumentStatus: 'issued',
+    });
+
+    const serviceReferenceAfterIssue = (
+      await request(application.getHttpServer())
+        .get('/api/v1/finance/financial-documents/reference-data')
+        .set('authorization', `Bearer ${token}`)
+        .expect(200)
+    ).body as FinancialDocumentReferenceData;
+    expect(
+      serviceReferenceAfterIssue.serviceDrafts.find((draft) => draft.id === completed.id)
+        ?.linkedDocumentTypes,
+    ).toContain('invoice');
+    const duplicateServiceInvoice = await request(application.getHttpServer())
+      .post('/api/v1/finance/financial-documents')
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', `service-finance-duplicate-${runId}`)
+      .send(serviceInvoiceInput)
+      .expect(409);
+    expect(duplicateServiceInvoice.body.error.code).toBe('FINANCE_SERVICE_INVOICE_ALREADY_ISSUED');
+
+    const serviceCollectionId = issuedServiceInvoice.collection?.id;
+    if (!serviceCollectionId) throw new Error('Issued Service invoice has no collection record');
+    const unpaidServiceCollection = (
+      await request(application.getHttpServer())
+        .get(`/api/v1/finance/documents/${serviceCollectionId}`)
+        .set('authorization', `Bearer ${token}`)
+        .expect(200)
+    ).body as FinanceCustomerDocument;
+    expect(unpaidServiceCollection).toMatchObject({
+      financialDocument: { id: financeDraft.id, number: issuedServiceInvoice.officialNumber },
+      outstandingTotal: '102.0000',
+      paymentStatus: 'unpaid',
+      total: '102.0000',
+    });
+
+    const servicePayment = {
+      amount: '102',
+      paymentDate: businessDate,
+      paymentMethod: 'bank_transfer',
+      paymentReference: `SERVICE-${runId}`,
+    };
+    const paidServiceCollection = (
+      await request(application.getHttpServer())
+        .post(`/api/v1/finance/documents/${serviceCollectionId}/payments`)
+        .set('authorization', `Bearer ${token}`)
+        .set('idempotency-key', `service-finance-payment-${runId}`)
+        .send(servicePayment)
+        .expect(201)
+    ).body as FinanceCustomerDocument;
+    expect(paidServiceCollection).toMatchObject({
+      financialDocument: { id: financeDraft.id, number: issuedServiceInvoice.officialNumber },
+      outstandingTotal: '0.0000',
+      paymentStatus: 'paid',
+      total: '102.0000',
+    });
+    const servicePaymentReplay = (
+      await request(application.getHttpServer())
+        .post(`/api/v1/finance/documents/${serviceCollectionId}/payments`)
+        .set('authorization', `Bearer ${token}`)
+        .set('idempotency-key', `service-finance-payment-${runId}`)
+        .send(servicePayment)
+        .expect(201)
+    ).body as FinanceCustomerDocument;
+    expect(servicePaymentReplay.payments.map((payment) => payment.id)).toEqual(
+      paidServiceCollection.payments.map((payment) => payment.id),
+    );
+    const paidServiceStatus = await request(application.getHttpServer())
+      .get(
+        `/api/v1/finance/customer-accounts/payment-status?search=${encodeURIComponent(issuedServiceInvoice.officialNumber ?? '')}&status=paid`,
+      )
+      .set('authorization', `Bearer ${token}`)
+      .expect(200);
+    expect(paidServiceStatus.body).toMatchObject({
+      totalItems: 1,
+      items: [
+        expect.objectContaining({
+          number: issuedServiceInvoice.officialNumber,
+          outstandingTotal: '0.0000',
+          paymentStatus: 'paid',
+        }),
+      ],
     });
 
     const serialTraceResponse = await request(application.getHttpServer())
@@ -8376,6 +9181,25 @@ describe.skipIf(!runInfrastructureTests)('quotation to invoice-draft sales workf
       '0081_financial_document_branding',
       'Cannot downgrade document branding while settings, assets or document snapshots exist',
     );
+  }, 15_000);
+
+  it('creates the supplier payable from the supplier invoice rate snapshot', async () => {
+    if (!foreignSupplierInvoiceId)
+      throw new Error('The foreign-currency supplier invoice was not created earlier');
+    const response = await request(application.getHttpServer())
+      .post('/api/v1/finance/supplier-payables')
+      .set('authorization', `Bearer ${token}`)
+      .set('idempotency-key', `foreign-supplier-payable-${runId}`)
+      .send({ dueDate: '2099-09-10', supplierInvoiceId: foreignSupplierInvoiceId })
+      .expect(201);
+    expect(response.body as FinanceSupplierPayable).toMatchObject({
+      currencyCode: 'USD',
+      eurTotal: '22.0800',
+      exchangeRate: '0.92000000',
+      rateDate: '2099-09-03',
+      rateSource: 'BNB',
+      total: '24.0000',
+    });
   });
 });
 
@@ -8679,6 +9503,12 @@ async function seedSalesData(pool: Pool, actorId: string, runId: string) {
   await pool.query(
     "INSERT INTO master_data.partner_roles (partner_id, role, assigned_by) VALUES ($1, 'customer', $2)",
     [customerId, actorId],
+  );
+  await pool.query(
+    `INSERT INTO master_data.partner_contacts (
+       partner_id, display_name, email, contact_role
+     ) VALUES ($1, 'Sales test contact', $2, 'accountant')`,
+    [customerId, `client-${runId}@example.test`],
   );
   await pool.query(
     `INSERT INTO master_data.partners (id, kind, display_name, created_by, updated_by)

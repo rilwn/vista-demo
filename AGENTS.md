@@ -328,7 +328,7 @@ Implement:
 - Automatic warehouse receipt generation.
 - Comparison of ordered, delivered, and invoiced quantities.
 - Supplier claims for non-conforming or damaged goods with status tracking.
-- Complete delivery history linked to supplier invoices and goods receipt documents.
+- Complete delivery history linked to supplier invoices and goods receipt documents, with an immutable acceptance-handover protocol for each goods receipt.
 
 ### 6.3 Warehouse management
 
@@ -814,6 +814,7 @@ Minimum hardware scope:
 - Dedicated POS terminal integrated with warehouse-management software.
 - 1D/2D barcode scanner.
 - Fiscal device certified under Bulgarian Ordinance H-18 and integrated with POS software.
+- Communication router with backup Internet connectivity.
 
 Hardware abstractions must support test doubles so automated tests do not require physical devices.
 
@@ -822,7 +823,6 @@ Hardware abstractions must support test doubles so automated tests do not requir
 Additional evaluation items, not minimum mandatory software scope:
 
 - Self-service customer kiosk.
-- Communication router with backup Internet connectivity.
 - Electronic Shelf Label system synchronized with ERP pricing.
 - Automatic fiscalization for online-store sales integrating POS, e-commerce platform, and fiscal device.
 
@@ -1211,8 +1211,9 @@ Use simulators in CI and test real target hardware before acceptance for:
 - Fiscal device
 - Barcode scanner
 - PIN pad
+- Communication router with backup Internet connectivity
 - Tape drive/library
-- Optional kiosk, ESL, router, and online fiscalization
+- Optional kiosk, ESL, and online fiscalization
 
 A successful backup is not sufficient. Restore must be tested.
 

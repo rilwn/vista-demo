@@ -1,20 +1,24 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
 import type { AppEnvironment } from '@vista/config';
 import type {
   CreateCrmReferralRequest,
+  CreateCrmWarrantyCoverageOfferRequest,
   CreateWarrantyClaimRequest,
   CrmAfterSalesOverview,
   CrmCustomerSurvey,
+  CrmPublicSurvey,
   CrmReferral,
   CrmSurveySourceKind,
   CrmSurveySourceReference,
   CrmWarrantyCard,
   CrmWarrantyCardReconciliationResult,
+  CrmWarrantyCoverageOffer,
   RecordCrmSurveyResponseRequest,
   SendCrmCustomerSurveyRequest,
   TransitionWarrantyClaimRequest,
+  TransitionCrmWarrantyCoverageOfferRequest,
   UpdateCrmWarrantyOfferRequest,
   WarrantyClaim,
 } from '@vista/contracts';
@@ -29,6 +33,7 @@ import { ApiErrorException } from '../common/api-error.exception.js';
 import { APP_ENVIRONMENT } from '../config/config.module.js';
 import { DatabaseService } from '../database/database.service.js';
 import { ServiceCareService } from '../service/service-care.service.js';
+import { queueEmailMessage } from '../notifications/notification-email.js';
 
 type Queryable = Pool | PoolClient;
 
@@ -49,6 +54,27 @@ interface WarrantyCardRow {
   serial_number: string;
   warranty_ends_on: string;
   warranty_starts_on: string;
+}
+
+interface WarrantyCoverageOfferRow {
+  coverage_starts_on: string;
+  created_at: Date | string;
+  currency_code: 'EUR';
+  customer_name: string;
+  customer_partner_id: string;
+  device_name: string;
+  duration_months: number;
+  effective_status: CrmWarrantyCoverageOffer['status'];
+  id: string;
+  offer_number: string;
+  offer_type: CrmWarrantyCoverageOffer['offerType'];
+  quoted_amount: string;
+  serial_number: string;
+  terms: string;
+  valid_until: string;
+  visit_frequency_months: number | null;
+  warranty_card_id: string;
+  warranty_ends_on: string;
 }
 
 interface WarrantyCardReconciliationCandidate {
@@ -72,6 +98,8 @@ interface SurveyRow {
   comment: string | null;
   customer_name: string;
   customer_partner_id: string;
+  delivery_status: CrmCustomerSurvey['deliveryStatus'] | null;
+  recipient_email: string | null;
   id: string;
   responded_at: Date | string | null;
   score: number | null;
@@ -80,6 +108,24 @@ interface SurveyRow {
   source_label: string;
   status: CrmCustomerSurvey['status'];
   survey_number: string;
+}
+
+interface PublicSurveyRow {
+  response_expires_at: Date | string;
+  score: number | null;
+  source_kind: CrmSurveySourceKind;
+  status: CrmCustomerSurvey['status'];
+  survey_number: string;
+}
+
+interface SurveySourceRow {
+  customer_location_id: string;
+  customer_name: string;
+  customer_partner_id: string;
+  recipient_emails: string[];
+  id: string;
+  label: string;
+  source_kind: CrmSurveySourceKind;
 }
 
 interface ReferralRow {
@@ -108,17 +154,29 @@ export class CrmAfterSalesService {
 
   async overview(auth: AuthenticationContext): Promise<CrmAfterSalesOverview> {
     const pool = this.database.getPool();
-    const [cards, serviceCare, surveys, referrals, customers, assignees, sources, reconciliation] =
-      await Promise.all([
-        pool.query<WarrantyCardRow>(warrantyCardsSql(this.environment.BUSINESS_TIMEZONE)),
-        this.care.overviewForCrm(auth),
-        pool.query<SurveyRow>(surveysSql()),
-        pool.query<ReferralRow>(referralsSql()),
-        pool.query<{ id: string; name: string }>(customersSql()),
-        pool.query<{ display_name: string; id: string }>(assigneesSql()),
-        this.surveySources(pool),
-        pool.query<WarrantyCardReconciliationCountRow>(warrantyCardReconciliationCountsSql()),
-      ]);
+    const [
+      cards,
+      serviceCare,
+      surveys,
+      referrals,
+      customers,
+      assignees,
+      sources,
+      reconciliation,
+      coverageOffers,
+    ] = await Promise.all([
+      pool.query<WarrantyCardRow>(warrantyCardsSql(this.environment.BUSINESS_TIMEZONE)),
+      this.care.overviewForCrm(auth),
+      pool.query<SurveyRow>(surveysSql()),
+      pool.query<ReferralRow>(referralsSql()),
+      pool.query<{ id: string; name: string }>(customersSql()),
+      pool.query<{ display_name: string; id: string }>(assigneesSql()),
+      this.surveySources(pool),
+      pool.query<WarrantyCardReconciliationCountRow>(warrantyCardReconciliationCountsSql()),
+      pool.query<WarrantyCoverageOfferRow>(
+        warrantyCoverageOffersSql(this.environment.BUSINESS_TIMEZONE),
+      ),
+    ]);
     const mappedSurveys = surveys.rows.map(mapSurvey);
     const reconciliationCounts = reconciliation.rows[0];
     return {
@@ -126,6 +184,7 @@ export class CrmAfterSalesService {
       businessTimezone: this.environment.BUSINESS_TIMEZONE,
       claims: serviceCare.claims,
       customers: customers.rows,
+      coverageOffers: coverageOffers.rows.map(mapWarrantyCoverageOffer),
       nps: npsSummary(mappedSurveys, this.environment.BUSINESS_TIMEZONE),
       referrals: referrals.rows.map(mapReferral),
       surveySources: sources,
@@ -256,13 +315,161 @@ export class CrmAfterSalesService {
     );
   }
 
+  createWarrantyCoverageOffer(
+    warrantyCardId: string,
+    input: CreateCrmWarrantyCoverageOfferRequest,
+    key: string | undefined,
+    auth: AuthenticationContext,
+    metadata: RequestSecurityMetadata,
+  ): Promise<CrmWarrantyCoverageOffer> {
+    const normalized = normalizeWarrantyCoverageOffer(input);
+    return this.command(
+      `crm.warranty-coverage-offer.create:${warrantyCardId}`,
+      key,
+      normalized,
+      HttpStatus.CREATED,
+      async (client, commandKey) => {
+        const card = await this.loadWarrantyCard(client, warrantyCardId, true);
+        if (card.status !== 'active')
+          throw new ApiErrorException(
+            'CRM_WARRANTY_OFFER_COVERAGE_EXPIRED',
+            'A coverage offer can only be prepared while the current warranty is active.',
+            HttpStatus.CONFLICT,
+          );
+        const today = await client.query<{ business_date: string }>(
+          `SELECT (now() AT TIME ZONE $1)::date::text AS business_date`,
+          [this.environment.BUSINESS_TIMEZONE],
+        );
+        const businessDate = today.rows[0]?.business_date;
+        if (
+          !businessDate ||
+          normalized.validUntil < businessDate ||
+          normalized.coverageStartsOn < businessDate
+        )
+          throw badRequest(
+            'CRM_WARRANTY_OFFER_DATE_INVALID',
+            'Use a current or future coverage start date and an offer expiry date that has not passed.',
+          );
+        if (
+          normalized.offerType === 'extended_warranty' &&
+          normalized.coverageStartsOn <= card.warrantyEndsOn
+        )
+          throw badRequest(
+            'CRM_WARRANTY_OFFER_START_INVALID',
+            'Extended coverage must start after the current warranty ends.',
+          );
+
+        const id = randomUUID();
+        const number = await this.allocateNumber(client, 'warranty_coverage_offer', 'WOF');
+        await client.query(
+          `INSERT INTO crm.warranty_coverage_offers (
+             id, offer_number, warranty_card_id, customer_partner_id,
+             customer_equipment_id, customer_name, device_name, serial_number,
+             current_warranty_ends_on, offer_type, coverage_starts_on,
+             duration_months, visit_frequency_months, quoted_amount, terms,
+             valid_until, created_by, updated_by
+           ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$17)`,
+          [
+            id,
+            number,
+            card.id,
+            card.customerPartnerId,
+            card.customerEquipmentId,
+            card.customerName,
+            card.deviceName,
+            card.serialNumber,
+            card.warrantyEndsOn,
+            normalized.offerType,
+            normalized.coverageStartsOn,
+            normalized.durationMonths,
+            normalized.visitFrequencyMonths ?? null,
+            normalized.quotedAmount,
+            normalized.terms,
+            normalized.validUntil,
+            auth.accountId,
+          ],
+        );
+        const offer = await this.loadWarrantyCoverageOffer(client, id);
+        await this.sideEffects(
+          client,
+          'crm_warranty_coverage_offer',
+          id,
+          'crm.warranty-coverage-offer.created',
+          offer,
+          commandKey,
+          auth,
+          metadata,
+        );
+        return offer;
+      },
+    );
+  }
+
+  transitionWarrantyCoverageOffer(
+    id: string,
+    input: TransitionCrmWarrantyCoverageOfferRequest,
+    key: string | undefined,
+    auth: AuthenticationContext,
+    metadata: RequestSecurityMetadata,
+  ): Promise<CrmWarrantyCoverageOffer> {
+    const normalized = { nextStatus: input.nextStatus };
+    return this.command(
+      `crm.warranty-coverage-offer.transition:${id}`,
+      key,
+      normalized,
+      HttpStatus.OK,
+      async (client, commandKey) => {
+        const before = await this.loadWarrantyCoverageOffer(client, id, true);
+        if (before.status === 'expired')
+          throw new ApiErrorException(
+            'CRM_WARRANTY_OFFER_EXPIRED',
+            'This offer has expired and can no longer be updated.',
+            HttpStatus.CONFLICT,
+          );
+        if (before.status === normalized.nextStatus) return before;
+        const allowed =
+          (before.status === 'draft' && normalized.nextStatus === 'offered') ||
+          (before.status === 'offered' &&
+            (normalized.nextStatus === 'accepted' || normalized.nextStatus === 'declined'));
+        if (!allowed)
+          throw new ApiErrorException(
+            'CRM_WARRANTY_OFFER_TRANSITION_INVALID',
+            'Record the offer as shared before recording the customer’s decision.',
+            HttpStatus.CONFLICT,
+          );
+        await client.query(
+          `UPDATE crm.warranty_coverage_offers
+           SET status = $2, updated_by = $3, updated_at = now() WHERE id = $1`,
+          [id, normalized.nextStatus, auth.accountId],
+        );
+        const after = await this.loadWarrantyCoverageOffer(client, id);
+        await this.sideEffects(
+          client,
+          'crm_warranty_coverage_offer',
+          id,
+          'crm.warranty-coverage-offer.status-changed',
+          after,
+          commandKey,
+          auth,
+          metadata,
+          before,
+        );
+        return after;
+      },
+    );
+  }
+
   async sendSurvey(
     input: SendCrmCustomerSurveyRequest,
     key: string | undefined,
     auth: AuthenticationContext,
     metadata: RequestSecurityMetadata,
   ): Promise<CrmCustomerSurvey> {
-    const normalized = { sourceId: input.sourceId, sourceKind: input.sourceKind };
+    const normalized = {
+      recipientEmail: input.recipientEmail.trim().toLowerCase(),
+      sourceId: input.sourceId,
+      sourceKind: input.sourceKind,
+    };
     if (!['delivery', 'service'].includes(normalized.sourceKind))
       throw badRequest('CRM_SURVEY_SOURCE_INVALID', 'Choose a completed delivery or Service job.');
     return this.command(
@@ -276,14 +483,30 @@ export class CrmAfterSalesService {
           normalized.sourceKind,
           normalized.sourceId,
         );
+        if (!source.recipientEmails.includes(normalized.recipientEmail))
+          throw badRequest(
+            'CRM_SURVEY_RECIPIENT_INVALID',
+            'Choose an active email address listed for this customer.',
+          );
         const id = randomUUID();
         const number = await this.allocateNumber(client, 'survey', 'SUR');
+        const responseToken = randomBytes(32).toString('base64url');
+        const tokenHash = createHash('sha256').update(responseToken).digest('hex');
+        const expiresAt = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000);
+        const responseUrl = `${this.operationsBaseUrl()}/survey/${responseToken}?lang=bg`;
+        const notification = await queueEmailMessage(client, {
+          idempotencyKey: `crm.customer-survey:${id}`,
+          recipient: normalized.recipientEmail,
+          subject: 'Vista Service | Моля, споделете мнението си',
+          text: customerSurveyEmail(responseUrl, expiresAt),
+        });
         try {
           await client.query(
             `INSERT INTO crm.customer_surveys (
              id, survey_number, customer_partner_id, customer_location_id, source_kind,
-             handover_certificate_id, service_work_order_id, created_by, updated_by
-           ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$8)`,
+             handover_certificate_id, service_work_order_id, response_token_hash,
+             response_expires_at, recipient_email, email_notification_id, created_by, updated_by
+           ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$12)`,
             [
               id,
               number,
@@ -292,6 +515,10 @@ export class CrmAfterSalesService {
               normalized.sourceKind,
               normalized.sourceKind === 'delivery' ? normalized.sourceId : null,
               normalized.sourceKind === 'service' ? normalized.sourceId : null,
+              tokenHash,
+              expiresAt,
+              normalized.recipientEmail,
+              notification.id,
               auth.accountId,
             ],
           );
@@ -328,10 +555,7 @@ export class CrmAfterSalesService {
     metadata: RequestSecurityMetadata,
   ): Promise<CrmCustomerSurvey> {
     const comment = input.comment?.trim();
-    if (!Number.isInteger(input.score) || input.score < 0 || input.score > 10)
-      throw badRequest('CRM_SURVEY_SCORE_INVALID', 'Choose a score from 0 to 10.');
-    if (comment && comment.length > 2000)
-      throw badRequest('CRM_SURVEY_COMMENT_INVALID', 'Keep the feedback within 2,000 characters.');
+    validateSurveyResponse(input.score, comment);
     const normalized = { ...(comment ? { comment } : {}), score: input.score };
     return this.command(
       `crm.customer-survey.respond:${id}`,
@@ -368,6 +592,130 @@ export class CrmAfterSalesService {
         return after;
       },
     );
+  }
+
+  async publicSurvey(token: string): Promise<CrmPublicSurvey> {
+    const tokenHash = surveyTokenHash(token);
+    const result = await this.database.getPool().query<PublicSurveyRow>(
+      `SELECT survey.survey_number, survey.source_kind, survey.status,
+              survey.score, survey.response_expires_at
+       FROM crm.customer_surveys survey
+       WHERE survey.response_token_hash = $1`,
+      [tokenHash],
+    );
+    const row = result.rows[0];
+    if (!row)
+      throw new ApiErrorException(
+        'CRM_SURVEY_LINK_INVALID',
+        'This survey link is not valid.',
+        HttpStatus.NOT_FOUND,
+      );
+    return mapPublicSurvey(row);
+  }
+
+  async submitPublicSurvey(
+    token: string,
+    input: RecordCrmSurveyResponseRequest,
+    metadata: RequestSecurityMetadata,
+  ): Promise<CrmPublicSurvey> {
+    const tokenHash = surveyTokenHash(token);
+    const comment = input.comment?.trim();
+    validateSurveyResponse(input.score, comment);
+    const client = await this.database.getPool().connect();
+    try {
+      await client.query('BEGIN');
+      const result = await client.query<PublicSurveyRow & { id: string }>(
+        `SELECT survey.id, survey.survey_number, survey.source_kind, survey.status,
+                survey.score, survey.response_expires_at
+         FROM crm.customer_surveys survey
+         WHERE survey.response_token_hash = $1
+         FOR UPDATE`,
+        [tokenHash],
+      );
+      const survey = result.rows[0];
+      if (!survey)
+        throw new ApiErrorException(
+          'CRM_SURVEY_LINK_INVALID',
+          'This survey link is not valid.',
+          HttpStatus.NOT_FOUND,
+        );
+      if (survey.status === 'responded') {
+        await client.query('COMMIT');
+        return mapPublicSurvey(survey);
+      }
+      if (new Date(survey.response_expires_at).getTime() <= Date.now())
+        throw new ApiErrorException(
+          'CRM_SURVEY_LINK_EXPIRED',
+          'This survey link has expired.',
+          HttpStatus.GONE,
+        );
+
+      await client.query(
+        `UPDATE crm.customer_surveys
+         SET status = 'responded', score = $2, comment = $3,
+             responded_at = now(), updated_at = now()
+         WHERE id = $1`,
+        [survey.id, input.score, comment || null],
+      );
+      const after = {
+        number: survey.survey_number,
+        score: input.score,
+        sourceKind: survey.source_kind,
+        status: 'responded',
+      };
+      await client.query(
+        `INSERT INTO integration.outbox_events (
+           id, aggregate_type, aggregate_id, event_type, event_version,
+           correlation_id, idempotency_key, payload
+         ) VALUES ($1,'crm_customer_survey',$2,'crm.customer-survey.response-recorded',1,$3,$4,$5)
+         ON CONFLICT (idempotency_key) DO NOTHING`,
+        [
+          randomUUID(),
+          survey.id,
+          metadata.correlationId,
+          `crm.customer-survey.public-response:${survey.id}`,
+          after,
+        ],
+      );
+      await this.audit.append(
+        {
+          action: 'crm.customer-survey.public-response-recorded',
+          after: { score: input.score, status: 'responded' },
+          before: { status: 'awaiting_response' },
+          correlationId: metadata.correlationId,
+          ...(metadata.sourceIp ? { sourceIp: metadata.sourceIp } : {}),
+          targetId: survey.id,
+          targetType: 'crm_customer_survey',
+          ...(metadata.userAgent ? { userAgent: metadata.userAgent } : {}),
+          metadata: { responseChannel: 'public_email_link' },
+        },
+        client,
+      );
+      await client.query('COMMIT');
+      return {
+        expiresAt: iso(survey.response_expires_at),
+        number: survey.survey_number,
+        score: input.score,
+        sourceKind: survey.source_kind,
+        status: 'responded',
+      };
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  private operationsBaseUrl(): string {
+    const origins = this.environment.CORS_ORIGINS;
+    const operationsOrigin = origins.find((origin) => {
+      const { hostname, port } = new URL(origin);
+      return (
+        hostname.startsWith('vista-ops.') || hostname.includes('operations') || port === '5173'
+      );
+    });
+    return (operationsOrigin ?? origins[0] ?? 'http://localhost:5173').replace(/\/$/u, '');
   }
 
   async createReferral(
@@ -466,30 +814,45 @@ export class CrmAfterSalesService {
   }
 
   private async surveySources(queryable: Queryable): Promise<CrmSurveySourceReference[]> {
-    const result = await queryable.query<{
-      customer_location_id: string;
-      customer_name: string;
-      customer_partner_id: string;
-      id: string;
-      label: string;
-      source_kind: CrmSurveySourceKind;
-    }>(
+    const result = await queryable.query<SurveySourceRow>(
       `SELECT certificate.id, certificate.customer_partner_id,
               certificate.customer_location_id, partner.display_name AS customer_name,
               'delivery'::text AS source_kind,
-              certificate.certificate_number || ' · accepted delivery' AS label
+              certificate.certificate_number || ' · accepted delivery' AS label,
+              emails.recipient_emails
        FROM sales.handover_certificates certificate
        JOIN master_data.partners partner ON partner.id = certificate.customer_partner_id
+       CROSS JOIN LATERAL (
+         SELECT COALESCE(array_agg(contact.email ORDER BY contact.email), ARRAY[]::text[])
+           AS recipient_emails
+         FROM (
+           SELECT DISTINCT lower(btrim(email)) AS email
+           FROM master_data.partner_contacts
+           WHERE partner_id = certificate.customer_partner_id AND active
+             AND email IS NOT NULL AND btrim(email) <> ''
+         ) contact
+       ) emails
        LEFT JOIN crm.customer_surveys survey ON survey.handover_certificate_id = certificate.id
        WHERE certificate.status = 'accepted' AND certificate.customer_location_id IS NOT NULL
          AND survey.id IS NULL
        UNION ALL
        SELECT work_order.id, request.customer_partner_id, request.customer_location_id,
               partner.display_name AS customer_name, 'service'::text AS source_kind,
-              work_order.work_order_number || ' · completed Service job' AS label
+              work_order.work_order_number || ' · completed Service job' AS label,
+              emails.recipient_emails
        FROM service.work_orders work_order
        JOIN service.requests request ON request.id = work_order.service_request_id
        JOIN master_data.partners partner ON partner.id = request.customer_partner_id
+       CROSS JOIN LATERAL (
+         SELECT COALESCE(array_agg(contact.email ORDER BY contact.email), ARRAY[]::text[])
+           AS recipient_emails
+         FROM (
+           SELECT DISTINCT lower(btrim(email)) AS email
+           FROM master_data.partner_contacts
+           WHERE partner_id = request.customer_partner_id AND active
+             AND email IS NOT NULL AND btrim(email) <> ''
+         ) contact
+       ) emails
        LEFT JOIN crm.customer_surveys survey ON survey.service_work_order_id = work_order.id
        WHERE work_order.status = 'completed' AND request.customer_location_id IS NOT NULL
          AND survey.id IS NULL
@@ -501,6 +864,7 @@ export class CrmAfterSalesService {
       customerPartnerId: row.customer_partner_id,
       id: row.id,
       label: row.label,
+      recipientEmails: row.recipient_emails,
       sourceKind: row.source_kind,
     }));
   }
@@ -562,6 +926,37 @@ export class CrmAfterSalesService {
         HttpStatus.NOT_FOUND,
       );
     return mapWarrantyCard(row);
+  }
+
+  private async loadWarrantyCoverageOffer(
+    queryable: Queryable,
+    id: string,
+    lock = false,
+  ): Promise<CrmWarrantyCoverageOffer> {
+    if (lock) {
+      const locked = await queryable.query(
+        'SELECT id FROM crm.warranty_coverage_offers WHERE id = $1 FOR UPDATE',
+        [id],
+      );
+      if (!locked.rowCount)
+        throw new ApiErrorException(
+          'CRM_WARRANTY_COVERAGE_OFFER_NOT_FOUND',
+          'The coverage offer was not found.',
+          HttpStatus.NOT_FOUND,
+        );
+    }
+    const result = await queryable.query<WarrantyCoverageOfferRow>(
+      warrantyCoverageOffersSql(this.environment.BUSINESS_TIMEZONE, 'WHERE offer.id = $1'),
+      [id],
+    );
+    const row = result.rows[0];
+    if (!row)
+      throw new ApiErrorException(
+        'CRM_WARRANTY_COVERAGE_OFFER_NOT_FOUND',
+        'The coverage offer was not found.',
+        HttpStatus.NOT_FOUND,
+      );
+    return mapWarrantyCoverageOffer(row);
   }
 
   private async loadSurvey(
@@ -718,6 +1113,25 @@ function warrantyCardsSql(timezone: string, where = '') {
   ORDER BY card.warranty_ends_on, partner.display_name, card.id`;
 }
 
+function warrantyCoverageOffersSql(timezone: string, where = '') {
+  const safeTimezone = timezone.replaceAll("'", "''");
+  return `SELECT offer.id, offer.offer_number, offer.warranty_card_id,
+    offer.customer_partner_id, offer.customer_name, offer.device_name,
+    offer.serial_number, offer.current_warranty_ends_on::text AS warranty_ends_on,
+    offer.offer_type, offer.coverage_starts_on::text, offer.duration_months,
+    offer.visit_frequency_months, offer.quoted_amount::text, offer.currency_code,
+    offer.terms, offer.valid_until::text, offer.created_at,
+    CASE
+      WHEN offer.status IN ('draft', 'offered')
+        AND offer.valid_until < (now() AT TIME ZONE '${safeTimezone}')::date
+        THEN 'expired'
+      ELSE offer.status
+    END AS effective_status
+  FROM crm.warranty_coverage_offers offer
+  ${where}
+  ORDER BY offer.created_at DESC, offer.id DESC`;
+}
+
 function warrantyCardReconciliationCountsSql() {
   return `${eligibleWarrantyCardsCte()}
   SELECT count(*)::text AS eligible_sold_serials,
@@ -787,10 +1201,13 @@ function surveysSql(where = '') {
   return `SELECT survey.id, survey.survey_number, survey.customer_partner_id,
     partner.display_name AS customer_name, survey.source_kind, survey.status,
     survey.score, survey.comment, survey.sent_at, survey.responded_at,
+    survey.recipient_email,
+    notification.status AS delivery_status,
     CASE WHEN survey.source_kind = 'delivery' THEN handover.certificate_number
          ELSE work_order.work_order_number END AS source_label
   FROM crm.customer_surveys survey
   JOIN master_data.partners partner ON partner.id = survey.customer_partner_id
+  LEFT JOIN notifications.messages notification ON notification.id = survey.email_notification_id
   LEFT JOIN sales.handover_certificates handover ON handover.id = survey.handover_certificate_id
   LEFT JOIN service.work_orders work_order ON work_order.id = survey.service_work_order_id
   ${where}
@@ -852,11 +1269,38 @@ function mapWarrantyCard(row: WarrantyCardRow): CrmWarrantyCard {
   };
 }
 
+function mapWarrantyCoverageOffer(row: WarrantyCoverageOfferRow): CrmWarrantyCoverageOffer {
+  return {
+    coverageStartsOn: row.coverage_starts_on,
+    createdAt: iso(row.created_at),
+    currencyCode: row.currency_code,
+    customerName: row.customer_name,
+    customerPartnerId: row.customer_partner_id,
+    deviceName: row.device_name,
+    durationMonths: Number(row.duration_months),
+    id: row.id,
+    number: row.offer_number,
+    offerType: row.offer_type,
+    quotedAmount: row.quoted_amount,
+    serialNumber: row.serial_number,
+    status: row.effective_status,
+    terms: row.terms,
+    validUntil: row.valid_until,
+    ...(row.visit_frequency_months === null
+      ? {}
+      : { visitFrequencyMonths: Number(row.visit_frequency_months) }),
+    warrantyCardId: row.warranty_card_id,
+    warrantyEndsOn: row.warranty_ends_on,
+  };
+}
+
 function mapSurvey(row: SurveyRow): CrmCustomerSurvey {
   return {
     ...(row.comment ? { comment: row.comment } : {}),
     customerName: row.customer_name,
     customerPartnerId: row.customer_partner_id,
+    ...(row.delivery_status ? { deliveryStatus: row.delivery_status } : {}),
+    ...(row.recipient_email ? { recipientEmail: row.recipient_email } : {}),
     id: row.id,
     number: row.survey_number,
     ...(row.responded_at ? { respondedAt: iso(row.responded_at) } : {}),
@@ -865,6 +1309,23 @@ function mapSurvey(row: SurveyRow): CrmCustomerSurvey {
     sourceKind: row.source_kind,
     sourceLabel: row.source_label,
     status: row.status,
+  };
+}
+
+function mapPublicSurvey(row: PublicSurveyRow): CrmPublicSurvey {
+  const expiresAt = iso(row.response_expires_at);
+  const status =
+    row.status === 'responded'
+      ? 'responded'
+      : new Date(expiresAt).getTime() <= Date.now()
+        ? 'expired'
+        : 'awaiting_response';
+  return {
+    expiresAt,
+    number: row.survey_number,
+    ...(row.score === null ? {} : { score: row.score }),
+    sourceKind: row.source_kind,
+    status,
   };
 }
 
@@ -949,6 +1410,71 @@ function normalizeReferral(input: CreateCrmReferralRequest) {
   };
 }
 
+function normalizeWarrantyCoverageOffer(input: CreateCrmWarrantyCoverageOfferRequest) {
+  const terms = input.terms.trim();
+  if (!['extended_warranty', 'service_plan'].includes(input.offerType))
+    throw badRequest('CRM_WARRANTY_OFFER_TYPE_INVALID', 'Choose an offer type.');
+  if (
+    !Number.isInteger(input.durationMonths) ||
+    input.durationMonths < 1 ||
+    input.durationMonths > 120
+  )
+    throw badRequest(
+      'CRM_WARRANTY_OFFER_DURATION_INVALID',
+      'Choose a duration from 1 to 120 months.',
+    );
+  if (
+    !/^\d{1,12}\.\d{2}$/u.test(input.quotedAmount) ||
+    BigInt(input.quotedAmount.replace('.', '')) <= 0n
+  )
+    throw badRequest(
+      'CRM_WARRANTY_OFFER_AMOUNT_INVALID',
+      'Enter a EUR amount greater than zero, to two decimal places.',
+    );
+  if (!isDateOnly(input.coverageStartsOn) || !isDateOnly(input.validUntil))
+    throw badRequest(
+      'CRM_WARRANTY_OFFER_DATE_INVALID',
+      'Enter valid coverage and offer expiry dates.',
+    );
+  if (terms.length < 10 || terms.length > 2000)
+    throw badRequest(
+      'CRM_WARRANTY_OFFER_TERMS_INVALID',
+      'Describe the offer in 10 to 2,000 characters.',
+    );
+  if (
+    input.offerType === 'service_plan' &&
+    (!Number.isInteger(input.visitFrequencyMonths) ||
+      (input.visitFrequencyMonths ?? 0) < 1 ||
+      (input.visitFrequencyMonths ?? 0) > input.durationMonths)
+  )
+    throw badRequest(
+      'CRM_WARRANTY_OFFER_FREQUENCY_INVALID',
+      'For a Service plan, choose a visit frequency within the plan duration.',
+    );
+  if (input.offerType === 'extended_warranty' && input.visitFrequencyMonths !== undefined)
+    throw badRequest(
+      'CRM_WARRANTY_OFFER_FREQUENCY_INVALID',
+      'Visit frequency applies only to a Service plan offer.',
+    );
+  return {
+    coverageStartsOn: input.coverageStartsOn,
+    durationMonths: input.durationMonths,
+    offerType: input.offerType,
+    quotedAmount: input.quotedAmount,
+    terms,
+    validUntil: input.validUntil,
+    ...(input.visitFrequencyMonths === undefined
+      ? {}
+      : { visitFrequencyMonths: input.visitFrequencyMonths }),
+  };
+}
+
+function isDateOnly(value: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/u.test(value)) return false;
+  const parsed = new Date(`${value}T00:00:00.000Z`);
+  return !Number.isNaN(parsed.valueOf()) && parsed.toISOString().slice(0, 10) === value;
+}
+
 function clean(value: string, max: number) {
   const result = value.trim().replace(/\s+/gu, ' ');
   if (!result || result.length > max)
@@ -997,6 +1523,47 @@ function validKey(value: string | undefined) {
 
 function badRequest(code: string, message: string) {
   return new ApiErrorException(code, message, HttpStatus.BAD_REQUEST);
+}
+
+function surveyTokenHash(token: string): string {
+  if (!/^[A-Za-z0-9_-]{43}$/u.test(token))
+    throw new ApiErrorException(
+      'CRM_SURVEY_LINK_INVALID',
+      'This survey link is not valid.',
+      HttpStatus.NOT_FOUND,
+    );
+  return createHash('sha256').update(token).digest('hex');
+}
+
+function validateSurveyResponse(score: number, comment?: string): void {
+  if (!Number.isInteger(score) || score < 0 || score > 10)
+    throw badRequest('CRM_SURVEY_SCORE_INVALID', 'Choose a score from 0 to 10.');
+  if (comment && comment.length > 2000)
+    throw badRequest('CRM_SURVEY_COMMENT_INVALID', 'Keep the feedback within 2,000 characters.');
+}
+
+function customerSurveyEmail(responseUrl: string, expiresAt: Date): string {
+  const expiry = new Intl.DateTimeFormat('bg-BG', {
+    dateStyle: 'long',
+    timeZone: 'Europe/Sofia',
+  }).format(expiresAt);
+  return [
+    'Здравейте,',
+    '',
+    'Моля, отделете минута, за да оцените обслужването на Vista Service.',
+    'Каква е вероятността да препоръчате Vista Service? Оценката е от 0 до 10.',
+    responseUrl,
+    `Линкът е активен до ${expiry}.`,
+    '',
+    'Hello,',
+    '',
+    'Please take a minute to rate your experience with Vista Service.',
+    'How likely are you to recommend Vista Service? Choose a score from 0 to 10.',
+    'The survey page can be switched to English or Bulgarian.',
+    `This link is available until ${expiry}.`,
+    '',
+    'Vista Service',
+  ].join('\n');
 }
 
 function iso(value: Date | string) {

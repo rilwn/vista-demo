@@ -30,6 +30,7 @@ const emptyReferences: FinanceCashReferenceData = {
   businessDate: '',
   cashRegisters: [],
   openCollections: [],
+  openPosAccounts: [],
   partners: [],
 };
 
@@ -210,6 +211,8 @@ function CashVoucherRegister({
   onPreview: (voucher: FinanceCashVoucher) => void;
   vouchers: FinanceCashVoucher[];
 }) {
+  const { locale } = useLocalization();
+  const bg = locale === 'bg';
   if (!vouchers.length)
     return (
       <section className="cash-empty-state">
@@ -247,6 +250,11 @@ function CashVoucherRegister({
             <strong>{voucher.counterpartyName}</strong>
             <span>{voucher.purpose}</span>
             {voucher.collectionNumber ? <small>Collection {voucher.collectionNumber}</small> : null}
+            {voucher.posSaleNumber ? (
+              <small>
+                {bg ? 'POS продажба' : 'POS sale'} {voucher.posSaleNumber}
+              </small>
+            ) : null}
           </div>
           <div className="cash-register-detail">
             <strong>{voucher.cashRegisterName}</strong>
@@ -385,6 +393,8 @@ function CreateCashVoucherDrawer({
   references: FinanceCashReferenceData;
   token: string;
 }) {
+  const { locale } = useLocalization();
+  const bg = locale === 'bg';
   const firstRegister = references.cashRegisters[0]!;
   const [direction, setDirection] = useState<'receipt' | 'payment'>('receipt');
   const [cashRegisterId, setCashRegisterId] = useState(firstRegister.id);
@@ -393,7 +403,9 @@ function CreateCashVoucherDrawer({
   const [operatorId, setOperatorId] = useState(register.operators[0]?.id ?? '');
   const [voucherDate, setVoucherDate] = useState(references.businessDate);
   const [customerDocumentId, setCustomerDocumentId] = useState('');
+  const [posSaleId, setPosSaleId] = useState('');
   const collection = references.openCollections.find((item) => item.id === customerDocumentId);
+  const posAccount = references.openPosAccounts.find((item) => item.saleId === posSaleId);
   const [counterpartyPartnerId, setCounterpartyPartnerId] = useState('');
   const [counterpartyName, setCounterpartyName] = useState('');
   const [amount, setAmount] = useState('');
@@ -411,17 +423,41 @@ function CreateCashVoucherDrawer({
 
   function changeDirection(next: 'receipt' | 'payment') {
     setDirection(next);
-    if (next === 'payment') setCustomerDocumentId('');
+    if (next === 'payment') {
+      setCustomerDocumentId('');
+      setPosSaleId('');
+    }
   }
 
   function changeCollection(id: string) {
-    setCustomerDocumentId(id);
-    const selected = references.openCollections.find((item) => item.id === id);
+    const [kind, targetId] = id.split(':', 2);
+    const selected =
+      kind === 'collection'
+        ? references.openCollections.find((item) => item.id === targetId)
+        : undefined;
+    const selectedPos =
+      kind === 'pos'
+        ? references.openPosAccounts.find((item) => item.saleId === targetId)
+        : undefined;
+    setCustomerDocumentId(selected?.id ?? '');
+    setPosSaleId(selectedPos?.saleId ?? '');
     if (selected) {
       setCounterpartyPartnerId(selected.customerPartnerId);
       setCounterpartyName('');
       setAmount(selected.outstandingTotal);
-      setPaymentReference(`Cash payment for ${selected.number}`);
+      setPaymentReference(`${bg ? 'Касова бележка за' : 'Cash receipt for'} ${selected.number}`);
+    } else if (selectedPos) {
+      setCounterpartyPartnerId(selectedPos.customerPartnerId);
+      setCounterpartyName('');
+      setAmount(selectedPos.outstandingTotal);
+      setPaymentReference(
+        `${bg ? 'Касова бележка за POS продажба' : 'Cash receipt for POS sale'} ${selectedPos.saleNumber}`,
+      );
+    } else {
+      setCounterpartyPartnerId('');
+      setCounterpartyName('');
+      setAmount('');
+      setPaymentReference('');
     }
   }
 
@@ -435,6 +471,7 @@ function CreateCashVoucherDrawer({
       ...(counterpartyName.trim() ? { counterpartyName: counterpartyName.trim() } : {}),
       ...(counterpartyPartnerId ? { counterpartyPartnerId } : {}),
       ...(customerDocumentId ? { customerDocumentId } : {}),
+      ...(posSaleId ? { posSaleId } : {}),
       direction,
       ...(notes.trim() ? { notes: notes.trim() } : {}),
       operatorId,
@@ -549,16 +586,32 @@ function CreateCashVoucherDrawer({
           <div className="cash-form-grid">
             {direction === 'receipt' ? (
               <label className="is-wide">
-                <span>Customer collection (optional)</span>
+                <span>
+                  {bg ? 'Клиентско задължение (по избор)' : 'Customer balance (optional)'}
+                </span>
                 <select
                   onChange={(event) => changeCollection(event.target.value)}
-                  value={customerDocumentId}
+                  value={
+                    collection
+                      ? `collection:${collection.id}`
+                      : posAccount
+                        ? `pos:${posAccount.saleId}`
+                        : ''
+                  }
                 >
-                  <option value="">Independent cash receipt</option>
+                  <option value="">
+                    {bg ? 'Несвързано касово постъпление' : 'Independent cash receipt'}
+                  </option>
+                  {references.openPosAccounts.map((item) => (
+                    <option key={`pos:${item.saleId}`} value={`pos:${item.saleId}`}>
+                      POS · {item.saleNumber} · {item.customerName} ·{' '}
+                      {formatMoney(item.outstandingTotal)} {bg ? 'остатък' : 'remaining'}
+                    </option>
+                  ))}
                   {references.openCollections.map((item) => (
-                    <option key={item.id} value={item.id}>
+                    <option key={`collection:${item.id}`} value={`collection:${item.id}`}>
                       {item.number} · {item.customerName} · {formatMoney(item.outstandingTotal)}{' '}
-                      remaining
+                      {bg ? 'остатък' : 'remaining'}
                     </option>
                   ))}
                 </select>
@@ -567,12 +620,16 @@ function CreateCashVoucherDrawer({
             <label className="is-wide">
               <span>Known partner (optional)</span>
               <select
-                disabled={Boolean(collection)}
+                disabled={Boolean(collection || posAccount)}
                 onChange={(event) => {
                   setCounterpartyPartnerId(event.target.value);
                   if (event.target.value) setCounterpartyName('');
                 }}
-                value={collection?.customerPartnerId ?? counterpartyPartnerId}
+                value={
+                  collection?.customerPartnerId ??
+                  posAccount?.customerPartnerId ??
+                  counterpartyPartnerId
+                }
               >
                 <option value="">Enter another counterparty</option>
                 {references.partners.map((partner) => (
@@ -582,7 +639,7 @@ function CreateCashVoucherDrawer({
                 ))}
               </select>
             </label>
-            {!counterpartyPartnerId && !collection ? (
+            {!counterpartyPartnerId && !collection && !posAccount ? (
               <label className="is-wide">
                 <span>Counterparty name</span>
                 <input
@@ -677,6 +734,8 @@ function CashVoucherDrawer({
   token: string;
   voucher: FinanceCashVoucher;
 }) {
+  const { locale } = useLocalization();
+  const bg = locale === 'bg';
   const [showCancel, setShowCancel] = useState(false);
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
@@ -751,7 +810,10 @@ function CashVoucherDrawer({
             </div>
           </dl>
         </section>
-        {voucher.collectionNumber || voucher.paymentNumber || voucher.paymentReference ? (
+        {voucher.collectionNumber ||
+        voucher.posSaleNumber ||
+        voucher.paymentNumber ||
+        voucher.paymentReference ? (
           <section className="cash-preview-section">
             <header>
               <h3>Linked records</h3>
@@ -761,6 +823,12 @@ function CashVoucherDrawer({
                 <div>
                   <dt>Customer collection</dt>
                   <dd>{voucher.collectionNumber}</dd>
+                </div>
+              ) : null}
+              {voucher.posSaleNumber ? (
+                <div>
+                  <dt>{bg ? 'POS продажба' : 'POS sale'}</dt>
+                  <dd>{voucher.posSaleNumber}</dd>
                 </div>
               ) : null}
               {voucher.paymentNumber ? (
@@ -790,7 +858,7 @@ function CashVoucherDrawer({
             {voucher.cancellationReason}
           </InlineAlert>
         ) : null}
-        {voucher.customerDocumentId ? (
+        {voucher.customerDocumentId || voucher.posSaleId ? (
           <InlineAlert tone="info">
             This receipt updated a customer collection and cannot be cancelled without a payment
             reversal.
@@ -823,7 +891,11 @@ function CashVoucherDrawer({
             </div>
           </section>
         ) : null}
-        {canCancel && voucher.status === 'issued' && !voucher.customerDocumentId && !showCancel ? (
+        {canCancel &&
+        voucher.status === 'issued' &&
+        !voucher.customerDocumentId &&
+        !voucher.posSaleId &&
+        !showCancel ? (
           <div className="cash-drawer-actions">
             <Button onClick={() => setShowCancel(true)} variant="danger">
               Cancel voucher

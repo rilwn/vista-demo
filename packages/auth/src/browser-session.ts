@@ -22,6 +22,8 @@ export interface BrowserSessionOptions<
   TContext,
 > extends BrowserSessionApi<TInput, TCredential, TContext> {
   isContextValid: (value: unknown) => value is TContext;
+  /** Allows a trusted app to resume its unexpired cached context after a network-only failure. */
+  allowOfflineRestore?: (error: unknown) => boolean;
   storageKey: string;
 }
 
@@ -30,6 +32,7 @@ export interface BrowserSessionState<
   TCredential extends BrowserSessionCredential,
   TContext,
 > {
+  accept: (credential: TCredential) => Promise<void>;
   login: (input: TInput) => Promise<void>;
   logout: () => Promise<void>;
   session: BrowserAuthenticatedSession<TCredential, TContext> | null;
@@ -43,7 +46,14 @@ export interface BrowserSessionState<
 export function useBrowserSession<TInput, TCredential extends BrowserSessionCredential, TContext>(
   options: BrowserSessionOptions<TInput, TCredential, TContext>,
 ): BrowserSessionState<TInput, TCredential, TContext> {
-  const { authenticate, getCurrentAccount, isContextValid, revokeSession, storageKey } = options;
+  const {
+    allowOfflineRestore,
+    authenticate,
+    getCurrentAccount,
+    isContextValid,
+    revokeSession,
+    storageKey,
+  } = options;
   const [initialSession] = useState<BrowserAuthenticatedSession<TCredential, TContext> | null>(() =>
     readStoredSession(storageKey, isContextValid),
   );
@@ -69,13 +79,28 @@ export function useBrowserSession<TInput, TCredential extends BrowserSessionCred
         setSession(restored);
         setStatus('authenticated');
       })
-      .catch(() => {
-        if (active) clearSession();
+      .catch((error: unknown) => {
+        if (active) {
+          const stillValid = new Date(session.expiresAt).getTime() > Date.now();
+          if (stillValid && isContextValid(session.context) && allowOfflineRestore?.(error)) {
+            setStatus('authenticated');
+          } else {
+            clearSession();
+          }
+        }
       });
     return () => {
       active = false;
     };
-  }, [clearSession, getCurrentAccount, session, status, storageKey]);
+  }, [
+    allowOfflineRestore,
+    clearSession,
+    getCurrentAccount,
+    isContextValid,
+    session,
+    status,
+    storageKey,
+  ]);
 
   useEffect(() => {
     if (!session) return;
@@ -95,9 +120,8 @@ export function useBrowserSession<TInput, TCredential extends BrowserSessionCred
     };
   }, [clearSession, session]);
 
-  const login = useCallback(
-    async (input: TInput) => {
-      const authenticated = await authenticate(input);
+  const accept = useCallback(
+    async (authenticated: TCredential) => {
       let context: TContext;
       try {
         context = await getCurrentAccount(authenticated.sessionToken);
@@ -114,7 +138,14 @@ export function useBrowserSession<TInput, TCredential extends BrowserSessionCred
       setSession(nextSession);
       setStatus('authenticated');
     },
-    [authenticate, getCurrentAccount, revokeSession, storageKey],
+    [getCurrentAccount, revokeSession, storageKey],
+  );
+
+  const login = useCallback(
+    async (input: TInput) => {
+      await accept(await authenticate(input));
+    },
+    [accept, authenticate],
   );
 
   const logout = useCallback(async () => {
@@ -128,7 +159,10 @@ export function useBrowserSession<TInput, TCredential extends BrowserSessionCred
     }
   }, [clearSession, revokeSession, session?.sessionToken]);
 
-  return useMemo(() => ({ login, logout, session, status }), [login, logout, session, status]);
+  return useMemo(
+    () => ({ accept, login, logout, session, status }),
+    [accept, login, logout, session, status],
+  );
 }
 
 function readStoredSession<TCredential extends BrowserSessionCredential, TContext>(

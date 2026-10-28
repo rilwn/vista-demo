@@ -4,19 +4,34 @@ import { HttpStatus, Inject, Injectable } from '@nestjs/common';
 import type { AppEnvironment } from '@vista/config';
 import type {
   FinancialDocument,
+  ConfirmPosFiscalSaleCancellationRequest,
   CreatePosDiscountAuthorizationRequest,
   CreatePosReturnRequest,
   CreatePosSaleRequest,
+  ConfirmPosFiscalSaleReceiptRequest,
+  ConfirmPosFiscalDailyReportRequest,
   ClosePosShiftRequest,
+  CreatePosFiscalDailyReportRequest,
+  FailPosFiscalDailyReportRequest,
   EnrolPosLoyaltyRequest,
   OpenPosShiftRequest,
   PosBasketPricing,
+  PosFiscalReceiptLine,
+  PosFiscalSalePreparation,
+  PosFiscalSalePreparationStatus,
+  PosFiscalDailyReport,
+  PosFiscalDailyReportStatus,
+  PosFiscalDailyReportType,
+  PosFiscalReturnPreparation,
+  PosFiscalReturnPreparationStatus,
   PosCatalogItem,
   PosCatalogPage,
   PosCustomerOption,
   PosCustomerPaymentOptions,
   PosDiscountAuthorization,
   PosDiscountType,
+  PosDatecsUnpLease,
+  PosOfflineSyncEventResponse,
   PosLoyaltyAccount,
   PosLoyaltyLedger,
   PosPricingAdjustment,
@@ -33,11 +48,20 @@ import type {
   PosTerminalContext,
   PosTrackingMode,
   PosVatTreatment,
+  PreparePosFiscalSaleRequest,
+  ReservePosDatecsUnpLeaseRequest,
+  ReportPosOfflineSyncEventRequest,
+  PreparePosFiscalReturnRequest,
+  ConfirmPosFiscalReturnRequest,
+  ResolvePosFiscalReturnRequest,
+  MarkPosFiscalSaleOutcomeUnknownRequest,
   PosWarrantyCardDocument,
   PricePosBasketRequest,
   UpdatePosQuickAccessRequest,
 } from '@vista/contracts';
 import type { PoolClient } from 'pg';
+
+const DATECS_UNP_OFFLINE_BUFFER_SIZE = 20;
 
 import { AuditService } from '../audit/audit.service.js';
 import { PasswordService } from '../auth/password.service.js';
@@ -50,6 +74,7 @@ import { ApiErrorException } from '../common/api-error.exception.js';
 import { APP_ENVIRONMENT } from '../config/config.module.js';
 import { DatabaseService } from '../database/database.service.js';
 import { FinancialDocumentsService } from '../finance/financial-documents.service.js';
+import { CardAuthorizationService } from './card-authorization.service.js';
 import { renderPosWarrantyCard } from './pos-warranty-card-renderer.js';
 import { canUseFiscalSimulator } from './fiscal-mode-policy.js';
 
@@ -124,6 +149,106 @@ interface SaleProductRow {
   unit_price: string | null;
   vat_treatment: PosVatTreatment | null;
   warranty_months: number | null;
+}
+
+interface PreparedSalePayment {
+  accountDueOn?: string;
+  adapter: string;
+  advanceId?: string;
+  amount: string;
+  changeAmount: string;
+  creditLimitEur?: string;
+  method: PosSalePayment['method'];
+  paymentTermsDays?: number;
+  paymentTermsId?: string;
+  providerReference?: string;
+  status: PosSalePayment['status'];
+  tenderedAmount: string | null;
+}
+
+type NormalizedSale = ReturnType<typeof normalizeSale>;
+type NormalizedSaleLine = NormalizedSale['lines'][number];
+
+interface ReadySaleLine extends NormalizedSaleLine {
+  automaticDiscountTotal: string;
+  baseNetTotal: string;
+  grossTotal: string;
+  loyaltyDiscountTotal: string;
+  manualDiscountTotal: string;
+  netTotal: string;
+  pricingAdjustments: PosPricingAdjustment[];
+  product: SaleProductRow;
+  vatTotal: string;
+}
+
+interface FiscalSalePricingSnapshot {
+  basketPricing: PosBasketPricing;
+  payments: PreparedSalePayment[];
+  preparedLines: ReadySaleLine[];
+}
+
+interface FiscalSalePreparationRow {
+  cashier_account_id: string;
+  cash_register_id: string;
+  client_transaction_id: string;
+  device_serial: string;
+  finalized_sale_id: string | null;
+  fiscal_document_number: string | null;
+  fiscal_receipt_number: string | null;
+  fiscal_response: ConfirmPosFiscalSaleReceiptRequest | null;
+  id: string;
+  operator_id: string;
+  operator_identifier: string;
+  pricing_snapshot: FiscalSalePricingSnapshot;
+  request_digest: string;
+  request_snapshot: CreatePosSaleRequest;
+  shift_id: string;
+  status: PosFiscalSalePreparationStatus;
+  unique_sale_id: string;
+}
+
+interface FiscalDailyReportRow {
+  cashier_account_id: string;
+  cash_register_id: string;
+  closing_cash_eur: string | null;
+  completed_at: Date | string | null;
+  created_at: Date | string;
+  failure_reason: string | null;
+  fiscal_record_number: string | null;
+  id: string;
+  non_vat_sales_total_eur: string | null;
+  operator_id: string;
+  report_type: PosFiscalDailyReportType;
+  shift_id: string;
+  shift_number: string;
+  shift_version: number | null;
+  status: PosFiscalDailyReportStatus;
+  tax_group_totals: Record<string, string> | null;
+}
+
+interface FiscalReturnPreparationRow {
+  cashier_account_id: string;
+  cash_register_id: string;
+  completed_return_id: string | null;
+  device_serial: string;
+  failure_reason: string | null;
+  fiscal_document_number: string | null;
+  fiscal_reversals_since_daily_report: string | null;
+  id: string;
+  operator_id: string;
+  operator_identifier: string;
+  original_fiscal_document_number: string;
+  original_sale_id: string;
+  original_unique_sale_id: string;
+  request_digest: string;
+  request_snapshot: CreatePosReturnRequest;
+  shift_id: string;
+  status: PosFiscalReturnPreparationStatus;
+  unique_reversal_id: string;
+}
+
+interface FiscalReturnConfirmation extends ConfirmPosFiscalReturnRequest {
+  preparationId: string;
 }
 
 interface SaleRow {
@@ -206,7 +331,9 @@ interface SaleLineRow {
 interface ReturnRow {
   completed_at: Date | string;
   fiscal_adapter: string;
+  fiscal_document_number: string | null;
   fiscal_reversal_number: string;
+  fiscal_reversals_since_daily_report: string | null;
   gross_total: string;
   id: string;
   loyalty_points_earned_reversed: number;
@@ -285,6 +412,8 @@ export class PosService {
     @Inject(TotpService) private readonly totp: TotpService,
     @Inject(FinancialDocumentsService)
     private readonly financialDocuments: FinancialDocumentsService,
+    @Inject(CardAuthorizationService)
+    private readonly cardAuthorizations: CardAuthorizationService,
   ) {}
 
   async terminalContext(authentication: AuthenticationContext): Promise<PosTerminalContext> {
@@ -432,6 +561,40 @@ export class PosService {
           throw new ApiErrorException(
             'POS_SHIFT_NOT_OPEN',
             'This cashier shift is no longer open',
+            HttpStatus.CONFLICT,
+          );
+        const unresolvedFiscal = await client.query(
+          `SELECT id FROM pos.fiscal_sale_preparations
+           WHERE shift_id = $1
+             AND status IN ('prepared', 'printing', 'outcome_unknown', 'receipt_confirmed')
+           FOR UPDATE`,
+          [id],
+        );
+        const unresolvedFiscalReturn = await client.query(
+          `SELECT id FROM pos.fiscal_return_preparations WHERE shift_id = $1
+           AND status IN ('prepared', 'printing', 'outcome_unknown') FOR UPDATE`,
+          [id],
+        );
+        if (unresolvedFiscal.rowCount || unresolvedFiscalReturn.rowCount)
+          throw new ApiErrorException(
+            'POS_FISCAL_SALE_REQUIRES_REVIEW',
+            'Resolve the pending fiscal receipt before closing this shift.',
+            HttpStatus.CONFLICT,
+          );
+        const configuredTerminal = await client.query<{
+          fiscal_mode: AssignmentRow['fiscal_mode'];
+        }>(
+          `SELECT configuration.fiscal_mode
+           FROM pos.terminal_configurations configuration
+           WHERE configuration.cash_register_id = (
+             SELECT shift.cash_register_id FROM pos.shifts shift WHERE shift.id = $1
+           ) AND configuration.active`,
+          [id],
+        );
+        if (configuredTerminal.rows[0]?.fiscal_mode === 'hardware')
+          throw new ApiErrorException(
+            'POS_FISCAL_Z_REPORT_REQUIRED',
+            'Print and record the DATECS Z report before closing a hardware register shift.',
             HttpStatus.CONFLICT,
           );
         const updated = await client.query(
@@ -1003,53 +1166,260 @@ export class PosService {
     }
   }
 
-  async completeSale(
-    input: CreatePosSaleRequest,
+  async prepareFiscalDailyReport(
+    input: CreatePosFiscalDailyReportRequest,
     key: string | undefined,
     authentication: AuthenticationContext,
     metadata: RequestSecurityMetadata,
-  ): Promise<PosSale> {
-    const normalized = normalizeSale(input);
+  ): Promise<PosFiscalDailyReport> {
+    if (
+      (input.type === 'z' && (!input.closingCashEur || !input.shiftVersion)) ||
+      (input.type === 'x' &&
+        (input.closingCashEur !== undefined || input.shiftVersion !== undefined))
+    )
+      throw new ApiErrorException(
+        'POS_FISCAL_REPORT_CLOSE_SNAPSHOT_INVALID',
+        'A Z report needs the counted cash and current shift version; an X report does not close a shift.',
+        HttpStatus.BAD_REQUEST,
+      );
+    const closingCashEur = input.type === 'z' ? decimal(input.closingCashEur!, false) : undefined;
     return this.command(
-      'pos.sale.complete',
+      'pos.fiscal-daily-report.prepare',
       key,
-      normalized,
+      {
+        closingCashEur,
+        shiftId: input.shiftId,
+        shiftVersion: input.shiftVersion,
+        type: input.type,
+      },
       HttpStatus.CREATED,
-      isPosSale,
+      isPosFiscalDailyReport,
       async (client, commandKey) => {
-        const shift = await this.lockShift(client, normalized.shiftId, authentication.accountId);
-        const existingSale = await client.query<{ id: string; shift_id: string }>(
-          `SELECT id, shift_id FROM pos.sales
-           WHERE client_transaction_id = $1 FOR UPDATE`,
-          [normalized.clientTransactionId],
-        );
-        if (existingSale.rows[0]) {
-          if (existingSale.rows[0].shift_id !== normalized.shiftId)
-            throw new ApiErrorException(
-              'POS_TRANSACTION_ID_REUSED',
-              'This checkout reference belongs to another cashier shift',
-              HttpStatus.CONFLICT,
-            );
-          return this.sale(client, existingSale.rows[0].id);
-        }
+        const shift = await this.lockShift(client, input.shiftId, authentication.accountId);
+        if (input.type === 'z' && input.shiftVersion !== shift.version)
+          throw new ApiErrorException(
+            'POS_SHIFT_CONFLICT',
+            'The shift changed. Refresh the counted cash before printing its Z report.',
+            HttpStatus.CONFLICT,
+          );
         const assignment = await client.query<AssignmentRow>(
-          `${assignmentSql} AND register.id = $2 FOR UPDATE OF configuration`,
+          `${assignmentSql} AND register.id = $2 FOR UPDATE OF register, operator, configuration`,
           [authentication.accountId, shift.cashRegisterId],
         );
-        const terminal = assignment.rows[0];
-        if (!terminal || terminal.warehouse_id !== shift.warehouseId)
+        const terminal = required(assignment.rows[0], 'POS terminal lookup failed');
+        if (terminal.fiscal_mode !== 'hardware')
+          throw new ApiErrorException(
+            'POS_DATECS_HARDWARE_REQUIRED',
+            'A DATECS daily report needs a register assigned to fiscal hardware.',
+            HttpStatus.CONFLICT,
+          );
+        const activeSale = await client.query(
+          `SELECT id FROM pos.fiscal_sale_preparations
+           WHERE cash_register_id = $1
+             AND status IN ('prepared', 'printing', 'outcome_unknown', 'receipt_confirmed')
+           FOR UPDATE`,
+          [shift.cashRegisterId],
+        );
+        const activeReport = await client.query(
+          `SELECT id FROM pos.fiscal_daily_reports
+           WHERE cash_register_id = $1
+             AND status IN ('prepared', 'printing', 'outcome_unknown')
+           FOR UPDATE`,
+          [shift.cashRegisterId],
+        );
+        const activeReturn = await client.query(
+          `SELECT id FROM pos.fiscal_return_preparations
+           WHERE cash_register_id = $1 AND status IN ('prepared', 'printing', 'outcome_unknown')
+           FOR UPDATE`,
+          [shift.cashRegisterId],
+        );
+        if (activeSale.rowCount || activeReport.rowCount || activeReturn.rowCount)
+          throw new ApiErrorException(
+            activeSale.rowCount
+              ? 'POS_FISCAL_SALE_REQUIRES_REVIEW'
+              : activeReport.rowCount
+                ? 'POS_FISCAL_REPORT_REQUIRES_REVIEW'
+                : 'POS_FISCAL_RETURN_REQUIRES_REVIEW',
+            'Resolve the pending fiscal printer action before starting another one.',
+            HttpStatus.CONFLICT,
+          );
+        const id = randomUUID();
+        await client.query(
+          `INSERT INTO pos.fiscal_daily_reports (
+             id, shift_id, cash_register_id, operator_id, cashier_account_id,
+             report_type, closing_cash_eur, shift_version
+           ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+          [
+            id,
+            shift.id,
+            shift.cashRegisterId,
+            shift.operatorId,
+            authentication.accountId,
+            input.type,
+            closingCashEur ?? null,
+            input.type === 'z' ? shift.version : null,
+          ],
+        );
+        const report = await this.fiscalDailyReport(client, id);
+        await this.sideEffects(
+          client,
+          'pos_fiscal_daily_report',
+          id,
+          `pos.fiscal_daily_report.${input.type}.prepared`,
+          report,
+          authentication,
+          metadata,
+          commandKey,
+        );
+        return report;
+      },
+    );
+  }
+
+  async activeFiscalDailyReport(
+    shiftId: string,
+    authentication: AuthenticationContext,
+  ): Promise<PosFiscalDailyReport | null> {
+    const result = await this.database.getPool().query<FiscalDailyReportRow>(
+      `${fiscalDailyReportSql}
+       WHERE report.shift_id = $1 AND report.cashier_account_id = $2
+         AND report.status IN ('prepared', 'printing', 'outcome_unknown')`,
+      [shiftId, authentication.accountId],
+    );
+    return result.rows[0] ? mapFiscalDailyReport(result.rows[0]) : null;
+  }
+
+  async prepareFiscalSale(
+    input: PreparePosFiscalSaleRequest,
+    key: string | undefined,
+    authentication: AuthenticationContext,
+    metadata: RequestSecurityMetadata,
+  ): Promise<PosFiscalSalePreparation> {
+    const normalized = normalizeSale(input);
+    const deviceSerial = input.deviceSerial.trim().toUpperCase();
+    const operatorIdentifier = input.operatorIdentifier.trim().toUpperCase();
+    const requestedUniqueSaleId = input.uniqueSaleId?.trim().toUpperCase();
+    const requestDigest = digest({
+      deviceSerial,
+      normalized,
+      operatorIdentifier,
+      uniqueSaleId: requestedUniqueSaleId ?? null,
+    });
+    if (
+      normalized.payments.length !== 1 ||
+      normalized.payments[0]?.method !== 'cash' ||
+      !normalized.payments[0].tenderedAmount
+    )
+      throw new ApiErrorException(
+        'POS_DATECS_CASH_PAYMENT_REQUIRED',
+        'This fiscal-device flow currently accepts one cash payment per receipt.',
+        HttpStatus.BAD_REQUEST,
+      );
+
+    return this.command(
+      'pos.fiscal-sale.prepare',
+      key,
+      { deviceSerial, normalized, operatorIdentifier, uniqueSaleId: requestedUniqueSaleId ?? null },
+      HttpStatus.CREATED,
+      isPosFiscalSalePreparation,
+      async (client, commandKey) => {
+        const shift = await this.lockShift(client, normalized.shiftId, authentication.accountId);
+        const activeReport = await client.query(
+          `SELECT id FROM pos.fiscal_daily_reports
+           WHERE shift_id = $1 AND status IN ('prepared', 'printing', 'outcome_unknown')
+           FOR UPDATE`,
+          [shift.id],
+        );
+        if (activeReport.rowCount)
+          throw new ApiErrorException(
+            'POS_FISCAL_REPORT_REQUIRES_REVIEW',
+            'Resolve the pending fiscal report before preparing another printer action.',
+            HttpStatus.CONFLICT,
+          );
+        const activeReturn = await client.query(
+          `SELECT id FROM pos.fiscal_return_preparations WHERE cash_register_id = $1
+           AND status IN ('prepared', 'printing', 'outcome_unknown') FOR UPDATE`,
+          [shift.cashRegisterId],
+        );
+        if (activeReturn.rowCount)
+          throw new ApiErrorException(
+            'POS_FISCAL_RETURN_REQUIRES_REVIEW',
+            'Resolve the pending fiscal return before preparing another printer action.',
+            HttpStatus.CONFLICT,
+          );
+        const assignment = await client.query<AssignmentRow>(
+          `${assignmentSql} AND register.id = $2 FOR UPDATE OF register, operator, configuration`,
+          [authentication.accountId, shift.cashRegisterId],
+        );
+        const terminal = required(assignment.rows[0], 'POS terminal lookup failed');
+        if (terminal.warehouse_id !== shift.warehouseId)
           throw new ApiErrorException(
             'POS_TERMINAL_CHANGED',
             'The register assignment changed after this shift was opened',
             HttpStatus.CONFLICT,
           );
         this.requireUsableFiscalMode(terminal.fiscal_mode);
-        if (terminal.fiscal_mode !== 'simulator')
+        if (terminal.fiscal_mode !== 'hardware')
           throw new ApiErrorException(
-            'POS_FISCAL_ADAPTER_UNAVAILABLE',
-            'The approved fiscal-device adapter is not connected yet',
-            HttpStatus.SERVICE_UNAVAILABLE,
+            'POS_DATECS_HARDWARE_REQUIRED',
+            'A DATECS sale can be prepared only for a register assigned to fiscal hardware.',
+            HttpStatus.CONFLICT,
           );
+
+        const existing = await client.query<FiscalSalePreparationRow>(
+          `SELECT * FROM pos.fiscal_sale_preparations
+           WHERE client_transaction_id = $1 FOR UPDATE`,
+          [normalized.clientTransactionId],
+        );
+        if (existing.rows[0]) {
+          if (
+            existing.rows[0].cashier_account_id !== authentication.accountId ||
+            existing.rows[0].request_digest !== requestDigest
+          )
+            throw new ApiErrorException(
+              'POS_TRANSACTION_ID_REUSED',
+              'This checkout reference is already tied to another fiscal sale.',
+              HttpStatus.CONFLICT,
+            );
+          return mapFiscalSalePreparation(existing.rows[0]);
+        }
+
+        const completedSale = await client.query(
+          'SELECT id FROM pos.sales WHERE client_transaction_id = $1 FOR UPDATE',
+          [normalized.clientTransactionId],
+        );
+        if (completedSale.rowCount)
+          throw new ApiErrorException(
+            'POS_TRANSACTION_ALREADY_COMPLETED',
+            'This checkout reference already belongs to a completed sale.',
+            HttpStatus.CONFLICT,
+          );
+
+        const openPreparation = await client.query(
+          `SELECT id FROM pos.fiscal_sale_preparations
+           WHERE cash_register_id = $1
+             AND status IN ('prepared', 'printing', 'outcome_unknown', 'receipt_confirmed')
+           FOR UPDATE`,
+          [terminal.cash_register_id],
+        );
+        if (openPreparation.rowCount)
+          throw new ApiErrorException(
+            'POS_FISCAL_SALE_REQUIRES_REVIEW',
+            'Resolve the register’s pending fiscal receipt before preparing another sale.',
+            HttpStatus.CONFLICT,
+          );
+        const openReturnPreparation = await client.query(
+          `SELECT id FROM pos.fiscal_return_preparations WHERE cash_register_id = $1
+           AND status IN ('prepared', 'printing', 'outcome_unknown') FOR UPDATE`,
+          [terminal.cash_register_id],
+        );
+        if (openReturnPreparation.rowCount)
+          throw new ApiErrorException(
+            'POS_FISCAL_RETURN_REQUIRES_REVIEW',
+            'Resolve the register’s pending fiscal return before preparing another sale.',
+            HttpStatus.CONFLICT,
+          );
+
         if (normalized.customerPartnerId) {
           await this.requireCustomer(client, normalized.customerPartnerId);
           if (normalized.customerLocationId)
@@ -1061,18 +1431,24 @@ export class PosService {
         }
 
         const productIds = normalized.lines.map((line) => line.productId);
-        const products = await client.query<SaleProductRow>(saleProductsSql, [
+        const productResult = await client.query<SaleProductRow>(saleProductsSql, [
           productIds,
           shift.warehouseId,
           normalized.customerPartnerId ?? null,
         ]);
-        if (products.rowCount !== productIds.length)
+        if (productResult.rowCount !== productIds.length)
           throw new ApiErrorException(
             'POS_PRODUCT_UNAVAILABLE',
             'One or more basket items are inactive or unavailable at this register',
             HttpStatus.CONFLICT,
           );
 
+        await client.query(
+          `SELECT warehouse_id, product_id FROM inventory.stock_balances
+           WHERE warehouse_id = $1 AND product_id = ANY($2::uuid[])
+           ORDER BY product_id FOR UPDATE`,
+          [shift.warehouseId, productIds],
+        );
         const basketPricing = await this.prepareBasketPricing(
           client,
           shift,
@@ -1080,9 +1456,11 @@ export class PosService {
           authentication.accountId,
         );
 
-        const preparedLines = normalized.lines.map((inputLine) => {
+        const serialsByProduct = new Map<string, Array<{ id: string; serial_number: string }>>();
+        const preparedLines: ReadySaleLine[] = [];
+        for (const inputLine of normalized.lines) {
           const product = required(
-            products.rows.find((row) => row.id === inputLine.productId),
+            productResult.rows.find((row) => row.id === inputLine.productId),
             'POS product lookup failed',
           );
           if (!product.unit_price)
@@ -1132,37 +1510,1362 @@ export class PosService {
               `${product.name} does not use batch tracking`,
               HttpStatus.BAD_REQUEST,
             );
-          const totals = required(
-            basketPricing.lines.find((line) => line.productId === inputLine.productId),
-            'POS basket pricing line lookup failed',
+
+          const quantity = units(inputLine.quantity);
+          const available = await client.query<{ available_quantity: string }>(
+            `SELECT (balance.quantity - COALESCE((
+               SELECT sum(reservation.remaining_quantity)
+               FROM inventory.stock_reservations reservation
+               WHERE reservation.warehouse_id = balance.warehouse_id
+                 AND reservation.product_id = balance.product_id
+                 AND reservation.status = 'active'
+             ), 0))::text AS available_quantity
+             FROM inventory.stock_balances balance
+             WHERE balance.warehouse_id = $1 AND balance.product_id = $2`,
+            [shift.warehouseId, inputLine.productId],
           );
-          return {
+          if (units(available.rows[0]?.available_quantity ?? '0') < quantity)
+            throw new ApiErrorException(
+              'POS_STOCK_UNAVAILABLE',
+              `There is not enough available stock for ${product.name}`,
+              HttpStatus.CONFLICT,
+            );
+
+          if (inputLine.batchId) {
+            const batch = await client.query(
+              `SELECT batch_balance.batch_id
+               FROM inventory.batch_stock_balances batch_balance
+               JOIN inventory.batches batch ON batch.id = batch_balance.batch_id
+               WHERE batch_balance.warehouse_id = $1 AND batch_balance.batch_id = $2
+                 AND batch.product_id = $3
+                 AND batch_balance.quantity - batch_balance.reserved_quantity >= $4
+               FOR UPDATE OF batch_balance`,
+              [shift.warehouseId, inputLine.batchId, inputLine.productId, inputLine.quantity],
+            );
+            if (!batch.rowCount)
+              throw new ApiErrorException(
+                'POS_BATCH_UNAVAILABLE',
+                `The selected batch cannot supply ${product.name}`,
+                HttpStatus.CONFLICT,
+              );
+          }
+
+          const serials = inputLine.serialNumbers.length
+            ? await client.query<{ id: string; serial_number: string }>(
+                `SELECT item.id, item.serial_number
+                 FROM inventory.serialized_items item
+                 WHERE item.product_id = $1 AND item.warehouse_id = $2
+                   AND item.status = 'available'
+                   AND upper(item.serial_number) = ANY($3::text[])
+                   AND NOT EXISTS (
+                     SELECT 1 FROM inventory.stock_reservation_serials reserved
+                     WHERE reserved.serialized_item_id = item.id AND reserved.active
+                   )
+                 ORDER BY item.serial_number FOR UPDATE OF item`,
+                [
+                  inputLine.productId,
+                  shift.warehouseId,
+                  inputLine.serialNumbers.map((serial) => serial.toUpperCase()),
+                ],
+              )
+            : { rowCount: 0, rows: [] as Array<{ id: string; serial_number: string }> };
+          if (serials.rowCount !== inputLine.serialNumbers.length)
+            throw new ApiErrorException(
+              'POS_SERIAL_UNAVAILABLE',
+              `One or more selected serial numbers for ${product.name} are unavailable`,
+              HttpStatus.CONFLICT,
+            );
+          serialsByProduct.set(inputLine.productId, serials.rows);
+
+          preparedLines.push({
             ...inputLine,
             product,
-            ...totals,
-          };
-        });
-        const netTotal = basketPricing.netTotal;
-        const vatTotal = basketPricing.vatTotal;
-        const grossTotal = basketPricing.grossTotal;
-        const payments = await prepareSalePayments(
+            ...required(
+              basketPricing.lines.find((line) => line.productId === inputLine.productId),
+              'POS basket pricing line lookup failed',
+            ),
+          });
+        }
+
+        const paymentSnapshot = await prepareSalePayments(
           client,
           normalized.payments,
-          grossTotal,
+          basketPricing.grossTotal,
           normalized.customerPartnerId,
           terminal,
+          normalized.clientTransactionId,
+          this.cardAuthorizations,
+          authentication.accountId,
+          normalized.shiftId,
           this.environment.NODE_ENV,
           this.environment.BUSINESS_TIMEZONE,
         );
+        const preparationId = randomUUID();
+        const availableLease = await client.query<{ unique_sale_id: string }>(
+          `SELECT unique_sale_id FROM pos.datecs_unp_leases
+           WHERE cash_register_id = $1 AND reserved_by_account_id = $2
+             AND device_serial = $3 AND operator_identifier = $4
+             AND claimed_by_transaction_id IS NULL
+             AND ($5::varchar IS NULL OR unique_sale_id = $5)
+           ORDER BY substring(unique_sale_id from 15 for 7)::integer
+           LIMIT 1 FOR UPDATE`,
+          [
+            shift.cashRegisterId,
+            authentication.accountId,
+            deviceSerial,
+            operatorIdentifier,
+            requestedUniqueSaleId ?? null,
+          ],
+        );
+        const leasedUniqueSaleId = availableLease.rows[0]?.unique_sale_id;
+        if (requestedUniqueSaleId && !leasedUniqueSaleId)
+          throw new ApiErrorException(
+            'POS_DATECS_UNP_LEASE_UNAVAILABLE',
+            'This DATECS receipt reference is not available to this register. Refresh the terminal before continuing.',
+            HttpStatus.CONFLICT,
+          );
+
+        let uniqueSaleId = leasedUniqueSaleId;
+        if (!uniqueSaleId) {
+          await client.query(
+            `INSERT INTO pos.datecs_unp_sequences (device_serial, operator_identifier)
+             VALUES ($1,$2) ON CONFLICT DO NOTHING`,
+            [deviceSerial, operatorIdentifier],
+          );
+          const allocated = await client.query<{ allocated: string }>(
+            `UPDATE pos.datecs_unp_sequences
+             SET next_value = next_value + 1
+             WHERE device_serial = $1 AND operator_identifier = $2
+               AND next_value <= 9999999
+             RETURNING (next_value - 1)::text AS allocated`,
+            [deviceSerial, operatorIdentifier],
+          );
+          if (!allocated.rows[0])
+            throw new ApiErrorException(
+              'POS_DATECS_UNP_SEQUENCE_EXHAUSTED',
+              'The DATECS sale sequence is full. Contact an administrator before continuing.',
+              HttpStatus.CONFLICT,
+            );
+          uniqueSaleId = `${deviceSerial}-${operatorIdentifier}-${allocated.rows[0].allocated.padStart(7, '0')}`;
+        }
+        const pricingSnapshot: FiscalSalePricingSnapshot = {
+          basketPricing,
+          payments: paymentSnapshot,
+          preparedLines,
+        };
+        const requestSnapshot: CreatePosSaleRequest = {
+          clientTransactionId: normalized.clientTransactionId,
+          ...(normalized.customerLocationId
+            ? { customerLocationId: normalized.customerLocationId }
+            : {}),
+          ...(normalized.customerPartnerId
+            ? { customerPartnerId: normalized.customerPartnerId }
+            : {}),
+          lines: normalized.lines.map((line) => ({
+            ...(line.batchId ? { batchId: line.batchId } : {}),
+            productId: line.productId,
+            quantity: line.quantity,
+            serialNumbers: line.serialNumbers,
+          })),
+          ...(normalized.loyaltyPointsToRedeem !== undefined
+            ? { loyaltyPointsToRedeem: normalized.loyaltyPointsToRedeem }
+            : {}),
+          ...(normalized.manualDiscount
+            ? {
+                manualDiscount: {
+                  authorizationId: required(
+                    normalized.manualDiscount.authorizationId,
+                    'POS discount authorization is required',
+                  ),
+                  discountType: normalized.manualDiscount.discountType,
+                  discountValue: normalized.manualDiscount.discountValue,
+                },
+              }
+            : {}),
+          payments: normalized.payments,
+          shiftId: normalized.shiftId,
+        };
+        await client.query(
+          `INSERT INTO pos.fiscal_sale_preparations (
+             id, client_transaction_id, shift_id, cash_register_id, operator_id,
+             cashier_account_id, device_serial, operator_identifier, unique_sale_id,
+             request_digest, request_snapshot, pricing_snapshot
+           ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::jsonb,$12::jsonb)`,
+          [
+            preparationId,
+            normalized.clientTransactionId,
+            shift.id,
+            terminal.cash_register_id,
+            terminal.operator_id,
+            authentication.accountId,
+            deviceSerial,
+            operatorIdentifier,
+            uniqueSaleId,
+            requestDigest,
+            JSON.stringify(requestSnapshot),
+            JSON.stringify(pricingSnapshot),
+          ],
+        );
+        if (leasedUniqueSaleId) {
+          const claimed = await client.query(
+            `UPDATE pos.datecs_unp_leases
+             SET claimed_by_transaction_id = $2, fiscal_preparation_id = $3
+             WHERE unique_sale_id = $1 AND claimed_by_transaction_id IS NULL`,
+            [leasedUniqueSaleId, normalized.clientTransactionId, preparationId],
+          );
+          if (!claimed.rowCount)
+            throw new ApiErrorException(
+              'POS_DATECS_UNP_LEASE_UNAVAILABLE',
+              'This DATECS receipt reference has already been used. Refresh the terminal before continuing.',
+              HttpStatus.CONFLICT,
+            );
+        }
+
+        if (normalized.manualDiscount?.authorizationId) {
+          const reserved = await client.query(
+            `UPDATE pos.discount_authorizations
+             SET reserved_by_fiscal_preparation_id = $2
+             WHERE id = $1 AND consumed_by_sale_id IS NULL
+               AND reserved_by_fiscal_preparation_id IS NULL AND expires_at > now()`,
+            [normalized.manualDiscount.authorizationId, preparationId],
+          );
+          if (!reserved.rowCount)
+            throw new ApiErrorException(
+              'POS_DISCOUNT_AUTHORIZATION_INVALID',
+              'This discount approval is already in use or has expired.',
+              HttpStatus.CONFLICT,
+            );
+        }
+        if (basketPricing.loyaltyPointsRedeemed > 0 && normalized.customerPartnerId) {
+          const account = await client.query<{ id: string }>(
+            `SELECT id FROM pos.loyalty_accounts
+             WHERE customer_partner_id = $1 AND status = 'active' FOR UPDATE`,
+            [normalized.customerPartnerId],
+          );
+          if (!account.rows[0])
+            throw new ApiErrorException(
+              'POS_LOYALTY_ACCOUNT_REQUIRED',
+              'Choose an active loyalty customer before redeeming points.',
+              HttpStatus.CONFLICT,
+            );
+          await client.query(
+            `INSERT INTO pos.fiscal_preparation_loyalty_reservations (
+               fiscal_preparation_id, loyalty_account_id, points
+             ) VALUES ($1,$2,$3)`,
+            [preparationId, account.rows[0].id, basketPricing.loyaltyPointsRedeemed],
+          );
+        }
+
+        for (const line of preparedLines) {
+          const reservation = await client.query<{ id: string }>(
+            `INSERT INTO inventory.stock_reservations (
+               warehouse_id, product_id, reference_type, reference_id,
+               initial_quantity, remaining_quantity, created_by
+             ) VALUES ($1,$2,'pos_fiscal_preparation',$3,$4,$4,$5)
+             RETURNING id`,
+            [
+              shift.warehouseId,
+              line.productId,
+              preparationId,
+              line.quantity,
+              authentication.accountId,
+            ],
+          );
+          const reservationId = required(reservation.rows[0], 'Stock reservation insert failed').id;
+          if (line.batchId) {
+            const batchReservation = await client.query(
+              `UPDATE inventory.batch_stock_balances
+               SET reserved_quantity = reserved_quantity + $3, updated_at = now()
+               WHERE warehouse_id = $1 AND batch_id = $2
+                 AND quantity - reserved_quantity >= $3`,
+              [shift.warehouseId, line.batchId, line.quantity],
+            );
+            if (!batchReservation.rowCount)
+              throw new ApiErrorException(
+                'POS_BATCH_UNAVAILABLE',
+                `The selected batch cannot supply ${line.product.name}`,
+                HttpStatus.CONFLICT,
+              );
+          }
+          for (const serial of serialsByProduct.get(line.productId) ?? [])
+            await client.query(
+              `INSERT INTO inventory.stock_reservation_serials (
+                 reservation_id, serialized_item_id
+               ) VALUES ($1,$2)`,
+              [reservationId, serial.id],
+            );
+        }
+
+        const preparation = await this.fiscalSalePreparation(client, preparationId);
+        await this.sideEffects(
+          client,
+          'pos_fiscal_sale_preparation',
+          preparationId,
+          'pos.fiscal_sale.prepared',
+          preparation,
+          authentication,
+          metadata,
+          commandKey,
+        );
+        return preparation;
+      },
+    );
+  }
+
+  async reserveDatecsUnpLease(
+    input: ReservePosDatecsUnpLeaseRequest,
+    key: string | undefined,
+    authentication: AuthenticationContext,
+    metadata: RequestSecurityMetadata,
+  ): Promise<PosDatecsUnpLease> {
+    const deviceSerial = input.deviceSerial.trim().toUpperCase();
+    const operatorIdentifier = input.operatorIdentifier.trim().toUpperCase();
+    if (!/^[A-Z0-9]{8}$/u.test(deviceSerial) || !/^[A-Z0-9]{4}$/u.test(operatorIdentifier))
+      throw new ApiErrorException(
+        'POS_DATECS_IDENTITY_INVALID',
+        'Enter the DATECS device serial number and operator code from the printer settings.',
+        HttpStatus.BAD_REQUEST,
+      );
+
+    return this.command(
+      'pos.datecs-unp.reserve',
+      key,
+      { deviceSerial, operatorIdentifier, shiftId: input.shiftId },
+      HttpStatus.CREATED,
+      isPosDatecsUnpLease,
+      async (client, commandKey) => {
+        const shift = await this.lockShift(client, input.shiftId, authentication.accountId);
+        const assignment = await client.query<AssignmentRow>(
+          `${assignmentSql} AND register.id = $2 FOR UPDATE OF register, operator, configuration`,
+          [authentication.accountId, shift.cashRegisterId],
+        );
+        const terminal = required(assignment.rows[0], 'POS terminal lookup failed');
+        if (terminal.warehouse_id !== shift.warehouseId)
+          throw new ApiErrorException(
+            'POS_TERMINAL_CHANGED',
+            'The register assignment changed after this shift was opened',
+            HttpStatus.CONFLICT,
+          );
+        this.requireUsableFiscalMode(terminal.fiscal_mode);
+        if (terminal.fiscal_mode !== 'hardware')
+          throw new ApiErrorException(
+            'POS_DATECS_HARDWARE_REQUIRED',
+            'Offline receipt references can be reserved only for a register assigned to fiscal hardware.',
+            HttpStatus.CONFLICT,
+          );
+
+        await client.query(
+          `INSERT INTO pos.datecs_unp_sequences (device_serial, operator_identifier)
+           VALUES ($1,$2) ON CONFLICT DO NOTHING`,
+          [deviceSerial, operatorIdentifier],
+        );
+        const sequence = await client.query<{ next_value: number }>(
+          `SELECT next_value FROM pos.datecs_unp_sequences
+           WHERE device_serial = $1 AND operator_identifier = $2 FOR UPDATE`,
+          [deviceSerial, operatorIdentifier],
+        );
+        const available = await client.query<{ unique_sale_id: string }>(
+          `SELECT unique_sale_id FROM pos.datecs_unp_leases
+           WHERE cash_register_id = $1 AND reserved_by_account_id = $2
+             AND device_serial = $3 AND operator_identifier = $4
+             AND claimed_by_transaction_id IS NULL
+           ORDER BY substring(unique_sale_id from 15 for 7)::integer
+           FOR UPDATE`,
+          [shift.cashRegisterId, authentication.accountId, deviceSerial, operatorIdentifier],
+        );
+        const missing = Math.max(0, DATECS_UNP_OFFLINE_BUFFER_SIZE - available.rows.length);
+        if (missing) {
+          const nextValue = Number(sequence.rows[0]?.next_value ?? 0);
+          if (!nextValue || nextValue + missing > 10_000_000)
+            throw new ApiErrorException(
+              'POS_DATECS_UNP_SEQUENCE_EXHAUSTED',
+              'The DATECS sale sequence is full. Contact an administrator before continuing.',
+              HttpStatus.CONFLICT,
+            );
+          await client.query(
+            `UPDATE pos.datecs_unp_sequences SET next_value = $3
+             WHERE device_serial = $1 AND operator_identifier = $2`,
+            [deviceSerial, operatorIdentifier, nextValue + missing],
+          );
+          for (let offset = 0; offset < missing; offset += 1) {
+            const uniqueSaleId = `${deviceSerial}-${operatorIdentifier}-${String(nextValue + offset).padStart(7, '0')}`;
+            await client.query(
+              `INSERT INTO pos.datecs_unp_leases (
+                 unique_sale_id, device_serial, operator_identifier,
+                 cash_register_id, reserved_by_account_id
+               ) VALUES ($1,$2,$3,$4,$5)`,
+              [
+                uniqueSaleId,
+                deviceSerial,
+                operatorIdentifier,
+                shift.cashRegisterId,
+                authentication.accountId,
+              ],
+            );
+          }
+        }
+        const result: PosDatecsUnpLease = {
+          cashRegisterId: shift.cashRegisterId,
+          deviceSerial,
+          operatorIdentifier,
+          uniqueSaleIds: [
+            ...available.rows.map((row) => row.unique_sale_id),
+            ...Array.from({ length: missing }, (_, index) => {
+              const first = Number(sequence.rows[0]!.next_value);
+              return `${deviceSerial}-${operatorIdentifier}-${String(first + index).padStart(7, '0')}`;
+            }),
+          ],
+        };
+        await this.sideEffects(
+          client,
+          'pos_cash_register',
+          shift.cashRegisterId,
+          'pos.datecs.unp_lease.reserved',
+          { leaseCount: result.uniqueSaleIds.length, deviceSerial, operatorIdentifier },
+          authentication,
+          metadata,
+          commandKey,
+        );
+        return result;
+      },
+    );
+  }
+
+  async reportOfflineSyncEvent(
+    input: ReportPosOfflineSyncEventRequest,
+    authentication: AuthenticationContext,
+    metadata: RequestSecurityMetadata,
+  ): Promise<PosOfflineSyncEventResponse> {
+    const client = await this.database.getPool().connect();
+    try {
+      await client.query('BEGIN');
+      await client.query(
+        `SELECT pg_advisory_xact_lock(hashtext('pos.offline_sync_event'), hashtext($1))`,
+        [`${authentication.accountId}:${input.clientEventId}`],
+      );
+      const existing = await client.query<{
+        audit_event_id: string;
+        cash_register_id: string;
+        client_occurred_at_ms: string;
+        client_transaction_id: string;
+        device_serial: string;
+        event_type: string;
+        operator_identifier: string;
+        reason_code: string;
+        unique_sale_id: string;
+      }>(
+        `SELECT audit_event_id, cash_register_id, client_transaction_id, device_serial,
+                event_type, operator_identifier, reason_code, unique_sale_id,
+                floor(extract(epoch FROM client_occurred_at) * 1000)::bigint::text
+                  AS client_occurred_at_ms
+         FROM pos.offline_sync_events
+         WHERE account_id = $1 AND client_event_id = $2`,
+        [authentication.accountId, input.clientEventId],
+      );
+      if (existing.rows[0]) {
+        const prior = existing.rows[0];
+        const sameRequest =
+          prior.cash_register_id === input.cashRegisterId &&
+          prior.client_transaction_id === input.clientTransactionId &&
+          prior.device_serial === input.deviceSerial &&
+          prior.event_type === input.type &&
+          prior.operator_identifier === input.operatorIdentifier &&
+          prior.reason_code === input.reasonCode &&
+          prior.unique_sale_id === input.uniqueSaleId &&
+          Number(prior.client_occurred_at_ms) === Date.parse(input.occurredAt);
+        if (!sameRequest)
+          throw new ApiErrorException(
+            'POS_OFFLINE_EVENT_IDEMPOTENCY_CONFLICT',
+            'This offline sync event identifier was already used for different details.',
+            HttpStatus.CONFLICT,
+          );
+        await client.query('COMMIT');
+        return {
+          auditEventId: prior.audit_event_id,
+          clientEventId: input.clientEventId,
+          duplicate: true,
+        };
+      }
+
+      const lease = await client.query<{ claimed_by_transaction_id: string | null }>(
+        `SELECT claimed_by_transaction_id
+         FROM pos.datecs_unp_leases
+         WHERE unique_sale_id = $1 AND cash_register_id = $2
+           AND reserved_by_account_id = $3 AND device_serial = $4
+           AND operator_identifier = $5
+         FOR SHARE`,
+        [
+          input.uniqueSaleId,
+          input.cashRegisterId,
+          authentication.accountId,
+          input.deviceSerial,
+          input.operatorIdentifier,
+        ],
+      );
+      const reservedLease = lease.rows[0];
+      if (
+        !reservedLease ||
+        (reservedLease.claimed_by_transaction_id &&
+          reservedLease.claimed_by_transaction_id !== input.clientTransactionId)
+      )
+        throw new ApiErrorException(
+          'POS_OFFLINE_EVENT_REFERENCE_INVALID',
+          'This offline receipt reference is not assigned to the signed-in cashier.',
+          HttpStatus.CONFLICT,
+        );
+
+      const auditEvent = await this.audit.append(
+        {
+          action: `pos.offline_sync.${input.type}`,
+          actorAccountId: authentication.accountId,
+          after: {
+            cashRegisterId: input.cashRegisterId,
+            clientEventId: input.clientEventId,
+            clientOccurredAt: input.occurredAt,
+            clientTransactionId: input.clientTransactionId,
+            deviceSerial: input.deviceSerial,
+            operatorIdentifier: input.operatorIdentifier,
+            reasonCode: input.reasonCode,
+            type: input.type,
+            uniqueSaleId: input.uniqueSaleId,
+          },
+          correlationId: metadata.correlationId,
+          ...(metadata.sourceIp ? { sourceIp: metadata.sourceIp } : {}),
+          targetId: input.clientTransactionId,
+          targetType: 'pos_offline_checkout',
+          ...(metadata.userAgent ? { userAgent: metadata.userAgent } : {}),
+        },
+        client,
+      );
+      await client.query(
+        `INSERT INTO pos.offline_sync_events (
+           id, account_id, client_event_id, client_transaction_id,
+           cash_register_id, unique_sale_id, device_serial, operator_identifier,
+           event_type, reason_code, client_occurred_at, audit_event_id
+         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+        [
+          randomUUID(),
+          authentication.accountId,
+          input.clientEventId,
+          input.clientTransactionId,
+          input.cashRegisterId,
+          input.uniqueSaleId,
+          input.deviceSerial,
+          input.operatorIdentifier,
+          input.type,
+          input.reasonCode,
+          input.occurredAt,
+          auditEvent.id,
+        ],
+      );
+      await client.query('COMMIT');
+      return {
+        auditEventId: auditEvent.id,
+        clientEventId: input.clientEventId,
+        duplicate: false,
+      };
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async markFiscalDailyReportPrinting(
+    reportId: string,
+    key: string | undefined,
+    authentication: AuthenticationContext,
+    metadata: RequestSecurityMetadata,
+  ): Promise<PosFiscalDailyReport> {
+    return this.updateFiscalDailyReportState(reportId, 'printing', key, authentication, metadata);
+  }
+
+  async markFiscalDailyReportOutcomeUnknown(
+    reportId: string,
+    key: string | undefined,
+    authentication: AuthenticationContext,
+    metadata: RequestSecurityMetadata,
+  ): Promise<PosFiscalDailyReport> {
+    return this.updateFiscalDailyReportState(
+      reportId,
+      'outcome_unknown',
+      key,
+      authentication,
+      metadata,
+    );
+  }
+
+  async rejectFiscalDailyReport(
+    reportId: string,
+    input: FailPosFiscalDailyReportRequest,
+    key: string | undefined,
+    authentication: AuthenticationContext,
+    metadata: RequestSecurityMetadata,
+  ): Promise<PosFiscalDailyReport> {
+    return this.command(
+      'pos.fiscal-daily-report.reject',
+      key,
+      { input, reportId },
+      HttpStatus.OK,
+      isPosFiscalDailyReport,
+      async (client, commandKey) => {
+        const result = await client.query<FiscalDailyReportRow>(
+          `${fiscalDailyReportSql}
+           WHERE report.id = $1 AND report.cashier_account_id = $2 FOR UPDATE OF report`,
+          [reportId, authentication.accountId],
+        );
+        const row = required(result.rows[0], 'Fiscal daily report was not found');
+        if (row.status === 'failed') return mapFiscalDailyReport(row);
+        if (!['prepared', 'printing'].includes(row.status))
+          throw new ApiErrorException(
+            'POS_FISCAL_REPORT_STATE_CONFLICT',
+            'This printer action cannot be marked as rejected.',
+            HttpStatus.CONFLICT,
+          );
+        await client.query(
+          `UPDATE pos.fiscal_daily_reports SET status = 'failed', failure_reason = $2 WHERE id = $1`,
+          [reportId, input.reason],
+        );
+        const report = await this.fiscalDailyReport(client, reportId);
+        await this.sideEffects(
+          client,
+          'pos_fiscal_daily_report',
+          reportId,
+          `pos.fiscal_daily_report.${report.reportType}.rejected`,
+          { reason: input.reason, report },
+          authentication,
+          metadata,
+          commandKey,
+        );
+        return report;
+      },
+    );
+  }
+
+  async confirmFiscalDailyReport(
+    reportId: string,
+    input: ConfirmPosFiscalDailyReportRequest,
+    key: string | undefined,
+    authentication: AuthenticationContext,
+    metadata: RequestSecurityMetadata,
+  ): Promise<PosFiscalDailyReport> {
+    const normalized = normalizeFiscalDailyReportResult(input);
+    return this.command(
+      'pos.fiscal-daily-report.confirm',
+      key,
+      { input: normalized, reportId },
+      HttpStatus.OK,
+      isPosFiscalDailyReport,
+      async (client, commandKey) => {
+        const found = await client.query<{ shift_id: string; status: PosFiscalDailyReportStatus }>(
+          `SELECT shift_id, status FROM pos.fiscal_daily_reports
+           WHERE id = $1 AND cashier_account_id = $2`,
+          [reportId, authentication.accountId],
+        );
+        const initial = required(found.rows[0], 'Fiscal daily report was not found');
+        if (initial.status === 'completed') {
+          const report = await this.fiscalDailyReport(client, reportId);
+          const taxGroups = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'] as const;
+          if (
+            report.fiscalRecordNumber !== normalized.fiscalRecordNumber ||
+            units(report.nonVatSalesTotalEur ?? '0') !== units(normalized.nonVatSalesTotalEur) ||
+            taxGroups.some(
+              (group) =>
+                units(report.taxGroupTotals?.[group] ?? '0') !==
+                units(normalized.taxGroupTotals[group]),
+            )
+          )
+            throw new ApiErrorException(
+              'POS_FISCAL_REPORT_RESULT_CONFLICT',
+              'This report was already recorded with different printer results.',
+              HttpStatus.CONFLICT,
+            );
+          return report;
+        }
+        const shift = await this.lockShift(client, initial.shift_id, authentication.accountId);
+        const result = await client.query<FiscalDailyReportRow>(
+          `${fiscalDailyReportSql}
+           WHERE report.id = $1 AND report.cashier_account_id = $2 FOR UPDATE OF report`,
+          [reportId, authentication.accountId],
+        );
+        const row = required(result.rows[0], 'Fiscal daily report was not found');
+        if (!['printing', 'outcome_unknown'].includes(row.status))
+          throw new ApiErrorException(
+            'POS_FISCAL_REPORT_STATE_CONFLICT',
+            'Only a report sent to the printer can be confirmed.',
+            HttpStatus.CONFLICT,
+          );
+        if (row.report_type === 'z') {
+          if (row.shift_version !== shift.version)
+            throw new ApiErrorException(
+              'POS_SHIFT_CONFLICT',
+              'The shift changed before the Z report was recorded. Keep the printed report and ask a manager to reconcile it.',
+              HttpStatus.CONFLICT,
+            );
+          const closed = await client.query(
+            `UPDATE pos.shifts SET status = 'closed', closing_cash_eur = $3,
+               closed_by = $2, closed_at = now(), version = version + 1
+             WHERE id = $1 AND version = $4 AND status = 'open'`,
+            [row.shift_id, authentication.accountId, row.closing_cash_eur, row.shift_version],
+          );
+          if (!closed.rowCount)
+            throw new ApiErrorException(
+              'POS_SHIFT_CONFLICT',
+              'The shift changed before the Z report was recorded. Keep the printed report and ask a manager to reconcile it.',
+              HttpStatus.CONFLICT,
+            );
+        }
+        await client.query(
+          `UPDATE pos.fiscal_daily_reports SET status = 'completed',
+             fiscal_record_number = $2, non_vat_sales_total_eur = $3,
+             tax_group_totals = $4::jsonb, completed_at = now()
+           WHERE id = $1`,
+          [
+            reportId,
+            normalized.fiscalRecordNumber,
+            normalized.nonVatSalesTotalEur,
+            JSON.stringify(normalized.taxGroupTotals),
+          ],
+        );
+        if (row.report_type === 'z')
+          await this.sideEffects(
+            client,
+            'pos_shift',
+            row.shift_id,
+            'pos.shift.closed.with_fiscal_z_report',
+            await this.shift(client, row.shift_id),
+            authentication,
+            metadata,
+            commandKey,
+          );
+        const report = await this.fiscalDailyReport(client, reportId);
+        await this.sideEffects(
+          client,
+          'pos_fiscal_daily_report',
+          reportId,
+          `pos.fiscal_daily_report.${report.reportType}.completed`,
+          report,
+          authentication,
+          metadata,
+          commandKey,
+        );
+        return report;
+      },
+    );
+  }
+
+  private async updateFiscalDailyReportState(
+    reportId: string,
+    next: 'printing' | 'outcome_unknown',
+    key: string | undefined,
+    authentication: AuthenticationContext,
+    metadata: RequestSecurityMetadata,
+  ): Promise<PosFiscalDailyReport> {
+    const scope = `pos.fiscal-daily-report.${next}`;
+    return this.command(
+      scope,
+      key,
+      { reportId },
+      HttpStatus.OK,
+      isPosFiscalDailyReport,
+      async (client, commandKey) => {
+        const result = await client.query<FiscalDailyReportRow>(
+          `${fiscalDailyReportSql}
+           WHERE report.id = $1 AND report.cashier_account_id = $2 FOR UPDATE OF report`,
+          [reportId, authentication.accountId],
+        );
+        const row = required(result.rows[0], 'Fiscal daily report was not found');
+        if (row.status === next) return mapFiscalDailyReport(row);
+        const allowed = next === 'printing' ? row.status === 'prepared' : row.status === 'printing';
+        if (!allowed)
+          throw new ApiErrorException(
+            'POS_FISCAL_REPORT_STATE_CONFLICT',
+            next === 'printing'
+              ? 'Only a prepared daily report can be sent to the printer.'
+              : 'Only a report being printed can be marked for review.',
+            HttpStatus.CONFLICT,
+          );
+        await client.query('UPDATE pos.fiscal_daily_reports SET status = $2 WHERE id = $1', [
+          reportId,
+          next,
+        ]);
+        const report = await this.fiscalDailyReport(client, reportId);
+        await this.sideEffects(
+          client,
+          'pos_fiscal_daily_report',
+          reportId,
+          `pos.fiscal_daily_report.${report.reportType}.${next}`,
+          report,
+          authentication,
+          metadata,
+          commandKey,
+        );
+        return report;
+      },
+    );
+  }
+
+  async activeFiscalSalePreparation(
+    shiftId: string,
+    authentication: AuthenticationContext,
+  ): Promise<PosFiscalSalePreparation | null> {
+    const client = await this.database.getPool().connect();
+    try {
+      const shift = await this.requireOpenShift(client, shiftId, authentication.accountId);
+      const result = await client.query<FiscalSalePreparationRow>(
+        `SELECT * FROM pos.fiscal_sale_preparations
+         WHERE cash_register_id = $1
+           AND status IN ('prepared', 'printing', 'outcome_unknown', 'receipt_confirmed')
+         ORDER BY created_at, id LIMIT 1`,
+        [shift.cashRegisterId],
+      );
+      const row = result.rows[0];
+      if (!row) return null;
+      if (row.cashier_account_id !== authentication.accountId)
+        throw new ApiErrorException(
+          'POS_FISCAL_PREPARATION_RESTRICTED',
+          'A fiscal receipt from another cashier requires an authorized manager to reconcile it.',
+          HttpStatus.FORBIDDEN,
+        );
+      return mapFiscalSalePreparation(row);
+    } finally {
+      client.release();
+    }
+  }
+
+  async markFiscalSalePrinting(
+    preparationId: string,
+    key: string | undefined,
+    authentication: AuthenticationContext,
+    metadata: RequestSecurityMetadata,
+  ): Promise<PosFiscalSalePreparation> {
+    return this.command(
+      'pos.fiscal-sale.printing',
+      key,
+      { preparationId },
+      HttpStatus.OK,
+      isPosFiscalSalePreparation,
+      async (client, commandKey) => {
+        const result = await client.query<FiscalSalePreparationRow>(
+          `SELECT * FROM pos.fiscal_sale_preparations
+           WHERE id = $1 AND cashier_account_id = $2 FOR UPDATE`,
+          [preparationId, authentication.accountId],
+        );
+        const row = required(result.rows[0], 'Fiscal sale preparation was not found');
+        if (row.status === 'printing') return mapFiscalSalePreparation(row);
+        if (row.status !== 'prepared')
+          throw new ApiErrorException(
+            'POS_FISCAL_PREPARATION_STATE_CONFLICT',
+            'This fiscal sale can no longer be started. Review its current status.',
+            HttpStatus.CONFLICT,
+          );
+        await client.query(
+          `UPDATE pos.fiscal_sale_preparations SET status = 'printing', updated_at = now()
+           WHERE id = $1`,
+          [preparationId],
+        );
+        const preparation = await this.fiscalSalePreparation(client, preparationId);
+        await this.sideEffects(
+          client,
+          'pos_fiscal_sale_preparation',
+          preparationId,
+          'pos.fiscal_sale.printing_started',
+          preparation,
+          authentication,
+          metadata,
+          commandKey,
+        );
+        return preparation;
+      },
+    );
+  }
+
+  async markFiscalSaleOutcomeUnknown(
+    preparationId: string,
+    input: MarkPosFiscalSaleOutcomeUnknownRequest,
+    key: string | undefined,
+    authentication: AuthenticationContext,
+    metadata: RequestSecurityMetadata,
+  ): Promise<PosFiscalSalePreparation> {
+    return this.command(
+      'pos.fiscal-sale.outcome-unknown',
+      key,
+      { input, preparationId },
+      HttpStatus.OK,
+      isPosFiscalSalePreparation,
+      async (client, commandKey) => {
+        const result = await client.query<FiscalSalePreparationRow>(
+          `SELECT * FROM pos.fiscal_sale_preparations
+           WHERE id = $1 AND cashier_account_id = $2 FOR UPDATE`,
+          [preparationId, authentication.accountId],
+        );
+        const row = required(result.rows[0], 'Fiscal sale preparation was not found');
+        if (row.status === 'outcome_unknown') return mapFiscalSalePreparation(row);
+        if (row.status !== 'printing')
+          throw new ApiErrorException(
+            'POS_FISCAL_PREPARATION_STATE_CONFLICT',
+            'Only a printing fiscal sale can be marked for review.',
+            HttpStatus.CONFLICT,
+          );
+        await client.query(
+          `UPDATE pos.fiscal_sale_preparations
+           SET status = 'outcome_unknown', updated_at = now()
+           WHERE id = $1`,
+          [preparationId],
+        );
+        const preparation = await this.fiscalSalePreparation(client, preparationId);
+        await this.sideEffects(
+          client,
+          'pos_fiscal_sale_preparation',
+          preparationId,
+          'pos.fiscal_sale.outcome_requires_review',
+          { commandCode: input.commandCode, preparation },
+          authentication,
+          metadata,
+          commandKey,
+        );
+        return preparation;
+      },
+    );
+  }
+
+  async cancelFiscalSalePreparation(
+    preparationId: string,
+    input: ConfirmPosFiscalSaleCancellationRequest,
+    key: string | undefined,
+    authentication: AuthenticationContext,
+    metadata: RequestSecurityMetadata,
+  ): Promise<PosFiscalSalePreparation> {
+    return this.command(
+      'pos.fiscal-sale.cancel',
+      key,
+      { input, preparationId },
+      HttpStatus.OK,
+      isPosFiscalSalePreparation,
+      async (client, commandKey) => {
+        const result = await client.query<FiscalSalePreparationRow>(
+          `SELECT * FROM pos.fiscal_sale_preparations
+           WHERE id = $1 AND cashier_account_id = $2 FOR UPDATE`,
+          [preparationId, authentication.accountId],
+        );
+        const row = required(result.rows[0], 'Fiscal sale preparation was not found');
+        if (row.status === 'cancelled') return mapFiscalSalePreparation(row);
+        const printerCancellationConfirmed =
+          input.evidence === 'printer_open_rejected' ||
+          input.evidence === 'printer_receipt_cancelled';
+        const safeBeforePrinting =
+          row.status === 'prepared' && input.evidence === 'before_printing';
+        const safePrinterResolution = row.status === 'printing' && printerCancellationConfirmed;
+        if (!safeBeforePrinting && !safePrinterResolution)
+          throw new ApiErrorException(
+            'POS_FISCAL_PREPARATION_CANNOT_CANCEL',
+            'Stock can be released only before printing starts or after the printer confirms cancellation.',
+            HttpStatus.CONFLICT,
+          );
+        await this.releaseFiscalSaleReservations(client, row, authentication.accountId);
+        await client.query(
+          `UPDATE pos.fiscal_sale_preparations
+           SET status = 'cancelled', printer_cancellation_confirmed = $2, updated_at = now()
+           WHERE id = $1`,
+          [preparationId, printerCancellationConfirmed],
+        );
+        const preparation = await this.fiscalSalePreparation(client, preparationId);
+        await this.sideEffects(
+          client,
+          'pos_fiscal_sale_preparation',
+          preparationId,
+          safePrinterResolution
+            ? input.evidence === 'printer_open_rejected'
+              ? 'pos.fiscal_sale.printer_open_rejected'
+              : 'pos.fiscal_sale.printer_cancellation_confirmed'
+            : 'pos.fiscal_sale.cancelled_before_printing',
+          { preparation, evidence: input.evidence },
+          authentication,
+          metadata,
+          commandKey,
+        );
+        return preparation;
+      },
+    );
+  }
+
+  async confirmFiscalSaleReceipt(
+    preparationId: string,
+    input: ConfirmPosFiscalSaleReceiptRequest,
+    key: string | undefined,
+    authentication: AuthenticationContext,
+    metadata: RequestSecurityMetadata,
+  ): Promise<PosSale> {
+    const normalized = normalizeFiscalSaleReceipt(input);
+    const preparation = await this.command(
+      'pos.fiscal-sale.receipt-confirm',
+      key,
+      { input: normalized, preparationId },
+      HttpStatus.OK,
+      isPosFiscalSalePreparation,
+      async (client, commandKey) => {
+        const result = await client.query<FiscalSalePreparationRow>(
+          `SELECT * FROM pos.fiscal_sale_preparations
+           WHERE id = $1 AND cashier_account_id = $2 FOR UPDATE`,
+          [preparationId, authentication.accountId],
+        );
+        const row = required(result.rows[0], 'Fiscal sale preparation was not found');
+        if (row.status === 'receipt_confirmed' || row.status === 'finalized') {
+          if (
+            digest(
+              normalizeFiscalSaleReceipt(
+                required(row.fiscal_response ?? undefined, 'Fiscal receipt evidence was not found'),
+              ),
+            ) !== digest(normalized)
+          )
+            throw new ApiErrorException(
+              'POS_FISCAL_RECEIPT_CONFLICT',
+              'The printer reported a different receipt for this prepared sale.',
+              HttpStatus.CONFLICT,
+            );
+          return mapFiscalSalePreparation(row);
+        }
+        if (!['printing', 'outcome_unknown'].includes(row.status))
+          throw new ApiErrorException(
+            'POS_FISCAL_PREPARATION_STATE_CONFLICT',
+            'The prepared sale was not sent to the fiscal printer.',
+            HttpStatus.CONFLICT,
+          );
+        if (normalized.uniqueSaleId !== row.unique_sale_id)
+          throw new ApiErrorException(
+            'POS_FISCAL_RECEIPT_ID_MISMATCH',
+            'The printer receipt does not belong to this prepared sale.',
+            HttpStatus.CONFLICT,
+          );
+        const expectedChange = fiscalMinorUnitAmount(
+          row.pricing_snapshot.payments[0]?.changeAmount ?? '0.0000',
+          'change',
+        );
+        if (normalized.changeEur !== expectedChange)
+          throw new ApiErrorException(
+            'POS_FISCAL_RECEIPT_TOTAL_MISMATCH',
+            'The printer change does not match the prepared cash sale.',
+            HttpStatus.CONFLICT,
+          );
+        const fiscalReceiptNumber = `${row.device_serial}-${normalized.fiscalDocumentNumber}`;
+        await client.query(
+          `UPDATE pos.fiscal_sale_preparations
+           SET status = 'receipt_confirmed', fiscal_document_number = $2,
+               fiscal_receipt_number = $3, fiscal_response = $4::jsonb, updated_at = now()
+           WHERE id = $1`,
+          [
+            preparationId,
+            normalized.fiscalDocumentNumber,
+            fiscalReceiptNumber,
+            JSON.stringify(normalized),
+          ],
+        );
+        const confirmed = await this.fiscalSalePreparation(client, preparationId);
+        await this.sideEffects(
+          client,
+          'pos_fiscal_sale_preparation',
+          preparationId,
+          'pos.fiscal_sale.receipt_confirmed',
+          confirmed,
+          authentication,
+          metadata,
+          commandKey,
+        );
+        return confirmed;
+      },
+    );
+
+    if (preparation.status === 'finalized') {
+      const result = await this.database.getPool().query<{ id: string }>(
+        `SELECT finalized_sale_id AS id FROM pos.fiscal_sale_preparations
+         WHERE id = $1 AND cashier_account_id = $2`,
+        [preparationId, authentication.accountId],
+      );
+      return this.saleFromPool(
+        required(result.rows[0]?.id, 'Finalized POS sale link was not found'),
+      );
+    }
+
+    const snapshot = await this.database
+      .getPool()
+      .query<{ request_snapshot: CreatePosSaleRequest }>(
+        `SELECT request_snapshot FROM pos.fiscal_sale_preparations
+         WHERE id = $1 AND cashier_account_id = $2 AND status = 'receipt_confirmed'`,
+        [preparationId, authentication.accountId],
+      );
+    const requestSnapshot = required(
+      snapshot.rows[0],
+      'Confirmed fiscal sale was not found',
+    ).request_snapshot;
+    return this.completeSale(
+      requestSnapshot,
+      `datecs-finalize-${preparationId}`,
+      authentication,
+      metadata,
+      preparationId,
+    );
+  }
+
+  async finalizeConfirmedFiscalSale(
+    preparationId: string,
+    authentication: AuthenticationContext,
+    metadata: RequestSecurityMetadata,
+  ): Promise<PosSale> {
+    const result = await this.database.getPool().query<FiscalSalePreparationRow>(
+      `SELECT * FROM pos.fiscal_sale_preparations
+       WHERE id = $1 AND cashier_account_id = $2`,
+      [preparationId, authentication.accountId],
+    );
+    const row = required(result.rows[0], 'Fiscal sale preparation was not found');
+    if (row.status === 'finalized' && row.finalized_sale_id)
+      return this.saleFromPool(row.finalized_sale_id);
+    if (row.status !== 'receipt_confirmed')
+      throw new ApiErrorException(
+        'POS_FISCAL_RECEIPT_NOT_CONFIRMED',
+        'Only a receipt already confirmed by the printer can be finalized.',
+        HttpStatus.CONFLICT,
+      );
+    return this.completeSale(
+      row.request_snapshot,
+      `datecs-finalize-${preparationId}`,
+      authentication,
+      metadata,
+      preparationId,
+    );
+  }
+
+  async completeSale(
+    input: CreatePosSaleRequest,
+    key: string | undefined,
+    authentication: AuthenticationContext,
+    metadata: RequestSecurityMetadata,
+    fiscalPreparationId?: string,
+  ): Promise<PosSale> {
+    const normalized = normalizeSale(input);
+    return this.command(
+      'pos.sale.complete',
+      key,
+      normalized,
+      HttpStatus.CREATED,
+      isPosSale,
+      async (client, commandKey) => {
+        const shift = await this.lockShift(client, normalized.shiftId, authentication.accountId);
+        const activeReport = await client.query(
+          `SELECT id FROM pos.fiscal_daily_reports
+           WHERE shift_id = $1 AND status IN ('prepared', 'printing', 'outcome_unknown')
+           FOR UPDATE`,
+          [shift.id],
+        );
+        if (activeReport.rowCount)
+          throw new ApiErrorException(
+            'POS_FISCAL_REPORT_REQUIRES_REVIEW',
+            'Resolve the pending fiscal report before completing a sale.',
+            HttpStatus.CONFLICT,
+          );
+        const activeReturn = await client.query(
+          `SELECT id FROM pos.fiscal_return_preparations WHERE cash_register_id = $1
+           AND status IN ('prepared', 'printing', 'outcome_unknown') FOR UPDATE`,
+          [shift.cashRegisterId],
+        );
+        if (activeReturn.rowCount)
+          throw new ApiErrorException(
+            'POS_FISCAL_RETURN_REQUIRES_REVIEW',
+            'Resolve the pending fiscal return before completing another sale.',
+            HttpStatus.CONFLICT,
+          );
+        const fiscalPreparation = fiscalPreparationId
+          ? await client.query<FiscalSalePreparationRow>(
+              `SELECT * FROM pos.fiscal_sale_preparations
+               WHERE id = $1 AND cashier_account_id = $2 FOR UPDATE`,
+              [fiscalPreparationId, authentication.accountId],
+            )
+          : undefined;
+        const preparedFiscalSale = fiscalPreparation?.rows[0];
+        if (fiscalPreparationId) {
+          if (!preparedFiscalSale)
+            throw new ApiErrorException(
+              'POS_FISCAL_PREPARATION_NOT_FOUND',
+              'The confirmed fiscal sale could not be found for this cashier.',
+              HttpStatus.NOT_FOUND,
+            );
+          if (preparedFiscalSale.status !== 'receipt_confirmed')
+            throw new ApiErrorException(
+              'POS_FISCAL_PREPARATION_STATE_CONFLICT',
+              'Only a confirmed fiscal receipt can be posted to the sale register.',
+              HttpStatus.CONFLICT,
+            );
+          if (
+            preparedFiscalSale.shift_id !== normalized.shiftId ||
+            preparedFiscalSale.client_transaction_id !== normalized.clientTransactionId ||
+            digest(normalized) !== digest(normalizeSale(preparedFiscalSale.request_snapshot))
+          )
+            throw new ApiErrorException(
+              'POS_FISCAL_PREPARATION_SNAPSHOT_MISMATCH',
+              'The fiscal receipt no longer matches its original checkout.',
+              HttpStatus.CONFLICT,
+            );
+        }
+        const existingSale = await client.query<{ id: string; shift_id: string }>(
+          `SELECT id, shift_id FROM pos.sales
+           WHERE client_transaction_id = $1 FOR UPDATE`,
+          [normalized.clientTransactionId],
+        );
+        if (existingSale.rows[0]) {
+          if (existingSale.rows[0].shift_id !== normalized.shiftId)
+            throw new ApiErrorException(
+              'POS_TRANSACTION_ID_REUSED',
+              'This checkout reference belongs to another cashier shift',
+              HttpStatus.CONFLICT,
+            );
+          return this.sale(client, existingSale.rows[0].id);
+        }
+        const assignment = await client.query<AssignmentRow>(
+          `${assignmentSql} AND register.id = $2 FOR UPDATE OF configuration`,
+          [authentication.accountId, shift.cashRegisterId],
+        );
+        const terminal = assignment.rows[0];
+        if (!terminal || terminal.warehouse_id !== shift.warehouseId)
+          throw new ApiErrorException(
+            'POS_TERMINAL_CHANGED',
+            'The register assignment changed after this shift was opened',
+            HttpStatus.CONFLICT,
+          );
+        this.requireUsableFiscalMode(terminal.fiscal_mode);
+        if (
+          terminal.fiscal_mode !== 'simulator' &&
+          !(terminal.fiscal_mode === 'hardware' && preparedFiscalSale)
+        )
+          throw new ApiErrorException(
+            'POS_FISCAL_ADAPTER_UNAVAILABLE',
+            'The approved fiscal-device adapter is not connected yet',
+            HttpStatus.SERVICE_UNAVAILABLE,
+          );
+        if (terminal.fiscal_mode === 'simulator' && preparedFiscalSale)
+          throw new ApiErrorException(
+            'POS_FISCAL_REGISTER_CHANGED',
+            'The register fiscal configuration changed after the receipt was printed.',
+            HttpStatus.CONFLICT,
+          );
+        if (normalized.customerPartnerId) {
+          await this.requireCustomer(client, normalized.customerPartnerId);
+          if (normalized.customerLocationId)
+            await this.requireCustomerLocation(
+              client,
+              normalized.customerPartnerId,
+              normalized.customerLocationId,
+            );
+        }
+
+        const productIds = normalized.lines.map((line) => line.productId);
+        const products = preparedFiscalSale
+          ? undefined
+          : await client.query<SaleProductRow>(saleProductsSql, [
+              productIds,
+              shift.warehouseId,
+              normalized.customerPartnerId ?? null,
+            ]);
+        if (products && products.rowCount !== productIds.length)
+          throw new ApiErrorException(
+            'POS_PRODUCT_UNAVAILABLE',
+            'One or more basket items are inactive or unavailable at this register',
+            HttpStatus.CONFLICT,
+          );
+
+        const basketPricing = preparedFiscalSale
+          ? preparedFiscalSale.pricing_snapshot.basketPricing
+          : await this.prepareBasketPricing(client, shift, normalized, authentication.accountId);
+
+        const preparedLines = preparedFiscalSale
+          ? preparedFiscalSale.pricing_snapshot.preparedLines
+          : normalized.lines.map((inputLine) => {
+              const product = required(
+                products?.rows.find((row) => row.id === inputLine.productId),
+                'POS product lookup failed',
+              );
+              if (!product.unit_price)
+                throw new ApiErrorException(
+                  'POS_PRICE_UNAVAILABLE',
+                  `${product.name} does not have an active EUR selling price`,
+                  HttpStatus.CONFLICT,
+                );
+              if (!product.vat_treatment)
+                throw new ApiErrorException(
+                  'POS_VAT_UNCONFIGURED',
+                  `${product.name} does not have an approved POS VAT treatment`,
+                  HttpStatus.CONFLICT,
+                );
+              if (product.tracking_mode === 'serial') {
+                if (
+                  !isWhole(inputLine.quantity) ||
+                  inputLine.serialNumbers.length !== Number(inputLine.quantity)
+                )
+                  throw new ApiErrorException(
+                    'POS_SERIAL_SELECTION_REQUIRED',
+                    `Select one available serial number for each ${product.name}`,
+                    HttpStatus.CONFLICT,
+                  );
+                if (!normalized.customerPartnerId || !normalized.customerLocationId)
+                  throw new ApiErrorException(
+                    'POS_SERIAL_CUSTOMER_REQUIRED',
+                    'Select the customer and receiving location before selling a serialised item',
+                    HttpStatus.CONFLICT,
+                  );
+              } else if (inputLine.serialNumbers.length) {
+                throw new ApiErrorException(
+                  'POS_SERIAL_NOT_ALLOWED',
+                  `${product.name} does not use serial-number tracking`,
+                  HttpStatus.BAD_REQUEST,
+                );
+              }
+              if (product.tracking_mode === 'batch' && !inputLine.batchId)
+                throw new ApiErrorException(
+                  'POS_BATCH_REQUIRED',
+                  `Select a batch for ${product.name}`,
+                  HttpStatus.CONFLICT,
+                );
+              if (product.tracking_mode !== 'batch' && inputLine.batchId)
+                throw new ApiErrorException(
+                  'POS_BATCH_NOT_ALLOWED',
+                  `${product.name} does not use batch tracking`,
+                  HttpStatus.BAD_REQUEST,
+                );
+              const totals = required(
+                basketPricing.lines.find((line) => line.productId === inputLine.productId),
+                'POS basket pricing line lookup failed',
+              );
+              return {
+                ...inputLine,
+                product,
+                ...totals,
+              };
+            });
+        const netTotal = basketPricing.netTotal;
+        const vatTotal = basketPricing.vatTotal;
+        const grossTotal = basketPricing.grossTotal;
+        const payments = preparedFiscalSale
+          ? preparedFiscalSale.pricing_snapshot.payments
+          : await prepareSalePayments(
+              client,
+              normalized.payments,
+              grossTotal,
+              normalized.customerPartnerId,
+              terminal,
+              normalized.clientTransactionId,
+              this.cardAuthorizations,
+              authentication.accountId,
+              normalized.shiftId,
+              this.environment.NODE_ENV,
+              this.environment.BUSINESS_TIMEZONE,
+            );
 
         const saleId = randomUUID();
         const saleNumber = await this.nextNumber(client, terminal, 'sale', 'SALE');
-        const receiptNumber = await this.nextNumber(
-          client,
-          terminal,
-          'fiscal_receipt',
-          'SIM-RECEIPT',
-        );
+        const receiptNumber =
+          preparedFiscalSale?.fiscal_receipt_number ??
+          (await this.nextNumber(client, terminal, 'fiscal_receipt', 'SIM-RECEIPT'));
+        const fiscalStatus = preparedFiscalSale ? 'fiscalized' : 'simulated';
+        const fiscalAdapter = preparedFiscalSale ? 'datecs-fp2000' : 'development-simulator';
         await client.query(
           `INSERT INTO pos.sales (
              id, sale_number, client_transaction_id, shift_id, cash_register_id,
@@ -1171,8 +2874,8 @@ export class PosService {
              fiscal_adapter, completed_by, base_net_total, automatic_discount_total,
              manual_discount_total, loyalty_discount_total, loyalty_points_redeemed,
              discount_authorization_id
-           ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'simulated',$13,
-             'development-simulator',$14,$15,$16,$17,$18,$19,$20)`,
+           ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,
+             $15,$16,$17,$18,$19,$20,$21,$22)`,
           [
             saleId,
             saleNumber,
@@ -1186,7 +2889,9 @@ export class PosService {
             netTotal,
             vatTotal,
             grossTotal,
+            fiscalStatus,
             receiptNumber,
+            fiscalAdapter,
             authentication.accountId,
             basketPricing.baseNetTotal,
             basketPricing.automaticDiscountTotal,
@@ -1198,6 +2903,22 @@ export class PosService {
         );
 
         for (const line of preparedLines) {
+          if (fiscalPreparationId) {
+            const held = await client.query(
+              `SELECT id FROM inventory.stock_reservations
+               WHERE reference_type = 'pos_fiscal_preparation'
+                 AND reference_id = $1 AND warehouse_id = $2 AND product_id = $3
+                 AND status = 'active' AND remaining_quantity = $4
+               FOR UPDATE`,
+              [fiscalPreparationId, shift.warehouseId, line.productId, line.quantity],
+            );
+            if (!held.rowCount)
+              throw new ApiErrorException(
+                'POS_FISCAL_RESERVATION_MISSING',
+                'Reserved stock changed before this fiscal receipt could be posted. Contact a manager before continuing.',
+                HttpStatus.CONFLICT,
+              );
+          }
           const balance = await client.query<{ average_unit_cost_eur: string }>(
             `SELECT balance.average_unit_cost_eur::text
              FROM inventory.stock_balances balance
@@ -1218,10 +2939,12 @@ export class PosService {
                WHERE reservation.warehouse_id = balance.warehouse_id
                  AND reservation.product_id = balance.product_id
                  AND reservation.status = 'active'
+                 AND ($3::uuid IS NULL OR reservation.reference_id <> $3::text
+                   OR reservation.reference_type <> 'pos_fiscal_preparation')
              ), 0))::text AS available_quantity
              FROM inventory.stock_balances balance
              WHERE balance.warehouse_id = $1 AND balance.product_id = $2`,
-            [shift.warehouseId, line.productId],
+            [shift.warehouseId, line.productId, fiscalPreparationId ?? null],
           );
           if (units(available.rows[0]?.available_quantity ?? '0') < units(line.quantity))
             throw new ApiErrorException(
@@ -1238,13 +2961,23 @@ export class PosService {
           if (line.batchId) {
             const batch = await client.query(
               `UPDATE inventory.batch_stock_balances balance
-               SET quantity = balance.quantity - $3, updated_at = now()
+               SET quantity = balance.quantity - $3,
+                   reserved_quantity = balance.reserved_quantity -
+                     CASE WHEN $5::uuid IS NULL THEN 0 ELSE $3::numeric END,
+                   updated_at = now()
                FROM inventory.batches batch
                WHERE balance.warehouse_id = $1 AND balance.batch_id = $2
                  AND batch.id = balance.batch_id AND batch.product_id = $4
                  AND balance.quantity >= $3
+                 AND ($5::uuid IS NULL OR balance.reserved_quantity >= $3)
                RETURNING balance.batch_id`,
-              [shift.warehouseId, line.batchId, line.quantity, line.productId],
+              [
+                shift.warehouseId,
+                line.batchId,
+                line.quantity,
+                line.productId,
+                fiscalPreparationId ?? null,
+              ],
             );
             if (!batch.rowCount)
               throw new ApiErrorException(
@@ -1260,15 +2993,25 @@ export class PosService {
                  WHERE item.product_id = $1 AND item.warehouse_id = $2
                    AND item.status = 'available'
                    AND upper(item.serial_number) = ANY($3::text[])
-                   AND NOT EXISTS (
-                     SELECT 1 FROM inventory.stock_reservation_serials reserved
-                     WHERE reserved.serialized_item_id = item.id AND reserved.active
+                   AND (
+                     ($4::uuid IS NULL AND NOT EXISTS (
+                       SELECT 1 FROM inventory.stock_reservation_serials reserved
+                       WHERE reserved.serialized_item_id = item.id AND reserved.active
+                     )) OR ($4::uuid IS NOT NULL AND EXISTS (
+                       SELECT 1 FROM inventory.stock_reservation_serials reserved
+                       JOIN inventory.stock_reservations reservation
+                         ON reservation.id = reserved.reservation_id
+                       WHERE reserved.serialized_item_id = item.id AND reserved.active
+                         AND reservation.reference_type = 'pos_fiscal_preparation'
+                         AND reservation.reference_id = $4::text AND reservation.status = 'active'
+                     ))
                    )
                  ORDER BY item.serial_number FOR UPDATE OF item`,
                 [
                   line.productId,
                   shift.warehouseId,
                   line.serialNumbers.map((serial) => serial.toUpperCase()),
+                  fiscalPreparationId ?? null,
                 ],
               )
             : { rowCount: 0, rows: [] as Array<{ id: string; serial_number: string }> };
@@ -1341,6 +3084,17 @@ export class PosService {
               [serials.rows.map((serial) => serial.id), movementId],
             );
             for (const serial of serials.rows) {
+              if (fiscalPreparationId)
+                await client.query(
+                  `UPDATE inventory.stock_reservation_serials reserved
+                   SET active = false, ended_at = now()
+                   FROM inventory.stock_reservations reservation
+                   WHERE reserved.reservation_id = reservation.id
+                     AND reserved.serialized_item_id = $1 AND reserved.active
+                     AND reservation.reference_type = 'pos_fiscal_preparation'
+                     AND reservation.reference_id = $2 AND reservation.status = 'active'`,
+                  [serial.id, fiscalPreparationId],
+                );
               await client.query(
                 `INSERT INTO pos.sale_line_serials (
                    sale_line_id, serialized_item_id, serial_number
@@ -1484,9 +3238,55 @@ export class PosService {
           `INSERT INTO pos.fiscal_operations (
              id, sale_id, operation_type, adapter, status, external_reference,
              request_digest, response_digest
-           ) VALUES ($1,$2,'sale_receipt','development-simulator','simulated',$3,$4,$5)`,
-          [randomUUID(), saleId, receiptNumber, requestDigest, digest({ receiptNumber })],
+           ) VALUES ($1,$2,'sale_receipt',$3,$4,$5,$6,$7)`,
+          [
+            randomUUID(),
+            saleId,
+            fiscalAdapter,
+            preparedFiscalSale ? 'completed' : 'simulated',
+            preparedFiscalSale?.unique_sale_id ?? receiptNumber,
+            requestDigest,
+            digest(preparedFiscalSale?.fiscal_response ?? { receiptNumber }),
+          ],
         );
+        if (fiscalPreparationId) {
+          await client.query(
+            `UPDATE inventory.stock_reservation_serials reserved
+             SET active = false, ended_at = now()
+             FROM inventory.stock_reservations reservation
+             WHERE reserved.reservation_id = reservation.id AND reserved.active
+               AND reservation.reference_type = 'pos_fiscal_preparation'
+               AND reservation.reference_id = $1 AND reservation.status = 'active'`,
+            [fiscalPreparationId],
+          );
+          await client.query(
+            `UPDATE inventory.stock_reservations
+             SET remaining_quantity = 0, status = 'consumed', ended_by = $2,
+                 ended_at = now(), version = version + 1
+             WHERE reference_type = 'pos_fiscal_preparation'
+               AND reference_id = $1 AND status = 'active'`,
+            [fiscalPreparationId, authentication.accountId],
+          );
+          await client.query(
+            `UPDATE pos.discount_authorizations
+             SET consumed_by_sale_id = $2, consumed_at = now(),
+                 reserved_by_fiscal_preparation_id = NULL
+             WHERE reserved_by_fiscal_preparation_id = $1 AND consumed_by_sale_id IS NULL`,
+            [fiscalPreparationId, saleId],
+          );
+          await client.query(
+            `UPDATE pos.fiscal_preparation_loyalty_reservations
+             SET active = false, ended_at = now()
+             WHERE fiscal_preparation_id = $1 AND active`,
+            [fiscalPreparationId],
+          );
+          await client.query(
+            `UPDATE pos.fiscal_sale_preparations
+             SET status = 'finalized', finalized_sale_id = $2, updated_at = now()
+             WHERE id = $1 AND status = 'receipt_confirmed'`,
+            [fiscalPreparationId, saleId],
+          );
+        }
         const sale = await this.sale(client, saleId);
         await this.sideEffects(
           client,
@@ -1569,6 +3369,28 @@ export class PosService {
         throw new ApiErrorException(
           'POS_SALE_NOT_FOUND',
           'No completed sale was found for this checkout.',
+          HttpStatus.NOT_FOUND,
+        );
+      return await this.sale(client, row.id);
+    } finally {
+      client.release();
+    }
+  }
+
+  async saleById(saleId: string, authentication: AuthenticationContext): Promise<PosSale> {
+    const client = await this.database.getPool().connect();
+    try {
+      const result = await client.query<{ id: string }>(
+        `SELECT sale.id FROM pos.sales sale
+         JOIN organization.operators operator ON operator.id = sale.operator_id
+         WHERE sale.id = $1 AND operator.account_id = $2`,
+        [saleId, authentication.accountId],
+      );
+      const row = result.rows[0];
+      if (!row)
+        throw new ApiErrorException(
+          'POS_SALE_NOT_FOUND',
+          'The sale was not found for this cashier account.',
           HttpStatus.NOT_FOUND,
         );
       return await this.sale(client, row.id);
@@ -1665,47 +3487,92 @@ export class PosService {
     };
   }
 
-  async createReturn(
-    input: CreatePosReturnRequest,
+  async prepareFiscalReturn(
+    input: PreparePosFiscalReturnRequest,
     key: string | undefined,
     authentication: AuthenticationContext,
     metadata: RequestSecurityMetadata,
-  ): Promise<PosReturn> {
+  ): Promise<PosFiscalReturnPreparation> {
     const normalized = normalizeReturn(input);
+    const deviceSerial = input.deviceSerial.trim().toUpperCase();
+    const operatorIdentifier = input.operatorIdentifier.trim().toUpperCase();
+    const requestDigest = digest(normalized);
+    if (
+      !/^[A-Z0-9]{8}$/u.test(deviceSerial) ||
+      !/^[A-Z0-9]{4}$/u.test(operatorIdentifier) ||
+      Array.from(normalized.reason).length > 30 ||
+      normalized.reason.includes(',') ||
+      normalized.reason.includes('#') ||
+      Array.from(normalized.reason).some((character) => {
+        const code = character.codePointAt(0) ?? 0;
+        return code < 0x20 || code === 0x7f;
+      })
+    )
+      throw new ApiErrorException(
+        'POS_FISCAL_RETURN_REASON_INVALID',
+        'Enter a printer-friendly reason of up to 30 characters without commas or #.',
+        HttpStatus.BAD_REQUEST,
+      );
     return this.command(
-      'pos.return.complete',
+      'pos.fiscal-return.prepare',
       key,
-      normalized,
+      { deviceSerial, normalized, operatorIdentifier },
       HttpStatus.CREATED,
-      isPosReturn,
+      isPosFiscalReturnPreparation,
       async (client, commandKey) => {
         const shift = await this.lockShift(client, normalized.shiftId, authentication.accountId);
         const assignment = await client.query<AssignmentRow>(
-          `${assignmentSql} AND register.id = $2 FOR UPDATE OF configuration`,
+          `${assignmentSql} AND register.id = $2 FOR UPDATE OF register, operator, configuration`,
           [authentication.accountId, shift.cashRegisterId],
         );
         const terminal = required(assignment.rows[0], 'POS terminal lookup failed');
-        this.requireUsableFiscalMode(terminal.fiscal_mode);
-        if (terminal.fiscal_mode !== 'simulator')
+        if (terminal.fiscal_mode !== 'hardware')
           throw new ApiErrorException(
-            'POS_FISCAL_ADAPTER_UNAVAILABLE',
-            'The approved fiscal-device return adapter is not connected yet',
-            HttpStatus.SERVICE_UNAVAILABLE,
+            'POS_DATECS_HARDWARE_REQUIRED',
+            'A printer-linked return needs a register assigned to fiscal hardware.',
+            HttpStatus.CONFLICT,
+          );
+        if (terminal.warehouse_id !== shift.warehouseId)
+          throw new ApiErrorException(
+            'POS_TERMINAL_CHANGED',
+            'The register assignment changed after this shift was opened',
+            HttpStatus.CONFLICT,
+          );
+
+        const pendingSale = await client.query(
+          `SELECT id FROM pos.fiscal_sale_preparations WHERE cash_register_id = $1
+           AND status IN ('prepared', 'printing', 'outcome_unknown', 'receipt_confirmed') FOR UPDATE`,
+          [shift.cashRegisterId],
+        );
+        const pendingReport = await client.query(
+          `SELECT id FROM pos.fiscal_daily_reports WHERE cash_register_id = $1
+           AND status IN ('prepared', 'printing', 'outcome_unknown') FOR UPDATE`,
+          [shift.cashRegisterId],
+        );
+        const pendingReturn = await client.query(
+          `SELECT id FROM pos.fiscal_return_preparations WHERE cash_register_id = $1
+           AND status IN ('prepared', 'printing', 'outcome_unknown') FOR UPDATE`,
+          [shift.cashRegisterId],
+        );
+        if (pendingSale.rowCount || pendingReport.rowCount || pendingReturn.rowCount)
+          throw new ApiErrorException(
+            'POS_FISCAL_ACTION_REQUIRES_REVIEW',
+            'Resolve the pending fiscal printer action before starting a return.',
+            HttpStatus.CONFLICT,
           );
 
         const originalResult = await client.query<{
           business_location_id: string;
           customer_partner_id: string | null;
+          fiscal_adapter: string;
+          fiscal_status: string;
           gross_total: string;
           id: string;
-          loyalty_points_earned: number;
-          loyalty_points_redeemed: number;
           sale_number: string;
           warehouse_id: string;
         }>(
           `SELECT sale.id, sale.sale_number, sale.customer_partner_id, sale.warehouse_id,
-             sale.gross_total::text, sale.loyalty_points_earned,
-             sale.loyalty_points_redeemed,
+             sale.gross_total::text, sale.fiscal_status, sale.fiscal_adapter,
              register.business_location_id
            FROM pos.sales sale
            JOIN organization.cash_registers register ON register.id = sale.cash_register_id
@@ -1723,6 +3590,577 @@ export class PosService {
           throw new ApiErrorException(
             'POS_RETURN_LOCATION_MISMATCH',
             'Process this return at a register in the original business location',
+            HttpStatus.CONFLICT,
+          );
+        const saleReturnPreparations = await client.query<FiscalReturnPreparationRow>(
+          `SELECT * FROM pos.fiscal_return_preparations WHERE original_sale_id = $1
+           AND status IN ('prepared', 'printing', 'outcome_unknown') FOR UPDATE`,
+          [original.id],
+        );
+        if (saleReturnPreparations.rowCount)
+          throw new ApiErrorException(
+            'POS_FISCAL_RETURN_REQUIRES_REVIEW',
+            'This sale already has a printer return awaiting confirmation.',
+            HttpStatus.CONFLICT,
+          );
+        if (original.fiscal_status !== 'fiscalized' || original.fiscal_adapter !== 'datecs-fp2000')
+          throw new ApiErrorException(
+            'POS_FISCAL_ORIGINAL_REQUIRED',
+            'A printer-linked return requires an original DATECS fiscal receipt.',
+            HttpStatus.CONFLICT,
+          );
+
+        const sourcePreparation = await client.query<FiscalSalePreparationRow>(
+          `SELECT * FROM pos.fiscal_sale_preparations
+           WHERE finalized_sale_id = $1 AND status = 'finalized' FOR UPDATE`,
+          [original.id],
+        );
+        const source = required(
+          sourcePreparation.rows[0],
+          'The original DATECS receipt link is missing',
+        );
+        if (
+          source.device_serial !== deviceSerial ||
+          source.operator_identifier !== operatorIdentifier
+        )
+          throw new ApiErrorException(
+            'POS_FISCAL_DEVICE_MISMATCH',
+            'Connect the fiscal printer that issued the original receipt.',
+            HttpStatus.CONFLICT,
+          );
+
+        const priorReturn = await client.query(
+          'SELECT id FROM pos.returns WHERE original_sale_id = $1 FOR UPDATE',
+          [original.id],
+        );
+        if (priorReturn.rowCount)
+          throw new ApiErrorException(
+            'POS_FISCAL_PARTIAL_RETURN_UNSUPPORTED',
+            'This printer workflow reverses a complete receipt. A sale with an earlier return needs an authorized reconciliation.',
+            HttpStatus.CONFLICT,
+          );
+
+        const saleLines = await client.query<{
+          id: string;
+          quantity: string;
+          tracking_mode: PosTrackingMode;
+        }>(
+          `SELECT line.id, line.quantity::text, category.tracking_mode
+           FROM pos.sale_lines line
+           JOIN master_data.products product ON product.id = line.product_id
+           JOIN master_data.product_categories category ON category.id = product.category_id
+           WHERE line.sale_id = $1 ORDER BY line.id FOR UPDATE OF line`,
+          [original.id],
+        );
+        if (normalized.lines.length !== saleLines.rowCount)
+          throw new ApiErrorException(
+            'POS_FISCAL_FULL_RETURN_REQUIRED',
+            'The DATECS printer reverses the complete receipt. Select every original item and its full quantity.',
+            HttpStatus.CONFLICT,
+          );
+        const destinationIds = new Set<string>();
+        for (const saleLine of saleLines.rows) {
+          const selected = normalized.lines.find((line) => line.originalSaleLineId === saleLine.id);
+          if (!selected || units(selected.quantity) !== units(saleLine.quantity))
+            throw new ApiErrorException(
+              'POS_FISCAL_FULL_RETURN_REQUIRED',
+              'The DATECS printer reverses the complete receipt. Select every original item and its full quantity.',
+              HttpStatus.CONFLICT,
+            );
+          if (saleLine.tracking_mode === 'serial') {
+            const sourceSerials = await client.query<{ serial_number: string; status: string }>(
+              `SELECT sold.serial_number, item.status FROM pos.sale_line_serials sold
+               JOIN inventory.serialized_items item ON item.id = sold.serialized_item_id
+               WHERE sold.sale_line_id = $1 ORDER BY sold.serial_number FOR UPDATE OF item`,
+              [saleLine.id],
+            );
+            const expected = sourceSerials.rows
+              .map((row) => row.serial_number.toUpperCase())
+              .sort();
+            const received = selected.serialNumbers.map((value) => value.toUpperCase()).sort();
+            if (
+              expected.length !== received.length ||
+              expected.some((value, index) => value !== received[index]) ||
+              sourceSerials.rows.some((row) => row.status !== 'issued')
+            )
+              throw new ApiErrorException(
+                'POS_RETURN_SERIAL_SELECTION_REQUIRED',
+                'Select every serial number from the original receipt.',
+                HttpStatus.CONFLICT,
+              );
+          } else if (selected.serialNumbers.length) {
+            throw new ApiErrorException(
+              'POS_RETURN_SERIAL_NOT_ALLOWED',
+              'A non-serialised product cannot include serial numbers.',
+              HttpStatus.BAD_REQUEST,
+            );
+          }
+          if (selected.disposition === 'service' && saleLine.tracking_mode !== 'serial')
+            throw new ApiErrorException(
+              'POS_SERVICE_RETURN_REQUIRES_DEVICE',
+              'Only a serialised device can be routed to Service',
+              HttpStatus.BAD_REQUEST,
+            );
+          const destination =
+            selected.disposition === 'service'
+              ? terminal.service_return_warehouse_id
+              : original.warehouse_id;
+          if (!destination)
+            throw new ApiErrorException(
+              'POS_SERVICE_RETURN_WAREHOUSE_REQUIRED',
+              'A Service return warehouse has not been configured for this register',
+              HttpStatus.CONFLICT,
+            );
+          destinationIds.add(destination);
+        }
+        const destinations = await client.query<{ id: string }>(
+          `SELECT warehouse.id FROM master_data.warehouses warehouse
+           WHERE warehouse.id = ANY($1::uuid[]) AND warehouse.active
+             AND NOT EXISTS (SELECT 1 FROM inventory.stocktakes stocktake
+               WHERE stocktake.warehouse_id = warehouse.id AND stocktake.status = 'open')
+           FOR KEY SHARE OF warehouse`,
+          [[...destinationIds]],
+        );
+        if (destinations.rowCount !== destinationIds.size)
+          throw new ApiErrorException(
+            'POS_RETURN_WAREHOUSE_UNAVAILABLE',
+            'A return warehouse is unavailable or currently under stocktake',
+            HttpStatus.CONFLICT,
+          );
+
+        const sourcePayments = await client.query<{ amount: string; method: string }>(
+          `SELECT payment.amount::text, payment.payment_method AS method
+           FROM pos.payments payment WHERE payment.sale_id = $1
+           ORDER BY payment.recorded_at, payment.id FOR UPDATE OF payment`,
+          [original.id],
+        );
+        if (
+          sourcePayments.rowCount !== 1 ||
+          sourcePayments.rows[0]?.method !== 'cash' ||
+          units(sourcePayments.rows[0]?.amount ?? '0') !== units(original.gross_total)
+        )
+          throw new ApiErrorException(
+            'POS_FISCAL_RETURN_PAYMENT_UNSUPPORTED',
+            'This DATECS return workflow requires the original receipt to have been paid in full by cash.',
+            HttpStatus.CONFLICT,
+          );
+        await prepareReturnRefunds(
+          client,
+          original.id,
+          normalized.refunds,
+          original.gross_total,
+          terminal,
+          this.environment.NODE_ENV,
+        );
+
+        await client.query(
+          `INSERT INTO pos.datecs_unp_sequences (device_serial, operator_identifier)
+           VALUES ($1,$2) ON CONFLICT DO NOTHING`,
+          [deviceSerial, operatorIdentifier],
+        );
+        const allocated = await client.query<{ allocated: string }>(
+          `UPDATE pos.datecs_unp_sequences
+           SET next_value = next_value + 1
+           WHERE device_serial = $1 AND operator_identifier = $2
+             AND next_value <= 9999999
+           RETURNING (next_value - 1)::text AS allocated`,
+          [deviceSerial, operatorIdentifier],
+        );
+        if (!allocated.rows[0])
+          throw new ApiErrorException(
+            'POS_DATECS_UNP_SEQUENCE_EXHAUSTED',
+            'The DATECS return sequence is full. Contact an administrator before continuing.',
+            HttpStatus.CONFLICT,
+          );
+        const uniqueReversalId = `${deviceSerial}-${operatorIdentifier}-${allocated.rows[0].allocated.padStart(7, '0')}`;
+        const preparationId = randomUUID();
+        await client.query(
+          `INSERT INTO pos.fiscal_return_preparations (
+             id, shift_id, cash_register_id, operator_id, cashier_account_id,
+             original_sale_id, device_serial, operator_identifier,
+             original_unique_sale_id, original_fiscal_document_number,
+             unique_reversal_id, request_digest, request_snapshot
+           ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::jsonb)`,
+          [
+            preparationId,
+            shift.id,
+            shift.cashRegisterId,
+            shift.operatorId,
+            authentication.accountId,
+            original.id,
+            deviceSerial,
+            operatorIdentifier,
+            source.unique_sale_id,
+            required(source.fiscal_document_number, 'The source receipt number is missing'),
+            uniqueReversalId,
+            requestDigest,
+            JSON.stringify(normalized),
+          ],
+        );
+        const preparation = await this.fiscalReturnPreparation(client, preparationId);
+        await this.sideEffects(
+          client,
+          'pos_fiscal_return_preparation',
+          preparationId,
+          'pos.fiscal_return.prepared',
+          preparation,
+          authentication,
+          metadata,
+          commandKey,
+        );
+        return preparation;
+      },
+    );
+  }
+
+  async activeFiscalReturnPreparation(
+    shiftId: string,
+    authentication: AuthenticationContext,
+  ): Promise<PosFiscalReturnPreparation | null> {
+    const client = await this.database.getPool().connect();
+    try {
+      const shift = await this.requireOpenShift(client, shiftId, authentication.accountId);
+      const result = await client.query<FiscalReturnPreparationRow>(
+        `SELECT * FROM pos.fiscal_return_preparations
+         WHERE cash_register_id = $1 AND status IN ('prepared', 'printing', 'outcome_unknown')
+         ORDER BY created_at, id LIMIT 1`,
+        [shift.cashRegisterId],
+      );
+      const row = result.rows[0];
+      if (!row) return null;
+      if (row.cashier_account_id !== authentication.accountId)
+        throw new ApiErrorException(
+          'POS_FISCAL_PREPARATION_RESTRICTED',
+          'A return from another cashier requires an authorized manager to reconcile it.',
+          HttpStatus.FORBIDDEN,
+        );
+      return mapFiscalReturnPreparation(row);
+    } finally {
+      client.release();
+    }
+  }
+
+  async markFiscalReturnPrinting(
+    preparationId: string,
+    key: string | undefined,
+    authentication: AuthenticationContext,
+    metadata: RequestSecurityMetadata,
+  ): Promise<PosFiscalReturnPreparation> {
+    return this.command(
+      'pos.fiscal-return.printing',
+      key,
+      { preparationId },
+      HttpStatus.OK,
+      isPosFiscalReturnPreparation,
+      async (client, commandKey) => {
+        const result = await client.query<FiscalReturnPreparationRow>(
+          `SELECT * FROM pos.fiscal_return_preparations
+           WHERE id = $1 AND cashier_account_id = $2 FOR UPDATE`,
+          [preparationId, authentication.accountId],
+        );
+        const row = required(result.rows[0], 'Fiscal return preparation was not found');
+        if (row.status === 'printing') return mapFiscalReturnPreparation(row);
+        if (row.status !== 'prepared')
+          throw new ApiErrorException(
+            'POS_FISCAL_PREPARATION_STATE_CONFLICT',
+            'This fiscal return cannot be started. Review its current status.',
+            HttpStatus.CONFLICT,
+          );
+        await client.query(
+          `UPDATE pos.fiscal_return_preparations SET status = 'printing', updated_at = now()
+           WHERE id = $1`,
+          [preparationId],
+        );
+        const preparation = await this.fiscalReturnPreparation(client, preparationId);
+        await this.sideEffects(
+          client,
+          'pos_fiscal_return_preparation',
+          preparationId,
+          'pos.fiscal_return.printing_started',
+          preparation,
+          authentication,
+          metadata,
+          commandKey,
+        );
+        return preparation;
+      },
+    );
+  }
+
+  async markFiscalReturnOutcomeUnknown(
+    preparationId: string,
+    key: string | undefined,
+    authentication: AuthenticationContext,
+    metadata: RequestSecurityMetadata,
+  ): Promise<PosFiscalReturnPreparation> {
+    return this.command(
+      'pos.fiscal-return.outcome-unknown',
+      key,
+      { preparationId },
+      HttpStatus.OK,
+      isPosFiscalReturnPreparation,
+      async (client, commandKey) => {
+        const result = await client.query<FiscalReturnPreparationRow>(
+          `SELECT * FROM pos.fiscal_return_preparations
+           WHERE id = $1 AND cashier_account_id = $2 FOR UPDATE`,
+          [preparationId, authentication.accountId],
+        );
+        const row = required(result.rows[0], 'Fiscal return preparation was not found');
+        if (row.status === 'outcome_unknown') return mapFiscalReturnPreparation(row);
+        if (row.status !== 'printing')
+          throw new ApiErrorException(
+            'POS_FISCAL_PREPARATION_STATE_CONFLICT',
+            'Only a printing fiscal return can be marked for review.',
+            HttpStatus.CONFLICT,
+          );
+        await client.query(
+          `UPDATE pos.fiscal_return_preparations SET status = 'outcome_unknown', updated_at = now()
+           WHERE id = $1`,
+          [preparationId],
+        );
+        const preparation = await this.fiscalReturnPreparation(client, preparationId);
+        await this.sideEffects(
+          client,
+          'pos_fiscal_return_preparation',
+          preparationId,
+          'pos.fiscal_return.outcome_requires_review',
+          preparation,
+          authentication,
+          metadata,
+          commandKey,
+        );
+        return preparation;
+      },
+    );
+  }
+
+  async resolveFiscalReturn(
+    preparationId: string,
+    input: ResolvePosFiscalReturnRequest,
+    key: string | undefined,
+    authentication: AuthenticationContext,
+    metadata: RequestSecurityMetadata,
+  ): Promise<PosFiscalReturnPreparation> {
+    return this.command(
+      'pos.fiscal-return.resolve',
+      key,
+      { input, preparationId },
+      HttpStatus.OK,
+      isPosFiscalReturnPreparation,
+      async (client, commandKey) => {
+        const result = await client.query<FiscalReturnPreparationRow>(
+          `SELECT * FROM pos.fiscal_return_preparations
+           WHERE id = $1 AND cashier_account_id = $2 FOR UPDATE`,
+          [preparationId, authentication.accountId],
+        );
+        const row = required(result.rows[0], 'Fiscal return preparation was not found');
+        if (row.status === 'cancelled' || row.status === 'rejected')
+          return mapFiscalReturnPreparation(row);
+        const safeBeforePrinting =
+          row.status === 'prepared' && input.evidence === 'before_printing';
+        const explicitPrinterRejection =
+          row.status === 'printing' && input.evidence === 'printer_rejected';
+        if (!safeBeforePrinting && !explicitPrinterRejection)
+          throw new ApiErrorException(
+            'POS_FISCAL_PREPARATION_CANNOT_RESOLVE',
+            'A return with an uncertain printer result cannot be cancelled. Review the printer before continuing.',
+            HttpStatus.CONFLICT,
+          );
+        const status = safeBeforePrinting ? 'cancelled' : 'rejected';
+        await client.query(
+          `UPDATE pos.fiscal_return_preparations
+           SET status = $2, failure_reason = $3, updated_at = now() WHERE id = $1`,
+          [preparationId, status, input.evidence],
+        );
+        const preparation = await this.fiscalReturnPreparation(client, preparationId);
+        await this.sideEffects(
+          client,
+          'pos_fiscal_return_preparation',
+          preparationId,
+          safeBeforePrinting
+            ? 'pos.fiscal_return.cancelled_before_printing'
+            : 'pos.fiscal_return.printer_rejected',
+          preparation,
+          authentication,
+          metadata,
+          commandKey,
+        );
+        return preparation;
+      },
+    );
+  }
+
+  async confirmFiscalReturn(
+    preparationId: string,
+    input: ConfirmPosFiscalReturnRequest,
+    key: string | undefined,
+    authentication: AuthenticationContext,
+    metadata: RequestSecurityMetadata,
+  ): Promise<PosReturn> {
+    const result = await this.database.getPool().query<FiscalReturnPreparationRow>(
+      `SELECT * FROM pos.fiscal_return_preparations
+       WHERE id = $1 AND cashier_account_id = $2`,
+      [preparationId, authentication.accountId],
+    );
+    const preparation = required(result.rows[0], 'Fiscal return preparation was not found');
+    if (input.uniqueReversalId !== preparation.unique_reversal_id)
+      throw new ApiErrorException(
+        'POS_FISCAL_RETURN_EVIDENCE_MISMATCH',
+        'The printer result does not match this return reference.',
+        HttpStatus.CONFLICT,
+      );
+    if (preparation.status === 'completed') {
+      if (
+        preparation.fiscal_document_number !== input.fiscalDocumentNumber ||
+        preparation.fiscal_reversals_since_daily_report !==
+          (input.fiscalReversalsSinceDailyReport ?? null)
+      )
+        throw new ApiErrorException(
+          'POS_FISCAL_RETURN_EVIDENCE_MISMATCH',
+          'The return was already confirmed with different printer evidence.',
+          HttpStatus.CONFLICT,
+        );
+      const client = await this.database.getPool().connect();
+      try {
+        return await this.posReturn(
+          client,
+          required(
+            preparation.completed_return_id ?? undefined,
+            'Completed return link is missing',
+          ),
+        );
+      } finally {
+        client.release();
+      }
+    }
+    return this.createReturn(preparation.request_snapshot, key, authentication, metadata, {
+      ...input,
+      preparationId,
+    });
+  }
+
+  async createReturn(
+    input: CreatePosReturnRequest,
+    key: string | undefined,
+    authentication: AuthenticationContext,
+    metadata: RequestSecurityMetadata,
+    fiscalConfirmation?: FiscalReturnConfirmation,
+  ): Promise<PosReturn> {
+    const normalized = normalizeReturn(input);
+    return this.command(
+      'pos.return.complete',
+      key,
+      { fiscalConfirmation: fiscalConfirmation ?? null, normalized },
+      HttpStatus.CREATED,
+      isPosReturn,
+      async (client, commandKey) => {
+        const shift = await this.lockShift(client, normalized.shiftId, authentication.accountId);
+        const assignment = await client.query<AssignmentRow>(
+          `${assignmentSql} AND register.id = $2 FOR UPDATE OF configuration`,
+          [authentication.accountId, shift.cashRegisterId],
+        );
+        const terminal = required(assignment.rows[0], 'POS terminal lookup failed');
+        this.requireUsableFiscalMode(terminal.fiscal_mode);
+        let fiscalPreparation: FiscalReturnPreparationRow | undefined;
+        if (terminal.fiscal_mode === 'hardware' && fiscalConfirmation) {
+          const preparationResult = await client.query<FiscalReturnPreparationRow>(
+            `SELECT * FROM pos.fiscal_return_preparations
+             WHERE id = $1 AND cashier_account_id = $2 FOR UPDATE`,
+            [fiscalConfirmation.preparationId, authentication.accountId],
+          );
+          fiscalPreparation = required(
+            preparationResult.rows[0],
+            'Fiscal return preparation was not found',
+          );
+          if (
+            !['printing', 'outcome_unknown'].includes(fiscalPreparation.status) ||
+            fiscalPreparation.request_digest !== digest(normalized) ||
+            fiscalPreparation.original_sale_id !== normalized.originalSaleId ||
+            fiscalPreparation.unique_reversal_id !== fiscalConfirmation.uniqueReversalId ||
+            !/^\d{1,10}$/u.test(fiscalConfirmation.fiscalDocumentNumber) ||
+            (fiscalConfirmation.fiscalReversalsSinceDailyReport !== undefined &&
+              !/^\d{1,4}$/u.test(fiscalConfirmation.fiscalReversalsSinceDailyReport))
+          )
+            throw new ApiErrorException(
+              'POS_FISCAL_RETURN_EVIDENCE_MISMATCH',
+              'This printer result does not match a return awaiting confirmation.',
+              HttpStatus.CONFLICT,
+            );
+          if (
+            fiscalConfirmation.fiscalDocumentNumber ===
+            fiscalPreparation.original_fiscal_document_number
+          )
+            throw new ApiErrorException(
+              'POS_FISCAL_RETURN_EVIDENCE_MISMATCH',
+              'The printer returned the original receipt number instead of a new reversal.',
+              HttpStatus.CONFLICT,
+            );
+        } else if (terminal.fiscal_mode === 'hardware') {
+          throw new ApiErrorException(
+            'POS_FISCAL_ADAPTER_UNAVAILABLE',
+            'Prepare and confirm the return through the assigned DATECS printer.',
+            HttpStatus.CONFLICT,
+          );
+        } else if (fiscalConfirmation) {
+          throw new ApiErrorException(
+            'POS_FISCAL_DEVICE_MISMATCH',
+            'A DATECS return confirmation cannot be posted on a simulator register.',
+            HttpStatus.CONFLICT,
+          );
+        }
+
+        const originalResult = await client.query<{
+          business_location_id: string;
+          customer_partner_id: string | null;
+          fiscal_adapter: string;
+          fiscal_status: string;
+          gross_total: string;
+          id: string;
+          loyalty_points_earned: number;
+          loyalty_points_redeemed: number;
+          sale_number: string;
+          warehouse_id: string;
+        }>(
+          `SELECT sale.id, sale.sale_number, sale.customer_partner_id, sale.warehouse_id,
+             sale.gross_total::text, sale.loyalty_points_earned,
+             sale.loyalty_points_redeemed, sale.fiscal_status, sale.fiscal_adapter,
+             register.business_location_id
+           FROM pos.sales sale
+           JOIN organization.cash_registers register ON register.id = sale.cash_register_id
+           WHERE sale.id = $1 FOR UPDATE OF sale`,
+          [normalized.originalSaleId],
+        );
+        const original = originalResult.rows[0];
+        if (!original)
+          throw new ApiErrorException(
+            'POS_ORIGINAL_SALE_NOT_FOUND',
+            'The original POS sale was not found',
+            HttpStatus.NOT_FOUND,
+          );
+        if (original.business_location_id !== terminal.business_location_id)
+          throw new ApiErrorException(
+            'POS_RETURN_LOCATION_MISMATCH',
+            'Process this return at a register in the original business location',
+            HttpStatus.CONFLICT,
+          );
+        const activeSaleReturn = await client.query<FiscalReturnPreparationRow>(
+          `SELECT * FROM pos.fiscal_return_preparations WHERE original_sale_id = $1
+           AND status IN ('prepared', 'printing', 'outcome_unknown') FOR UPDATE`,
+          [original.id],
+        );
+        if (activeSaleReturn.rowCount && activeSaleReturn.rows[0]?.id !== fiscalPreparation?.id)
+          throw new ApiErrorException(
+            'POS_FISCAL_RETURN_REQUIRES_REVIEW',
+            'This sale already has a printer return awaiting confirmation.',
+            HttpStatus.CONFLICT,
+          );
+        if (
+          fiscalPreparation &&
+          (original.fiscal_status !== 'fiscalized' || original.fiscal_adapter !== 'datecs-fp2000')
+        )
+          throw new ApiErrorException(
+            'POS_FISCAL_ORIGINAL_REQUIRED',
+            'A printer-linked return requires the original DATECS fiscal receipt.',
             HttpStatus.CONFLICT,
           );
 
@@ -1785,6 +4223,26 @@ export class PosService {
             'One or more selected products do not belong to the original sale',
             HttpStatus.CONFLICT,
           );
+        if (fiscalPreparation) {
+          const allSaleLines = await client.query<{ total: string }>(
+            'SELECT count(*)::text AS total FROM pos.sale_lines WHERE sale_id = $1',
+            [original.id],
+          );
+          if (
+            Number(allSaleLines.rows[0]?.total ?? 0) !== normalized.lines.length ||
+            normalized.lines.some((selected) => {
+              const line = lineResult.rows.find(
+                (candidate) => candidate.id === selected.originalSaleLineId,
+              );
+              return !line || units(selected.quantity) !== units(line.quantity);
+            })
+          )
+            throw new ApiErrorException(
+              'POS_FISCAL_FULL_RETURN_REQUIRED',
+              'The DATECS printer reverses the complete receipt. Select every original item and its full quantity.',
+              HttpStatus.CONFLICT,
+            );
+        }
 
         const preparedLines = [] as Array<{
           destinationWarehouseId: string;
@@ -1904,19 +4362,17 @@ export class PosService {
         );
         const returnId = randomUUID();
         const returnNumber = await this.nextNumber(client, terminal, 'return', 'RETURN');
-        const reversalNumber = await this.nextNumber(
-          client,
-          terminal,
-          'fiscal_return',
-          'SIM-REVERSAL',
-        );
+        const reversalNumber = fiscalPreparation
+          ? fiscalPreparation.unique_reversal_id
+          : await this.nextNumber(client, terminal, 'fiscal_return', 'SIM-REVERSAL');
+        const fiscalAdapter = fiscalPreparation ? 'datecs-fp2000' : 'development-simulator';
         await client.query(
           `INSERT INTO pos.returns (
              id, return_number, original_sale_id, shift_id, cash_register_id,
              operator_id, customer_partner_id, reason, net_total, vat_total,
-             gross_total, fiscal_reversal_number, fiscal_adapter, completed_by
-           ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,
-             'development-simulator',$13)`,
+             gross_total, fiscal_reversal_number, fiscal_adapter,
+             fiscal_document_number, fiscal_reversals_since_daily_report, completed_by
+           ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
           [
             returnId,
             returnNumber,
@@ -1930,6 +4386,9 @@ export class PosService {
             vatTotal,
             grossTotal,
             reversalNumber,
+            fiscalAdapter,
+            fiscalConfirmation?.fiscalDocumentNumber ?? null,
+            fiscalConfirmation?.fiscalReversalsSinceDailyReport ?? null,
             authentication.accountId,
           ],
         );
@@ -2257,16 +4716,47 @@ export class PosService {
           `INSERT INTO pos.fiscal_operations (
              id, sale_id, return_id, operation_type, adapter, status,
              external_reference, request_digest, response_digest
-           ) VALUES ($1,$2,$3,'return_reversal','development-simulator','simulated',$4,$5,$6)`,
+           ) VALUES ($1,$2,$3,'return_reversal',$4,$5,$6,$7,$8)`,
           [
             randomUUID(),
             original.id,
             returnId,
+            fiscalAdapter,
+            fiscalPreparation ? 'completed' : 'simulated',
             reversalNumber,
             requestDigest,
-            digest({ reversalNumber }),
+            digest(
+              fiscalConfirmation
+                ? {
+                    fiscalDocumentNumber: fiscalConfirmation.fiscalDocumentNumber,
+                    fiscalReversalsSinceDailyReport:
+                      fiscalConfirmation.fiscalReversalsSinceDailyReport,
+                    uniqueReversalId: fiscalConfirmation.uniqueReversalId,
+                  }
+                : { reversalNumber },
+            ),
           ],
         );
+        if (fiscalPreparation && fiscalConfirmation) {
+          const finalizedPreparation = await client.query(
+            `UPDATE pos.fiscal_return_preparations SET status = 'completed',
+               fiscal_document_number = $2, fiscal_reversals_since_daily_report = $3,
+               completed_return_id = $4, updated_at = now()
+             WHERE id = $1 AND status IN ('printing', 'outcome_unknown')`,
+            [
+              fiscalPreparation.id,
+              fiscalConfirmation.fiscalDocumentNumber,
+              fiscalConfirmation.fiscalReversalsSinceDailyReport,
+              returnId,
+            ],
+          );
+          if (!finalizedPreparation.rowCount)
+            throw new ApiErrorException(
+              'POS_FISCAL_RETURN_REQUIRES_REVIEW',
+              'The printer-linked return changed while it was being confirmed. Reconcile the printer before retrying.',
+              HttpStatus.CONFLICT,
+            );
+        }
         const result = await this.posReturn(client, returnId);
         await this.sideEffects(
           client,
@@ -2472,8 +4962,9 @@ export class PosService {
         const authorization = await client.query<{
           basket_digest: string;
           consumed_by_sale_id: string | null;
+          reserved_by_fiscal_preparation_id: string | null;
         }>(
-          `SELECT basket_digest, consumed_by_sale_id
+          `SELECT basket_digest, consumed_by_sale_id, reserved_by_fiscal_preparation_id
            FROM pos.discount_authorizations
            WHERE id = $1 AND shift_id = $2 AND cashier_account_id = $3
              AND discount_type = $4 AND discount_value = $5
@@ -2490,6 +4981,7 @@ export class PosService {
         if (
           !record ||
           record.consumed_by_sale_id ||
+          record.reserved_by_fiscal_preparation_id ||
           record.basket_digest !==
             discountBasketDigest(
               input,
@@ -2596,7 +5088,11 @@ export class PosService {
     const result = await client.query<LoyaltyAccountRow>(
       `SELECT account.id, account.card_number, account.status, program.name AS program_name,
          program.redemption_value_eur::text,
-         COALESCE(sum(entry.points), 0)::text AS balance
+         (COALESCE(sum(entry.points), 0) - COALESCE((
+           SELECT sum(reservation.points)
+           FROM pos.fiscal_preparation_loyalty_reservations reservation
+           WHERE reservation.loyalty_account_id = account.id AND reservation.active
+         ), 0))::text AS balance
        FROM pos.loyalty_accounts account
        JOIN pos.loyalty_programs program ON program.id = account.program_id
        LEFT JOIN pos.loyalty_points_ledger entry ON entry.loyalty_account_id = account.id
@@ -2845,6 +5341,105 @@ export class PosService {
     );
   }
 
+  private async saleFromPool(id: string): Promise<PosSale> {
+    const client = await this.database.getPool().connect();
+    try {
+      return await this.sale(client, id);
+    } finally {
+      client.release();
+    }
+  }
+
+  private async releaseFiscalSaleReservations(
+    client: PoolClient,
+    row: FiscalSalePreparationRow,
+    actorAccountId: string,
+  ): Promise<void> {
+    for (const line of row.pricing_snapshot.preparedLines) {
+      if (line.batchId) {
+        const releasedBatch = await client.query(
+          `UPDATE inventory.batch_stock_balances
+           SET reserved_quantity = reserved_quantity - $3, updated_at = now()
+           WHERE warehouse_id = (
+             SELECT shift.warehouse_id FROM pos.shifts shift WHERE shift.id = $1
+           ) AND batch_id = $2 AND reserved_quantity >= $3`,
+          [row.shift_id, line.batchId, line.quantity],
+        );
+        if (!releasedBatch.rowCount)
+          throw new ApiErrorException(
+            'POS_FISCAL_BATCH_RESERVATION_MISSING',
+            'The reserved batch quantity could not be released safely. Contact a manager.',
+            HttpStatus.CONFLICT,
+          );
+      }
+    }
+    await client.query(
+      `UPDATE inventory.stock_reservation_serials reserved
+       SET active = false, ended_at = now()
+       FROM inventory.stock_reservations reservation
+       WHERE reserved.reservation_id = reservation.id AND reserved.active
+         AND reservation.reference_type = 'pos_fiscal_preparation'
+         AND reservation.reference_id = $1 AND reservation.status = 'active'`,
+      [row.id],
+    );
+    await client.query(
+      `UPDATE inventory.stock_reservations
+       SET status = 'released', ended_by = $2, ended_at = now(), version = version + 1
+       WHERE reference_type = 'pos_fiscal_preparation'
+         AND reference_id = $1 AND status = 'active'`,
+      [row.id, actorAccountId],
+    );
+    await client.query(
+      `UPDATE pos.discount_authorizations
+       SET reserved_by_fiscal_preparation_id = NULL
+       WHERE reserved_by_fiscal_preparation_id = $1 AND consumed_by_sale_id IS NULL`,
+      [row.id],
+    );
+    await client.query(
+      `UPDATE pos.fiscal_preparation_loyalty_reservations
+       SET active = false, ended_at = now()
+       WHERE fiscal_preparation_id = $1 AND active`,
+      [row.id],
+    );
+  }
+
+  private async fiscalSalePreparation(
+    client: PoolClient,
+    id: string,
+  ): Promise<PosFiscalSalePreparation> {
+    const result = await client.query<FiscalSalePreparationRow>(
+      'SELECT * FROM pos.fiscal_sale_preparations WHERE id = $1',
+      [id],
+    );
+    return mapFiscalSalePreparation(
+      required(result.rows[0], 'POS fiscal-sale preparation lookup failed'),
+    );
+  }
+
+  private async fiscalDailyReport(
+    client: Pick<PoolClient, 'query'>,
+    id: string,
+  ): Promise<PosFiscalDailyReport> {
+    const result = await client.query<FiscalDailyReportRow>(
+      `${fiscalDailyReportSql} WHERE report.id = $1`,
+      [id],
+    );
+    return mapFiscalDailyReport(required(result.rows[0], 'POS fiscal daily report lookup failed'));
+  }
+
+  private async fiscalReturnPreparation(
+    client: Pick<PoolClient, 'query'>,
+    id: string,
+  ): Promise<PosFiscalReturnPreparation> {
+    const result = await client.query<FiscalReturnPreparationRow>(
+      `SELECT * FROM pos.fiscal_return_preparations WHERE id = $1`,
+      [id],
+    );
+    return mapFiscalReturnPreparation(
+      required(result.rows[0], 'POS fiscal return preparation lookup failed'),
+    );
+  }
+
   private async posReturn(client: PoolClient, id: string): Promise<PosReturn> {
     const header = await client.query<ReturnRow>(`${returnHeaderSql} WHERE pos_return.id = $1`, [
       id,
@@ -2942,6 +5537,11 @@ export class PosService {
     );
   }
 }
+
+const fiscalDailyReportSql = `
+  SELECT report.*, shift.shift_number
+  FROM pos.fiscal_daily_reports report
+  JOIN pos.shifts shift ON shift.id = report.shift_id`;
 
 const assignmentSql = `
   SELECT register.id AS cash_register_id, register.code AS cash_register_code,
@@ -3225,7 +5825,8 @@ const returnHeaderSql = `
     sale.sale_number AS original_sale_number, pos_return.shift_id, pos_return.reason,
     pos_return.net_total::text, pos_return.vat_total::text,
     pos_return.gross_total::text, pos_return.fiscal_reversal_number,
-    pos_return.fiscal_adapter, pos_return.completed_at,
+    pos_return.fiscal_adapter, pos_return.fiscal_document_number,
+    pos_return.fiscal_reversals_since_daily_report, pos_return.completed_at,
     pos_return.loyalty_points_earned_reversed,
     pos_return.loyalty_points_redeemed_restored
   FROM pos.returns pos_return
@@ -3269,6 +5870,48 @@ function normalizeSale(input: CreatePosSaleRequest) {
       method: payment.method,
       ...(payment.tenderedAmount ? { tenderedAmount: decimal(payment.tenderedAmount, false) } : {}),
     })),
+  };
+}
+
+function normalizeFiscalSaleReceipt(
+  input: ConfirmPosFiscalSaleReceiptRequest,
+): ConfirmPosFiscalSaleReceiptRequest {
+  return {
+    changeEur: fiscalMinorUnitAmount(input.changeEur, 'change'),
+    fiscalDocumentNumber: input.fiscalDocumentNumber,
+    ...(input.fiscalReceiptsSinceDailyReport
+      ? { fiscalReceiptsSinceDailyReport: input.fiscalReceiptsSinceDailyReport }
+      : {}),
+    uniqueSaleId: input.uniqueSaleId,
+  };
+}
+
+function normalizeFiscalDailyReportResult(
+  input: ConfirmPosFiscalDailyReportRequest,
+): ConfirmPosFiscalDailyReportRequest {
+  const groups = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'] as const;
+  const amount = (value: string) => {
+    if (!/^-?\d{1,12}(?:\.\d{1,2})?$/u.test(value))
+      throw new ApiErrorException(
+        'POS_FISCAL_REPORT_TOTAL_INVALID',
+        'The printer report contains an invalid amount.',
+        HttpStatus.BAD_REQUEST,
+      );
+    return value;
+  };
+  if (!/^\d{1,4}$/u.test(input.fiscalRecordNumber))
+    throw new ApiErrorException(
+      'POS_FISCAL_REPORT_RECORD_INVALID',
+      'The printer report has an invalid fiscal record number.',
+      HttpStatus.BAD_REQUEST,
+    );
+  const taxGroupTotals = Object.fromEntries(
+    groups.map((group) => [group, amount(input.taxGroupTotals[group])]),
+  ) as ConfirmPosFiscalDailyReportRequest['taxGroupTotals'];
+  return {
+    fiscalRecordNumber: input.fiscalRecordNumber,
+    nonVatSalesTotalEur: amount(input.nonVatSalesTotalEur),
+    taxGroupTotals,
   };
 }
 
@@ -3530,6 +6173,10 @@ async function prepareSalePayments(
   grossTotal: string,
   customerPartnerId: string | undefined,
   terminal: AssignmentRow,
+  clientTransactionId: string,
+  cardAuthorizations: CardAuthorizationService,
+  cashierAccountId: string,
+  shiftId: string,
   nodeEnvironment: string,
   businessTimezone: string,
 ) {
@@ -3727,12 +6374,24 @@ async function prepareSalePayments(
         'The development card simulator cannot be used in production',
         HttpStatus.FORBIDDEN,
       );
+    const authorization = await cardAuthorizations.authorize(
+      {
+        amountEur: payment.amount,
+        cashRegisterId: terminal.cash_register_id,
+        idempotencyKey: `pos-sale:${clientTransactionId}:card`,
+      },
+      {
+        cashierAccountId,
+        clientTransactionId,
+        shiftId,
+      },
+    );
     prepared.push({
-      adapter: 'development-card-simulator',
+      adapter: authorization.adapter,
       amount: payment.amount,
       changeAmount: '0.0000',
       method: payment.method,
-      providerReference: `SIM-CARD-${randomUUID()}`,
+      providerReference: authorization.providerReference,
       status: 'simulated' as const,
       tenderedAmount: null,
     });
@@ -3815,6 +6474,132 @@ function mapSale(row: SaleRow, lines: PosSaleLine[], payments: PosSalePayment[])
   };
 }
 
+function mapFiscalSalePreparation(row: FiscalSalePreparationRow): PosFiscalSalePreparation {
+  const payment = row.pricing_snapshot.payments[0];
+  if (!payment || payment.method !== 'cash' || !payment.tenderedAmount)
+    throw new Error('A DATECS preparation is missing its cash tender snapshot.');
+  const lines: PosFiscalReceiptLine[] = row.pricing_snapshot.preparedLines.map((line) => {
+    const unitPriceNet = required(line.product.unit_price ?? undefined, 'Missing POS unit price');
+    const treatment = required(line.product.vat_treatment ?? undefined, 'Missing POS VAT');
+    const unitPriceGross = add(unitPriceNet, vat(unitPriceNet, treatment));
+    const preDiscountGross = multiply(unitPriceGross, line.quantity);
+    const discountEur = subtract(preDiscountGross, line.grossTotal);
+    const unitPriceEur = fiscalMinorUnitAmount(unitPriceGross, 'unit price');
+    const grossTotalEur = fiscalMinorUnitAmount(line.grossTotal, 'line total');
+    const formattedDiscount = fiscalMinorUnitAmount(discountEur, 'discount');
+    if (units(discountEur) < 0n)
+      throw new ApiErrorException(
+        'POS_FISCAL_LINE_ROUNDING_UNSUPPORTED',
+        `${line.product.name} cannot be represented exactly by the fiscal device. Review its price and quantity precision.`,
+        HttpStatus.CONFLICT,
+      );
+    if (
+      units(multiply(unitPriceEur, line.quantity)) - units(formattedDiscount) !==
+      units(grossTotalEur)
+    )
+      throw new ApiErrorException(
+        'POS_FISCAL_LINE_ROUNDING_UNSUPPORTED',
+        `${line.product.name} cannot be represented exactly by the fiscal device. Review its price and quantity precision.`,
+        HttpStatus.CONFLICT,
+      );
+    return {
+      description: line.product.name,
+      ...(units(formattedDiscount) > 0n ? { discountEur: formattedDiscount } : {}),
+      grossTotalEur,
+      quantity: line.quantity.replace(/0+$/u, '').replace(/\.$/u, ''),
+      unitCode: line.product.unit_code,
+      unitPriceEur,
+      vatTreatment: treatment,
+    };
+  });
+  const totalGrossEur = fiscalMinorUnitAmount(
+    row.pricing_snapshot.basketPricing.grossTotal,
+    'sale total',
+  );
+  const cashTenderedEur = fiscalMinorUnitAmount(payment.tenderedAmount, 'cash tender');
+  const changeEur = fiscalMinorUnitAmount(payment.changeAmount, 'change');
+  if (
+    units(sum(lines.map((line) => line.grossTotalEur))) !== units(totalGrossEur) ||
+    units(cashTenderedEur) - units(totalGrossEur) !== units(changeEur)
+  )
+    throw new ApiErrorException(
+      'POS_FISCAL_TOTAL_ROUNDING_UNSUPPORTED',
+      'The sale total does not reconcile to the fiscal device’s EUR cent precision.',
+      HttpStatus.CONFLICT,
+    );
+  return {
+    cashTenderedEur,
+    changeEur,
+    deviceSerial: row.device_serial,
+    ...(row.fiscal_document_number ? { fiscalDocumentNumber: row.fiscal_document_number } : {}),
+    ...(row.fiscal_receipt_number ? { fiscalReceiptNumber: row.fiscal_receipt_number } : {}),
+    id: row.id,
+    lines,
+    status: row.status,
+    totalGrossEur,
+    uniqueSaleId: row.unique_sale_id,
+  };
+}
+
+function mapFiscalDailyReport(row: FiscalDailyReportRow): PosFiscalDailyReport {
+  return {
+    ...(row.closing_cash_eur ? { closingCashEur: row.closing_cash_eur } : {}),
+    ...(row.completed_at ? { completedAt: iso(row.completed_at) } : {}),
+    createdAt: iso(row.created_at),
+    ...(row.fiscal_record_number ? { fiscalRecordNumber: row.fiscal_record_number } : {}),
+    id: row.id,
+    ...(row.non_vat_sales_total_eur ? { nonVatSalesTotalEur: row.non_vat_sales_total_eur } : {}),
+    reportType: row.report_type,
+    shiftId: row.shift_id,
+    shiftNumber: row.shift_number,
+    status: row.status,
+    ...(row.tax_group_totals
+      ? {
+          taxGroupTotals: {
+            A: row.tax_group_totals['A'] ?? '0.00',
+            B: row.tax_group_totals['B'] ?? '0.00',
+            C: row.tax_group_totals['C'] ?? '0.00',
+            D: row.tax_group_totals['D'] ?? '0.00',
+            E: row.tax_group_totals['E'] ?? '0.00',
+            F: row.tax_group_totals['F'] ?? '0.00',
+            G: row.tax_group_totals['G'] ?? '0.00',
+            H: row.tax_group_totals['H'] ?? '0.00',
+          },
+        }
+      : {}),
+  };
+}
+
+function mapFiscalReturnPreparation(row: FiscalReturnPreparationRow): PosFiscalReturnPreparation {
+  return {
+    deviceSerial: row.device_serial,
+    ...(row.fiscal_document_number ? { fiscalDocumentNumber: row.fiscal_document_number } : {}),
+    ...(row.fiscal_reversals_since_daily_report
+      ? { fiscalReversalsSinceDailyReport: row.fiscal_reversals_since_daily_report }
+      : {}),
+    id: row.id,
+    operatorIdentifier: row.operator_identifier,
+    originalFiscalDocumentNumber: row.original_fiscal_document_number,
+    originalSaleId: row.original_sale_id,
+    originalUniqueSaleId: row.original_unique_sale_id,
+    request: row.request_snapshot,
+    status: row.status,
+    uniqueReversalId: row.unique_reversal_id,
+  };
+}
+
+function fiscalMinorUnitAmount(value: string, label: string): string {
+  const amount = units(value);
+  if (amount < 0n || amount % 100n !== 0n)
+    throw new ApiErrorException(
+      'POS_FISCAL_MINOR_UNIT_REQUIRED',
+      `The ${label} must be an exact EUR cent amount before it can be printed.`,
+      HttpStatus.CONFLICT,
+    );
+  const cents = amount / 100n;
+  return `${cents / 100n}.${(cents % 100n).toString().padStart(2, '0')}`;
+}
+
 function mapSaleLine(row: SaleLineRow): PosSaleLine {
   return {
     automaticDiscountTotal: row.automatic_discount_total,
@@ -3868,7 +6653,11 @@ function mapReturn(
   return {
     completedAt: iso(row.completed_at),
     fiscalAdapter: row.fiscal_adapter,
+    ...(row.fiscal_document_number ? { fiscalDocumentNumber: row.fiscal_document_number } : {}),
     fiscalReversalNumber: row.fiscal_reversal_number,
+    ...(row.fiscal_reversals_since_daily_report
+      ? { fiscalReversalsSinceDailyReport: row.fiscal_reversals_since_daily_report }
+      : {}),
     grossTotal: row.gross_total,
     id: row.id,
     lines,
@@ -4161,6 +6950,52 @@ function isPosShift(value: unknown): value is PosShift {
 
 function isPosSale(value: unknown): value is PosSale {
   return Boolean(value && typeof value === 'object' && 'saleNumber' in value);
+}
+
+function isPosFiscalSalePreparation(value: unknown): value is PosFiscalSalePreparation {
+  return Boolean(
+    value &&
+    typeof value === 'object' &&
+    'uniqueSaleId' in value &&
+    'status' in value &&
+    'lines' in value &&
+    Array.isArray(value.lines),
+  );
+}
+
+function isPosDatecsUnpLease(value: unknown): value is PosDatecsUnpLease {
+  return Boolean(
+    value &&
+    typeof value === 'object' &&
+    'cashRegisterId' in value &&
+    'deviceSerial' in value &&
+    'operatorIdentifier' in value &&
+    'uniqueSaleIds' in value &&
+    Array.isArray(value.uniqueSaleIds),
+  );
+}
+
+function isPosFiscalDailyReport(value: unknown): value is PosFiscalDailyReport {
+  return Boolean(
+    value &&
+    typeof value === 'object' &&
+    'id' in value &&
+    'reportType' in value &&
+    'shiftId' in value &&
+    'status' in value,
+  );
+}
+
+function isPosFiscalReturnPreparation(value: unknown): value is PosFiscalReturnPreparation {
+  return Boolean(
+    value &&
+    typeof value === 'object' &&
+    'id' in value &&
+    'originalSaleId' in value &&
+    'uniqueReversalId' in value &&
+    'request' in value &&
+    'status' in value,
+  );
 }
 
 function isPosReturn(value: unknown): value is PosReturn {

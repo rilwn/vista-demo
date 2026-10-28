@@ -14,6 +14,10 @@ import { SavedFinanceReportsController } from './saved-finance-reports.controlle
 import { SavedFinanceReportsService } from './saved-finance-reports.service.js';
 
 import { AuditModule } from '../audit/audit.module.js';
+import { BackupModule } from '../backup/backup.module.js';
+import { BackupExecutionService } from '../backup/backup-execution.service.js';
+import { BackupRestoreWorkerService } from '../backup/backup-restore-worker.service.js';
+import { PostgresBackupDumpRunner } from '../backup/postgres-backup-dump.runner.js';
 import { DatabaseModule } from '../database/database.module.js';
 import { CrmModule } from '../crm/crm.module.js';
 import { FinanceModule } from '../finance/finance.module.js';
@@ -51,6 +55,7 @@ import { ServiceReportExportsController } from './service-report-exports.control
   exports: [JobHandlerRegistry, JobQueueService],
   imports: [
     AuditModule,
+    BackupModule,
     CrmModule,
     DatabaseModule,
     FinanceModule,
@@ -69,6 +74,9 @@ import { ServiceReportExportsController } from './service-report-exports.control
     SavedFinanceReportsService,
     FinanceReportExportDispatcherService,
     FinanceReportExportsService,
+    BackupExecutionService,
+    BackupRestoreWorkerService,
+    PostgresBackupDumpRunner,
     JobHandlerRegistry,
     JobQueueService,
     NamedJobTriggerHandlersService,

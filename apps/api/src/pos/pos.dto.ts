@@ -5,6 +5,7 @@ import {
   ArrayMinSize,
   ArrayUnique,
   IsArray,
+  IsDateString,
   IsEmail,
   IsIn,
   IsInt,
@@ -26,16 +27,37 @@ import type {
   CreatePosSalePaymentRequest,
   CreatePosSaleRequest,
   CreatePosSaleLineRequest,
+  ConfirmPosFiscalSaleReceiptRequest,
+  ConfirmPosFiscalSaleCancellationRequest,
+  ConfirmPosFiscalDailyReportRequest,
+  ConfirmPosFiscalReturnRequest,
+  PosFiscalReturnPreparation,
+  PosFiscalReturnPreparationStatus,
+  PreparePosFiscalReturnRequest,
+  ResolvePosFiscalReturnRequest,
+  CreatePosFiscalDailyReportRequest,
+  FailPosFiscalDailyReportRequest,
   ClosePosShiftRequest,
   EnrolPosLoyaltyRequest,
   OpenPosShiftRequest,
   PosBasketPricing,
+  PosFiscalReceiptLine,
+  PosFiscalSalePreparation,
+  PosFiscalSalePreparationStatus,
+  PosFiscalDailyReport,
+  PosFiscalDailyReportActiveResponse,
+  PosFiscalDailyReportStatus,
+  PosFiscalDailyReportType,
   PosCatalogItem,
   PosCatalogPage,
   PosCustomerOption,
   PosCustomerPaymentOptions,
   PosDiscountAuthorization,
   PosDiscountType,
+  PosDatecsUnpLease,
+  PosOfflineSyncEventKind,
+  PosOfflineSyncEventReason,
+  PosOfflineSyncEventResponse,
   PosLoyaltyAccount,
   PosLoyaltyLedger,
   PosManualDiscountRequest,
@@ -53,7 +75,11 @@ import type {
   PosShift,
   PosTerminalContext,
   PosVatTreatment,
+  PreparePosFiscalSaleRequest,
+  ReservePosDatecsUnpLeaseRequest,
+  ReportPosOfflineSyncEventRequest,
   PosWarrantyCardDocument,
+  MarkPosFiscalSaleOutcomeUnknownRequest,
   PricePosBasketRequest,
   UpdatePosQuickAccessRequest,
 } from '@vista/contracts';
@@ -357,6 +383,311 @@ export class CreatePosSaleDto implements CreatePosSaleRequest {
   @ApiProperty({ format: 'uuid', type: String })
   @IsUUID('loose')
   shiftId!: string;
+}
+
+export class PreparePosFiscalSaleDto
+  extends CreatePosSaleDto
+  implements PreparePosFiscalSaleRequest
+{
+  @ApiProperty({ example: 'DT000600', type: String })
+  @IsString()
+  @Matches(/^[A-Z0-9]{8}$/u)
+  deviceSerial!: string;
+
+  @ApiProperty({ example: 'OP01', type: String })
+  @IsString()
+  @Matches(/^[A-Z0-9]{4}$/u)
+  operatorIdentifier!: string;
+
+  @ApiPropertyOptional({ example: 'DT000600-OP01-0001000', type: String })
+  @IsOptional()
+  @IsString()
+  @Matches(/^[A-Z0-9]{8}-[A-Z0-9]{4}-\d{7}$/u)
+  uniqueSaleId?: string;
+}
+
+export class ReservePosDatecsUnpLeaseDto implements ReservePosDatecsUnpLeaseRequest {
+  @ApiProperty({ example: 'DT000600', type: String })
+  @IsString()
+  @Matches(/^[A-Z0-9]{8}$/u)
+  deviceSerial!: string;
+
+  @ApiProperty({ example: 'OP01', type: String })
+  @IsString()
+  @Matches(/^[A-Z0-9]{4}$/u)
+  operatorIdentifier!: string;
+
+  @ApiProperty({ format: 'uuid', type: String })
+  @IsUUID('loose')
+  shiftId!: string;
+}
+
+export class PosDatecsUnpLeaseDto implements PosDatecsUnpLease {
+  @ApiProperty({ format: 'uuid', type: String })
+  cashRegisterId!: string;
+
+  @ApiProperty({ type: String })
+  deviceSerial!: string;
+
+  @ApiProperty({ type: String })
+  operatorIdentifier!: string;
+
+  @ApiProperty({ isArray: true, type: String })
+  uniqueSaleIds!: string[];
+}
+
+export class ReportPosOfflineSyncEventDto implements ReportPosOfflineSyncEventRequest {
+  @ApiProperty({ format: 'uuid', type: String })
+  @IsUUID('loose')
+  cashRegisterId!: string;
+
+  @ApiProperty({ format: 'uuid', type: String })
+  @IsUUID('loose')
+  clientEventId!: string;
+
+  @ApiProperty({ format: 'uuid', type: String })
+  @IsUUID('loose')
+  clientTransactionId!: string;
+
+  @ApiProperty({ example: 'DT000600', type: String })
+  @IsString()
+  @Matches(/^[A-Z0-9]{8}$/u)
+  deviceSerial!: string;
+
+  @ApiProperty({ format: 'date-time', type: String })
+  @IsDateString()
+  occurredAt!: string;
+
+  @ApiProperty({ example: 'OP01', type: String })
+  @IsString()
+  @Matches(/^[A-Z0-9]{4}$/u)
+  operatorIdentifier!: string;
+
+  @ApiProperty({ enum: ['receipt_mismatch', 'server_rejected', 'sync_interrupted'] })
+  @IsIn(['receipt_mismatch', 'server_rejected', 'sync_interrupted'])
+  reasonCode!: PosOfflineSyncEventReason;
+
+  @ApiProperty({ enum: ['conflict', 'retry'] })
+  @IsIn(['conflict', 'retry'])
+  type!: PosOfflineSyncEventKind;
+
+  @ApiProperty({ example: 'DT000600-OP01-0001000', type: String })
+  @IsString()
+  @Matches(/^[A-Z0-9]{8}-[A-Z0-9]{4}-\d{7}$/u)
+  uniqueSaleId!: string;
+}
+
+export class PosOfflineSyncEventResponseDto implements PosOfflineSyncEventResponse {
+  @ApiProperty({ format: 'uuid', type: String }) auditEventId!: string;
+  @ApiProperty({ format: 'uuid', type: String }) clientEventId!: string;
+  @ApiProperty({ type: Boolean }) duplicate!: boolean;
+}
+
+export class PosFiscalReceiptLineDto implements PosFiscalReceiptLine {
+  @ApiProperty({ type: String }) description!: string;
+  @ApiPropertyOptional({ type: String }) discountEur?: string;
+  @ApiProperty({ type: String }) grossTotalEur!: string;
+  @ApiProperty({ type: String }) quantity!: string;
+  @ApiPropertyOptional({ type: String }) unitCode?: string;
+  @ApiProperty({ type: String }) unitPriceEur!: string;
+  @ApiProperty({ enum: ['standard_20', 'reduced_9', 'zero', 'exempt', 'ica'] })
+  vatTreatment!: PosVatTreatment;
+}
+
+export class PosFiscalSalePreparationDto implements PosFiscalSalePreparation {
+  @ApiProperty({ type: String }) cashTenderedEur!: string;
+  @ApiProperty({ type: String }) changeEur!: string;
+  @ApiProperty({ type: String }) deviceSerial!: string;
+  @ApiPropertyOptional({ type: String }) fiscalDocumentNumber?: string;
+  @ApiPropertyOptional({ type: String }) fiscalReceiptNumber?: string;
+  @ApiProperty({ format: 'uuid', type: String }) id!: string;
+  @ApiProperty({ isArray: true, type: PosFiscalReceiptLineDto })
+  lines!: PosFiscalReceiptLine[];
+  @ApiProperty({
+    enum: [
+      'cancelled',
+      'finalized',
+      'outcome_unknown',
+      'prepared',
+      'printing',
+      'receipt_confirmed',
+    ],
+  })
+  status!: PosFiscalSalePreparationStatus;
+  @ApiProperty({ type: String }) totalGrossEur!: string;
+  @ApiProperty({ example: 'DT000600-OP01-0001000', type: String }) uniqueSaleId!: string;
+}
+
+export class PosFiscalSalePreparationQueryDto {
+  @ApiProperty({ format: 'uuid', type: String })
+  @IsUUID('loose')
+  shiftId!: string;
+}
+
+export class ConfirmPosFiscalSaleCancellationDto implements ConfirmPosFiscalSaleCancellationRequest {
+  @ApiProperty({ enum: ['before_printing', 'printer_open_rejected', 'printer_receipt_cancelled'] })
+  @IsIn(['before_printing', 'printer_open_rejected', 'printer_receipt_cancelled'])
+  evidence!: ConfirmPosFiscalSaleCancellationRequest['evidence'];
+}
+
+export class ConfirmPosFiscalSaleReceiptDto implements ConfirmPosFiscalSaleReceiptRequest {
+  @ApiProperty({ example: '0.0000', type: String })
+  @IsString()
+  @Matches(decimalPattern)
+  changeEur!: string;
+
+  @ApiProperty({ example: '000123', type: String })
+  @IsString()
+  @Matches(/^\d{1,12}$/u)
+  fiscalDocumentNumber!: string;
+
+  @ApiPropertyOptional({ example: '27', type: String })
+  @IsOptional()
+  @IsString()
+  @Matches(/^\d{1,12}$/u)
+  fiscalReceiptsSinceDailyReport?: string;
+
+  @ApiProperty({ example: 'DT000600-OP01-0001000', type: String })
+  @IsString()
+  @Matches(/^[A-Z0-9]{8}-[A-Z0-9]{4}-\d{7}$/u)
+  uniqueSaleId!: string;
+}
+
+export class MarkPosFiscalSaleOutcomeUnknownDto implements MarkPosFiscalSaleOutcomeUnknownRequest {
+  @ApiProperty({ maximum: 255, minimum: 32, type: Number })
+  @Type(() => Number)
+  @IsInt()
+  @Min(32)
+  @Max(255)
+  commandCode!: number;
+}
+
+export class CreatePosFiscalDailyReportDto implements CreatePosFiscalDailyReportRequest {
+  @ApiPropertyOptional({ example: '160.0000', type: String })
+  @IsOptional()
+  @IsString()
+  @Matches(decimalPattern)
+  closingCashEur?: string;
+
+  @ApiProperty({ format: 'uuid', type: String })
+  @IsUUID('loose')
+  shiftId!: string;
+
+  @ApiPropertyOptional({ minimum: 1, type: Number })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  shiftVersion?: number;
+
+  @ApiProperty({ enum: ['x', 'z'] })
+  @IsIn(['x', 'z'])
+  type!: PosFiscalDailyReportType;
+}
+
+export class PosFiscalDailyReportTaxTotalsDto {
+  @ApiProperty({ example: '0.00', type: String })
+  @IsString()
+  @Matches(/^-?\d{1,12}(?:\.\d{1,2})?$/u)
+  A!: string;
+
+  @ApiProperty({ example: '100.00', type: String })
+  @IsString()
+  @Matches(/^-?\d{1,12}(?:\.\d{1,2})?$/u)
+  B!: string;
+
+  @ApiProperty({ example: '0.00', type: String })
+  @IsString()
+  @Matches(/^-?\d{1,12}(?:\.\d{1,2})?$/u)
+  C!: string;
+
+  @ApiProperty({ example: '0.00', type: String })
+  @IsString()
+  @Matches(/^-?\d{1,12}(?:\.\d{1,2})?$/u)
+  D!: string;
+
+  @ApiProperty({ example: '0.00', type: String })
+  @IsString()
+  @Matches(/^-?\d{1,12}(?:\.\d{1,2})?$/u)
+  E!: string;
+
+  @ApiProperty({ example: '0.00', type: String })
+  @IsString()
+  @Matches(/^-?\d{1,12}(?:\.\d{1,2})?$/u)
+  F!: string;
+
+  @ApiProperty({ example: '0.00', type: String })
+  @IsString()
+  @Matches(/^-?\d{1,12}(?:\.\d{1,2})?$/u)
+  G!: string;
+
+  @ApiProperty({ example: '0.00', type: String })
+  @IsString()
+  @Matches(/^-?\d{1,12}(?:\.\d{1,2})?$/u)
+  H!: string;
+}
+
+export class ConfirmPosFiscalDailyReportDto implements ConfirmPosFiscalDailyReportRequest {
+  @ApiProperty({ example: '123', type: String })
+  @IsString()
+  @Matches(/^\d{1,4}$/u)
+  fiscalRecordNumber!: string;
+
+  @ApiProperty({ example: '0.00', type: String })
+  @IsString()
+  @Matches(/^-?\d{1,12}(?:\.\d{1,2})?$/u)
+  nonVatSalesTotalEur!: string;
+
+  @ApiProperty({ type: PosFiscalDailyReportTaxTotalsDto })
+  @ValidateNested()
+  @Type(() => PosFiscalDailyReportTaxTotalsDto)
+  taxGroupTotals!: ConfirmPosFiscalDailyReportRequest['taxGroupTotals'];
+}
+
+export class FailPosFiscalDailyReportDto implements FailPosFiscalDailyReportRequest {
+  @ApiProperty({ enum: ['printer_rejected'] })
+  @IsIn(['printer_rejected'])
+  reason!: 'printer_rejected';
+}
+
+export class PosFiscalDailyReportDto implements PosFiscalDailyReport {
+  @ApiPropertyOptional({ type: String })
+  closingCashEur?: string;
+
+  @ApiPropertyOptional({ format: 'date-time', type: String })
+  completedAt?: string;
+
+  @ApiProperty({ format: 'date-time', type: String })
+  createdAt!: string;
+
+  @ApiPropertyOptional({ type: String })
+  fiscalRecordNumber?: string;
+
+  @ApiProperty({ format: 'uuid', type: String })
+  id!: string;
+
+  @ApiPropertyOptional({ type: String })
+  nonVatSalesTotalEur?: string;
+
+  @ApiProperty({ enum: ['x', 'z'] })
+  reportType!: PosFiscalDailyReportType;
+
+  @ApiProperty({ format: 'uuid', type: String })
+  shiftId!: string;
+
+  @ApiProperty({ type: String })
+  shiftNumber!: string;
+
+  @ApiProperty({ enum: ['prepared', 'printing', 'outcome_unknown', 'completed', 'failed'] })
+  status!: PosFiscalDailyReportStatus;
+
+  @ApiPropertyOptional({ type: PosFiscalDailyReportTaxTotalsDto })
+  taxGroupTotals?: NonNullable<PosFiscalDailyReport['taxGroupTotals']>;
+}
+
+export class PosFiscalDailyReportActiveResponseDto implements PosFiscalDailyReportActiveResponse {
+  @ApiProperty({ nullable: true, type: PosFiscalDailyReportDto })
+  report!: PosFiscalDailyReport | null;
 }
 
 class PosRegisterOptionDto {
@@ -731,6 +1062,68 @@ export class CreatePosReturnDto implements CreatePosReturnRequest {
   shiftId!: string;
 }
 
+export class PreparePosFiscalReturnDto
+  extends CreatePosReturnDto
+  implements PreparePosFiscalReturnRequest
+{
+  @ApiProperty({ example: 'DT000600', type: String })
+  @IsString()
+  @Matches(/^[A-Z0-9]{8}$/u)
+  deviceSerial!: string;
+
+  @ApiProperty({ example: 'OP01', type: String })
+  @IsString()
+  @Matches(/^[A-Z0-9]{4}$/u)
+  operatorIdentifier!: string;
+}
+
+export class PosFiscalReturnPreparationDto implements PosFiscalReturnPreparation {
+  @ApiProperty({ type: String }) deviceSerial!: string;
+  @ApiPropertyOptional({ type: String }) fiscalDocumentNumber?: string;
+  @ApiPropertyOptional({ type: String }) fiscalReversalsSinceDailyReport?: string;
+  @ApiProperty({ format: 'uuid', type: String }) id!: string;
+  @ApiProperty({ type: String }) operatorIdentifier!: string;
+  @ApiProperty({ type: String }) originalFiscalDocumentNumber!: string;
+  @ApiProperty({ format: 'uuid', type: String }) originalSaleId!: string;
+  @ApiProperty({ type: String }) originalUniqueSaleId!: string;
+  @ApiProperty({ type: CreatePosReturnDto }) request!: CreatePosReturnRequest;
+  @ApiProperty({
+    enum: ['cancelled', 'completed', 'outcome_unknown', 'prepared', 'printing', 'rejected'],
+  })
+  status!: PosFiscalReturnPreparationStatus;
+  @ApiProperty({ type: String }) uniqueReversalId!: string;
+}
+
+export class PosFiscalReturnPreparationQueryDto {
+  @ApiProperty({ format: 'uuid', type: String })
+  @IsUUID('loose')
+  shiftId!: string;
+}
+
+export class ConfirmPosFiscalReturnDto implements ConfirmPosFiscalReturnRequest {
+  @ApiProperty({ example: '0000124', type: String })
+  @IsString()
+  @Matches(/^\d{1,10}$/u)
+  fiscalDocumentNumber!: string;
+
+  @ApiPropertyOptional({ example: '0001', type: String })
+  @IsOptional()
+  @IsString()
+  @Matches(/^\d{1,4}$/u)
+  fiscalReversalsSinceDailyReport?: string;
+
+  @ApiProperty({ example: 'DT000600-OP01-0001001', type: String })
+  @IsString()
+  @Matches(/^[A-Z0-9]{8}-[A-Z0-9]{4}-\d{7}$/u)
+  uniqueReversalId!: string;
+}
+
+export class ResolvePosFiscalReturnDto implements ResolvePosFiscalReturnRequest {
+  @ApiProperty({ enum: ['before_printing', 'printer_rejected'] })
+  @IsIn(['before_printing', 'printer_rejected'])
+  evidence!: ResolvePosFiscalReturnRequest['evidence'];
+}
+
 export class PosReturnLineDto implements PosReturnLine {
   @ApiProperty({ format: 'uuid', type: String }) destinationWarehouseId!: string;
   @ApiProperty({ type: String }) destinationWarehouseName!: string;
@@ -761,7 +1154,9 @@ export class PosReturnRefundDto implements PosReturnRefund {
 export class PosReturnDto implements PosReturn {
   @ApiProperty({ format: 'date-time', type: String }) completedAt!: string;
   @ApiProperty({ type: String }) fiscalAdapter!: string;
+  @ApiPropertyOptional({ type: String }) fiscalDocumentNumber?: string;
   @ApiProperty({ type: String }) fiscalReversalNumber!: string;
+  @ApiPropertyOptional({ type: String }) fiscalReversalsSinceDailyReport?: string;
   @ApiProperty({ type: String }) grossTotal!: string;
   @ApiProperty({ format: 'uuid', type: String }) id!: string;
   @ApiProperty({ isArray: true, type: PosReturnLineDto }) lines!: PosReturnLine[];

@@ -47,8 +47,11 @@ interface FailedApiResponse {
   response: Response;
 }
 
-export function authorizationHeaders(token: string): Record<string, string> {
-  return { Authorization: `Bearer ${token}` };
+export function authorizationHeaders(
+  token: string,
+  additional: Record<string, string> = {},
+): Record<string, string> {
+  return { ...additional, Authorization: `Bearer ${token}` };
 }
 
 export async function unwrapApiResponse<T>(

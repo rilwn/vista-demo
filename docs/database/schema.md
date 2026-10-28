@@ -697,6 +697,34 @@ KPI source is duplicated. Rollback drops this scheduling/preference metadata and
 the union view; existing saved views, export jobs and audit evidence remain.
 Back up schedule configuration before any rollback.
 
+## Backup artifact compression metadata
+
+Migration `0109_backup_compression` records each run's immutable
+`compression_algorithm` and, where the source stream can be measured,
+`uncompressed_size_bytes`. PostgreSQL custom-format compression is selected
+for database sources; managed file-store archives use gzip when the policy
+enables compression, otherwise the archive is stored uncompressed. Verification
+and isolated restore use the recorded algorithm. Gzip decoding is bounded by
+the original byte count, which must match exactly. Legacy file-store runs are
+backfilled as uncompressed with their pre-existing artifact size. A downgrade
+is refused while any non-expired compressed file-store artifact still depends
+on the metadata.
+
+Migration `0116_backup_file_share_lineage` records the verified source manifest
+for each mounted-share or managed-object-store execution and links
+incremental/differential runs to the verified parent needed for recovery. The
+foreign key restricts deletion while descendant runs depend on a base. The
+downgrade refuses to remove lineage while source-manifest evidence remains, preserving
+recoverability and audit history.
+
+Migration `0117_backup_object_source_identity` records the original bucket and
+a non-secret fingerprint of the source endpoint, region and bucket on new
+object-storage runs. The fields cannot be changed after insertion. Verified
+legacy manifests provide their original bucket during upgrade, and existing
+managed-file source codes retain their prior mapping. Changed source identities
+start a new full baseline. Downgrade refuses to discard recorded source
+identity evidence; recovery does not require the original source credentials.
+
 ## Approved recurring invoice issuance
 
 Migration `0080_recurring_invoice_issuance` adds one versioned Finance approval

@@ -8,6 +8,7 @@ import type {
   CreateLogisticsReturnRequest,
   CreateLogisticsRouteRequest,
   LogisticsDelivery,
+  LogisticsCourierTrackingEvent,
   LogisticsDeliveryHistoryEntry,
   LogisticsDeliveryPage,
   LogisticsReferenceData,
@@ -38,13 +39,31 @@ import type {
   ListLogisticsDeliveriesQueryDto,
   ListLogisticsReturnsQueryDto,
   ListLogisticsRoutesQueryDto,
+  ReconcileLogisticsCourierBookingDto,
 } from './logistics.dto.js';
+import {
+  CourierAdapterService,
+  CourierProviderError,
+  type CourierShipmentInput,
+} from './courier-adapters.js';
 
 interface DeliveryRow {
   address_line_1: string;
   address_line_2: string | null;
   city: string;
   country_code: string;
+  courier_attempt_count: number;
+  courier_booking_status:
+    'not_applicable' | 'pending' | 'booking' | 'booked' | 'failed' | 'needs_review';
+  courier_events: LogisticsCourierTrackingEvent[];
+  courier_external_reference: string | null;
+  courier_last_checked_at: string | null;
+  courier_last_error: string | null;
+  courier_parcel_count: number | null;
+  courier_provider_status: string | null;
+  courier_recipient_name: string | null;
+  courier_recipient_phone: string | null;
+  courier_weight_kg: string | null;
   created_at: string;
   customer_location_id: string;
   customer_location_name: string;
@@ -140,6 +159,7 @@ export class LogisticsService {
     @Inject(ServiceOperationsService) private readonly service: ServiceOperationsService,
     @Inject(SalesService) private readonly sales: SalesService,
     @Inject(APP_ENVIRONMENT) private readonly environment: AppEnvironment,
+    @Inject(CourierAdapterService) private readonly courier: CourierAdapterService,
   ) {}
 
   async referenceData(): Promise<LogisticsReferenceData> {
@@ -298,8 +318,8 @@ export class LogisticsService {
       })),
       businessTimezone: this.environment.BUSINESS_TIMEZONE,
       courierConnections: [
-        { connected: false, provider: 'econt' },
-        { connected: false, provider: 'speedy' },
+        { connected: this.courier.isConfigured('econt'), provider: 'econt' },
+        { connected: this.courier.isConfigured('speedy'), provider: 'speedy' },
       ],
       equipment: equipment.rows.map((row) => ({
         customerId: row.customer_id,
@@ -375,7 +395,14 @@ export class LogisticsService {
     metadata: RequestSecurityMetadata,
   ): Promise<LogisticsDelivery> {
     const normalized = normalizeDelivery(input);
-    requireConfiguredTransport(normalized.deliveryMethod);
+    if (
+      normalized.deliveryMethod !== 'company_transport' &&
+      !this.courier.isConfigured(normalized.deliveryMethod)
+    )
+      conflict(
+        'COURIER_CONNECTION_NOT_CONFIGURED',
+        'This courier account is not configured yet. Choose company transport or connect the courier account.',
+      );
     return this.command(
       'logistics.delivery.create',
       key,
@@ -417,8 +444,10 @@ export class LogisticsService {
            id, delivery_number, shipment_id, handover_certificate_id,
            customer_partner_id, customer_location_id, delivery_method,
            scheduled_start, scheduled_end, address_line_1, address_line_2,
-           city, postal_code, country_code, instructions, created_by, updated_by
-         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$16)`,
+           city, postal_code, country_code, instructions, created_by, updated_by,
+           courier_booking_status, courier_recipient_name, courier_recipient_phone,
+           courier_parcel_count, courier_weight_kg
+         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$16,$17,$18,$19,$20,$21)`,
           [
             id,
             number,
@@ -436,6 +465,11 @@ export class LogisticsService {
             sourceRow.country_code,
             normalized.instructions ?? null,
             auth.accountId,
+            normalized.deliveryMethod === 'company_transport' ? 'not_applicable' : 'pending',
+            normalized.recipientName ?? null,
+            normalized.recipientPhone ?? null,
+            normalized.parcelCount ?? null,
+            normalized.parcelWeightKg ?? null,
           ],
         );
         await this.addDeliveryHistory(
@@ -460,6 +494,382 @@ export class LogisticsService {
         return delivery;
       },
     );
+  }
+
+  async bookCourierDelivery(
+    id: string,
+    key: string | undefined,
+    auth: AuthenticationContext,
+    metadata: RequestSecurityMetadata,
+  ): Promise<LogisticsDelivery> {
+    const idempotencyKey = validKey(key);
+    const scope = `logistics.courier.book:${id}`;
+    const hash = createHash('sha256')
+      .update(JSON.stringify({ deliveryId: id }))
+      .digest('hex');
+    const client = await this.database.getPool().connect();
+    let shipment: CourierShipmentInput | undefined;
+    let attempt = 0;
+    try {
+      await client.query('BEGIN');
+      const replay = await claim(client, scope, idempotencyKey, hash);
+      if (replay) {
+        await client.query('COMMIT');
+        return replay as LogisticsDelivery;
+      }
+      const current = await client.query<{
+        courier_attempt_count: number;
+        courier_booking_status: string;
+        courier_external_reference: string | null;
+        delivery_method: LogisticsDelivery['deliveryMethod'];
+      }>(
+        `SELECT courier_attempt_count, courier_booking_status, courier_external_reference,
+                delivery_method
+         FROM logistics.deliveries WHERE id=$1 FOR UPDATE`,
+        [id],
+      );
+      const row = current.rows[0];
+      if (!row) notFound('LOGISTICS_DELIVERY_NOT_FOUND', 'The delivery could not be found.');
+      if (row.delivery_method === 'company_transport')
+        conflict('LOGISTICS_COURIER_NOT_SELECTED', 'This delivery uses company transport.');
+      if (row.courier_booking_status === 'booked') {
+        const existing = await this.loadDelivery(client, id);
+        await completeIdempotency(client, scope, idempotencyKey, existing);
+        await client.query('COMMIT');
+        return existing;
+      }
+      if (row.courier_booking_status === 'booking' || row.courier_booking_status === 'needs_review')
+        conflict(
+          'LOGISTICS_COURIER_RECONCILIATION_REQUIRED',
+          'Check the courier account and reconcile this booking before trying again. Vista will not create a second label automatically.',
+        );
+      if (!['pending', 'failed'].includes(row.courier_booking_status))
+        conflict('LOGISTICS_COURIER_BOOKING_STATE_INVALID', 'This booking cannot be submitted.');
+      if (!this.courier.isConfigured(row.delivery_method))
+        conflict('COURIER_CONNECTION_NOT_CONFIGURED', 'This courier account is not configured.');
+
+      await client.query(
+        `UPDATE logistics.deliveries
+         SET courier_booking_status='booking', courier_attempt_count=courier_attempt_count+1,
+             courier_attempt_started_at=now(), courier_last_error=NULL, updated_by=$2
+         WHERE id=$1`,
+        [id, auth.accountId],
+      );
+      attempt = row.courier_attempt_count + 1;
+      const delivery = await this.loadDelivery(client, id);
+      shipment = this.toCourierShipment(delivery);
+      await this.sideEffects(
+        client,
+        'logistics_delivery',
+        id,
+        'logistics.courier-booking.started',
+        { deliveryNumber: delivery.number, provider: row.delivery_method, attempt },
+        auth,
+        metadata,
+        `${idempotencyKey}:${attempt}`,
+      );
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+
+    let providerReference: string | undefined;
+    let providerStatus: string | undefined;
+    let finalStatus: NonNullable<LogisticsDelivery['courierBooking']>['status'] = 'needs_review';
+    let lastError: string | undefined;
+    try {
+      const delivery = await this.delivery(id);
+      const result = await this.courier.create(
+        delivery.deliveryMethod as 'econt' | 'speedy',
+        shipment,
+      );
+      providerReference = result.providerReference;
+      providerStatus = result.providerStatus;
+      finalStatus = 'booked';
+    } catch (error) {
+      finalStatus =
+        error instanceof CourierProviderError && error.outcome === 'rejected'
+          ? 'failed'
+          : 'needs_review';
+      lastError =
+        error instanceof CourierProviderError
+          ? error.message
+          : 'The booking result could not be confirmed. Check the courier account before retrying.';
+    }
+
+    const resultClient = await this.database.getPool().connect();
+    try {
+      await resultClient.query('BEGIN');
+      await resultClient.query(
+        `UPDATE logistics.deliveries
+         SET courier_booking_status=$2::varchar,
+             courier_external_reference=COALESCE($3::varchar,courier_external_reference),
+             courier_provider_status=$4::varchar, courier_last_error=$5::varchar,
+             courier_last_checked_at=CASE WHEN $2::varchar='booked' THEN now() ELSE courier_last_checked_at END,
+             updated_by=$6::uuid
+         WHERE id=$1::uuid`,
+        [
+          id,
+          finalStatus,
+          providerReference ?? null,
+          providerStatus ?? null,
+          lastError ?? null,
+          auth.accountId,
+        ],
+      );
+      const updated = await this.loadDelivery(resultClient, id);
+      await completeIdempotency(resultClient, scope, idempotencyKey, updated);
+      await this.sideEffects(
+        resultClient,
+        'logistics_delivery',
+        id,
+        finalStatus === 'booked'
+          ? 'logistics.courier-booking.completed'
+          : 'logistics.courier-booking.needs-review',
+        {
+          deliveryNumber: updated.number,
+          provider: updated.deliveryMethod,
+          ...(providerReference ? { providerReference } : {}),
+          status: finalStatus,
+          ...(lastError ? { reason: lastError } : {}),
+        },
+        auth,
+        metadata,
+        `${idempotencyKey}:${attempt}:result`,
+      );
+      await resultClient.query('COMMIT');
+      return updated;
+    } catch (error) {
+      await resultClient.query('ROLLBACK');
+      throw error;
+    } finally {
+      resultClient.release();
+    }
+  }
+
+  async refreshCourierTracking(
+    id: string,
+    auth: AuthenticationContext,
+    metadata: RequestSecurityMetadata,
+  ): Promise<LogisticsDelivery> {
+    const delivery = await this.delivery(id);
+    const booking = delivery.courierBooking;
+    if (!booking?.providerReference || booking.status !== 'booked')
+      conflict(
+        'LOGISTICS_COURIER_TRACKING_UNAVAILABLE',
+        'Book the courier shipment before tracking it.',
+      );
+    let tracking: Awaited<ReturnType<CourierAdapterService['track']>>;
+    try {
+      tracking = await this.courier.track(
+        delivery.deliveryMethod as 'econt' | 'speedy',
+        booking.providerReference,
+        delivery.number,
+      );
+    } catch (error) {
+      const message =
+        error instanceof CourierProviderError
+          ? error.message
+          : 'Tracking could not be refreshed. Try again later.';
+      const failedClient = await this.database.getPool().connect();
+      try {
+        await failedClient.query('BEGIN');
+        const updated = await failedClient.query(
+          `UPDATE logistics.deliveries
+           SET courier_last_checked_at=now(), courier_last_error=$3, updated_by=$4
+           WHERE id=$1 AND courier_external_reference=$2 AND courier_booking_status='booked'`,
+          [id, booking.providerReference, message, auth.accountId],
+        );
+        if (updated.rowCount) {
+          await this.sideEffects(
+            failedClient,
+            'logistics_delivery',
+            id,
+            'logistics.courier-tracking.failed',
+            { deliveryNumber: delivery.number, reason: message },
+            auth,
+            metadata,
+            `tracking-failed:${id}:${new Date().toISOString()}`,
+          );
+        }
+        await failedClient.query('COMMIT');
+      } catch (persistError) {
+        await failedClient.query('ROLLBACK');
+        throw persistError;
+      } finally {
+        failedClient.release();
+      }
+      conflict('LOGISTICS_COURIER_TRACKING_FAILED', message);
+    }
+    const client = await this.database.getPool().connect();
+    try {
+      await client.query('BEGIN');
+      await this.upsertCourierEvents(client, id, tracking.events);
+      await client.query(
+        `UPDATE logistics.deliveries
+         SET courier_provider_status=$2, courier_last_checked_at=now(), courier_last_error=NULL,
+             updated_by=$3
+         WHERE id=$1 AND courier_external_reference=$4 AND courier_booking_status='booked'`,
+        [id, tracking.providerStatus, auth.accountId, booking.providerReference],
+      );
+      const updated = await this.loadDelivery(client, id);
+      await this.sideEffects(
+        client,
+        'logistics_delivery',
+        id,
+        'logistics.courier-tracking.refreshed',
+        {
+          deliveryNumber: updated.number,
+          eventCount: tracking.events.length,
+          providerStatus: tracking.providerStatus,
+        },
+        auth,
+        metadata,
+        `tracking:${id}:${tracking.events.at(-1)?.occurredAt ?? new Date().toISOString()}`,
+      );
+      await client.query('COMMIT');
+      return updated;
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async reconcileCourierBooking(
+    id: string,
+    input: ReconcileLogisticsCourierBookingDto,
+    auth: AuthenticationContext,
+    metadata: RequestSecurityMetadata,
+  ): Promise<LogisticsDelivery> {
+    const delivery = await this.delivery(id);
+    const booking = delivery.courierBooking;
+    if (!booking)
+      conflict(
+        'LOGISTICS_COURIER_RECONCILIATION_NOT_REQUIRED',
+        'This booking does not need reconciliation.',
+      );
+    const providerReference = input.providerReference.trim();
+    if (booking.status === 'booked') {
+      if (booking.providerReference === providerReference) return delivery;
+      conflict(
+        'LOGISTICS_COURIER_RECONCILIATION_REFERENCE_CONFLICT',
+        'This delivery is already linked to a different courier shipment.',
+      );
+    }
+    if (!['booking', 'needs_review'].includes(booking.status))
+      conflict(
+        'LOGISTICS_COURIER_RECONCILIATION_NOT_REQUIRED',
+        'This booking does not need reconciliation.',
+      );
+    const tracking = await this.courier.track(booking.provider, providerReference, delivery.number);
+    const client = await this.database.getPool().connect();
+    try {
+      await client.query('BEGIN');
+      const locked = await client.query<{
+        courier_booking_status: string;
+        courier_external_reference: string | null;
+      }>(
+        'SELECT courier_booking_status, courier_external_reference FROM logistics.deliveries WHERE id=$1 FOR UPDATE',
+        [id],
+      );
+      const lockedRow = locked.rows[0];
+      if (
+        lockedRow?.courier_booking_status === 'booked' &&
+        lockedRow.courier_external_reference === providerReference
+      ) {
+        const current = await this.loadDelivery(client, id);
+        await client.query('COMMIT');
+        return current;
+      }
+      if (!['booking', 'needs_review'].includes(lockedRow?.courier_booking_status ?? ''))
+        conflict(
+          'LOGISTICS_COURIER_RECONCILIATION_NOT_REQUIRED',
+          'This booking has already changed. Refresh and review it.',
+        );
+      await this.upsertCourierEvents(client, id, tracking.events);
+      await client.query(
+        `UPDATE logistics.deliveries
+         SET courier_booking_status='booked', courier_external_reference=$2,
+             courier_provider_status=$3, courier_last_checked_at=now(), courier_last_error=NULL,
+             updated_by=$4
+         WHERE id=$1`,
+        [id, providerReference, tracking.providerStatus, auth.accountId],
+      );
+      const updated = await this.loadDelivery(client, id);
+      await this.sideEffects(
+        client,
+        'logistics_delivery',
+        id,
+        'logistics.courier-booking.reconciled',
+        { deliveryNumber: updated.number, provider: booking.provider, providerReference },
+        auth,
+        metadata,
+        `reconcile:${id}:${providerReference}`,
+      );
+      await client.query('COMMIT');
+      return updated;
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  private toCourierShipment(delivery: LogisticsDelivery): CourierShipmentInput {
+    if (
+      !delivery.courierRecipientName ||
+      !delivery.courierRecipientPhone ||
+      !delivery.parcelCount ||
+      !delivery.parcelWeightKg
+    )
+      conflict(
+        'LOGISTICS_COURIER_DETAILS_REQUIRED',
+        'Complete the courier recipient and parcel details.',
+      );
+    return {
+      addressLine1: [delivery.addressLine1, delivery.addressLine2].filter(Boolean).join(', '),
+      city: delivery.city,
+      countryCode: delivery.countryCode,
+      customerName: delivery.customerName,
+      deliveryNumber: delivery.number,
+      ...(delivery.instructions ? { instructions: delivery.instructions } : {}),
+      parcelCount: delivery.parcelCount,
+      parcelWeightKg: delivery.parcelWeightKg,
+      ...(delivery.postalCode ? { postalCode: delivery.postalCode } : {}),
+      recipientName: delivery.courierRecipientName,
+      recipientPhone: delivery.courierRecipientPhone,
+      shipmentNumber: delivery.shipmentNumber,
+    };
+  }
+
+  private async upsertCourierEvents(
+    client: PoolClient,
+    deliveryId: string,
+    events: LogisticsCourierTrackingEvent[],
+  ) {
+    for (const event of events) {
+      const key = createHash('sha256').update(JSON.stringify(event)).digest('hex');
+      await client.query(
+        `INSERT INTO logistics.delivery_courier_tracking_events (
+           id,delivery_id,event_key,provider_status,description,place,occurred_at
+         ) VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT (delivery_id,event_key) DO NOTHING`,
+        [
+          randomUUID(),
+          deliveryId,
+          key,
+          event.status,
+          event.description,
+          event.place ?? null,
+          event.occurredAt,
+        ],
+      );
+    }
   }
 
   dispatchDelivery(
@@ -1624,6 +2034,19 @@ function deliverySelect() {
                  delivery.scheduled_end::text, delivery.address_line_1, delivery.address_line_2,
                  delivery.city, delivery.postal_code, delivery.country_code,
                  delivery.instructions, delivery.recipient_name, delivery.delivered_at::text,
+                 delivery.courier_booking_status, delivery.courier_external_reference,
+                 delivery.courier_provider_status, delivery.courier_last_checked_at::text,
+                 delivery.courier_last_error, delivery.courier_attempt_count,
+                 delivery.courier_recipient_name, delivery.courier_recipient_phone,
+                 delivery.courier_parcel_count, delivery.courier_weight_kg::text,
+                 COALESCE((SELECT jsonb_agg(jsonb_build_object(
+                   'description', event.description,
+                   'occurredAt', event.occurred_at,
+                   'place', event.place,
+                   'status', event.provider_status
+                 ) ORDER BY event.occurred_at, event.id)
+                   FROM logistics.delivery_courier_tracking_events event
+                   WHERE event.delivery_id = delivery.id), '[]'::jsonb) AS courier_events,
                  delivery.proof_notes, delivery.exception_reason, delivery.version,
                  delivery.created_at::text, count(*) OVER ()::text AS total_count
           FROM logistics.deliveries delivery
@@ -1707,6 +2130,34 @@ function mapDelivery(
     customerName: row.customer_name,
     ...(row.delivered_at ? { deliveredAt: asIso(row.delivered_at) } : {}),
     deliveryMethod: row.delivery_method,
+    ...(row.delivery_method !== 'company_transport'
+      ? {
+          courierBooking: {
+            attemptCount: row.courier_attempt_count,
+            events: row.courier_events ?? [],
+            ...(row.courier_last_checked_at
+              ? { lastCheckedAt: asIso(row.courier_last_checked_at) }
+              : {}),
+            ...(row.courier_last_error ? { lastError: row.courier_last_error } : {}),
+            provider: row.delivery_method,
+            ...(row.courier_external_reference
+              ? { providerReference: row.courier_external_reference }
+              : {}),
+            ...(row.courier_provider_status ? { providerStatus: row.courier_provider_status } : {}),
+            status: row.courier_booking_status as NonNullable<
+              LogisticsDelivery['courierBooking']
+            >['status'],
+          },
+          ...(row.courier_recipient_name
+            ? { courierRecipientName: row.courier_recipient_name }
+            : {}),
+          ...(row.courier_recipient_phone
+            ? { courierRecipientPhone: row.courier_recipient_phone }
+            : {}),
+          ...(row.courier_parcel_count ? { parcelCount: row.courier_parcel_count } : {}),
+          ...(row.courier_weight_kg ? { parcelWeightKg: row.courier_weight_kg } : {}),
+        }
+      : {}),
     ...(row.exception_reason ? { exceptionReason: row.exception_reason } : {}),
     handoverCertificateId: row.handover_certificate_id,
     handoverStatus: row.handover_status,
@@ -1818,10 +2269,27 @@ function normalizeDelivery(input: CreateLogisticsDeliveryRequest) {
       HttpStatus.BAD_REQUEST,
     );
   const instructions = input.instructions?.trim();
+  const courierRecipientName = input.recipientName?.trim();
+  const courierRecipientPhone = input.recipientPhone?.trim();
+  const isCourier = input.deliveryMethod !== 'company_transport';
+  if (
+    isCourier &&
+    (!courierRecipientName || !courierRecipientPhone || !input.parcelCount || !input.parcelWeightKg)
+  )
+    throw new ApiErrorException(
+      'LOGISTICS_COURIER_DETAILS_REQUIRED',
+      'Enter the recipient name and phone number, parcel count and total weight for courier delivery.',
+      HttpStatus.BAD_REQUEST,
+    );
+  const parcelWeightKg = input.parcelWeightKg ? positiveWeight(input.parcelWeightKg) : undefined;
   return {
     customerLocationId: input.customerLocationId,
     deliveryMethod: input.deliveryMethod,
     ...(instructions ? { instructions } : {}),
+    ...(courierRecipientName ? { recipientName: courierRecipientName } : {}),
+    ...(courierRecipientPhone ? { recipientPhone: courierRecipientPhone } : {}),
+    ...(input.parcelCount ? { parcelCount: input.parcelCount } : {}),
+    ...(parcelWeightKg ? { parcelWeightKg } : {}),
     scheduledEnd,
     scheduledStart,
     shipmentId: input.shipmentId,
@@ -1974,6 +2442,18 @@ function positiveDecimal(value: string) {
   return `${BigInt(whole).toString()}.${fraction.padEnd(4, '0')}`;
 }
 
+function positiveWeight(value: string) {
+  const normalized = value.trim();
+  if (!/^\d{1,9}(?:\.\d{1,3})?$/u.test(normalized) || decimalUnits(normalized) <= 0n)
+    throw new ApiErrorException(
+      'LOGISTICS_COURIER_WEIGHT_INVALID',
+      'Enter a parcel weight greater than zero with up to three decimal places.',
+      HttpStatus.BAD_REQUEST,
+    );
+  const [whole = '0', fraction = ''] = normalized.split('.');
+  return `${BigInt(whole).toString()}.${fraction.padEnd(3, '0')}`;
+}
+
 function decimalUnits(value: string) {
   const [whole = '0', fraction = ''] = value.split('.');
   return BigInt(whole) * 10_000n + BigInt(fraction.padEnd(4, '0').slice(0, 4));
@@ -2050,6 +2530,20 @@ async function claim(client: PoolClient, scope: string, key: string, hash: strin
     );
   if (row.status === 'completed') return row.response_body;
   conflict('COMMAND_IN_PROGRESS', 'This action is already being processed.');
+}
+
+async function completeIdempotency(
+  client: PoolClient,
+  scope: string,
+  key: string,
+  response: LogisticsDelivery,
+) {
+  await client.query(
+    `UPDATE platform.idempotency_keys
+     SET status='completed', response_status=200, response_body=$3
+     WHERE scope=$1 AND idempotency_key=$2 AND status='processing'`,
+    [scope, key, response],
+  );
 }
 
 function isUniqueViolation(error: unknown): error is { code: '23505' } {

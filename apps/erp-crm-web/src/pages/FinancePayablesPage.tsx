@@ -361,7 +361,7 @@ function AdvanceOffsetRegister({
         <header>
           <div>
             <p>Compensation</p>
-            <h2>Receivable offsets</h2>
+            <h2>Customer balance offsets</h2>
           </div>
           <strong>{offsets.length}</strong>
         </header>
@@ -376,7 +376,8 @@ function AdvanceOffsetRegister({
                   <strong>{item.number}</strong>
                   <span>{item.partnerName}</span>
                   <small>
-                    {item.customerDocumentNumber} ↔ {item.supplierPayableNumber}
+                    {item.customerDocumentNumber ?? item.posSaleNumber} ↔{' '}
+                    {item.supplierPayableNumber}
                   </small>
                 </div>
                 <strong>{money(item.amount)}</strong>
@@ -546,7 +547,9 @@ function PayableDrawer({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const canOffset = references.openReceivables.some(
-    (item) => item.customerPartnerId === payable.supplierPartnerId,
+    (item) =>
+      item.customerPartnerId === payable.supplierPartnerId &&
+      item.currencyCode === payable.currencyCode,
   );
 
   async function submit(event: FormEvent) {
@@ -1055,17 +1058,22 @@ function CreateOffsetDrawer({
   references: FinanceSupplierReferenceData;
   token: string;
 }) {
+  const { locale } = useLocalization();
   const eligible = payables.filter(
     (payable) =>
       payable.outstandingTotal !== '0.0000' &&
       references.openReceivables.some(
-        (receivable) => receivable.customerPartnerId === payable.supplierPartnerId,
+        (receivable) =>
+          receivable.customerPartnerId === payable.supplierPartnerId &&
+          receivable.currencyCode === payable.currencyCode,
       ),
   );
   const [payableId, setPayableId] = useState(eligible[0]?.id ?? '');
   const payable = eligible.find((item) => item.id === payableId);
   const receivables = references.openReceivables.filter(
-    (item) => item.customerPartnerId === payable?.supplierPartnerId,
+    (item) =>
+      item.customerPartnerId === payable?.supplierPartnerId &&
+      item.currencyCode === payable.currencyCode,
   );
   const [receivableId, setReceivableId] = useState(receivables[0]?.id ?? '');
   const receivable = receivables.find((item) => item.id === receivableId);
@@ -1081,7 +1089,9 @@ function CreateOffsetDrawer({
     setPayableId(id);
     const nextPayable = eligible.find((item) => item.id === id);
     const nextReceivable = references.openReceivables.find(
-      (item) => item.customerPartnerId === nextPayable?.supplierPartnerId,
+      (item) =>
+        item.customerPartnerId === nextPayable?.supplierPartnerId &&
+        item.currencyCode === nextPayable.currencyCode,
     );
     setReceivableId(nextReceivable?.id ?? '');
     if (nextPayable && nextReceivable)
@@ -1099,8 +1109,17 @@ function CreateOffsetDrawer({
     if (!payable || !receivable) return;
     const input: CreateFinanceSupplierOffsetRequest = {
       amount,
-      customerDocumentId: receivable.id,
-      expectedCustomerDocumentVersion: receivable.version,
+      ...(receivable.sourceType === 'customer_document'
+        ? {
+            customerDocumentId: receivable.id,
+            ...(receivable.version !== undefined
+              ? { expectedCustomerDocumentVersion: receivable.version }
+              : {}),
+          }
+        : {
+            expectedPosOutstanding: receivable.outstandingTotal,
+            posSaleId: receivable.posSaleId ?? receivable.id,
+          }),
       expectedSupplierPayableVersion: payable.version,
       offsetDate,
       reason,
@@ -1121,7 +1140,7 @@ function CreateOffsetDrawer({
     <SupplierDrawer
       busy={busy}
       onBack={onBack}
-      subtitle="Receivable ↔ payable"
+      subtitle={locale === 'bg' ? 'Клиентско салдо ↔ задължение' : 'Customer balance ↔ payable'}
       title="New compensation offset"
     >
       {error ? <InlineAlert tone="error">{error}</InlineAlert> : null}
@@ -1130,8 +1149,8 @@ function CreateOffsetDrawer({
           <Icon name="finance" size={24} />
           <h3>No bilateral balances are ready</h3>
           <p>
-            An offset requires the same partner to have both an open customer receivable and
-            supplier payable.
+            An offset requires the same partner to have both an open customer balance and supplier
+            payable.
           </p>
         </div>
       ) : (
@@ -1155,14 +1174,21 @@ function CreateOffsetDrawer({
               </select>
             </label>
             <label>
-              <span>Customer receivable</span>
+              <span>Customer balance</span>
               <select
                 onChange={(event) => changeReceivable(event.target.value)}
                 value={receivableId}
               >
                 {receivables.map((item) => (
                   <option key={item.id} value={item.id}>
-                    {item.number} · {item.sourceInvoiceNumber} · {money(item.outstandingTotal)}
+                    {locale === 'bg'
+                      ? item.sourceType === 'pos_account'
+                        ? 'POS продажба'
+                        : 'Фактура'
+                      : item.sourceType === 'pos_account'
+                        ? 'POS sale'
+                        : 'Invoice'}{' '}
+                    · {item.number} · {money(item.outstandingTotal)}
                   </option>
                 ))}
               </select>

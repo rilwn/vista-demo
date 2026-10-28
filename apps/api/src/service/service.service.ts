@@ -102,6 +102,7 @@ interface WorkOrderRow {
   device_name: string;
   financial_document_id: string | null;
   financial_document_number: string | null;
+  financial_document_status: 'draft' | 'issued' | null;
   id: string;
   is_overdue: boolean;
   labor_cost_eur: string;
@@ -2321,7 +2322,8 @@ function workOrderQuery(): string {
                  technician_employee.email AS technician_email,
                  technician_warehouse.name AS technician_warehouse_name,
                  financial_document.id AS financial_document_id,
-                 financial_document.draft_number AS financial_document_number
+                 coalesce(financial_document.official_number, financial_document.draft_number) AS financial_document_number,
+                 financial_document.status AS financial_document_status
           FROM service.work_orders work_order
           JOIN service.requests request ON request.id = work_order.service_request_id
           JOIN master_data.partners partner ON partner.id = request.customer_partner_id
@@ -2334,10 +2336,10 @@ function workOrderQuery(): string {
           LEFT JOIN master_data.warehouses technician_warehouse
             ON technician_warehouse.id = work_order.technician_warehouse_id
           LEFT JOIN LATERAL (
-            SELECT document.id, document.draft_number
+            SELECT document.id, document.official_number, document.draft_number, document.status
             FROM finance.financial_documents document
             WHERE document.source_service_work_order_id = work_order.id
-              AND document.document_type = 'invoice' AND document.status = 'draft'
+              AND document.document_type = 'invoice' AND document.status IN ('draft', 'issued')
             ORDER BY document.created_at DESC, document.id DESC LIMIT 1
           ) financial_document ON true`;
 }
@@ -2478,6 +2480,9 @@ function mapWorkOrder(
     ...(row.financial_document_id ? { financialDocumentId: row.financial_document_id } : {}),
     ...(row.financial_document_number
       ? { financialDocumentNumber: row.financial_document_number }
+      : {}),
+    ...(row.financial_document_status
+      ? { financialDocumentStatus: row.financial_document_status }
       : {}),
     history: history.map(mapHistory),
     id: row.id,

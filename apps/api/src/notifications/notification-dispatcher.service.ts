@@ -16,6 +16,7 @@ import {
 } from '../jobs/job-handler-registry.service.js';
 import { JobQueueService } from '../jobs/job-queue.service.js';
 import { StructuredLogger } from '../logging/structured-logger.service.js';
+import { SmsGatewayService } from './sms-gateway.service.js';
 import { SmtpMailerService, type SmtpMessage } from './smtp-mailer.service.js';
 
 export const notificationDispatchJobName = 'notification.dispatch';
@@ -47,6 +48,7 @@ export class NotificationDispatcherService
     @Inject(JobQueueService) private readonly jobs: JobQueueService,
     @Inject(StructuredLogger) private readonly logger: StructuredLogger,
     @Inject(SmtpMailerService) private readonly mailer: SmtpMailerService,
+    @Inject(SmsGatewayService) private readonly sms: SmsGatewayService,
   ) {}
 
   onModuleInit(): void {
@@ -78,7 +80,7 @@ export class NotificationDispatcherService
       } else if (claimed.channel === 'email') {
         await this.mailer.send(emailMessage(claimed.payload));
       } else {
-        throw new UnrecoverableError('SMS delivery is not configured for this environment');
+        await this.sms.send(smsMessage(claimed.payload));
       }
       await this.finish(notificationId, 'delivered');
       this.logger.event('info', 'notification.delivered', {
@@ -237,4 +239,11 @@ function emailMessage(payload: Record<string, unknown>): SmtpMessage {
     text: payload['text'],
     to: payload['to'],
   };
+}
+
+function smsMessage(payload: Record<string, unknown>): { body: string; to: string } {
+  if (typeof payload['to'] !== 'string' || typeof payload['body'] !== 'string') {
+    throw new UnrecoverableError('The queued SMS is missing required message details');
+  }
+  return { body: payload['body'], to: payload['to'] };
 }

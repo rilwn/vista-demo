@@ -4,6 +4,7 @@ import type {
   CreateLogisticsReturnRequest,
   CreateLogisticsRouteRequest,
   LogisticsDelivery,
+  LogisticsDeliveryMethod,
   LogisticsDeliveryPage,
   LogisticsReferenceData,
   LogisticsReturn,
@@ -16,6 +17,7 @@ import { type FormEvent, type ReactNode, useCallback, useEffect, useMemo, useSta
 import { ApiClientError } from '../api/client';
 import {
   cancelLogisticsDelivery,
+  bookLogisticsCourier,
   completeLogisticsDelivery,
   createLogisticsDelivery,
   createLogisticsReturn,
@@ -28,6 +30,8 @@ import {
   listLogisticsReturns,
   listLogisticsRoutes,
   receiveLogisticsReturn,
+  reconcileLogisticsCourierBooking,
+  refreshLogisticsCourierTracking,
   reportLogisticsDeliveryException,
 } from '../api/logistics';
 import { useAuth } from '../auth/AuthProvider';
@@ -339,14 +343,16 @@ function DeliveriesView({
 }
 
 function CouriersView({ references }: { references: LogisticsReferenceData }) {
+  const { locale } = useLocalization();
   return (
     <section className="content-panel courier-connection-panel">
       <div className="panel-heading">
         <div>
-          <h2>Courier connections</h2>
+          <h2>{locale === 'bg' ? 'Куриерски връзки' : 'Courier connections'}</h2>
           <p>
-            Company transport is available now. Courier booking starts after each account is
-            connected.
+            {locale === 'bg'
+              ? 'Собственият транспорт е наличен. За заявяване и проследяване на пратки свържете акаунт при куриера.'
+              : 'Company transport is available now. Courier booking starts after each account is connected.'}
           </p>
         </div>
       </div>
@@ -358,19 +364,30 @@ function CouriersView({ references }: { references: LogisticsReferenceData }) {
               <h3>{connection.provider === 'econt' ? 'Econt' : 'Speedy'}</h3>
               <p>
                 {connection.connected
-                  ? 'Ready for shipment booking and tracking.'
-                  : 'Not connected. Booking, labels, tracking, and courier returns remain unavailable.'}
+                  ? locale === 'bg'
+                    ? 'Готов за заявяване и проследяване на пратки.'
+                    : 'Ready for shipment booking and tracking.'
+                  : locale === 'bg'
+                    ? 'Свържете акаунта, за да заявявате и проследявате пратки.'
+                    : 'Connect the account to book and track shipments.'}
               </p>
             </div>
             <span className={connection.connected ? 'status-badge is-ready' : 'status-badge'}>
-              {connection.connected ? 'Connected' : 'Not connected'}
+              {connection.connected
+                ? locale === 'bg'
+                  ? 'Свързан'
+                  : 'Connected'
+                : locale === 'bg'
+                  ? 'Не е настроен'
+                  : 'Not set up'}
             </span>
           </article>
         ))}
       </div>
       <InlineAlert tone="info">
-        Provider accounts and approved shipment rules are required before courier actions can be
-        enabled. No courier shipment is created silently.
+        {locale === 'bg'
+          ? 'Свържете акаунт при Econt или Speedy, за да активирате заявяването и проследяването.'
+          : 'Connect an Econt or Speedy account to enable shipment booking and tracking.'}
       </InlineAlert>
     </section>
   );
@@ -504,6 +521,12 @@ function NewDeliveryDrawer({
   const times = useMemo(() => deliveryTimes(), []);
   const [scheduledStart, setScheduledStart] = useState(times.start);
   const [scheduledEnd, setScheduledEnd] = useState(times.end);
+  const [deliveryMethod, setDeliveryMethod] =
+    useState<LogisticsDeliveryMethod>('company_transport');
+  const [recipientName, setRecipientName] = useState('');
+  const [recipientPhone, setRecipientPhone] = useState('');
+  const [parcelCount, setParcelCount] = useState('1');
+  const [parcelWeightKg, setParcelWeightKg] = useState('');
   const [instructions, setInstructions] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -519,19 +542,71 @@ function NewDeliveryDrawer({
     try {
       const input: CreateLogisticsDeliveryRequest = {
         customerLocationId: locationId,
-        deliveryMethod: 'company_transport',
+        deliveryMethod,
         ...(instructions.trim() ? { instructions: instructions.trim() } : {}),
+        ...(deliveryMethod !== 'company_transport'
+          ? {
+              parcelCount: Number(parcelCount),
+              parcelWeightKg,
+              recipientName: recipientName.trim(),
+              recipientPhone: recipientPhone.trim(),
+            }
+          : {}),
         scheduledEnd: localDateTimeToIso(scheduledEnd),
         scheduledStart: localDateTimeToIso(scheduledStart),
         shipmentId,
       };
       onSaved(await createLogisticsDelivery(token, crypto.randomUUID(), input));
     } catch (caught) {
-      setError(errorMessage(caught, 'The delivery could not be planned.'));
+      setError(errorMessage(caught, text.error));
     } finally {
       setBusy(false);
     }
   }
+
+  const { locale } = useLocalization();
+  const text =
+    locale === 'bg'
+      ? {
+          cancel: 'Назад',
+          deliveryLocation: 'Място за доставка',
+          deliveryWindow: 'Час за доставка',
+          driverNotes: 'Бележки за доставката',
+          ends: 'Край',
+          instructions: 'Указания (по избор)',
+          instructionsHint: 'Достъп до адреса, контакт или уговорки за доставката',
+          noShipments:
+            'За всяка приключена пратка вече има план за доставка. Приключете друга пратка в „Продажби“, за да планирате нова.',
+          plan: 'Планирай доставка',
+          salesShipment: 'Пратка от продажба',
+          saving: 'Запазване…',
+          shipment: 'Пратка',
+          starts: 'Начало',
+          transport: 'Транспорт',
+          transportHint: 'Куриерските услуги са достъпни след настройване на акаунта.',
+          subtitle: 'Изберете пратка от „Продажби“, място за доставка и уговорен времеви интервал.',
+          error: 'Доставката не можа да бъде планирана.',
+        }
+      : {
+          cancel: 'Cancel',
+          deliveryLocation: 'Delivery location',
+          deliveryWindow: 'Delivery window',
+          driverNotes: 'Driver notes',
+          ends: 'Ends',
+          instructions: 'Instructions (optional)',
+          instructionsHint: 'Access details, contact instructions, or agreed handling notes',
+          noShipments:
+            'Every completed shipment already has a delivery plan. Complete another shipment in Sales to plan a new delivery.',
+          plan: 'Plan delivery',
+          salesShipment: 'Sales shipment',
+          saving: 'Saving…',
+          shipment: 'Shipment',
+          starts: 'Starts',
+          transport: 'Transport',
+          transportHint: 'Courier services are available when the account is configured.',
+          subtitle: 'Choose the Sales shipment, customer location, and agreed delivery window.',
+          error: 'The delivery could not be planned.',
+        };
 
   return (
     <LogisticsDrawer
@@ -543,32 +618,29 @@ function NewDeliveryDrawer({
             form="new-delivery-form"
             type="submit"
           >
-            {busy ? 'Saving…' : 'Plan delivery'}
+            {busy ? text.saving : text.plan}
           </Button>
           <Button disabled={busy} onClick={onBack} variant="secondary">
-            Cancel
+            {text.cancel}
           </Button>
         </>
       }
       onBack={onBack}
-      subtitle="Choose the Sales shipment, customer location, and agreed delivery window."
-      title="Plan delivery"
+      subtitle={text.subtitle}
+      title={text.plan}
     >
       {error ? <InlineAlert tone="error">{error}</InlineAlert> : null}
       {!shipments.length ? (
-        <InlineAlert tone="info">
-          Every completed shipment already has a delivery plan. Complete another shipment in Sales
-          to plan a new delivery.
-        </InlineAlert>
+        <InlineAlert tone="info">{text.noShipments}</InlineAlert>
       ) : (
         <form
           className="logistics-form"
           id="new-delivery-form"
           onSubmit={(event) => void submit(event)}
         >
-          <FormSection number="1" title="Sales shipment">
+          <FormSection number="1" title={text.salesShipment}>
             <label>
-              <span>Shipment</span>
+              <span>{text.shipment}</span>
               <select
                 required
                 value={shipmentId}
@@ -582,7 +654,7 @@ function NewDeliveryDrawer({
               </select>
             </label>
             <label>
-              <span>Delivery location</span>
+              <span>{text.deliveryLocation}</span>
               <select
                 required
                 value={locationId}
@@ -596,10 +668,10 @@ function NewDeliveryDrawer({
               </select>
             </label>
           </FormSection>
-          <FormSection number="2" title="Delivery window">
+          <FormSection number="2" title={text.deliveryWindow}>
             <div className="logistics-form-grid">
               <label>
-                <span>Starts</span>
+                <span>{text.starts}</span>
                 <input
                   required
                   type="datetime-local"
@@ -608,7 +680,7 @@ function NewDeliveryDrawer({
                 />
               </label>
               <label>
-                <span>Ends</span>
+                <span>{text.ends}</span>
                 <input
                   required
                   type="datetime-local"
@@ -618,19 +690,91 @@ function NewDeliveryDrawer({
               </label>
             </div>
             <label>
-              <span>Transport</span>
-              <select value="company_transport" disabled>
-                <option value="company_transport">Company transport</option>
+              <span>{text.transport}</span>
+              <select
+                value={deliveryMethod}
+                onChange={(event) =>
+                  setDeliveryMethod(event.target.value as LogisticsDeliveryMethod)
+                }
+              >
+                <option value="company_transport">
+                  {locale === 'bg' ? 'Собствен транспорт' : 'Company transport'}
+                </option>
+                {references.courierConnections.map((connection) => (
+                  <option
+                    disabled={!connection.connected}
+                    key={connection.provider}
+                    value={connection.provider}
+                  >
+                    {connection.provider === 'econt' ? 'Econt' : 'Speedy'}
+                    {connection.connected
+                      ? locale === 'bg'
+                        ? ' · свързан'
+                        : ' · connected'
+                      : locale === 'bg'
+                        ? ' · не е настроен'
+                        : ' · not configured'}
+                  </option>
+                ))}
               </select>
-              <small>Econt and Speedy become available after their accounts are connected.</small>
+              <small>{text.transportHint}</small>
             </label>
+            {deliveryMethod !== 'company_transport' ? (
+              <div className="logistics-form-grid">
+                <label>
+                  <span>{locale === 'bg' ? 'Лице за контакт' : 'Recipient contact'}</span>
+                  <input
+                    autoComplete="name"
+                    maxLength={255}
+                    required
+                    value={recipientName}
+                    onChange={(event) => setRecipientName(event.target.value)}
+                  />
+                </label>
+                <label>
+                  <span>{locale === 'bg' ? 'Телефон за контакт' : 'Recipient phone'}</span>
+                  <input
+                    autoComplete="tel"
+                    maxLength={30}
+                    required
+                    type="tel"
+                    value={recipientPhone}
+                    onChange={(event) => setRecipientPhone(event.target.value)}
+                  />
+                </label>
+                <label>
+                  <span>{locale === 'bg' ? 'Брой пратки' : 'Parcel count'}</span>
+                  <input
+                    inputMode="numeric"
+                    max={100}
+                    min={1}
+                    required
+                    type="number"
+                    value={parcelCount}
+                    onChange={(event) => setParcelCount(event.target.value)}
+                  />
+                </label>
+                <label>
+                  <span>{locale === 'bg' ? 'Общо тегло (кг)' : 'Total weight (kg)'}</span>
+                  <input
+                    inputMode="decimal"
+                    min="0.001"
+                    required
+                    step="0.001"
+                    type="number"
+                    value={parcelWeightKg}
+                    onChange={(event) => setParcelWeightKg(event.target.value)}
+                  />
+                </label>
+              </div>
+            ) : null}
           </FormSection>
-          <FormSection number="3" title="Driver notes">
+          <FormSection number="3" title={text.driverNotes}>
             <label>
-              <span>Instructions (optional)</span>
+              <span>{text.instructions}</span>
               <textarea
                 maxLength={2000}
-                placeholder="Access details, contact instructions, or agreed handling notes"
+                placeholder={text.instructionsHint}
                 rows={4}
                 value={instructions}
                 onChange={(event) => setInstructions(event.target.value)}
@@ -1315,12 +1459,58 @@ function DeliveryDrawer({
   onChanged: (delivery: LogisticsDelivery, message: string) => void;
   token: string;
 }) {
+  const { locale } = useLocalization();
   const [mode, setMode] = useState<'cancel' | 'complete' | 'exception' | null>(null);
+  const [providerReference, setProviderReference] = useState('');
   const [recipientName, setRecipientName] = useState('');
   const [deliveredAt, setDeliveredAt] = useState(nowLocalInput());
   const [notes, setNotes] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const courierBooking = delivery.courierBooking;
+  const courierReady =
+    delivery.deliveryMethod === 'company_transport' || courierBooking?.status === 'booked';
+
+  async function courierAction(kind: 'book' | 'track' | 'reconcile') {
+    setBusy(true);
+    setError(null);
+    try {
+      const updated =
+        kind === 'book'
+          ? await bookLogisticsCourier(token, delivery.id, crypto.randomUUID())
+          : kind === 'track'
+            ? await refreshLogisticsCourierTracking(token, delivery.id)
+            : await reconcileLogisticsCourierBooking(token, delivery.id, {
+                providerReference: providerReference.trim(),
+              });
+      setProviderReference('');
+      onChanged(
+        updated,
+        locale === 'bg'
+          ? kind === 'book'
+            ? 'Заявката за куриер е обработена.'
+            : kind === 'track'
+              ? 'Проследяването е обновено.'
+              : 'Куриерската пратка е потвърдена.'
+          : kind === 'book'
+            ? 'The courier booking request was processed.'
+            : kind === 'track'
+              ? 'Courier tracking was refreshed.'
+              : 'The courier shipment was confirmed.',
+      );
+    } catch (caught) {
+      setError(
+        errorMessage(
+          caught,
+          locale === 'bg'
+            ? 'Куриерската операция не бе изпълнена.'
+            : 'The courier action could not be completed.',
+        ),
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function action(kind: 'cancel' | 'complete' | 'dispatch' | 'exception') {
     setBusy(true);
@@ -1367,25 +1557,46 @@ function DeliveryDrawer({
       footer={
         canEdit && delivery.status !== 'delivered' && delivery.status !== 'cancelled' ? (
           <>
-            {delivery.status === 'planned' || delivery.status === 'exception' ? (
+            {courierBooking && ['pending', 'failed'].includes(courierBooking.status) ? (
+              <Button disabled={busy} onClick={() => void courierAction('book')}>
+                {busy
+                  ? locale === 'bg'
+                    ? 'Изпращане…'
+                    : 'Submitting…'
+                  : courierBooking.status === 'failed'
+                    ? locale === 'bg'
+                      ? 'Опитай отново'
+                      : 'Try booking again'
+                    : locale === 'bg'
+                      ? `Заяви ${courierBooking.provider === 'econt' ? 'Econt' : 'Speedy'}`
+                      : `Book ${courierBooking.provider === 'econt' ? 'Econt' : 'Speedy'}`}
+              </Button>
+            ) : null}
+            {courierReady && (delivery.status === 'planned' || delivery.status === 'exception') ? (
               <Button disabled={busy} onClick={() => void action('dispatch')}>
-                {delivery.status === 'exception' ? 'Resume delivery' : 'Dispatch'}
+                {locale === 'bg'
+                  ? delivery.status === 'exception'
+                    ? 'Продължи доставката'
+                    : 'Изпрати'
+                  : delivery.status === 'exception'
+                    ? 'Resume delivery'
+                    : 'Dispatch'}
               </Button>
             ) : null}
-            {delivery.status === 'in_transit' ? (
+            {courierReady && delivery.status === 'in_transit' ? (
               <Button disabled={busy} onClick={() => setMode('complete')}>
-                Record delivery
+                {locale === 'bg' ? 'Отбележи като доставена' : 'Record delivery'}
               </Button>
             ) : null}
-            {delivery.status !== 'exception' ? (
+            {courierReady && delivery.status !== 'exception' ? (
               <Button disabled={busy} onClick={() => setMode('exception')} variant="secondary">
-                Report issue
+                {locale === 'bg' ? 'Съобщи за проблем' : 'Report issue'}
               </Button>
             ) : null}
           </>
         ) : (
           <Button onClick={onBack} variant="secondary">
-            Close
+            {locale === 'bg' ? 'Затвори' : 'Close'}
           </Button>
         )
       }
@@ -1407,31 +1618,131 @@ function DeliveryDrawer({
       </section>
       <section className="logistics-detail-grid">
         <Info
-          label="Delivery window"
+          label={locale === 'bg' ? 'Време за доставка' : 'Delivery window'}
           value={`${formatDateTime(delivery.scheduledStart)}–${formatTime(delivery.scheduledEnd)}`}
         />
-        <Info label="Transport" value="Company transport" />
         <Info
-          label="Handover"
-          value={delivery.handoverStatus === 'accepted' ? 'Accepted' : 'Awaiting receipt'}
+          label={locale === 'bg' ? 'Транспорт' : 'Transport'}
+          value={deliveryMethodLabel(delivery.deliveryMethod, locale)}
         />
-        <Info label="Sales shipment" value={delivery.shipmentNumber} />
+        <Info
+          label={locale === 'bg' ? 'Предаване' : 'Handover'}
+          value={
+            delivery.handoverStatus === 'accepted'
+              ? locale === 'bg'
+                ? 'Прието'
+                : 'Accepted'
+              : locale === 'bg'
+                ? 'Очаква потвърждение'
+                : 'Awaiting receipt'
+          }
+        />
+        <Info
+          label={locale === 'bg' ? 'Пратка от продажба' : 'Sales shipment'}
+          value={delivery.shipmentNumber}
+        />
       </section>
+      {courierBooking ? (
+        <section className="logistics-courier-detail">
+          <header>
+            <div>
+              <h3>{locale === 'bg' ? 'Куриерска пратка' : 'Courier shipment'}</h3>
+              <p>{courierBooking.provider === 'econt' ? 'Econt' : 'Speedy'}</p>
+            </div>
+            <span className={`status-badge is-${courierBooking.status}`}>
+              {courierBookingStatusLabel(courierBooking.status, locale)}
+            </span>
+          </header>
+          {courierBooking.providerReference ? (
+            <p>
+              <span>{locale === 'bg' ? 'Номер за проследяване' : 'Tracking number'}</span>
+              <strong>{courierBooking.providerReference}</strong>
+            </p>
+          ) : null}
+          {courierBooking.providerStatus ? <p>{courierBooking.providerStatus}</p> : null}
+          {courierBooking.lastError ? (
+            <InlineAlert tone="warning">
+              {courierBooking.lastError}
+              {courierBooking.status === 'needs_review'
+                ? locale === 'bg'
+                  ? ' Проверете в акаунта на куриера, преди да заявите нов етикет.'
+                  : ' Check the courier account before requesting another label.'
+                : ''}
+            </InlineAlert>
+          ) : null}
+          {courierBooking.status === 'needs_review' || courierBooking.status === 'booking' ? (
+            <div className="logistics-courier-reconcile">
+              <p>
+                {locale === 'bg'
+                  ? 'Ако куриерът е създал пратката, въведете номера ѝ. Vista ще го потвърди чрез проследяване. Не заявяваме повторен етикет автоматично.'
+                  : 'If the courier created the shipment, enter its tracking number. Vista will verify it through tracking and will not request another label automatically.'}
+              </p>
+              <label>
+                <span>{locale === 'bg' ? 'Номер от куриера' : 'Courier tracking number'}</span>
+                <input
+                  maxLength={120}
+                  value={providerReference}
+                  onChange={(event) => setProviderReference(event.target.value)}
+                />
+              </label>
+              <Button
+                disabled={busy || !providerReference.trim()}
+                onClick={() => void courierAction('reconcile')}
+                variant="secondary"
+              >
+                {locale === 'bg' ? 'Потвърди чрез проследяване' : 'Verify and reconcile'}
+              </Button>
+            </div>
+          ) : null}
+          {courierBooking.status === 'booked' ? (
+            <Button disabled={busy} onClick={() => void courierAction('track')} variant="secondary">
+              {busy
+                ? locale === 'bg'
+                  ? 'Обновяване…'
+                  : 'Refreshing…'
+                : locale === 'bg'
+                  ? 'Обнови проследяването'
+                  : 'Refresh tracking'}
+            </Button>
+          ) : null}
+          {courierBooking.events.length ? (
+            <div className="logistics-courier-events">
+              {courierBooking.events.map((event) => (
+                <article key={`${event.occurredAt}:${event.status}:${event.description}`}>
+                  <span>{formatDateTime(event.occurredAt)}</span>
+                  <strong>{event.description}</strong>
+                  {event.place ? <small>{event.place}</small> : null}
+                </article>
+              ))}
+            </div>
+          ) : (
+            <p className="logistics-courier-empty">
+              {locale === 'bg'
+                ? 'Все още няма събития за проследяване.'
+                : 'No tracking events yet.'}
+            </p>
+          )}
+        </section>
+      ) : null}
       {delivery.instructions ? (
         <section className="logistics-note-card">
-          <strong>Driver notes</strong>
+          <strong>{locale === 'bg' ? 'Бележки за доставката' : 'Driver notes'}</strong>
           <p>{delivery.instructions}</p>
         </section>
       ) : null}
       {delivery.status === 'delivered' ? (
         <section className="logistics-note-card is-success">
-          <strong>Received by {delivery.recipientName}</strong>
+          <strong>
+            {locale === 'bg'
+              ? `Получена от ${delivery.recipientName}`
+              : `Received by ${delivery.recipientName}`}
+          </strong>
           <p>{delivery.deliveredAt ? formatDateTime(delivery.deliveredAt) : ''}</p>
           {delivery.proofNotes ? <p>{delivery.proofNotes}</p> : null}
         </section>
       ) : null}
       <section className="logistics-timeline">
-        <h3>Activity</h3>
+        <h3>{locale === 'bg' ? 'История' : 'Activity'}</h3>
         {delivery.history.map((entry) => (
           <div key={`${entry.changedAt}-${entry.nextStatus}`}>
             <span />
@@ -1858,6 +2169,39 @@ function statusLabel(status: string) {
     registered: 'Registered',
   };
   return labels[status] ?? status.replaceAll('_', ' ');
+}
+
+function deliveryMethodLabel(method: LogisticsDeliveryMethod, locale: 'en' | 'bg') {
+  if (method === 'company_transport')
+    return locale === 'bg' ? 'Собствен транспорт' : 'Company transport';
+  return method === 'econt'
+    ? locale === 'bg'
+      ? 'Куриер Econt'
+      : 'Econt courier'
+    : locale === 'bg'
+      ? 'Куриер Speedy'
+      : 'Speedy courier';
+}
+
+function courierBookingStatusLabel(
+  status: NonNullable<LogisticsDelivery['courierBooking']>['status'],
+  locale: 'en' | 'bg',
+) {
+  if (locale === 'bg')
+    return {
+      booked: 'Заявена',
+      booking: 'Обработва се',
+      failed: 'Неуспешна заявка',
+      needs_review: 'Нужна е проверка',
+      pending: 'Очаква заявка',
+    }[status];
+  return {
+    booked: 'Booked',
+    booking: 'Submitting',
+    failed: 'Booking failed',
+    needs_review: 'Needs review',
+    pending: 'Ready to book',
+  }[status];
 }
 
 function returnTransportLabel(value: LogisticsReturn['transportMethod']) {

@@ -1,6 +1,7 @@
 import { Button, InlineAlert, Toast } from '@vista/ui';
 import type {
   CreateCustomerAdvanceRequest,
+  ApplyCustomerAdvanceToPosSaleRequest,
   CustomerAdvancePaymentMethod,
   CustomerOpenReceivable,
   CustomerPaymentAccount,
@@ -15,7 +16,9 @@ import { type FormEvent, type ReactNode, useCallback, useEffect, useMemo, useSta
 import { ApiClientError } from '../api/client';
 import {
   allocateCustomerAdvance,
+  applyCustomerAdvanceToPosSale,
   createCustomerAdvance,
+  getCustomerPaymentAccount,
   getCustomerPaymentAccountReferenceData,
   listCustomerPaymentAccounts,
   updateCustomerPaymentTerms,
@@ -31,6 +34,8 @@ import { FinanceTabs } from './FinanceBankPage';
 import { useRouter } from '../routing/Router';
 import { PosAccountBalances, PosAccountPaymentPanel } from './PosAccountBalances';
 import { PosAccountRefundPanel } from './PosAccountRefundPanel';
+import { FinancePaymentStatusRegister } from './FinancePaymentStatusRegister';
+import { posAccountMessages } from './pos-account.messages';
 
 type Panel =
   | {
@@ -47,13 +52,15 @@ type Panel =
       sale: PosAccountReceivable;
       payment?: PosAccountPayment;
     }
+  | { account: CustomerPaymentAccount; mode: 'pos-advance'; sale: PosAccountReceivable }
   | { account?: CustomerPaymentAccount; customerPartnerId?: string; mode: 'advance' }
   | { account?: CustomerPaymentAccount; customerPartnerId?: string; mode: 'terms' };
 
 const emptyReferences: CustomerPaymentAccountReferenceData = { customers: [] };
 
 export function FinanceCustomerAccountsPage() {
-  useLocalization();
+  const { locale } = useLocalization();
+  const copy = posAccountMessages(locale);
   const { hasPermission, session } = useAuth();
   const token = session?.sessionToken ?? '';
   const data = useCustomerAccounts(token);
@@ -77,16 +84,6 @@ export function FinanceCustomerAccountsPage() {
     navigate(location.pathname, { replace: true, state: null });
   }, [data.loading, data.accounts, location.state, location.pathname, navigate]);
 
-  if (data.loading) return <AccountsState title="Loading customer accounts" />;
-  if (data.error)
-    return (
-      <AccountsState title="Customer accounts could not be loaded">
-        <Button onClick={data.reload} variant="secondary">
-          Try again
-        </Button>
-      </AccountsState>
-    );
-
   const advanceBalance = sum(data.accounts.map((account) => account.advanceBalance));
   const outstanding = sum(data.accounts.map((account) => account.outstandingBalance));
   const availableCredit = sum(data.accounts.map((account) => account.availableCredit));
@@ -107,12 +104,19 @@ export function FinanceCustomerAccountsPage() {
         </div>
         <div className="customer-accounts-header-actions">
           {canEdit ? (
-            <Button onClick={() => setPanel({ mode: 'terms' })} variant="secondary">
+            <Button
+              disabled={data.loading || data.error}
+              onClick={() => setPanel({ mode: 'terms' })}
+              variant="secondary"
+            >
               Set payment terms
             </Button>
           ) : null}
           {canCreate ? (
-            <Button onClick={() => setPanel({ mode: 'advance' })}>
+            <Button
+              disabled={data.loading || data.error}
+              onClick={() => setPanel({ mode: 'advance' })}
+            >
               <Icon name="plus" size={16} /> Record advance
             </Button>
           ) : null}
@@ -128,13 +132,40 @@ export function FinanceCustomerAccountsPage() {
       ) : null}
 
       <section aria-label="Customer payment summary" className="customer-account-summary">
-        <Metric label="Managed customers" value={String(data.accounts.length)} />
-        <Metric label="Advance available" value={money(advanceBalance)} />
-        <Metric label="On-account balance" value={money(outstanding)} />
-        <Metric label="Credit available" value={money(availableCredit)} />
+        <Metric
+          label="Managed customers"
+          value={data.loading ? '…' : String(data.accounts.length)}
+        />
+        <Metric label="Advance available" value={data.loading ? '…' : money(advanceBalance)} />
+        <Metric label="On-account balance" value={data.loading ? '…' : money(outstanding)} />
+        <Metric label="Credit available" value={data.loading ? '…' : money(availableCredit)} />
       </section>
 
-      {data.accounts.length ? (
+      <FinancePaymentStatusRegister
+        onOpenAccount={(customerPartnerId) => {
+          const account = data.accounts.find(
+            (item) => item.customerPartnerId === customerPartnerId,
+          );
+          if (account) {
+            setPanel({ account, mode: 'preview' });
+            return;
+          }
+          void getCustomerPaymentAccount(token, customerPartnerId)
+            .then((nextAccount) => setPanel({ account: nextAccount, mode: 'preview' }))
+            .catch(() => setNotice('Customer account could not be opened. Refresh and try again.'));
+        }}
+        token={token}
+      />
+
+      {data.loading ? (
+        <AccountsState title="Loading customer accounts" />
+      ) : data.error ? (
+        <AccountsState title="Customer accounts could not be loaded">
+          <Button onClick={data.reload} variant="secondary">
+            Try again
+          </Button>
+        </AccountsState>
+      ) : data.accounts.length ? (
         <section aria-label="Customer payment accounts" className="customer-account-register">
           <div className="customer-account-register-head" aria-hidden="true">
             <span>Customer</span>
@@ -181,6 +212,9 @@ export function FinanceCustomerAccountsPage() {
           canEdit={canEdit}
           canApprove={hasPermission('erp.finance', 'approve')}
           onCollect={(sale) => setPanel({ account: panel.account, mode: 'pos-payment', sale })}
+          onAllocatePosAdvance={(sale) =>
+            setPanel({ account: panel.account, mode: 'pos-advance', sale })
+          }
           onReverse={(sale, payment) =>
             setPanel({ account: panel.account, mode: 'pos-payment', sale, payment })
           }
@@ -249,6 +283,18 @@ export function FinanceCustomerAccountsPage() {
             setNotice(notice);
           }}
         />
+      ) : panel?.mode === 'pos-advance' ? (
+        <AllocatePosAdvancePanel
+          account={panel.account}
+          sale={panel.sale}
+          token={token}
+          onBack={() => setPanel({ account: panel.account, mode: 'preview' })}
+          onSaved={(account, number) => {
+            data.replace(account);
+            setPanel({ account, mode: 'preview' });
+            setNotice(`${number}: ${copy.advanceApplied}`);
+          }}
+        />
       ) : panel?.mode === 'terms' ? (
         <TermsPanel
           accounts={data.accounts}
@@ -273,6 +319,7 @@ function AccountPreview({
   canEdit,
   canApprove,
   onCollect,
+  onAllocatePosAdvance,
   onReverse,
   onRefund,
   onAllocate,
@@ -286,6 +333,7 @@ function AccountPreview({
   canEdit: boolean;
   canApprove: boolean;
   onCollect: (sale: PosAccountReceivable) => void;
+  onAllocatePosAdvance: (sale: PosAccountReceivable) => void;
   onReverse: (sale: PosAccountReceivable, payment: PosAccountPayment) => void;
   onRefund: (sale: PosAccountReceivable, credit: PosAccountReturnCredit) => void;
   onAllocate: (receivable: CustomerOpenReceivable) => void;
@@ -322,6 +370,9 @@ function AccountPreview({
           canCollect={canCreate}
           canReverse={canApprove}
           onCollect={onCollect}
+          {...(account.advances.some((advance) => decimalUnits(advance.availableAmount) > 0n)
+            ? { onAllocateAdvance: onAllocatePosAdvance }
+            : {})}
           onReverse={onReverse}
           customerId={account.customerPartnerId}
           onRefund={onRefund}
@@ -476,6 +527,143 @@ function AccountPreview({
           )}
         </section>
       </div>
+    </AccountDrawer>
+  );
+}
+
+function AllocatePosAdvancePanel({
+  account,
+  onBack,
+  onSaved,
+  sale,
+  token,
+}: {
+  account: CustomerPaymentAccount;
+  onBack: () => void;
+  onSaved: (account: CustomerPaymentAccount, advanceNumber: string) => void;
+  sale: PosAccountReceivable;
+  token: string;
+}) {
+  const { locale } = useLocalization();
+  const copy = posAccountMessages(locale);
+  const availableAdvances = account.advances.filter(
+    (item) => decimalUnits(item.availableAmount) > 0n,
+  );
+  const [advanceId, setAdvanceId] = useState(availableAdvances[0]?.id ?? '');
+  const selectedAdvance = availableAdvances.find((item) => item.id === advanceId);
+  const [amount, setAmount] = useState(
+    selectedAdvance ? smallerAmount(selectedAdvance.availableAmount, sale.outstandingTotal) : '',
+  );
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    if (!selectedAdvance) return;
+    const normalized = fixedDecimal(amount);
+    if (!normalized || decimalUnits(normalized) <= 0n) {
+      setError(copy.invalidAdvanceAmount);
+      return;
+    }
+    setBusy(true);
+    setError('');
+    try {
+      const input: ApplyCustomerAdvanceToPosSaleRequest = {
+        amount: normalized,
+        customerAdvanceId: selectedAdvance.id,
+        expectedOutstanding: sale.outstandingTotal,
+      };
+      const result = await applyCustomerAdvanceToPosSale(
+        token,
+        account.customerPartnerId,
+        sale.saleId,
+        crypto.randomUUID(),
+        input,
+      );
+      onSaved(result, selectedAdvance.number);
+    } catch (cause) {
+      setError(
+        cause instanceof ApiClientError
+          ? translatePosAdvanceError(cause, copy)
+          : copy.advanceApplyError,
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <AccountDrawer
+      busy={busy}
+      onBack={onBack}
+      subtitle={`${account.customerName} · ${sale.saleNumber}`}
+      title={copy.applyAdvanceTitle}
+    >
+      <form className="customer-account-form" onSubmit={(event) => void submit(event)}>
+        {error ? <InlineAlert tone="error">{error}</InlineAlert> : null}
+        <section className="customer-account-form-card">
+          <header>
+            <span>1</span>
+            <div>
+              <h3>{copy.chooseAdvance}</h3>
+              <p>{copy.advanceHelp}</p>
+            </div>
+          </header>
+          <Field label={copy.customerAdvance}>
+            <select
+              onChange={(event) => {
+                const next = availableAdvances.find((item) => item.id === event.target.value);
+                setAdvanceId(event.target.value);
+                if (next) setAmount(smallerAmount(next.availableAmount, sale.outstandingTotal));
+              }}
+              required
+              value={advanceId}
+            >
+              {availableAdvances.length === 0 ? (
+                <option disabled value="">
+                  {copy.advanceNotAvailable}
+                </option>
+              ) : null}
+              {availableAdvances.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.number} · {date(item.receivedOn)} · {money(item.availableAmount)}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label={copy.amountToApply}>
+            <input
+              max={
+                selectedAdvance
+                  ? smallerAmount(selectedAdvance.availableAmount, sale.outstandingTotal)
+                  : undefined
+              }
+              min="0.0001"
+              onChange={(event) => setAmount(event.target.value)}
+              required
+              step="0.0001"
+              type="number"
+              value={amount}
+            />
+          </Field>
+          <dl className="customer-account-detail-grid">
+            <div>
+              <dt>{copy.posBalance}</dt>
+              <dd>{money(sale.outstandingTotal)}</dd>
+            </div>
+            <div>
+              <dt>{copy.advanceAvailable}</dt>
+              <dd>{money(selectedAdvance?.availableAmount ?? '0')}</dd>
+            </div>
+          </dl>
+        </section>
+        <div className="finance-drawer-actions">
+          <Button disabled={busy} onClick={onBack} type="button" variant="secondary">
+            {copy.back}
+          </Button>
+          <Button busy={busy} disabled={!selectedAdvance} type="submit">
+            {copy.applyAdvance}
+          </Button>
+        </div>
+      </form>
     </AccountDrawer>
   );
 }
@@ -1125,4 +1313,13 @@ function methodLabel(method: CustomerAdvancePaymentMethod) {
 }
 function errorText(error: unknown, fallback: string) {
   return error instanceof ApiClientError ? error.message : fallback;
+}
+function translatePosAdvanceError(
+  error: ApiClientError,
+  copy: ReturnType<typeof posAccountMessages>,
+) {
+  if (error.code === 'FINANCE_ADVANCE_NOT_AVAILABLE') return copy.advanceNotAvailable;
+  if (error.code === 'FINANCE_ADVANCE_ALLOCATION_EXCEEDS_BALANCE') return copy.advanceChanged;
+  if (error.code === 'POS_ACCOUNT_PAYMENT_EXCEEDS_BALANCE') return copy.exceeded;
+  return copy.advanceApplyError;
 }

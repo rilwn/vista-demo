@@ -13,8 +13,31 @@ describe('workspace help', () => {
       'not full offline selling',
     );
   });
-  it('states the Recovery console cannot protect live data yet', () => {
-    expect(helpTopics('recovery')[0]?.note).toContain('does not create restore points');
+  it('describes the supported Recovery work and the remaining source limits accurately', () => {
+    const topics = helpTopics('recovery');
+    expect(topics.find((topic) => topic.id === 'setup')?.note).toContain('MariaDB');
+    expect(topics.find((topic) => topic.id === 'setup')?.note).toContain('IMAP mailboxes');
+    expect(topics.find((topic) => topic.id === 'setup')?.note).toContain('on-site recovery test');
+    expect(topics.find((topic) => topic.id === 'setup')?.note).not.toContain('not yet available');
+    expect(topics.find((topic) => topic.id === 'backup-workflow')?.note).toContain(
+      'verified database copy',
+    );
+    expect(topics.find((topic) => topic.id === 'dr-tests')?.steps[2]).toContain(
+      'signed protocol PDF',
+    );
+  });
+  it('provides a complete Bulgarian recovery-test guide', () => {
+    const setup = helpTopics('recovery', [], 'bg', 'overview').find((item) => item.id === 'setup');
+    expect(setup?.note).toContain('MariaDB');
+    expect(setup?.note).toContain('IMAP');
+    expect(setup?.note).toContain('тест за възстановяване на място');
+
+    const topic = helpTopics('recovery', [], 'bg', 'dr-tests').find(
+      (item) => item.id === 'dr-tests',
+    );
+    expect(topic?.title).toContain('тест');
+    expect(topic?.steps).toHaveLength(3);
+    expect(topic?.steps[2]).toContain('PDF');
   });
   it('has unique topics and complete steps in each app', () => {
     for (const app of ['operations', 'pos', 'recovery'] as const) {
@@ -59,6 +82,6 @@ describe('workspace help', () => {
     expect(pos[0]?.title).toBe('Преглед и експорт на POS отчети');
 
     const recovery = helpTopics('recovery', [], 'en', 'jobs');
-    expect(recovery[0]?.id).toBe('recovery-area');
+    expect(recovery[0]?.id).toBe('backup-workflow');
   });
 });

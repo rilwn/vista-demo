@@ -3331,22 +3331,54 @@ function ServiceWorkEvidence({
           ) : null}
           {workOrder.customerChargeRecorded &&
           Number(workOrder.totalCustomerChargeEur) > 0 &&
-          ((workOrder.financialDocumentId && canViewFinance) || canCreateFinance) ? (
+          (workOrder.financialDocumentId ? canViewFinance : canCreateFinance) ? (
             <div className="service-finance-handoff">
               <div>
-                <span>{workOrder.financialDocumentId ? 'Finance draft' : 'Ready for Finance'}</span>
+                <span>
+                  {workOrder.financialDocumentStatus === 'issued'
+                    ? locale === 'bg'
+                      ? 'Фактурата е издадена'
+                      : 'Invoice issued'
+                    : workOrder.financialDocumentId
+                      ? locale === 'bg'
+                        ? 'Чернова във Финанси'
+                        : 'Finance draft'
+                      : locale === 'bg'
+                        ? 'Готово за Финанси'
+                        : 'Ready for Finance'}
+                </span>
                 <strong>
                   {workOrder.financialDocumentNumber ??
-                    'Prepare an invoice draft from these charges'}
+                    (locale === 'bg'
+                      ? 'Подгответе чернова на фактура от тези начисления'
+                      : 'Prepare an invoice draft from these charges')}
                 </strong>
                 <small>
-                  {workOrder.financialDocumentId
-                    ? 'The work order and Finance draft remain linked.'
-                    : 'Finance will review VAT before saving the draft.'}
+                  {workOrder.financialDocumentStatus === 'issued'
+                    ? locale === 'bg'
+                      ? 'Начислението е свързано с издадената фактура. Отворете я във Финанси за плащанията.'
+                      : 'The charge remains linked to its issued invoice. Open it in Finance to follow payment.'
+                    : workOrder.financialDocumentId
+                      ? locale === 'bg'
+                        ? 'Работната поръчка и черновата във Финанси остават свързани.'
+                        : 'The work order and Finance draft remain linked.'
+                      : locale === 'bg'
+                        ? 'Във Финанси прегледайте ДДС преди да запазите черновата.'
+                        : 'Finance will review VAT before saving the draft.'}
                 </small>
               </div>
               <Button onClick={onOpenFinance} variant="secondary">
-                {workOrder.financialDocumentId ? 'Open Finance draft' : 'Prepare invoice draft'}
+                {workOrder.financialDocumentStatus === 'issued'
+                  ? locale === 'bg'
+                    ? 'Отвори фактурата'
+                    : 'Open invoice'
+                  : workOrder.financialDocumentId
+                    ? locale === 'bg'
+                      ? 'Отвори черновата'
+                      : 'Open Finance draft'
+                    : locale === 'bg'
+                      ? 'Подготви чернова на фактура'
+                      : 'Prepare invoice draft'}
                 <Icon name="arrow" size={15} />
               </Button>
             </div>

@@ -1,10 +1,25 @@
 import { useBrowserSession } from '@vista/auth/browser-session';
-import type { AuthenticationContextResponse, LoginRequest, LoginResponse } from '@vista/contracts';
+import type {
+  AuthenticationContextResponse,
+  DirectorySignInOptions,
+  LoginRequest,
+  LoginResponse,
+} from '@vista/contracts';
 import { AuthenticationForm, Button, SearchableSelects, VistaMark } from '@vista/ui';
+import { useCallback, useEffect, useState } from 'react';
 
-import { ApiClientError, authenticate, getCurrentAccount, revokeSession } from './api/auth';
+import {
+  ApiClientError,
+  authenticate,
+  exchangeDirectoryLogin,
+  getCurrentAccount,
+  getDirectorySignInOptions,
+  revokeSession,
+  startDirectoryLogin,
+} from './api/auth';
 import { PosTerminal } from './PosTerminal';
 import { LanguageSwitcher } from './i18n/LanguageSwitcher';
+import { useLocalization } from './i18n/LocalizationProvider';
 
 export function App() {
   return (
@@ -16,6 +31,8 @@ export function App() {
 }
 
 function Application() {
+  const { locale } = useLocalization();
+  const [directoryOptions, setDirectoryOptions] = useState<DirectorySignInOptions>();
   const authentication = useBrowserSession<
     LoginRequest,
     LoginResponse,
@@ -24,9 +41,26 @@ function Application() {
     authenticate,
     getCurrentAccount,
     isContextValid: isAuthenticationContext,
+    allowOfflineRestore: isNetworkUnavailable,
     revokeSession,
     storageKey: 'vista.pos.session.v1',
   });
+  useEffect(() => {
+    void getDirectorySignInOptions()
+      .then(setDirectoryOptions)
+      .catch(() => undefined);
+  }, []);
+  const beginDirectoryLogin = useCallback(async () => {
+    const result = await startDirectoryLogin({ app: 'pos' });
+    globalThis.location.assign(result.authorizationUrl);
+  }, []);
+  const finishDirectoryLogin = useCallback(
+    async (ticket: string, totpCode?: string) => {
+      const response = await exchangeDirectoryLogin({ ticket, ...(totpCode ? { totpCode } : {}) });
+      await authentication.accept(response);
+    },
+    [authentication.accept],
+  );
   const session = authentication.session;
 
   if (authentication.status === 'checking')
@@ -37,11 +71,23 @@ function Application() {
         <LanguageSwitcher floating />
         <AuthenticationForm
           applicationName="Vista POS"
-          eyebrow="Cashier terminal"
-          errorMessage={signInError}
+          eyebrow={locale === 'bg' ? 'Касов терминал' : 'Cashier terminal'}
+          errorMessage={(error) => signInError(error, locale)}
+          directoryOptions={directoryOptions}
+          onStartDirectoryLogin={beginDirectoryLogin}
+          onExchangeDirectoryLogin={finishDirectoryLogin}
+          locale={locale}
           onAuthenticate={authentication.login}
-          subtitle="Use your assigned cashier account."
-          supportText="Need help? Contact your Vista Service administrator."
+          subtitle={
+            locale === 'bg'
+              ? 'Влезте с назначения си касиерски профил.'
+              : 'Use your assigned cashier account.'
+          }
+          supportText={
+            locale === 'bg'
+              ? 'Нуждаете се от помощ? Свържете се с администратор на Vista Service.'
+              : 'Need help? Contact your Vista Service administrator.'
+          }
           variant="pos"
         />
       </>
@@ -123,13 +169,40 @@ function isAuthenticationContext(value: unknown): value is AuthenticationContext
   return typeof context['accountId'] === 'string' && Array.isArray(context['permissions']);
 }
 
-function signInError(error: unknown): string {
-  if (!(error instanceof ApiClientError))
-    return 'The service is unavailable. Check your connection and try again.';
-  if (error.code === 'TWO_FACTOR_ENROLLMENT_REQUIRED')
-    return 'This administrative account must enroll an authenticator before it can sign in.';
-  if (error.code === 'PASSWORD_EXPIRED')
-    return 'This password has expired. Contact a Vista Service administrator.';
-  if (error.code === 'RATE_LIMITED') return 'Too many attempts. Wait a moment and try again.';
-  return 'The email, password, or authentication code is incorrect.';
+function isNetworkUnavailable(error: unknown): boolean {
+  return error instanceof ApiClientError && error.status === 0;
+}
+
+function signInError(error: unknown, locale: 'bg' | 'en' = 'en'): string {
+  const messages =
+    locale === 'bg'
+      ? {
+          unavailable: 'Услугата не е достъпна. Проверете връзката си и опитайте отново.',
+          enrollment:
+            'Администраторският профил трябва първо да настрои приложение за удостоверяване.',
+          expired: 'Паролата е изтекла. Свържете се с администратор на Vista Service.',
+          rate: 'Твърде много опити. Изчакайте и опитайте отново.',
+          directory: 'Служебният вход не е достъпен. Опитайте отново след малко.',
+          failed:
+            'Служебният вход не може да бъде потвърден. Опитайте отново или се свържете с администратор.',
+          credentials: 'Имейлът, паролата или кодът за удостоверяване са неправилни.',
+        }
+      : {
+          unavailable: 'The service is unavailable. Check your connection and try again.',
+          enrollment:
+            'This administrative account must enroll an authenticator before it can sign in.',
+          expired: 'This password has expired. Contact a Vista Service administrator.',
+          rate: 'Too many attempts. Wait a moment and try again.',
+          directory: 'Organization sign-in is unavailable. Try again shortly.',
+          failed:
+            'Organization sign-in could not be verified. Start again or contact your administrator.',
+          credentials: 'The email, password, or authentication code is incorrect.',
+        };
+  if (!(error instanceof ApiClientError)) return messages.unavailable;
+  if (error.code === 'TWO_FACTOR_ENROLLMENT_REQUIRED') return messages.enrollment;
+  if (error.code === 'PASSWORD_EXPIRED') return messages.expired;
+  if (error.code === 'RATE_LIMITED') return messages.rate;
+  if (error.code === 'DIRECTORY_UNAVAILABLE') return messages.directory;
+  if (error.code === 'DIRECTORY_SIGN_IN_FAILED') return messages.failed;
+  return messages.credentials;
 }

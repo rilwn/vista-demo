@@ -429,6 +429,10 @@ export class FinanceReportsService {
           currency_code: string;
           invoice_date: string;
           invoice_number: string;
+          exchange_rate: string;
+          eur_gross_total: string;
+          eur_net_total: string;
+          eur_vat_total: string;
           net_total: string;
           partner_name: string;
           payment_date: string;
@@ -449,6 +453,13 @@ export class FinanceReportsService {
                   (CASE WHEN document.document_type = 'credit_note' THEN -1 ELSE 1 END
                     * document.gross_total)::text AS total,
                   document.currency_code,
+                  document.exchange_rate::text AS exchange_rate,
+                  (CASE WHEN document.document_type = 'credit_note' THEN -1 ELSE 1 END
+                    * document.eur_net_total)::text AS eur_net_total,
+                  (CASE WHEN document.document_type = 'credit_note' THEN -1 ELSE 1 END
+                    * document.eur_vat_total)::text AS eur_vat_total,
+                  (CASE WHEN document.document_type = 'credit_note' THEN -1 ELSE 1 END
+                    * document.eur_gross_total)::text AS eur_gross_total,
                   coalesce(rates.tax_rates, '') AS tax_rates,
                   coalesce(payment.payment_date, '') AS payment_date
            FROM finance.financial_documents document
@@ -498,6 +509,10 @@ export class FinanceReportsService {
             accountCode: row.account_code,
             netTotal: row.net_total,
             vatTotal: row.vat_total,
+            exchangeRate: row.exchange_rate,
+            eurNetTotal: row.eur_net_total,
+            eurVatTotal: row.eur_vat_total,
+            eurTotal: row.eur_gross_total,
             vatRates: row.tax_rates,
             total: row.total,
             currencyCode: row.currency_code,
@@ -510,6 +525,10 @@ export class FinanceReportsService {
       const result = await this.database.getPool().query<{
         account_code: string;
         currency_code: string;
+        exchange_rate: string | null;
+        eur_gross_total: string | null;
+        eur_net_total: string | null;
+        eur_vat_total: string | null;
         invoice_date: string;
         invoice_number: string;
         net_total: string;
@@ -529,6 +548,17 @@ export class FinanceReportsService {
                 coalesce(sum(line.vat_amount), 0)::text AS vat_total,
                 coalesce(sum(line.gross_total), 0)::text AS total,
                 invoice.currency_code,
+                invoice.exchange_rate::text AS exchange_rate,
+                CASE WHEN invoice.exchange_rate IS NOT NULL
+                     THEN round(coalesce(sum(line.line_total), 0) * invoice.exchange_rate, 4)::text
+                END AS eur_net_total,
+                CASE WHEN invoice.exchange_rate IS NOT NULL
+                       AND bool_and(line.vat_treatment IS NOT NULL)
+                     THEN round(coalesce(sum(line.vat_amount), 0) * invoice.exchange_rate, 4)::text
+                END AS eur_vat_total,
+                CASE WHEN invoice.exchange_rate IS NOT NULL
+                     THEN round(coalesce(sum(line.gross_total), 0) * invoice.exchange_rate, 4)::text
+                END AS eur_gross_total,
                 coalesce(rates.tax_rates, '') AS tax_rates,
                 coalesce(payment.payment_date, '') AS payment_date
          FROM procurement.supplier_invoices invoice
@@ -566,6 +596,10 @@ export class FinanceReportsService {
           invoiceDate: row.invoice_date,
           partnerName: row.partner_name,
           accountCode: row.account_code,
+          exchangeRate: row.exchange_rate ?? '',
+          eurNetTotal: row.eur_net_total ?? '',
+          eurVatTotal: row.eur_vat_total ?? '',
+          eurTotal: row.eur_gross_total ?? '',
           netTotal: row.net_total,
           vatTotal: row.vat_total,
           vatRates: row.tax_rates,
@@ -653,6 +687,10 @@ const incomeOutcomeExportColumns: FinanceReportExportColumn[] = [
   { key: 'vatRates', label: 'VAT rate(s)', type: 'text' },
   { key: 'total', label: 'Total amount', type: 'money' },
   { key: 'currencyCode', label: 'Currency', type: 'text' },
+  { key: 'exchangeRate', label: 'EUR rate', type: 'number' },
+  { key: 'eurNetTotal', label: 'Net EUR', type: 'money' },
+  { key: 'eurVatTotal', label: 'VAT EUR', type: 'money' },
+  { key: 'eurTotal', label: 'Total EUR', type: 'money' },
   { key: 'paymentDate', label: 'Payment date', type: 'date' },
 ];
 
@@ -767,17 +805,20 @@ function journalSource(kind: FinanceJournalReport['kind']): string {
                  invoice.invoice_date::text AS document_date,
                  invoice.invoice_date::text AS tax_event_date,
                  invoice.currency_code,
-                 CASE WHEN invoice.currency_code = 'EUR' THEN '1.00000000' END AS exchange_rate,
-                 CASE WHEN invoice.currency_code = 'EUR'
+                 invoice.exchange_rate::text AS exchange_rate,
+                 CASE WHEN invoice.exchange_rate IS NOT NULL
                         AND bool_and(line.vat_treatment IS NOT NULL)
-                      THEN coalesce(sum(line.line_total), 0) ELSE 0 END AS net_eur_total,
-                 CASE WHEN invoice.currency_code = 'EUR'
+                      THEN round(coalesce(sum(line.line_total), 0) * invoice.exchange_rate, 4)
+                      ELSE 0 END AS net_eur_total,
+                 CASE WHEN invoice.exchange_rate IS NOT NULL
                         AND bool_and(line.vat_treatment IS NOT NULL)
-                      THEN coalesce(sum(line.vat_amount), 0) ELSE 0 END AS vat_eur_total,
-                 CASE WHEN invoice.currency_code = 'EUR'
+                      THEN round(coalesce(sum(line.vat_amount), 0) * invoice.exchange_rate, 4)
+                      ELSE 0 END AS vat_eur_total,
+                 CASE WHEN invoice.exchange_rate IS NOT NULL
                         AND bool_and(line.vat_treatment IS NOT NULL)
-                      THEN coalesce(sum(line.gross_total), 0) ELSE 0 END AS gross_eur_total,
-                 (invoice.currency_code = 'EUR'
+                      THEN round(coalesce(sum(line.gross_total), 0) * invoice.exchange_rate, 4)
+                      ELSE 0 END AS gross_eur_total,
+                 (invoice.exchange_rate IS NOT NULL
                    AND bool_and(line.vat_treatment IS NOT NULL)) AS tax_breakdown_complete
           FROM procurement.supplier_invoices invoice
           JOIN master_data.partners supplier ON supplier.id = invoice.supplier_partner_id
@@ -789,7 +830,7 @@ function journalSource(kind: FinanceJournalReport['kind']): string {
 function vatReviewSource(): string {
   return `WITH purchase_completeness AS (
             SELECT invoice.id,
-                   invoice.currency_code = 'EUR'
+                   invoice.exchange_rate IS NOT NULL
                      AND bool_and(line.vat_treatment IS NOT NULL) AS complete
             FROM procurement.supplier_invoices invoice
             JOIN procurement.supplier_invoice_lines line ON line.supplier_invoice_id = invoice.id
@@ -818,8 +859,8 @@ function vatReviewSource(): string {
           SELECT 'input'::varchar AS direction,
                  line.vat_treatment, line.vat_rate::text,
                  count(DISTINCT invoice.id)::text AS document_count,
-                 round(sum(line.line_total), 4)::text AS net_eur_total,
-                 round(sum(line.vat_amount), 4)::text AS vat_eur_total
+                 round(sum(line.line_total * invoice.exchange_rate), 4)::text AS net_eur_total,
+                 round(sum(line.vat_amount * invoice.exchange_rate), 4)::text AS vat_eur_total
           FROM procurement.supplier_invoice_lines line
           JOIN procurement.supplier_invoices invoice ON invoice.id = line.supplier_invoice_id
           JOIN purchase_completeness completeness
@@ -839,7 +880,7 @@ function incompletePurchaseTaxSource(): string {
             JOIN procurement.supplier_invoice_lines line ON line.supplier_invoice_id = invoice.id
             WHERE invoice.invoice_date BETWEEN $1 AND $2
             GROUP BY invoice.id, invoice.supplier_invoice_number
-            HAVING invoice.currency_code <> 'EUR'
+            HAVING invoice.exchange_rate IS NULL
                OR NOT bool_and(line.vat_treatment IS NOT NULL)
           ) incomplete`;
 }

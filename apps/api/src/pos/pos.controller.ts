@@ -39,8 +39,19 @@ import {
   CreatePosDiscountAuthorizationDto,
   CreatePosReturnDto,
   CreatePosSaleDto,
+  CreatePosFiscalDailyReportDto,
+  PreparePosFiscalReturnDto,
+  PosFiscalReturnPreparationDto,
+  PosFiscalReturnPreparationQueryDto,
+  ConfirmPosFiscalReturnDto,
+  ResolvePosFiscalReturnDto,
+  ConfirmPosFiscalDailyReportDto,
+  FailPosFiscalDailyReportDto,
   ClosePosShiftDto,
+  ConfirmPosFiscalSaleCancellationDto,
+  ConfirmPosFiscalSaleReceiptDto,
   EnrolPosLoyaltyDto,
+  MarkPosFiscalSaleOutcomeUnknownDto,
   OpenPosShiftDto,
   PosCatalogPageDto,
   PosCatalogQueryDto,
@@ -48,6 +59,12 @@ import {
   PosCustomerPaymentOptionsDto,
   PosCustomerQueryDto,
   PosDiscountAuthorizationDto,
+  PosDatecsUnpLeaseDto,
+  PosOfflineSyncEventResponseDto,
+  PosFiscalSalePreparationDto,
+  PosFiscalSalePreparationQueryDto,
+  PosFiscalDailyReportDto,
+  PosFiscalDailyReportActiveResponseDto,
   PosLoyaltyAccountDto,
   PosLoyaltyLedgerDto,
   PosBasketPricingDto,
@@ -62,6 +79,9 @@ import {
   PosShiftDto,
   PosTerminalContextDto,
   PricePosBasketDto,
+  PreparePosFiscalSaleDto,
+  ReservePosDatecsUnpLeaseDto,
+  ReportPosOfflineSyncEventDto,
   UpdatePosQuickAccessDto,
 } from './pos.dto.js';
 import { PosService } from './pos.service.js';
@@ -234,6 +254,369 @@ export class PosController {
     return this.pos.loyaltyLedger(customerPartnerId);
   }
 
+  @Post('fiscal-sales/preparations')
+  @HttpCode(HttpStatus.CREATED)
+  @RateLimitPolicy('sensitive')
+  @RequirePermissions({ action: 'create', module: 'pos' })
+  @ApiBody({ type: PreparePosFiscalSaleDto })
+  @ApiCreatedResponse({ type: PosFiscalSalePreparationDto })
+  @ApiHeader({ name: 'Idempotency-Key', required: true })
+  prepareFiscalSale(
+    @Body() input: PreparePosFiscalSaleDto,
+    @Headers('idempotency-key') key: string | undefined,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<PosFiscalSalePreparationDto> {
+    return this.pos.prepareFiscalSale(input, key, request.authentication, metadata(request));
+  }
+
+  @Post('fiscal-sales/unp-leases')
+  @HttpCode(HttpStatus.CREATED)
+  @RateLimitPolicy('sensitive')
+  @RequirePermissions({ action: 'create', module: 'pos' })
+  @ApiBody({ type: ReservePosDatecsUnpLeaseDto })
+  @ApiCreatedResponse({ type: PosDatecsUnpLeaseDto })
+  @ApiHeader({ name: 'Idempotency-Key', required: true })
+  reserveDatecsUnpLease(
+    @Body() input: ReservePosDatecsUnpLeaseDto,
+    @Headers('idempotency-key') key: string | undefined,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<PosDatecsUnpLeaseDto> {
+    return this.pos.reserveDatecsUnpLease(input, key, request.authentication, metadata(request));
+  }
+
+  @Post('offline-sync-events')
+  @HttpCode(HttpStatus.CREATED)
+  @RateLimitPolicy('sensitive')
+  @RequirePermissions({ action: 'create', module: 'pos' })
+  @ApiBody({ type: ReportPosOfflineSyncEventDto })
+  @ApiCreatedResponse({ type: PosOfflineSyncEventResponseDto })
+  reportOfflineSyncEvent(
+    @Body() input: ReportPosOfflineSyncEventDto,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<PosOfflineSyncEventResponseDto> {
+    return this.pos.reportOfflineSyncEvent(input, request.authentication, metadata(request));
+  }
+
+  @Post('fiscal-returns/preparations')
+  @HttpCode(HttpStatus.CREATED)
+  @RateLimitPolicy('sensitive')
+  @RequirePermissions({ action: 'create', module: 'pos' })
+  @ApiBody({ type: PreparePosFiscalReturnDto })
+  @ApiCreatedResponse({ type: PosFiscalReturnPreparationDto })
+  @ApiHeader({ name: 'Idempotency-Key', required: true })
+  prepareFiscalReturn(
+    @Body() input: PreparePosFiscalReturnDto,
+    @Headers('idempotency-key') key: string | undefined,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<PosFiscalReturnPreparationDto> {
+    return this.pos.prepareFiscalReturn(input, key, request.authentication, metadata(request));
+  }
+
+  @Get('fiscal-returns/preparations/active')
+  @RateLimitPolicy('read')
+  @RequirePermissions({ action: 'view', module: 'pos' })
+  @ApiQuery({ format: 'uuid', name: 'shiftId', required: true, type: String })
+  @ApiOkResponse({ nullable: true, type: PosFiscalReturnPreparationDto })
+  activeFiscalReturnPreparation(
+    @Query() query: PosFiscalReturnPreparationQueryDto,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<PosFiscalReturnPreparationDto | null> {
+    return this.pos.activeFiscalReturnPreparation(query.shiftId, request.authentication);
+  }
+
+  @Post('fiscal-returns/preparations/:id/printing')
+  @HttpCode(HttpStatus.OK)
+  @RateLimitPolicy('sensitive')
+  @RequirePermissions({ action: 'create', module: 'pos' })
+  @ApiOkResponse({ type: PosFiscalReturnPreparationDto })
+  @ApiHeader({ name: 'Idempotency-Key', required: true })
+  @ApiParam({ format: 'uuid', name: 'id', type: String })
+  markFiscalReturnPrinting(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Headers('idempotency-key') key: string | undefined,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<PosFiscalReturnPreparationDto> {
+    return this.pos.markFiscalReturnPrinting(id, key, request.authentication, metadata(request));
+  }
+
+  @Post('fiscal-returns/preparations/:id/outcome-unknown')
+  @HttpCode(HttpStatus.OK)
+  @RateLimitPolicy('sensitive')
+  @RequirePermissions({ action: 'create', module: 'pos' })
+  @ApiOkResponse({ type: PosFiscalReturnPreparationDto })
+  @ApiHeader({ name: 'Idempotency-Key', required: true })
+  @ApiParam({ format: 'uuid', name: 'id', type: String })
+  markFiscalReturnOutcomeUnknown(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Headers('idempotency-key') key: string | undefined,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<PosFiscalReturnPreparationDto> {
+    return this.pos.markFiscalReturnOutcomeUnknown(
+      id,
+      key,
+      request.authentication,
+      metadata(request),
+    );
+  }
+
+  @Post('fiscal-returns/preparations/:id/resolve')
+  @HttpCode(HttpStatus.OK)
+  @RateLimitPolicy('sensitive')
+  @RequirePermissions({ action: 'create', module: 'pos' })
+  @ApiBody({ type: ResolvePosFiscalReturnDto })
+  @ApiOkResponse({ type: PosFiscalReturnPreparationDto })
+  @ApiHeader({ name: 'Idempotency-Key', required: true })
+  @ApiParam({ format: 'uuid', name: 'id', type: String })
+  resolveFiscalReturn(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() input: ResolvePosFiscalReturnDto,
+    @Headers('idempotency-key') key: string | undefined,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<PosFiscalReturnPreparationDto> {
+    return this.pos.resolveFiscalReturn(id, input, key, request.authentication, metadata(request));
+  }
+
+  @Post('fiscal-returns/preparations/:id/confirm')
+  @HttpCode(HttpStatus.OK)
+  @RateLimitPolicy('sensitive')
+  @RequirePermissions({ action: 'create', module: 'pos' })
+  @ApiBody({ type: ConfirmPosFiscalReturnDto })
+  @ApiOkResponse({ type: PosReturnDto })
+  @ApiHeader({ name: 'Idempotency-Key', required: true })
+  @ApiParam({ format: 'uuid', name: 'id', type: String })
+  confirmFiscalReturn(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() input: ConfirmPosFiscalReturnDto,
+    @Headers('idempotency-key') key: string | undefined,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<PosReturnDto> {
+    return this.pos.confirmFiscalReturn(id, input, key, request.authentication, metadata(request));
+  }
+
+  @Post('fiscal-daily-reports')
+  @HttpCode(HttpStatus.CREATED)
+  @RateLimitPolicy('sensitive')
+  @RequirePermissions({ action: 'create', module: 'pos' })
+  @ApiBody({ type: CreatePosFiscalDailyReportDto })
+  @ApiCreatedResponse({ type: PosFiscalDailyReportDto })
+  @ApiHeader({ name: 'Idempotency-Key', required: true })
+  prepareFiscalDailyReport(
+    @Body() input: CreatePosFiscalDailyReportDto,
+    @Headers('idempotency-key') key: string | undefined,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<PosFiscalDailyReportDto> {
+    return this.pos.prepareFiscalDailyReport(input, key, request.authentication, metadata(request));
+  }
+
+  @Get('fiscal-daily-reports/active')
+  @RateLimitPolicy('read')
+  @RequirePermissions({ action: 'view', module: 'pos' })
+  @ApiQuery({ format: 'uuid', name: 'shiftId', required: true, type: String })
+  @ApiOkResponse({ type: PosFiscalDailyReportActiveResponseDto })
+  activeFiscalDailyReport(
+    @Query('shiftId', ParseUUIDPipe) shiftId: string,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<PosFiscalDailyReportActiveResponseDto> {
+    return this.pos
+      .activeFiscalDailyReport(shiftId, request.authentication)
+      .then((report) => ({ report }));
+  }
+
+  @Post('fiscal-daily-reports/:id/printing')
+  @HttpCode(HttpStatus.OK)
+  @RateLimitPolicy('sensitive')
+  @RequirePermissions({ action: 'create', module: 'pos' })
+  @ApiHeader({ name: 'Idempotency-Key', required: true })
+  @ApiParam({ format: 'uuid', name: 'id', type: String })
+  @ApiOkResponse({ type: PosFiscalDailyReportDto })
+  markFiscalDailyReportPrinting(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Headers('idempotency-key') key: string | undefined,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<PosFiscalDailyReportDto> {
+    return this.pos.markFiscalDailyReportPrinting(
+      id,
+      key,
+      request.authentication,
+      metadata(request),
+    );
+  }
+
+  @Post('fiscal-daily-reports/:id/outcome-unknown')
+  @HttpCode(HttpStatus.OK)
+  @RateLimitPolicy('sensitive')
+  @RequirePermissions({ action: 'create', module: 'pos' })
+  @ApiHeader({ name: 'Idempotency-Key', required: true })
+  @ApiParam({ format: 'uuid', name: 'id', type: String })
+  @ApiOkResponse({ type: PosFiscalDailyReportDto })
+  markFiscalDailyReportOutcomeUnknown(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Headers('idempotency-key') key: string | undefined,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<PosFiscalDailyReportDto> {
+    return this.pos.markFiscalDailyReportOutcomeUnknown(
+      id,
+      key,
+      request.authentication,
+      metadata(request),
+    );
+  }
+
+  @Post('fiscal-daily-reports/:id/confirm')
+  @HttpCode(HttpStatus.OK)
+  @RateLimitPolicy('sensitive')
+  @RequirePermissions({ action: 'create', module: 'pos' })
+  @ApiBody({ type: ConfirmPosFiscalDailyReportDto })
+  @ApiHeader({ name: 'Idempotency-Key', required: true })
+  @ApiParam({ format: 'uuid', name: 'id', type: String })
+  @ApiOkResponse({ type: PosFiscalDailyReportDto })
+  confirmFiscalDailyReport(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() input: ConfirmPosFiscalDailyReportDto,
+    @Headers('idempotency-key') key: string | undefined,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<PosFiscalDailyReportDto> {
+    return this.pos.confirmFiscalDailyReport(
+      id,
+      input,
+      key,
+      request.authentication,
+      metadata(request),
+    );
+  }
+
+  @Post('fiscal-daily-reports/:id/reject')
+  @HttpCode(HttpStatus.OK)
+  @RateLimitPolicy('sensitive')
+  @RequirePermissions({ action: 'create', module: 'pos' })
+  @ApiBody({ type: FailPosFiscalDailyReportDto })
+  @ApiHeader({ name: 'Idempotency-Key', required: true })
+  @ApiParam({ format: 'uuid', name: 'id', type: String })
+  @ApiOkResponse({ type: PosFiscalDailyReportDto })
+  rejectFiscalDailyReport(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() input: FailPosFiscalDailyReportDto,
+    @Headers('idempotency-key') key: string | undefined,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<PosFiscalDailyReportDto> {
+    return this.pos.rejectFiscalDailyReport(
+      id,
+      input,
+      key,
+      request.authentication,
+      metadata(request),
+    );
+  }
+
+  @Get('fiscal-sales/preparations/active')
+  @RateLimitPolicy('read')
+  @RequirePermissions({ action: 'view', module: 'pos' })
+  @ApiOkResponse({ nullable: true, type: PosFiscalSalePreparationDto })
+  @ApiQuery({ format: 'uuid', name: 'shiftId', required: true, type: String })
+  activeFiscalSalePreparation(
+    @Query() query: PosFiscalSalePreparationQueryDto,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<PosFiscalSalePreparationDto | null> {
+    return this.pos.activeFiscalSalePreparation(query.shiftId, request.authentication);
+  }
+
+  @Post('fiscal-sales/preparations/:id/printing')
+  @HttpCode(HttpStatus.OK)
+  @RateLimitPolicy('sensitive')
+  @RequirePermissions({ action: 'create', module: 'pos' })
+  @ApiOkResponse({ type: PosFiscalSalePreparationDto })
+  @ApiHeader({ name: 'Idempotency-Key', required: true })
+  @ApiParam({ format: 'uuid', name: 'id', type: String })
+  markFiscalSalePrinting(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Headers('idempotency-key') key: string | undefined,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<PosFiscalSalePreparationDto> {
+    return this.pos.markFiscalSalePrinting(id, key, request.authentication, metadata(request));
+  }
+
+  @Post('fiscal-sales/preparations/:id/outcome-unknown')
+  @HttpCode(HttpStatus.OK)
+  @RateLimitPolicy('sensitive')
+  @RequirePermissions({ action: 'create', module: 'pos' })
+  @ApiBody({ type: MarkPosFiscalSaleOutcomeUnknownDto })
+  @ApiOkResponse({ type: PosFiscalSalePreparationDto })
+  @ApiHeader({ name: 'Idempotency-Key', required: true })
+  @ApiParam({ format: 'uuid', name: 'id', type: String })
+  markFiscalSaleOutcomeUnknown(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() input: MarkPosFiscalSaleOutcomeUnknownDto,
+    @Headers('idempotency-key') key: string | undefined,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<PosFiscalSalePreparationDto> {
+    return this.pos.markFiscalSaleOutcomeUnknown(
+      id,
+      input,
+      key,
+      request.authentication,
+      metadata(request),
+    );
+  }
+
+  @Post('fiscal-sales/preparations/:id/finalize')
+  @HttpCode(HttpStatus.OK)
+  @RateLimitPolicy('sensitive')
+  @RequirePermissions({ action: 'create', module: 'pos' })
+  @ApiOkResponse({ type: PosSaleDto })
+  @ApiParam({ format: 'uuid', name: 'id', type: String })
+  finalizeConfirmedFiscalSale(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<PosSaleDto> {
+    return this.pos.finalizeConfirmedFiscalSale(id, request.authentication, metadata(request));
+  }
+
+  @Post('fiscal-sales/preparations/:id/cancel')
+  @HttpCode(HttpStatus.OK)
+  @RateLimitPolicy('sensitive')
+  @RequirePermissions({ action: 'create', module: 'pos' })
+  @ApiBody({ type: ConfirmPosFiscalSaleCancellationDto })
+  @ApiOkResponse({ type: PosFiscalSalePreparationDto })
+  @ApiHeader({ name: 'Idempotency-Key', required: true })
+  @ApiParam({ format: 'uuid', name: 'id', type: String })
+  cancelFiscalSalePreparation(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() input: ConfirmPosFiscalSaleCancellationDto,
+    @Headers('idempotency-key') key: string | undefined,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<PosFiscalSalePreparationDto> {
+    return this.pos.cancelFiscalSalePreparation(
+      id,
+      input,
+      key,
+      request.authentication,
+      metadata(request),
+    );
+  }
+
+  @Post('fiscal-sales/preparations/:id/receipt')
+  @HttpCode(HttpStatus.OK)
+  @RateLimitPolicy('sensitive')
+  @RequirePermissions({ action: 'create', module: 'pos' })
+  @ApiBody({ type: ConfirmPosFiscalSaleReceiptDto })
+  @ApiOkResponse({ type: PosSaleDto })
+  @ApiHeader({ name: 'Idempotency-Key', required: true })
+  @ApiParam({ format: 'uuid', name: 'id', type: String })
+  confirmFiscalSaleReceipt(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() input: ConfirmPosFiscalSaleReceiptDto,
+    @Headers('idempotency-key') key: string | undefined,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<PosSaleDto> {
+    return this.pos.confirmFiscalSaleReceipt(
+      id,
+      input,
+      key,
+      request.authentication,
+      metadata(request),
+    );
+  }
+
   @Post('sales')
   @HttpCode(HttpStatus.CREATED)
   @RequirePermissions({ action: 'create', module: 'pos' })
@@ -271,6 +654,18 @@ export class PosController {
     @Req() request: AuthenticatedRequest,
   ): Promise<PosSaleDto> {
     return this.pos.saleByTransaction(transactionId, request.authentication);
+  }
+
+  @Get('sales/:saleId')
+  @RateLimitPolicy('read')
+  @RequirePermissions({ action: 'view', module: 'pos' })
+  @ApiOkResponse({ type: PosSaleDto })
+  @ApiParam({ format: 'uuid', name: 'saleId', type: String })
+  saleById(
+    @Param('saleId', new ParseUUIDPipe()) saleId: string,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<PosSaleDto> {
+    return this.pos.saleById(saleId, request.authentication);
   }
 
   @Post('sales/:id/invoice-draft')

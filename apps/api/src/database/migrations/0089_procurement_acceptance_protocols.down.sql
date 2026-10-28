@@ -1,0 +1,9 @@
+DROP TRIGGER acceptance_protocol_lines_immutable ON procurement.acceptance_protocol_lines;
+DROP TRIGGER acceptance_protocols_immutable ON procurement.acceptance_protocols;
+DROP FUNCTION procurement.prevent_acceptance_protocol_rewrite();
+DROP TABLE procurement.acceptance_protocol_lines;
+DROP INDEX procurement.acceptance_protocols_order_created_idx;
+DROP TABLE procurement.acceptance_protocols;
+DROP TABLE procurement.acceptance_protocol_sequences;
+ALTER TABLE procurement.supplier_invoices
+  DROP CONSTRAINT supplier_invoice_id_order_supplier_unique;

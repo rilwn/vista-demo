@@ -368,12 +368,42 @@
   background: #fff;
   font-size: 0.65rem;
 }
+.pos-offline-banner {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.35rem 0.75rem;
+  margin-top: 0.65rem;
+  padding: 0.65rem 0.8rem;
+  border: 1px solid #e5c98e;
+  border-radius: 0.55rem;
+  color: #75551e;
+  background: #fff8e9;
+  font-size: 0.72rem;
+}
+.pos-offline-banner strong {
+  color: #654815;
+  font-size: 0.74rem;
+}
+.pos-offline-banner time {
+  color: #846f4a;
+  font-size: 0.67rem;
+  font-variant-numeric: tabular-nums;
+}
 .pos-catalog-toolbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 0.8rem;
   margin: 1rem 0;
+}
+@media (max-width: 720px) {
+  .pos-offline-banner {
+    grid-template-columns: 1fr auto;
+  }
+  .pos-offline-banner span {
+    grid-column: 1 / -1;
+  }
 }
 .pos-category-tabs {
   display: flex;
@@ -2420,6 +2450,138 @@
   line-height: 1.45;
 }
 
+.pos-fiscal-report-actions {
+  display: grid;
+  gap: 0.85rem;
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid #e0e5df;
+}
+
+.pos-fiscal-report-copy {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.pos-fiscal-report-copy strong {
+  color: #26372b;
+  font-size: 0.8rem;
+}
+
+.pos-fiscal-report-copy p,
+.pos-fiscal-report-actions > p {
+  max-width: 48rem;
+  margin: 0;
+  color: #758179;
+  font-size: 0.68rem;
+  line-height: 1.5;
+}
+
+.pos-fiscal-report-toolbar {
+  display: grid;
+  align-items: end;
+  grid-template-columns: auto minmax(11rem, 15rem) auto;
+  gap: 0.65rem;
+}
+
+.pos-report-counted-cash,
+.pos-fiscal-reconcile > label,
+.pos-fiscal-tax-totals label {
+  display: grid;
+  min-width: 0;
+  gap: 0.25rem;
+  color: #647269;
+  font-size: 0.64rem;
+  font-weight: 700;
+}
+
+.pos-report-counted-cash > div {
+  display: grid;
+  overflow: hidden;
+  grid-template-columns: minmax(0, 1fr) auto;
+  border: 1px solid #b9c6ba;
+  border-radius: 0.58rem;
+  background: #f1f4f0;
+}
+
+.pos-report-counted-cash > div:focus-within {
+  border-color: #356e4a;
+  background: #fff;
+  box-shadow: 0 0 0 3px rgb(53 110 74 / 11%);
+}
+
+.pos-report-counted-cash input {
+  min-width: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.pos-report-counted-cash > div > span {
+  display: grid;
+  min-width: 2.75rem;
+  place-items: center;
+  border-left: 1px solid #ccd5cd;
+  background: #edf1ed;
+  color: #68766d;
+  font-size: 0.65rem;
+}
+
+.pos-fiscal-reconcile {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+  padding: 0.9rem;
+  border: 1px solid #d6dfd6;
+  border-radius: 0.65rem;
+  background: #f7f9f6;
+}
+
+.pos-fiscal-reconcile > div:first-child {
+  grid-column: 1 / -1;
+}
+
+.pos-fiscal-reconcile > div:first-child strong {
+  color: #26372b;
+  font-size: 0.78rem;
+}
+
+.pos-fiscal-reconcile > div:first-child p {
+  margin: 0.2rem 0 0;
+  color: #758179;
+  font-size: 0.67rem;
+  line-height: 1.45;
+}
+
+.pos-fiscal-reconcile > label input,
+.pos-fiscal-tax-totals input {
+  width: 100%;
+  min-width: 0;
+}
+
+.pos-fiscal-tax-totals {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.55rem;
+}
+
+.pos-fiscal-reconcile-actions {
+  display: flex;
+  grid-column: 1 / -1;
+  justify-content: flex-end;
+  gap: 0.55rem;
+}
+
+.pos-fiscal-report-pending {
+  padding: 0.65rem 0.75rem;
+  border: 1px solid #d7e3d8;
+  border-radius: 0.5rem;
+  background: #f3f8f2;
+  color: #42634b !important;
+}
+
 .pos-page-loading,
 .pos-page-error {
   margin-top: 1rem;
@@ -2552,6 +2714,21 @@
   .pos-close-shift > div {
     align-items: stretch;
     flex-direction: column;
+  }
+  .pos-fiscal-report-toolbar {
+    grid-template-columns: 1fr;
+  }
+  .pos-fiscal-report-toolbar > button {
+    width: 100%;
+  }
+  .pos-fiscal-tax-totals {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .pos-fiscal-reconcile-actions {
+    flex-direction: column;
+  }
+  .pos-fiscal-reconcile-actions button {
+    width: 100%;
   }
 }
 
@@ -3510,6 +3687,176 @@
   color: #9a3c35;
 }
 
+.pos-fiscal-setup,
+.pos-fiscal-recovery {
+  display: grid;
+  gap: 0.65rem;
+  margin: 0.7rem 0.85rem 0;
+  padding: 0.75rem;
+  border: 1px solid #d4dfd4;
+  border-radius: 0.65rem;
+  background: #f5f8f4;
+}
+
+.pos-fiscal-setup-heading,
+.pos-fiscal-recovery-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+}
+
+.pos-fiscal-setup-heading > div,
+.pos-fiscal-recovery-heading > div {
+  display: grid;
+  gap: 0.16rem;
+}
+
+.pos-fiscal-setup-heading strong,
+.pos-fiscal-recovery-heading strong {
+  color: #254a32;
+  font-size: 0.72rem;
+}
+
+.pos-fiscal-setup-heading small,
+.pos-fiscal-recovery > small {
+  color: #6c786f;
+  font-size: 0.61rem;
+  line-height: 1.4;
+}
+
+.pos-fiscal-mode-badge {
+  flex: 0 0 auto;
+  padding: 0.25rem 0.42rem;
+  border-radius: 999px;
+  color: #245a37;
+  background: #e1efe2;
+  font-size: 0.59rem;
+  font-weight: 750;
+}
+
+.pos-fiscal-setup-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.pos-fiscal-setup-grid label,
+.pos-fiscal-tax-grid label {
+  display: grid;
+  min-width: 0;
+  gap: 0.24rem;
+}
+
+.pos-fiscal-setup-grid label > span,
+.pos-fiscal-tax-grid label > span {
+  color: #58695e;
+  font-size: 0.59rem;
+  font-weight: 720;
+}
+
+.pos-fiscal-setup-grid input,
+.pos-fiscal-tax-grid select {
+  width: 100%;
+  min-width: 0;
+  height: 2.05rem;
+  padding: 0 0.55rem;
+  border: 1px solid #c5d1c6;
+  border-radius: 0.42rem;
+  color: #25382b;
+  background: #fff;
+  font-size: 0.66rem;
+}
+
+.pos-fiscal-setup-grid input:focus,
+.pos-fiscal-tax-grid select:focus {
+  border-color: #378056;
+  outline: 2px solid #37805633;
+  outline-offset: 1px;
+}
+
+.pos-fiscal-tax-settings {
+  border-top: 1px solid #dde5dc;
+  padding-top: 0.55rem;
+}
+
+.pos-fiscal-tax-settings summary {
+  color: #45614d;
+  font-size: 0.62rem;
+  font-weight: 740;
+  cursor: pointer;
+}
+
+.pos-fiscal-tax-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.45rem;
+  padding-top: 0.55rem;
+}
+
+.pos-fiscal-tax-settings > small {
+  display: block;
+  margin-top: 0.45rem;
+  color: #6b786e;
+  font-size: 0.58rem;
+  line-height: 1.45;
+}
+
+.pos-fiscal-recovery {
+  margin: 0.8rem;
+  border-color: #e6d5aa;
+  background: #fffbf0;
+}
+
+.pos-fiscal-recovery-heading > div > span {
+  color: #68746b;
+  font-size: 0.59rem;
+  font-weight: 720;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.pos-fiscal-recovery p {
+  margin: 0;
+  color: #6a746d;
+  font-size: 0.62rem;
+  overflow-wrap: anywhere;
+}
+
+.pos-fiscal-recovery p strong {
+  color: #314238;
+  font-variant-numeric: tabular-nums;
+}
+
+.pos-fiscal-recovery-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.pos-fiscal-recovery-actions button {
+  min-height: 2.15rem;
+  padding: 0 0.68rem;
+  border: 1px solid #2c6843;
+  border-radius: 0.42rem;
+  color: #fff;
+  background: #1d5736;
+  font-size: 0.64rem;
+  font-weight: 720;
+  cursor: pointer;
+}
+
+.pos-fiscal-recovery-actions .pos-fiscal-cancel-button {
+  border-color: #d5dcd4;
+  color: #58665d;
+  background: #fff;
+}
+
+.pos-fiscal-recovery-actions button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 .pos-customer-balance-strip {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -3747,6 +4094,88 @@
   font-size: 0.72rem;
 }
 
+.pos-fiscal-return-recovery,
+.pos-return-recovery-note,
+.pos-datecs-return-card {
+  display: grid;
+  gap: 0.45rem;
+  border: 1px solid #e2c88f;
+  border-radius: 0.55rem;
+  color: #574719;
+  background: #fff9e9;
+}
+
+.pos-fiscal-return-recovery {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  margin: 0.7rem 1rem;
+  padding: 0.7rem 0.8rem;
+}
+
+.pos-fiscal-return-recovery > div,
+.pos-datecs-return-card > div {
+  display: grid;
+  min-width: 0;
+  gap: 0.2rem;
+}
+
+.pos-fiscal-return-recovery strong,
+.pos-datecs-return-card strong {
+  font-size: 0.72rem;
+}
+
+.pos-fiscal-return-recovery small,
+.pos-datecs-return-card small {
+  color: #786a45;
+  font-size: 0.64rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.pos-return-recovery-note {
+  padding: 0.75rem 0.85rem;
+  font-size: 0.72rem;
+  line-height: 1.5;
+}
+
+.pos-return-recovery-note span {
+  color: #786a45;
+  font-size: 0.67rem;
+}
+
+.pos-datecs-return-card {
+  margin: 0.85rem 0.9rem 0;
+  padding: 0.75rem;
+}
+
+.pos-datecs-return-card label {
+  display: grid;
+  gap: 0.3rem;
+  color: #36453a;
+  font-size: 0.68rem;
+  font-weight: 680;
+}
+
+.pos-datecs-return-card input {
+  width: 100%;
+  min-height: 2.45rem;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid #bbc8bc;
+  border-radius: 0.42rem;
+  color: #28372d;
+  background: #fff;
+  font-size: 0.74rem;
+}
+
+.pos-datecs-return-card label small,
+.pos-datecs-return-card > p {
+  margin: 0;
+  color: #786a45;
+  font-size: 0.65rem;
+  font-weight: 450;
+  line-height: 1.45;
+}
+
 .pos-return-dialog {
   width: min(100%, 54rem);
   max-height: min(52rem, calc(100vh - 2rem));
@@ -3762,6 +4191,10 @@
 .pos-return-dialog .pos-dialog-body {
   display: grid;
   gap: 0.8rem;
+}
+
+.pos-return-dialog > footer {
+  flex-wrap: wrap;
 }
 
 .pos-return-step {
@@ -3995,6 +4428,14 @@
 }
 
 @media (max-width: 520px) {
+  .pos-fiscal-return-recovery {
+    grid-template-columns: 1fr;
+  }
+
+  .pos-fiscal-return-recovery > button {
+    width: 100%;
+  }
+
   .pos-return-line-fields {
     grid-template-columns: 1fr;
     padding-left: 0.9rem;

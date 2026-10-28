@@ -314,24 +314,58 @@ const pos: HelpTopic[] = [
 const recovery: HelpTopic[] = [
   {
     id: 'setup',
-    title: 'What is available in Vista Recovery',
+    contexts: ['overview'],
+    title: 'Start with Vista Recovery',
     steps: [
       'Sign in with an assigned Backup role and verify your authenticator. A password-only sign-in cannot open the console.',
-      'Use the navigation to review the planned areas for sources, policies, jobs, restores, audit and recovery tests.',
-      'Ask the infrastructure owner to confirm backup sources, storage and tape hardware, retention, recovery targets and responsible approvers.',
+      'In Sources & inventory, check that each system requiring protection is listed with its owner, classification and restore prerequisites.',
+      'Review Policies & schedules, then use Jobs & restore points to confirm the latest scheduled database backup is verified.',
     ],
-    note: 'The console is not yet an operational backup service. It does not create restore points or restore data. Do not rely on it to protect live information.',
+    note: 'Vista Recovery supports configured PostgreSQL and MariaDB databases, IMAP mailboxes, S3-compatible storage, WebDAV and mounted file shares. Physical server and device protection, plus tape workflows, still require the approved hardware and an on-site recovery test.',
   },
   {
-    id: 'recovery-area',
-    contexts: ['overview', 'jobs', 'sources', 'policies', 'approvals', 'dr-tests', 'audit'],
-    title: 'Review readiness for this recovery area',
+    id: 'backup-workflow',
+    contexts: ['sources', 'policies', 'approvals', 'jobs'],
+    title: 'Set up and check a database backup',
     steps: [
-      'Review the readiness cards and identify the missing source inventory, approved policy or recorded restore test.',
-      'Use the current area to confirm the required owner, scope, protection target, retention, RPO, RTO or approval evidence with the infrastructure team.',
-      'Record the agreed decision in the implementation handover. Enable operational actions only after storage, tape hardware, credentials and approvers are confirmed.',
+      'In Sources & inventory, add or review the PostgreSQL source, its classification, owner, location and recovery prerequisites.',
+      'In Policies & schedules, prepare a database-snapshot schedule with retention, encryption, RPO and RTO targets. Submit it for independent approval.',
+      'After the Security Officer approves and the policy is activated, open Jobs & restore points and check that the run is Verified.',
     ],
-    note: 'The disabled actions are intentional. This screen does not run backups or restores until the approved infrastructure integration is completed.',
+    note: 'A verified database copy does not prove that the whole site can be recovered. Keep the source inventory and restore target current.',
+  },
+  {
+    id: 'restore-workflow',
+    contexts: ['restores'],
+    title: 'Restore a database without replacing live Vista',
+    steps: [
+      'In Jobs & restore points, select a Verified database backup and choose Request restore. State why it is needed.',
+      'A different MFA-verified Security Officer reviews it in Restores & approvals. The requester cannot approve their own request.',
+      'When the restore is complete, confirm it opened in a separate database and review its final status and audit record.',
+    ],
+    note: 'Vista Recovery creates a new isolated database. It never switches or overwrites the live Vista database.',
+  },
+  {
+    id: 'dr-tests',
+    contexts: ['dr-tests'],
+    title: 'Complete and record a recovery test',
+    steps: [
+      'In DR tests, plan the exercise from a Verified database backup and describe which system records must be checked.',
+      'Request its isolated restore. A different MFA-verified Security Officer must approve it; wait until the restore has a final status.',
+      'Enter the observed RPO and RTO, checks, issues and corrective actions. Attach the signed protocol PDF, save, and download it to verify the evidence.',
+    ],
+    note: 'Use actual measured times and signed site evidence. Automated integration tests do not replace a witnessed company-site restore.',
+  },
+  {
+    id: 'audit-workflow',
+    contexts: ['audit'],
+    title: 'Review backup alerts and audit history',
+    steps: [
+      'Open Alerts & audit and filter by the affected policy, source, backup run or restore request.',
+      'Read the status and event history before retrying. Check the job or restore record first so the same action is not submitted twice.',
+      'For unresolved failures, give your administrator the record number and error reference. Never send passwords, keys or customer files.',
+    ],
+    note: 'Audit events are append-only. Use the related source, policy or request page to make authorized corrections.',
   },
 ];
 
@@ -562,13 +596,49 @@ const bulgarianTopics: Readonly<Record<string, Omit<HelpTopic, 'id' | 'module'>>
     note: 'Възстановяването на плащане не е пълна офлайн продажба. Не изчиствайте данните на браузъра, докато има нерешено плащане.',
   },
   setup: {
-    title: 'Какво е налично във Vista Recovery',
+    title: 'Започване работа с Vista Recovery',
     steps: [
       'Влезте с назначена роля за архивиране и потвърдете приложението за удостоверяване. Само парола не може да отвори конзолата.',
-      'Използвайте навигацията, за да прегледате планираните раздели за източници, политики, задачи, възстановявания, одит и DR тестове.',
-      'Поискайте от собственика на инфраструктурата да потвърди източниците, хранилището, лентовия хардуер, сроковете, целите и отговорните одобряващи.',
+      'В Източници и инвентар проверете дали всички системи за защита са вписани със собственик, класификация и условия за възстановяване.',
+      'Прегледайте Политики и графици, след което в Задачи и точки за възстановяване потвърдете, че последният архив на база данни е проверен.',
     ],
-    note: 'Конзолата все още не е действаща услуга за архивиране. Тя не създава точки за възстановяване и не възстановява данни. Не разчитайте на нея за защита на реална информация.',
+    note: 'Vista Recovery поддържа конфигурирани бази данни PostgreSQL и MariaDB, IMAP пощенски кутии, S3-съвместимо хранилище, WebDAV и монтирани файлови споделяния. За защита на физически сървъри и устройства, както и за работа с ленти, са нужни одобреният хардуер и тест за възстановяване на място.',
+  },
+  'backup-workflow': {
+    title: 'Настройване и проверка на архив на база данни',
+    steps: [
+      'В Източници и инвентар добавете или проверете PostgreSQL източника, класификацията, отговорника, местоположението и условията за възстановяване.',
+      'В Политики и графици подгответе график за снимка на база данни със срокове за съхранение, криптиране и цели за RPO и RTO. Изпратете го за независимо одобрение.',
+      'След одобрение от служител по сигурността и активиране на политиката отворете Задачи и точки за възстановяване и проверете дали архивът е със статус Проверен.',
+    ],
+    note: 'Проверен архив на база данни не доказва, че целият обект може да бъде възстановен. Поддържайте актуални инвентара и целта за възстановяване.',
+  },
+  'restore-workflow': {
+    title: 'Възстановяване на база данни без замяна на работещата Vista',
+    steps: [
+      'В Задачи и точки за възстановяване изберете проверен архив на база данни и натиснете Заявка за възстановяване. Посочете причината.',
+      'Друг служител по сигурността с потвърдена двуфакторна защита преглежда заявката в Възстановявания и одобрения. Заявителят не може да одобри собствената си заявка.',
+      'След приключване потвърдете, че данните са възстановени в отделна база, и прегледайте крайния статус и одитния запис.',
+    ],
+    note: 'Vista Recovery създава нова изолирана база. Не заменя и не превключва работещата база на Vista.',
+  },
+  'dr-tests': {
+    title: 'Провеждане и записване на тест за възстановяване',
+    steps: [
+      'В Тестове за възстановяване планирайте упражнението от проверен архив на база данни и опишете кои системни записи трябва да бъдат проверени.',
+      'Заявете изолирано възстановяване. Друг служител по сигурността с потвърдена двуфакторна защита трябва да го одобри. Изчакайте крайния статус.',
+      'Въведете измерените RPO и RTO, проверките, проблемите и коригиращите действия. Приложете подписания протокол в PDF, запишете и изтеглете файла за проверка.',
+    ],
+    note: 'Използвайте действително измерено време и подписани доказателства от обекта. Автоматизираните тестове не заменят наблюдаван тест на място.',
+  },
+  'audit-workflow': {
+    title: 'Преглед на сигналите и одитната история',
+    steps: [
+      'Отворете Сигнали и одит и филтрирайте по засегнатата политика, източник, архив или заявка за възстановяване.',
+      'Преди повторен опит прегледайте статуса и историята на събитията. Проверете съществуващия запис, за да не изпратите действието повторно.',
+      'При неотстранен проблем изпратете на администратора номера на записа и кода за грешка. Не изпращайте пароли, ключове или клиентски файлове.',
+    ],
+    note: 'Одитните събития не могат да се редактират. Използвайте страницата на свързания източник, политика или заявка за разрешена промяна.',
   },
 };
 

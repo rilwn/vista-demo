@@ -1028,6 +1028,39 @@ select.vista-searchable-multi-select {
   margin-top: 2rem;
 }
 
+.vista-auth-directory {
+  display: grid;
+  gap: 0.75rem;
+  padding: 1rem;
+  border: 1px solid var(--vista-line);
+  border-radius: 0.8rem;
+  background: var(--vista-surface-muted);
+}
+
+.vista-auth-directory p {
+  margin: 0;
+  color: var(--vista-muted);
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+
+.vista-auth-emergency {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-height: 2.5rem;
+  color: var(--vista-muted);
+  font-size: 0.8rem;
+  font-weight: 650;
+}
+
+.vista-auth-emergency input {
+  width: 1rem;
+  height: 1rem;
+  margin: 0;
+  accent-color: var(--vista-accent-strong);
+}
+
 .vista-auth-form .vista-field-input {
   min-height: 3.15rem;
   border-color: #bfc7c0;

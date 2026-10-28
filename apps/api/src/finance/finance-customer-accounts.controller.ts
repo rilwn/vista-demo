@@ -9,6 +9,7 @@ import {
   Param,
   ParseUUIDPipe,
   Post,
+  Query,
   Put,
   Req,
 } from '@nestjs/common';
@@ -19,6 +20,7 @@ import {
   ApiHeader,
   ApiOkResponse,
   ApiParam,
+  ApiQuery,
   ApiTags,
 } from '@nestjs/swagger';
 
@@ -35,6 +37,9 @@ import {
   CreatePosAccountPaymentDto,
   ReversePosAccountPaymentDto,
   CreatePosAccountRefundDto,
+  ApplyCustomerAdvanceToPosSaleDto,
+  CustomerPaymentStatusPageDto,
+  CustomerPaymentStatusQueryDto,
 } from './finance-customer-accounts.dto.js';
 import { FinanceCustomerAccountsService } from './finance-customer-accounts.service.js';
 
@@ -54,6 +59,24 @@ export class FinanceCustomerAccountsController {
   @ApiOkResponse({ type: CustomerPaymentAccountReferenceDataDto })
   referenceData(): Promise<CustomerPaymentAccountReferenceDataDto> {
     return this.accounts.referenceData();
+  }
+
+  @Get('payment-status')
+  @RateLimitPolicy('read')
+  @RequirePermissions({ action: 'view', module: 'erp.finance' })
+  @ApiOkResponse({ type: CustomerPaymentStatusPageDto })
+  @ApiQuery({ name: 'page', required: false, minimum: 1, type: Number })
+  @ApiQuery({ name: 'pageSize', required: false, minimum: 1, maximum: 100, type: Number })
+  @ApiQuery({ name: 'search', required: false, minLength: 2, maxLength: 120, type: String })
+  @ApiQuery({
+    name: 'status',
+    required: false,
+    enum: ['unpaid', 'partially_paid', 'paid', 'overdue'],
+  })
+  paymentStatus(
+    @Query() query: CustomerPaymentStatusQueryDto,
+  ): Promise<CustomerPaymentStatusPageDto> {
+    return this.accounts.paymentStatus(query);
   }
 
   @Get()
@@ -126,6 +149,31 @@ export class FinanceCustomerAccountsController {
     @Req() request: AuthenticatedRequest,
   ): Promise<CustomerPaymentAccountDto> {
     return this.accounts.collectPosBalance(
+      customerId,
+      saleId,
+      input,
+      key,
+      request.authentication,
+      metadata(request),
+    );
+  }
+
+  @Post(':customerPartnerId/pos-sales/:saleId/advance-allocations')
+  @HttpCode(HttpStatus.CREATED)
+  @RequirePermissions({ action: 'create', module: 'erp.finance' })
+  @ApiBody({ type: ApplyCustomerAdvanceToPosSaleDto })
+  @ApiCreatedResponse({ type: CustomerPaymentAccountDto })
+  @ApiHeader({ name: 'Idempotency-Key', required: true })
+  @ApiParam({ name: 'customerPartnerId', format: 'uuid' })
+  @ApiParam({ name: 'saleId', format: 'uuid' })
+  allocateAdvance(
+    @Param('customerPartnerId', new ParseUUIDPipe()) customerId: string,
+    @Param('saleId', new ParseUUIDPipe()) saleId: string,
+    @Body() input: ApplyCustomerAdvanceToPosSaleDto,
+    @Headers('idempotency-key') key: string | undefined,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<CustomerPaymentAccountDto> {
+    return this.accounts.allocateAdvanceToPosBalance(
       customerId,
       saleId,
       input,
