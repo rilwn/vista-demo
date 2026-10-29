@@ -120,6 +120,7 @@ function enhanceSelect(select: HTMLSelectElement): EnhancedSelect {
   const listbox = document.createElement('div');
   const listId = `vista-search-options-${++searchableSelectId}`;
   const originalTabIndex = select.getAttribute('tabindex');
+  const originalAriaHidden = select.getAttribute('aria-hidden');
   let activeIndex = -1;
   let isOpen = false;
   let visibleOptions: HTMLOptionElement[] = [];
@@ -145,9 +146,10 @@ function enhanceSelect(select: HTMLSelectElement): EnhancedSelect {
   select.classList.add('vista-search-select-native');
   select.dataset.searchableEnhanced = 'true';
   select.tabIndex = -1;
+  select.setAttribute('aria-hidden', 'true');
   shell.append(input, toggle);
   select.insertAdjacentElement('afterend', shell);
-  (select.closest('dialog') ?? document.body).append(listbox);
+  (select.closest('dialog, [role="dialog"]') ?? document.body).append(listbox);
 
   function options() {
     return Array.from(select.options).filter(
@@ -375,6 +377,10 @@ function enhanceSelect(select: HTMLSelectElement): EnhancedSelect {
     } else closeListbox();
   }
 
+  function handleInputClick() {
+    if (!isOpen && !input.disabled) openListbox();
+  }
+
   function handleDocumentPointerDown(event: PointerEvent) {
     const target = event.target;
     if (target instanceof Node && !shell.contains(target) && !listbox.contains(target))
@@ -393,6 +399,7 @@ function enhanceSelect(select: HTMLSelectElement): EnhancedSelect {
   }
 
   input.addEventListener('input', handleInput);
+  input.addEventListener('click', handleInputClick);
   input.addEventListener('blur', handleBlur);
   input.addEventListener('focus', handleFocus);
   input.addEventListener('keydown', handleKeydown);
@@ -408,6 +415,7 @@ function enhanceSelect(select: HTMLSelectElement): EnhancedSelect {
     refresh,
     cleanup: () => {
       input.removeEventListener('input', handleInput);
+      input.removeEventListener('click', handleInputClick);
       input.removeEventListener('blur', handleBlur);
       input.removeEventListener('focus', handleFocus);
       input.removeEventListener('keydown', handleKeydown);
@@ -423,6 +431,8 @@ function enhanceSelect(select: HTMLSelectElement): EnhancedSelect {
       delete select.dataset.searchableEnhanced;
       if (originalTabIndex === null) select.removeAttribute('tabindex');
       else select.setAttribute('tabindex', originalTabIndex);
+      if (originalAriaHidden === null) select.removeAttribute('aria-hidden');
+      else select.setAttribute('aria-hidden', originalAriaHidden);
     },
   };
 }

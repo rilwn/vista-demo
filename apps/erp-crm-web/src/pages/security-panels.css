@@ -1,0 +1,460 @@
+.security-role-directory-search {
+  padding: 0.85rem 1.1rem;
+  border-bottom: 1px solid var(--vista-line);
+}
+.security-role-directory-search .vista-field {
+  max-width: 26rem;
+}
+
+.security-panel .security-form-pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+.security-panel .security-form-pair > * {
+  min-width: 0;
+}
+.security-panel :is(h3, p, legend) {
+  margin-top: 0;
+  overflow-wrap: anywhere;
+}
+.security-panel :is(.security-admin-toggle, .security-role-protection) {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.7rem;
+  margin: 0;
+  padding: 0.9rem;
+  border: 1px solid var(--vista-line);
+  border-radius: 0.75rem;
+  background: var(--vista-surface-muted);
+}
+.security-panel :is(.security-admin-toggle, .security-role-protection) > span {
+  display: grid;
+  gap: 0.2rem;
+  min-width: 0;
+}
+.security-panel :is(.security-admin-toggle, .security-role-protection) strong {
+  color: var(--vista-ink);
+  font-size: 0.8rem;
+  font-weight: 650;
+}
+.security-panel :is(.security-admin-toggle, .security-role-protection) small {
+  color: var(--vista-muted);
+  font-size: 0.73rem;
+  line-height: 1.5;
+}
+.security-panel .security-role-protection > svg {
+  flex: 0 0 auto;
+  color: var(--vista-forest);
+  margin-top: 0.1rem;
+}
+
+.security-panel input[type='checkbox'] {
+  appearance: auto;
+  width: 1rem;
+  height: 1rem;
+  min-height: 0;
+  padding: 0;
+  margin: 0;
+  flex: 0 0 1rem;
+  accent-color: var(--vista-forest);
+}
+.security-panel input[type='checkbox']:focus-visible {
+  outline: 2px solid var(--vista-forest);
+  outline-offset: 3px;
+}
+.security-panel .security-admin-toggle input {
+  margin-top: 0.15rem;
+}
+.security-panel :is(.security-permission-matrix, .security-role-assignment) {
+  display: block;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+}
+.security-panel :is(.security-permission-matrix, .security-role-assignment) > legend {
+  padding: 0;
+  margin-bottom: 0.35rem;
+  color: var(--vista-ink);
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+.security-panel :is(.security-permission-matrix, .security-role-assignment) > p {
+  margin: 0 0 0.9rem;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  color: var(--vista-muted);
+}
+.security-panel .security-choice-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.7rem;
+  margin-bottom: 0.85rem;
+}
+.security-panel .security-choice-toolbar .vista-field {
+  flex: 1 1 12rem;
+  min-width: 0;
+}
+.security-panel .security-selection-count {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.65rem;
+  color: var(--vista-muted);
+  font-size: 0.72rem;
+  white-space: nowrap;
+}
+.security-panel .security-filter-empty {
+  margin: 0;
+  padding: 1rem;
+  color: var(--vista-muted);
+  font-size: 0.78rem;
+}
+.security-panel .security-permission-list {
+  border: 1px solid var(--vista-line);
+  border-radius: 0.75rem;
+}
+.security-panel :is(.security-permission-head, .security-permission-row) {
+  display: grid;
+  grid-template-columns: minmax(8rem, 1.6fr) repeat(5, minmax(3.8rem, 0.8fr));
+  align-items: center;
+  gap: 0.3rem;
+  min-width: 0;
+}
+.security-panel .security-permission-head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  padding: 0.7rem 0.8rem;
+  border-radius: 0.75rem 0.75rem 0 0;
+  border-bottom: 1px solid var(--vista-line);
+  color: var(--vista-muted);
+  background: var(--vista-surface-muted);
+  font-size: 0.64rem;
+  font-weight: 650;
+  letter-spacing: 0;
+  text-transform: none;
+  text-align: center;
+}
+.security-panel .security-permission-head > span:first-child {
+  text-align: left;
+}
+.security-panel .security-permission-row {
+  margin: 0;
+  padding: 0.65rem 0.8rem;
+  border-top: 0;
+  border-bottom: 1px solid var(--vista-line);
+}
+.security-panel .security-permission-row:last-child {
+  border-bottom: 0;
+}
+.security-panel .security-permission-row > strong {
+  min-width: 0;
+  color: var(--vista-ink);
+  font-size: 0.76rem;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.security-panel .security-permission-row > label {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  min-height: 2rem;
+  margin: 0;
+  padding: 0.25rem;
+  cursor: pointer;
+}
+.security-panel .security-permission-row > label > span {
+  display: none;
+}
+.security-panel fieldset:disabled :is(label, input) {
+  cursor: not-allowed;
+}
+
+.security-panel .security-account-detail {
+  display: grid;
+  grid-template-columns: 2.65rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0;
+  padding: 0.85rem;
+  border: 1px solid var(--vista-line);
+  border-radius: 0.8rem;
+  background: var(--vista-surface-muted);
+}
+.security-panel .security-account-avatar {
+  display: grid;
+  place-items: center;
+  width: 2.65rem;
+  height: 2.65rem;
+  border: 1px solid var(--vista-line);
+  border-radius: 0.7rem;
+  color: var(--vista-forest-dark);
+  background: var(--vista-surface);
+  font-size: 0.8rem;
+}
+.security-panel .security-account-detail > div {
+  display: grid;
+  min-width: 0;
+  gap: 0.2rem;
+}
+.security-panel .security-account-detail strong {
+  color: var(--vista-ink);
+  font-size: 0.85rem;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+.security-panel .security-account-detail > div span {
+  color: var(--vista-muted);
+  font-size: 0.72rem;
+}
+.security-panel .security-account-detail > .security-status {
+  grid-column: 3;
+  grid-row: 1;
+  margin: 0;
+}
+.security-panel .security-account-section {
+  padding: 1rem;
+  border: 1px solid var(--vista-line);
+  border-radius: 0.8rem;
+  background: var(--vista-surface);
+}
+.security-panel .security-account-section-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+.security-panel .security-account-section-heading > div {
+  display: grid;
+  gap: 0.2rem;
+}
+.security-panel .security-account-section-heading span {
+  color: var(--vista-ink);
+  font-size: 0.82rem;
+  font-weight: 650;
+}
+.security-panel .security-account-section-heading p {
+  margin: 0;
+  font-size: 0.73rem;
+  line-height: 1.5;
+  color: var(--vista-muted);
+}
+.security-panel .security-account-section-heading > svg {
+  flex: 0 0 auto;
+  color: var(--vista-muted);
+}
+.security-panel .security-account-factor {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  margin-top: 0.9rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+.security-panel .security-account-factor > span {
+  width: 0.5rem;
+  height: 0.5rem;
+  flex: 0 0 0.5rem;
+  margin-left: 0.2rem;
+  border-radius: 50%;
+  background: #c29243;
+  box-shadow: 0 0 0 3px #faf2e4;
+}
+.security-panel .security-account-factor > span.is-ready {
+  background: var(--vista-forest);
+  box-shadow: 0 0 0 3px var(--vista-accent-soft);
+}
+.security-panel .security-account-factor > div {
+  display: grid;
+  gap: 0.18rem;
+}
+.security-panel .security-account-factor strong {
+  color: var(--vista-ink);
+  font-size: 0.77rem;
+}
+.security-panel .security-account-factor small {
+  color: var(--vista-muted);
+  font-size: 0.7rem;
+  line-height: 1.5;
+}
+.security-panel .security-account-recovery {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 1rem;
+  padding-top: 0.9rem;
+  border-top: 1px solid var(--vista-line);
+}
+.security-panel .security-account-recovery > div {
+  display: grid;
+  gap: 0.2rem;
+  min-width: 0;
+}
+.security-panel .security-account-recovery strong {
+  color: var(--vista-ink);
+  font-size: 0.76rem;
+}
+.security-panel .security-account-recovery span {
+  color: var(--vista-muted);
+  font-size: 0.71rem;
+  line-height: 1.5;
+}
+.security-panel .security-account-recovery .vista-button {
+  flex: 0 0 auto;
+}
+.security-panel .security-role-choices {
+  display: grid;
+  gap: 0;
+  overflow: hidden;
+  border: 1px solid var(--vista-line);
+  border-radius: 0.8rem;
+}
+.security-panel .security-role-choices > label {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0;
+  padding: 0.75rem 0.85rem;
+  border: 0;
+  border-bottom: 1px solid var(--vista-line);
+  border-radius: 0;
+  background: var(--vista-surface);
+  cursor: pointer;
+}
+.security-panel .security-role-choices > label:last-child {
+  border-bottom: 0;
+}
+.security-panel .security-role-choices > label:has(input:checked) {
+  background: var(--vista-accent-soft);
+}
+.security-panel .security-role-choices > label > span {
+  display: grid;
+  gap: 0.2rem;
+  min-width: 0;
+}
+.security-panel .security-role-choices strong {
+  color: var(--vista-ink);
+  font-size: 0.78rem;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.security-panel .security-role-choices small {
+  color: var(--vista-muted);
+  font-size: 0.69rem;
+}
+.security-panel .security-account-status-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.9rem;
+  border: 1px solid #eadad4;
+  border-radius: 0.8rem;
+  background: #fdf9f7;
+}
+.security-panel .security-account-status-actions > div {
+  display: grid;
+  min-width: 0;
+  gap: 0.25rem;
+}
+.security-panel .security-account-status-actions strong {
+  color: var(--vista-ink);
+  font-size: 0.79rem;
+}
+.security-panel .security-account-status-actions span {
+  color: var(--vista-muted);
+  font-size: 0.72rem;
+  line-height: 1.5;
+}
+.security-panel .security-account-status-actions .vista-button {
+  flex: 0 0 auto;
+}
+.security-panel .security-recovery-issued {
+  display: grid;
+  gap: 1rem;
+}
+.security-panel .security-recovery-recipient {
+  margin: 0;
+  padding: 0.9rem;
+  border: 1px solid var(--vista-line);
+  border-radius: 0.75rem;
+}
+.security-panel .security-recovery-code {
+  min-width: 0;
+}
+.security-panel .security-recovery-code code {
+  display: block;
+  overflow-wrap: anywhere;
+  word-break: break-all;
+  font-size: 0.85rem;
+  line-height: 1.7;
+}
+.security-panel .security-recovery-note {
+  min-height: 7rem;
+  resize: vertical;
+}
+
+@media (max-width: 680px) {
+  .security-panel .security-form-pair {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .security-panel .security-permission-head {
+    display: none;
+  }
+  .security-panel .security-permission-row {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.4rem;
+    padding: 0.8rem;
+  }
+  .security-panel .security-permission-row > strong {
+    grid-column: 1 / -1;
+    margin-bottom: 0.2rem;
+    font-size: 0.8rem;
+  }
+  .security-panel .security-permission-row > label {
+    justify-content: flex-start;
+    gap: 0.35rem;
+    padding: 0.4rem 0.3rem;
+    border-radius: 0.4rem;
+    background: var(--vista-surface-muted);
+  }
+  .security-panel .security-permission-row > label:has(input:checked) {
+    background: var(--vista-accent-soft);
+  }
+  .security-panel .security-permission-row > label > span {
+    display: block;
+    color: var(--vista-ink);
+    font-size: 0.64rem;
+    font-weight: 500;
+    overflow-wrap: anywhere;
+  }
+  .security-panel :is(.security-account-recovery, .security-account-status-actions) {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .security-panel .security-account-detail {
+    gap: 0.6rem;
+  }
+  .security-panel .security-account-detail > .security-status {
+    grid-column: 2;
+    grid-row: 2;
+    justify-self: start;
+  }
+  .security-panel .security-choice-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.25rem;
+  }
+  .security-panel .security-choice-toolbar .vista-field {
+    flex: 0 0 auto;
+  }
+  .security-panel .security-selection-count {
+    min-height: 1.8rem;
+  }
+}

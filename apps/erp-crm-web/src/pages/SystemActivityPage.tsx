@@ -15,6 +15,7 @@ import {
   replayIntegrationEvent,
 } from '../api/integrations';
 import { useAuth } from '../auth/AuthProvider';
+import { AdminDrawer } from '../components/AdminDrawer';
 import { Icon } from '../components/Icon';
 import { TechnicalIdentifier } from '../components/TechnicalIdentifier';
 import { formatOperationsDate, useLocalization } from '../i18n/LocalizationProvider';
@@ -310,117 +311,96 @@ function ActivityDrawer({
   }
 
   return (
-    <div className="security-drawer-layer" role="presentation">
-      <button
-        aria-label={messages.operations.close}
-        className="security-drawer-scrim"
-        onClick={onClose}
-        type="button"
-      />
-      <aside
-        aria-label={messages.operations.details}
-        aria-modal="true"
-        className="security-drawer"
-        role="dialog"
-      >
-        <header className="panel-drawer-header">
-          <button
-            aria-label={messages.operations.backLabel}
-            className="panel-back-button"
-            onClick={onClose}
-            type="button"
-          >
-            <Icon name="arrow" size={17} />
-            {messages.operations.back}
-          </button>
-          <button
-            aria-label={messages.operations.close}
-            className="panel-close-button"
-            onClick={onClose}
-            type="button"
-          >
-            <Icon name="close" />
-          </button>
-          <div>
-            <h2>{event ? eventLabel(event.eventType) : messages.operations.details}</h2>
-            {event ? (
-              <TechnicalIdentifier kind="event" value={event.id} />
-            ) : (
-              <p>{messages.operations.loading}</p>
-            )}
-          </div>
-        </header>
-        <div className="security-drawer-body system-activity-detail">
-          {loading ? <ActivityLoading /> : null}
-          {error ? <InlineAlert tone="error">{error}</InlineAlert> : null}
-          {event ? (
+    <AdminDrawer
+      ariaLabel={messages.operations.details}
+      backLabel={messages.operations.backLabel}
+      backText={messages.operations.back}
+      busy={retrying}
+      className="system-activity-drawer"
+      closeLabel={messages.operations.close}
+      footer={
+        event?.status === 'dead_letter' && event.hasRegisteredConsumer && canRetry ? (
+          confirming ? (
             <>
-              <div className="system-activity-detail-heading">
-                <StatusBadge status={event.status} />
-                <span>{messages.operations.lastUpdated(dateTime(lastEventDate(event)))}</span>
-              </div>
-              {!event.hasRegisteredConsumer ? (
-                <InlineAlert tone="warning">{messages.operations.noReceivingService}</InlineAlert>
-              ) : null}
-              <dl className="system-activity-facts">
-                <div>
-                  <dt>{messages.operations.received}</dt>
-                  <dd>{dateTime(event.occurredAt)}</dd>
-                </div>
-                <div>
-                  <dt>{messages.operations.requestReference}</dt>
-                  <dd>
-                    <TechnicalIdentifier kind="request" value={event.correlationId} />
-                  </dd>
-                </div>
-                <div>
-                  <dt>{messages.operations.sequence}</dt>
-                  <dd>{event.sequenceNumber}</dd>
-                </div>
-                <div>
-                  <dt>{messages.operations.attempts}</dt>
-                  <dd>{event.attemptCount}</dd>
-                </div>
-              </dl>
-              <section className="system-activity-deliveries">
-                <h3>{messages.operations.deliverySteps}</h3>
-                {event.deliveries.length ? (
-                  event.deliveries.map((delivery) => (
-                    <DeliveryRow delivery={delivery} key={delivery.consumer} />
-                  ))
-                ) : (
-                  <p>{messages.operations.noDeliverySteps}</p>
-                )}
-              </section>
-              {event.status === 'dead_letter' && event.hasRegisteredConsumer && canRetry ? (
-                <div className="system-activity-recovery">
-                  <strong>{messages.operations.retryTitle}</strong>
-                  <p>{messages.operations.retryHint}</p>
-                  {confirming ? (
-                    <div>
-                      <Button disabled={retrying} onClick={() => void retry()}>
-                        {retrying ? messages.operations.retrying : messages.operations.confirmRetry}
-                      </Button>
-                      <Button
-                        disabled={retrying}
-                        onClick={() => setConfirming(false)}
-                        variant="secondary"
-                      >
-                        {messages.operations.cancel}
-                      </Button>
-                    </div>
-                  ) : (
-                    <Button onClick={() => setConfirming(true)} variant="secondary">
-                      {messages.operations.retry}
-                    </Button>
-                  )}
-                </div>
-              ) : null}
+              <Button disabled={retrying} onClick={() => setConfirming(false)} variant="secondary">
+                {messages.operations.cancel}
+              </Button>
+              <Button disabled={retrying} onClick={() => void retry()}>
+                {retrying ? messages.operations.retrying : messages.operations.confirmRetry}
+              </Button>
             </>
-          ) : null}
-        </div>
-      </aside>
-    </div>
+          ) : (
+            <Button disabled={loading} onClick={() => setConfirming(true)} variant="secondary">
+              {messages.operations.retry}
+            </Button>
+          )
+        ) : undefined
+      }
+      onClose={onClose}
+      subtitle={
+        event ? undefined : loading ? messages.operations.loading : messages.operations.detailError
+      }
+      title={event ? eventLabel(event.eventType) : messages.operations.details}
+    >
+      <div className="system-activity-detail">
+        {loading ? <ActivityLoading /> : null}
+        {error ? <InlineAlert tone="error">{error}</InlineAlert> : null}
+        {event ? (
+          <>
+            <div className="system-activity-event-reference">
+              <span>{messages.operations.eventReference}</span>
+              <TechnicalIdentifier kind="event" value={event.id} />
+            </div>
+            <div className="system-activity-detail-heading">
+              <StatusBadge status={event.status} />
+              <span>{messages.operations.lastUpdated(dateTime(lastEventDate(event)))}</span>
+            </div>
+            {!event.hasRegisteredConsumer ? (
+              <InlineAlert tone="warning">{messages.operations.noReceivingService}</InlineAlert>
+            ) : null}
+            {confirming ? (
+              <div className="system-activity-recovery" role="status">
+                <strong>{messages.operations.retryTitle}</strong>
+                <p>{messages.operations.retryHint}</p>
+              </div>
+            ) : null}
+            <dl className="system-activity-facts">
+              <div>
+                <dt>{messages.operations.received}</dt>
+                <dd>{dateTime(event.occurredAt)}</dd>
+              </div>
+              <div>
+                <dt>{messages.operations.requestReference}</dt>
+                <dd>
+                  <TechnicalIdentifier kind="request" value={event.correlationId} />
+                </dd>
+              </div>
+              <div>
+                <dt>{messages.operations.sequence}</dt>
+                <dd>{event.sequenceNumber}</dd>
+              </div>
+              <div>
+                <dt>{messages.operations.attempts}</dt>
+                <dd>{event.attemptCount}</dd>
+              </div>
+            </dl>
+            <section className="system-activity-deliveries">
+              <div className="system-activity-section-heading">
+                <h3>{messages.operations.deliverySteps}</h3>
+                <span>{event.deliveries.length}</span>
+              </div>
+              {event.deliveries.length ? (
+                event.deliveries.map((delivery) => (
+                  <DeliveryRow delivery={delivery} key={delivery.consumer} />
+                ))
+              ) : (
+                <p>{messages.operations.noDeliverySteps}</p>
+              )}
+            </section>
+          </>
+        ) : null}
+      </div>
+    </AdminDrawer>
   );
 }
 

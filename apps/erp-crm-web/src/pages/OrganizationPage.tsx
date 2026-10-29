@@ -9,7 +9,16 @@ import type {
   OrganizationTopology,
 } from '@vista/contracts';
 import { businessIdentifierIssues } from '@vista/domain';
-import { type FormEvent, useCallback, useEffect, useRef, useState } from 'react';
+import {
+  type FormEvent,
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+} from 'react';
+import { createPortal } from 'react-dom';
 
 import { ApiClientError } from '../api/client';
 import {
@@ -29,9 +38,10 @@ import {
 } from '../api/organization';
 import { useAuth } from '../auth/AuthProvider';
 import { Icon } from '../components/Icon';
-import { organizationText as text } from '../i18n/organizationMessages';
+import { locationTypeLabel, organizationText as text } from '../i18n/organizationMessages';
 import { businessIdentifierIssueMessage } from '../i18n/businessIdentifierMessages';
 import { formatOperationsNumber, useLocalization } from '../i18n/LocalizationProvider';
+import './organization.css';
 
 type CreateKind = 'branch' | 'entity' | 'location' | 'operator' | 'register';
 type EditableRecord =
@@ -59,16 +69,18 @@ export function OrganizationPage() {
   const [editTarget, setEditTarget] = useState<EditTarget | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const loadedForToken = useRef('');
   const reload = useCallback(() => setRevision((value) => value + 1), []);
 
   useEffect(() => {
     if (!token) return;
     let active = true;
-    setLoading(true);
+    setLoading(loadedForToken.current !== token);
     setLoadError(false);
     void Promise.all([getOrganizationTopology(token), listOrganizationMembers(token)])
       .then(([nextTopology, nextMembers]) => {
         if (!active) return;
+        loadedForToken.current = token;
         setTopology(nextTopology);
         setMembers(nextMembers);
       })
@@ -130,34 +142,52 @@ export function OrganizationPage() {
 
       {canCreate ? (
         <section className="organization-actions" aria-label={text.actions}>
-          <ActionButton active={composer === 'entity'} onClick={() => setComposer('entity')}>
+          <ActionButton
+            active={composer === 'entity'}
+            onClick={() => {
+              setEditTarget(null);
+              setComposer('entity');
+            }}
+          >
             {text.legalEntity}
           </ActionButton>
           <ActionButton
             active={composer === 'branch'}
             disabled={!topology.legalEntities.some((item) => item.active)}
-            onClick={() => setComposer('branch')}
+            onClick={() => {
+              setEditTarget(null);
+              setComposer('branch');
+            }}
           >
             {text.branch}
           </ActionButton>
           <ActionButton
             active={composer === 'location'}
             disabled={!topology.branches.some((item) => item.active)}
-            onClick={() => setComposer('location')}
+            onClick={() => {
+              setEditTarget(null);
+              setComposer('location');
+            }}
           >
             {text.location}
           </ActionButton>
           <ActionButton
             active={composer === 'operator'}
             disabled={!topology.locations.some((item) => item.active) || !members.length}
-            onClick={() => setComposer('operator')}
+            onClick={() => {
+              setEditTarget(null);
+              setComposer('operator');
+            }}
           >
             {text.operator}
           </ActionButton>
           <ActionButton
             active={composer === 'register'}
             disabled={!topology.locations.some((item) => item.active)}
-            onClick={() => setComposer('register')}
+            onClick={() => {
+              setEditTarget(null);
+              setComposer('register');
+            }}
           >
             {text.register}
           </ActionButton>
@@ -166,6 +196,7 @@ export function OrganizationPage() {
 
       {composer ? (
         <TopologyComposer
+          key={composer}
           kind={composer}
           members={members}
           onCancel={() => setComposer(null)}
@@ -280,13 +311,19 @@ function TopologyDirectory({
         return (
           <article className="organization-entity" key={entity.id}>
             <header>
-              <span className="organization-code">{entity.code}</span>
+              <span className="organization-entity-mark" aria-hidden="true">
+                <Icon name="organization" size={20} />
+              </span>
               <div>
+                <span className="organization-entity-code">{entity.code}</span>
                 <h2>
                   {entity.name} {!entity.active ? <StatusChip active={false} /> : null}
                 </h2>
                 <p>
-                  {[entity.uic ? `UIC ${entity.uic}` : null, entity.vatNumber]
+                  {[
+                    entity.uic ? `${text.registrationNumber} ${entity.uic}` : null,
+                    entity.vatNumber,
+                  ]
                     .filter(Boolean)
                     .join(' · ') || text.identifiersMissing}
                 </p>
@@ -396,7 +433,7 @@ function LocationCard({
             <strong>
               {location.name} {!location.active ? <StatusChip active={false} /> : null}
             </strong>
-            <small>{location.locationType}</small>
+            <small>{locationTypeLabel(location.locationType)}</small>
           </div>
         </div>
         {canEdit || canDeactivate ? (
@@ -415,58 +452,89 @@ function LocationCard({
         <br />
         {[location.postalCode, location.city, location.countryCode].filter(Boolean).join(' · ')}
       </address>
-      <div className="organization-location-resources">
-        <span>{text.registerCount(registers.length)}</span>
-        <span>{text.operatorCount(operators.length)}</span>
-      </div>
-      {registers.length ? (
-        <div className="organization-registers">
-          {registers.map((register) => (
-            <span className="organization-record-row" key={register.id}>
-              <strong>{register.code}</strong>
-              <span>
-                {register.name} · {text.assignedCount(register.operatorIds.length)}{' '}
-                {!register.active ? <StatusChip active={false} /> : null}
-              </span>
-              {canEdit || canDeactivate ? (
-                <RecordActions
-                  active={register.active}
-                  canDeactivate={canDeactivate}
-                  canEdit={canEdit}
-                  onEdit={() => onRecordEdit('register', register.id)}
-                  onToggle={() =>
-                    onRecordToggle('register', register.id, register.active, register.version)
-                  }
-                />
-              ) : null}
-            </span>
-          ))}
-        </div>
-      ) : null}
-      {operators.length ? (
-        <div className="organization-operator-list">
-          {operators.map((operator) => (
-            <span className="organization-record-row" key={operator.id} title={operator.email}>
-              <span>
-                {operator.code} · {operator.displayName}{' '}
-                {!operator.active ? <StatusChip active={false} /> : null}
-              </span>
-              {canEdit || canDeactivate ? (
-                <RecordActions
-                  active={operator.active}
-                  canDeactivate={canDeactivate}
-                  canEdit={canEdit}
-                  onEdit={() => onRecordEdit('operator', operator.id)}
-                  onToggle={() =>
-                    onRecordToggle('operator', operator.id, operator.active, operator.version)
-                  }
-                />
-              ) : null}
-            </span>
-          ))}
-        </div>
-      ) : null}
+      <LocationResources registers={registers.length} operators={operators.length}>
+        {registers.length ? (
+          <div className="organization-registers">
+            <h3>{text.registers}</h3>
+            {registers.map((register) => (
+              <div className="organization-record-row" key={register.id}>
+                <span className="organization-resource-identity">
+                  <strong>{register.name}</strong>
+                  <small>
+                    {register.code} · {text.assignedCount(register.operatorIds.length)}
+                  </small>
+                  {!register.active ? <StatusChip active={false} /> : null}
+                </span>
+                {canEdit || canDeactivate ? (
+                  <RecordActions
+                    active={register.active}
+                    canDeactivate={canDeactivate}
+                    canEdit={canEdit}
+                    onEdit={() => onRecordEdit('register', register.id)}
+                    onToggle={() =>
+                      onRecordToggle('register', register.id, register.active, register.version)
+                    }
+                  />
+                ) : null}
+              </div>
+            ))}
+          </div>
+        ) : null}
+        {operators.length ? (
+          <div className="organization-operator-list">
+            <h3>{text.operators}</h3>
+            {operators.map((operator) => (
+              <div className="organization-record-row" key={operator.id} title={operator.email}>
+                <span className="organization-resource-identity">
+                  <strong>{operator.displayName}</strong>
+                  <small>{operator.code}</small>
+                  {!operator.active ? <StatusChip active={false} /> : null}
+                </span>
+                {canEdit || canDeactivate ? (
+                  <RecordActions
+                    active={operator.active}
+                    canDeactivate={canDeactivate}
+                    canEdit={canEdit}
+                    onEdit={() => onRecordEdit('operator', operator.id)}
+                    onToggle={() =>
+                      onRecordToggle('operator', operator.id, operator.active, operator.version)
+                    }
+                  />
+                ) : null}
+              </div>
+            ))}
+          </div>
+        ) : null}
+      </LocationResources>
     </article>
+  );
+}
+
+function LocationResources({
+  children,
+  operators,
+  registers,
+}: {
+  children: ReactNode;
+  operators: number;
+  registers: number;
+}) {
+  const counts = (
+    <>
+      <span>{text.registerCount(registers)}</span>
+      <span>{text.operatorCount(operators)}</span>
+    </>
+  );
+  if (!operators && !registers)
+    return <div className="organization-location-resources">{counts}</div>;
+  return (
+    <details className="organization-resources">
+      <summary className="organization-location-resources">
+        {counts}
+        <Icon name="chevron" size={16} />
+      </summary>
+      <div className="organization-resources-body">{children}</div>
+    </details>
   );
 }
 
@@ -611,30 +679,13 @@ function TopologyComposer({
   }
 
   return (
-    <form className="content-panel organization-composer" onSubmit={(event) => void submit(event)}>
-      <header className="panel-drawer-header">
-        <button
-          aria-label={text.backLabel}
-          className="panel-back-button"
-          onClick={onCancel}
-          type="button"
-        >
-          <Icon name="arrow" size={17} />
-          {text.back}
-        </button>
-        <button
-          aria-label={text.close}
-          className="panel-close-button"
-          onClick={onCancel}
-          type="button"
-        >
-          <Icon name="close" />
-        </button>
-        <div>
-          <p className="page-eyebrow">{text.title}</p>
-          <h2>{composerTitle(kind)}</h2>
-        </div>
-      </header>
+    <StructureFormPanel
+      title={composerTitle(kind)}
+      busy={saving}
+      onClose={onCancel}
+      onSubmit={(event) => void submit(event)}
+      actionLabel={text.add(noun(kind))}
+    >
       <div className="organization-form-grid">
         {kind === 'branch' ? (
           <SelectControl
@@ -787,15 +838,7 @@ function TopologyComposer({
         </fieldset>
       ) : null}
       {error ? <InlineAlert tone="error">{error}</InlineAlert> : null}
-      <footer>
-        <Button onClick={onCancel} type="button" variant="secondary">
-          {text.cancel}
-        </Button>
-        <Button busy={saving} busyLabel={text.saving} type="submit">
-          {text.add(noun(kind))}
-        </Button>
-      </footer>
-    </form>
+    </StructureFormPanel>
   );
 }
 
@@ -843,14 +886,9 @@ function TopologyEditor({
 
   if (!currentRecord)
     return (
-      <section className="content-panel organization-composer">
+      <StructureFormPanel title={text.editTitle(noun(target.kind))} busy={false} onClose={onCancel}>
         <InlineAlert tone="error">{text.recordMissing}</InlineAlert>
-        <footer>
-          <Button onClick={onCancel} variant="secondary">
-            {text.back}
-          </Button>
-        </footer>
-      </section>
+      </StructureFormPanel>
     );
 
   function set(name: string, value: string) {
@@ -884,33 +922,13 @@ function TopologyEditor({
   }
 
   return (
-    <form
-      className="content-panel organization-composer organization-editor"
+    <StructureFormPanel
+      title={text.editTitle(noun(target.kind))}
+      busy={saving}
+      onClose={onCancel}
       onSubmit={(event) => void submit(event)}
+      actionLabel={text.saveChanges}
     >
-      <header className="panel-drawer-header">
-        <button
-          aria-label={text.backLabel}
-          className="panel-back-button"
-          onClick={onCancel}
-          type="button"
-        >
-          <Icon name="arrow" size={17} />
-          {text.back}
-        </button>
-        <button
-          aria-label={text.close}
-          className="panel-close-button"
-          onClick={onCancel}
-          type="button"
-        >
-          <Icon name="close" />
-        </button>
-        <div>
-          <p className="page-eyebrow">{text.title}</p>
-          <h2>{text.editTitle(noun(target.kind))}</h2>
-        </div>
-      </header>
       {target.kind !== 'entity' ? (
         <p className="organization-editor-hint">
           {target.kind === 'operator' ? text.operatorAccountLocked : text.hierarchyLocked}
@@ -1046,15 +1064,128 @@ function TopologyEditor({
         </fieldset>
       ) : null}
       {error ? <InlineAlert tone="error">{error}</InlineAlert> : null}
-      <footer>
-        <Button onClick={onCancel} type="button" variant="secondary">
-          {text.cancel}
-        </Button>
-        <Button busy={saving} busyLabel={text.saving} type="submit">
-          {text.saveChanges}
-        </Button>
-      </footer>
-    </form>
+    </StructureFormPanel>
+  );
+}
+
+function StructureFormPanel({
+  actionLabel,
+  busy,
+  children,
+  onClose,
+  onSubmit,
+  title,
+}: {
+  actionLabel?: string;
+  busy: boolean;
+  children: ReactNode;
+  onClose: () => void;
+  onSubmit?: (event: FormEvent<HTMLFormElement>) => void;
+  title: string;
+}) {
+  const panel = useRef<HTMLElement>(null);
+  const titleId = useId();
+
+  useEffect(() => {
+    const trigger = document.activeElement;
+    const root = document.getElementById('root');
+    const previouslyInert = root?.inert ?? false;
+    if (root) root.inert = true;
+    (
+      panel.current?.querySelector<HTMLElement>('input:not([type="hidden"])') ??
+      panel.current?.querySelector<HTMLElement>('.panel-back-button')
+    )?.focus();
+    return () => {
+      if (root) root.inert = previouslyInert;
+      if (trigger instanceof HTMLElement && trigger.isConnected) trigger.focus();
+    };
+  }, []);
+
+  return createPortal(
+    <div className="security-drawer-layer organization-drawer-layer">
+      <button
+        aria-label={text.backLabel}
+        className="security-drawer-scrim"
+        disabled={busy}
+        onClick={onClose}
+        type="button"
+        tabIndex={-1}
+      />
+      <aside
+        aria-labelledby={titleId}
+        aria-modal="true"
+        className="organization-drawer"
+        ref={panel}
+        role="dialog"
+        onKeyDown={(event) => {
+          if (event.key === 'Escape') {
+            event.preventDefault();
+            event.stopPropagation();
+            if (!busy) onClose();
+          }
+          if (event.key !== 'Tab') return;
+          const controls = Array.from(
+            event.currentTarget.querySelectorAll<HTMLElement>(
+              'button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex="0"]',
+            ),
+          ).filter(
+            (control) =>
+              !control.hidden &&
+              control.getAttribute('aria-hidden') !== 'true' &&
+              !control.closest('[hidden]'),
+          );
+          const first = controls[0];
+          const last = controls.at(-1);
+          if (event.shiftKey && document.activeElement === first) {
+            event.preventDefault();
+            last?.focus();
+          } else if (!event.shiftKey && document.activeElement === last) {
+            event.preventDefault();
+            first?.focus();
+          }
+        }}
+      >
+        <form className="organization-drawer-form" onSubmit={onSubmit}>
+          <header className="organization-drawer-header">
+            <div className="organization-drawer-navigation">
+              <button
+                aria-label={text.backLabel}
+                className="panel-back-button"
+                disabled={busy}
+                onClick={onClose}
+                type="button"
+              >
+                <Icon name="arrow" size={17} />
+                {text.back}
+              </button>
+              <button
+                aria-label={text.close}
+                className="panel-close-button"
+                disabled={busy}
+                onClick={onClose}
+                type="button"
+              >
+                <Icon name="close" size={18} />
+              </button>
+            </div>
+            <p className="page-eyebrow">{text.title}</p>
+            <h2 id={titleId}>{title}</h2>
+          </header>
+          <div className="organization-drawer-body">{children}</div>
+          <footer className="organization-drawer-footer">
+            <Button disabled={busy} onClick={onClose} type="button" variant="secondary">
+              {text.cancel}
+            </Button>
+            {actionLabel ? (
+              <Button busy={busy} busyLabel={text.saving} type="submit">
+                {actionLabel}
+              </Button>
+            ) : null}
+          </footer>
+        </form>
+      </aside>
+    </div>,
+    document.body,
   );
 }
 

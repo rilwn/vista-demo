@@ -121,7 +121,9 @@ export function Button({
 export interface TextFieldProps extends InputHTMLAttributes<HTMLInputElement> {
   error?: string;
   hint?: string;
+  hidePasswordLabel?: string;
   label: string;
+  showPasswordLabel?: string;
   trailingAction?: ReactNode;
 }
 
@@ -129,9 +131,12 @@ export function TextField({
   className = '',
   error,
   hint,
+  hidePasswordLabel = 'Hide password',
   id,
   label,
+  showPasswordLabel = 'Show password',
   trailingAction,
+  type = 'text',
   ...props
 }: TextFieldProps) {
   if (!id) {
@@ -151,13 +156,26 @@ export function TextField({
     <div className={`vista-field${error ? ' vista-field--error' : ''}`}>
       <label htmlFor={id}>{label}</label>
       <div className="vista-field-control">
-        <input
-          {...props}
-          id={id}
-          className={classes}
-          aria-describedby={descriptionId}
-          aria-invalid={Boolean(error)}
-        />
+        {type === 'password' && !trailingAction ? (
+          <PasswordInput
+            {...props}
+            aria-describedby={descriptionId}
+            aria-invalid={Boolean(error)}
+            className={classes}
+            hideLabel={hidePasswordLabel}
+            id={id}
+            showLabel={showPasswordLabel}
+          />
+        ) : (
+          <input
+            {...props}
+            id={id}
+            className={classes}
+            aria-describedby={descriptionId}
+            aria-invalid={Boolean(error)}
+            type={type}
+          />
+        )}
         {trailingAction ? <div className="vista-field-action">{trailingAction}</div> : null}
       </div>
       {error ? (
@@ -170,6 +188,54 @@ export function TextField({
         </p>
       ) : null}
     </div>
+  );
+}
+
+export interface PasswordInputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 'type'> {
+  hideLabel?: string;
+  showLabel?: string;
+}
+
+/** A password input with an accessible, localized mask toggle. */
+export function PasswordInput({
+  className = '',
+  hideLabel = 'Hide password',
+  showLabel = 'Show password',
+  ...props
+}: PasswordInputProps) {
+  const [visible, setVisible] = useState(false);
+  const label = visible ? hideLabel : showLabel;
+  return (
+    <span className="vista-password-control">
+      <input
+        {...props}
+        className={`vista-password-input ${className}`.trim()}
+        type={visible ? 'text' : 'password'}
+      />
+      <button
+        aria-label={label}
+        className="vista-password-toggle"
+        onClick={() => setVisible((current) => !current)}
+        title={label}
+        type="button"
+      >
+        <svg aria-hidden="true" fill="none" viewBox="0 0 24 24">
+          {visible ? (
+            <>
+              <path d="M3 3l18 18" />
+              <path d="M10.6 10.7a2 2 0 0 0 2.7 2.7" />
+              <path d="M9.9 5.2A10.9 10.9 0 0 1 12 5c5.8 0 9.5 7 9.5 7a17 17 0 0 1-3.2 3.9" />
+              <path d="M6.2 6.3C3.8 8 2.5 12 2.5 12s3.7 7 9.5 7a10 10 0 0 0 3.1-.5" />
+            </>
+          ) : (
+            <>
+              <path d="M2.5 12s3.7-7 9.5-7 9.5 7 9.5 7-3.7 7-9.5 7-9.5-7-9.5-7Z" />
+              <circle cx="12" cy="12" r="2.5" />
+            </>
+          )}
+        </svg>
+      </button>
+    </span>
   );
 }
 

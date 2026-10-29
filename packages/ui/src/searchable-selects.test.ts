@@ -9,6 +9,23 @@ afterEach(() => {
 });
 
 describe('searchable select enhancement', () => {
+  it.each(['dialog', 'aside'])(
+    'keeps %s choices inside their modal for focus and accessibility',
+    (tag) => {
+      document.body.innerHTML = `<${tag} role="dialog"><label><span>Location</span><select><option value="vratsa">Vratsa centre</option><option value="service">Service centre</option></select></label></${tag}>`;
+      const modal = document.querySelector(tag)!;
+      const cleanup = installSearchableSelects(document);
+      const search = modal.querySelector<HTMLInputElement>('.vista-search-select')!;
+      search.dispatchEvent(new FocusEvent('focus'));
+      const list = modal.querySelector('.vista-search-select-listbox');
+      expect(list).not.toBeNull();
+      expect(list?.parentElement).toBe(modal);
+      expect(search.getAttribute('aria-controls')).toBe(list?.id);
+      cleanup();
+      expect(modal.querySelector('.vista-search-select-listbox')).toBeNull();
+    },
+  );
+
   it('maps a custom-listbox label back to the existing select value and change event', () => {
     document.body.innerHTML = `
       <label for="supplier">Supplier</label>
@@ -25,6 +42,7 @@ describe('searchable select enhancement', () => {
     const search = document.querySelector<HTMLInputElement>('.vista-search-select')!;
 
     expect(search.getAttribute('list')).toBeNull();
+    expect(select.getAttribute('aria-hidden')).toBe('true');
     expect(search.getAttribute('aria-controls')).toBeTruthy();
     expect(search.getAttribute('aria-label')).toBe('Search Supplier');
     expect(document.querySelector('datalist')).toBeNull();
@@ -40,6 +58,7 @@ describe('searchable select enhancement', () => {
       'TechSupply',
     );
     cleanup();
+    expect(select.hasAttribute('aria-hidden')).toBe(false);
     expect(document.querySelector('.vista-search-select')).toBeNull();
     expect(document.querySelector('.vista-search-select-listbox')).toBeNull();
   });
@@ -64,6 +83,10 @@ describe('searchable select enhancement', () => {
     expect(document.querySelectorAll('.vista-search-select-option')).toHaveLength(1);
     search.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'Enter' }));
     expect(select.value).toBe('alfa');
+    expect(search.getAttribute('aria-expanded')).toBe('false');
+    search.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(search.getAttribute('aria-expanded')).toBe('true');
+    search.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'Escape' }));
     expect(search.getAttribute('aria-expanded')).toBe('false');
     cleanup();
   });

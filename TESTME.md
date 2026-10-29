@@ -1,3 +1,60 @@
+# Check Security panels
+
+Sign in to Vista Operations with your administrator account and authenticator.
+These checks do not require changing anyone's access.
+
+1. Select **Administration → Security → Employees**. In **Find an employee**,
+   enter `crm@vista.local`, then select **Manage**.
+2. Check the employee details and sign-in protection. Under **Assigned roles**,
+   search for `Warehouse`, then clear the search. Existing selections should
+   remain unchanged. Scroll down: **Close / Save roles** must stay visible,
+   edge-to-edge at the bottom. Select **Close** without saving.
+3. Select **Roles → Add role**. Search for `Service` under **Find a module**.
+   Check the aligned permission checkboxes, then select **Cancel**.
+4. Find an existing role and select **Edit access**. Check its current selections,
+   then select **Cancel** without saving.
+5. Switch to **BG** and narrow the window. Repeat the employee and role-panel
+   checks. Only the panel body should scroll; its heading and actions stay visible.
+   Press **Escape** to close, then switch back to **EN**.
+
+# Check System activity and Recovery panels
+
+Run locally with `npm run dev`. Use `platform.manager@vista.local` for Operations
+and `backup.administrator@vista.local` for Recovery. Enter each account's
+authenticator code if prompted.
+
+1. In Operations, open **Administration → System activity** and open an event.
+   Check its status, copyable reference and delivery steps. Scroll the details;
+   the panel heading stays visible. For a failed delivery with a receiver, choose
+   **Retry delivery**; its confirmation stays in the bottom bar. Cancel it. An
+   event with no receiver must not offer retry.
+2. Switch to **BG**, narrow the window, and reopen an event. Check that the
+   details remain inside the right panel. Press **Escape** to close.
+3. In Vista Recovery, open **Policies & schedules → Create policy**. Check the
+   fields and source checkboxes; scroll the form and confirm its bottom actions
+   stay visible. Select **Back** without saving.
+4. Open **Policy approvals** and **Restores & approvals**. Review any available
+   cards and confirm their status, notes, decision buttons and recovery controls
+   are aligned. Do not approve or decline a request during this visual check.
+
+# Check Business structure panels
+
+Sign in to Vista Operations as `manager@vista.local`. These checks do not
+require saving or changing business records.
+
+1. From the sidebar, select **Administration → Business structure**.
+2. Select **Edit** beside **Vista Demo Ltd.** The form should open at the
+   right edge, not above the company cards. Check the aligned fields, then
+   press **Escape**. Focus should return to **Edit**.
+3. Select **Location**. Make the browser window narrow, then scroll through
+   the form. The heading and bottom **Cancel / Add location** buttons should
+   stay visible, with no gap below the footer. Select **Cancel** without saving.
+4. In the existing location card, select the **registers / operators** counts.
+   Check the expanded rows, then select **Edit** for the cash register. Check
+   that operator checkboxes and names are aligned. Select **Cancel**.
+5. Switch to **BG**, reopen **Обект**, and repeat the scrolling check. Select
+   **Отказ** without saving, then switch back to **EN**.
+
 # Test a DATECS offline cash sale
 
 Only run with the connected DATECS FP-2000 in its manufacturer-approved

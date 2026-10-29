@@ -303,6 +303,8 @@ function AuthenticatorEnrollmentDrawer({
             {...(fieldErrors.currentPassword ? { error: fieldErrors.currentPassword } : {})}
             id="authenticator-current-password"
             label={messages.access.currentPassword}
+            showPasswordLabel={messages.access.showPassword}
+            hidePasswordLabel={messages.access.hidePassword}
             maxLength={128}
             onChange={(event) => setCurrentPassword(event.target.value)}
             required
@@ -438,6 +440,8 @@ function DisableAuthenticatorDrawer({
           {...(fieldErrors.currentPassword ? { error: fieldErrors.currentPassword } : {})}
           id="disable-authenticator-current-password"
           label={messages.access.currentPassword}
+          showPasswordLabel={messages.access.showPassword}
+          hidePasswordLabel={messages.access.hidePassword}
           maxLength={128}
           onChange={(event) => setCurrentPassword(event.target.value)}
           required
@@ -667,6 +671,8 @@ function PasswordChangeDrawer({
               {...(fieldErrors.currentPassword ? { error: fieldErrors.currentPassword } : {})}
               id="access-current-password"
               label={messages.access.currentPassword}
+              showPasswordLabel={messages.access.showPassword}
+              hidePasswordLabel={messages.access.hidePassword}
               maxLength={128}
               onChange={(event) => setCurrentPassword(event.target.value)}
               required
@@ -678,6 +684,8 @@ function PasswordChangeDrawer({
               {...(fieldErrors.newPassword ? { error: fieldErrors.newPassword } : {})}
               id="access-new-password"
               label={messages.access.newPassword}
+              showPasswordLabel={messages.access.showPassword}
+              hidePasswordLabel={messages.access.hidePassword}
               maxLength={128}
               onChange={(event) => setNewPassword(event.target.value)}
               required
@@ -689,6 +697,8 @@ function PasswordChangeDrawer({
               {...(fieldErrors.confirmNewPassword ? { error: fieldErrors.confirmNewPassword } : {})}
               id="access-confirm-password"
               label={messages.access.confirmPassword}
+              showPasswordLabel={messages.access.showPassword}
+              hidePasswordLabel={messages.access.hidePassword}
               maxLength={128}
               onChange={(event) => setConfirmNewPassword(event.target.value)}
               required

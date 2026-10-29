@@ -20,7 +20,7 @@ import type {
   PosShift,
   PosTerminalContext,
 } from '@vista/contracts';
-import { Help, Toast, VistaMark } from '@vista/ui';
+import { Help, PasswordInput, Toast, VistaMark } from '@vista/ui';
 import { useActiveItemVisibility } from '@vista/ui/navigation';
 import type { MouseEvent, ReactNode } from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -1908,7 +1908,7 @@ function SellScreen({
                 </label>
                 <label>
                   <span>Operator password</span>
-                  <input
+                  <PasswordInput
                     autoComplete="new-password"
                     inputMode="numeric"
                     maxLength={8}
@@ -1917,7 +1917,8 @@ function SellScreen({
                     }
                     pattern="[0-9]{4,8}"
                     placeholder="Enter before each sale"
-                    type="password"
+                    showLabel={locale === 'bg' ? 'Покажи паролата' : 'Show password'}
+                    hideLabel={locale === 'bg' ? 'Скрий паролата' : 'Hide password'}
                     value={datecsOperatorPassword}
                   />
                 </label>
@@ -3046,6 +3047,7 @@ function DiscountAuthorizationDialog({
   shiftId: string;
   token: string;
 }) {
+  const { locale } = useLocalization();
   const [approverEmail, setApproverEmail] = useState('manager@vista.local');
   const [approverPassword, setApproverPassword] = useState('');
   const [busy, setBusy] = useState(false);
@@ -3151,10 +3153,11 @@ function DiscountAuthorizationDialog({
           </label>
           <label className="pos-dialog-field">
             <span>Password</span>
-            <input
+            <PasswordInput
               autoComplete="current-password"
               onChange={(event) => setApproverPassword(event.target.value)}
-              type="password"
+              showLabel={locale === 'bg' ? 'Покажи паролата' : 'Show password'}
+              hideLabel={locale === 'bg' ? 'Скрий паролата' : 'Hide password'}
               value={approverPassword}
             />
           </label>
@@ -5097,14 +5100,15 @@ function ReturnDialog({
                 {!activePreparation || activePreparation.status === 'prepared' ? (
                   <label>
                     <span>{locale === 'bg' ? 'Парола на оператора' : 'Operator password'}</span>
-                    <input
+                    <PasswordInput
                       autoComplete="off"
                       inputMode="numeric"
                       maxLength={8}
                       onChange={(event) =>
                         setOperatorPassword(event.target.value.replace(/\D/gu, ''))
                       }
-                      type="password"
+                      showLabel={locale === 'bg' ? 'Покажи паролата' : 'Show password'}
+                      hideLabel={locale === 'bg' ? 'Скрий паролата' : 'Hide password'}
                       value={operatorPassword}
                     />
                     <small>

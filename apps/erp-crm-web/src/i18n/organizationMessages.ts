@@ -26,6 +26,7 @@ const english = {
   summary: 'Structure summary',
   configured: 'Configured business structure',
   identifiersMissing: 'Registration identifiers not supplied',
+  registrationNumber: 'UIC',
   locationCount: (count: number) => `${count} ${count === 1 ? 'location' : 'locations'}`,
   noLocations: 'No operating locations yet.',
   noBranches: 'No branches yet.',
@@ -126,6 +127,7 @@ const bulgarian = {
   summary: 'Обобщение на структурата',
   configured: 'Настроена бизнес структура',
   identifiersMissing: 'Не са въведени регистрационни идентификатори',
+  registrationNumber: 'ЕИК',
   locationCount: (count: number) => `${count} ${count === 1 ? 'обект' : 'обекта'}`,
   noLocations: 'Все още няма работни обекти.',
   noBranches: 'Все още няма клонове.',
@@ -204,3 +206,15 @@ export const organizationText = new Proxy(english, {
     return Reflect.get(getOperationsLocale() === 'bg' ? bulgarian : target, property, receiver);
   },
 });
+
+export function locationTypeLabel(value: string): string {
+  const known: Record<string, [string, string]> = {
+    service_and_retail: ['Service and retail centre', 'Сервизен и търговски център'],
+    retail: ['Retail centre', 'Търговски обект'],
+    service: ['Service centre', 'Сервизен център'],
+    warehouse: ['Warehouse', 'Склад'],
+    office: ['Office', 'Офис'],
+  };
+  const labels = Object.hasOwn(known, value) ? known[value] : undefined;
+  return labels ? labels[getOperationsLocale() === 'bg' ? 1 : 0] : value;
+}

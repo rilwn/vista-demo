@@ -1305,3 +1305,210 @@
     text-align: left;
   }
 }
+
+/* Polished policy, approval, and recovery surfaces. */
+.backup-policy-records .backup-record-grid,
+.backup-approvals .backup-record-grid,
+.backup-restore-requests .backup-record-grid {
+  align-items: stretch;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 25rem), 1fr));
+  gap: 0.85rem;
+}
+
+.backup-policy-records .backup-record-card,
+.backup-approvals .backup-record-card,
+.backup-restore-requests .backup-record-card {
+  gap: 0.7rem;
+  padding: 1rem 1.05rem;
+  border-color: #d9e2d8;
+  border-radius: 0.8rem;
+  box-shadow: 0 5px 18px rgb(26 45 31 / 4%);
+}
+
+.backup-policy-records .backup-record-card-heading,
+.backup-approvals .backup-record-card-heading,
+.backup-restore-requests .backup-record-card-heading {
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.backup-policy-records .backup-record-card > strong,
+.backup-approvals .backup-record-card > strong,
+.backup-restore-requests .backup-record-card > strong {
+  color: #26392d;
+  font-size: 0.98rem;
+  letter-spacing: -0.01em;
+}
+
+.backup-policy-records .backup-record-actions,
+.backup-approvals .backup-approval-actions,
+.backup-restore-requests .backup-approval-actions {
+  align-items: center;
+  justify-content: flex-end;
+  margin-top: 0.2rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid #e4eae2;
+}
+
+.backup-policy-records .backup-record-actions > .backup-policy-hint {
+  flex: 1 1 100%;
+}
+
+.backup-approvals .backup-record-card > small,
+.backup-restore-requests .backup-record-card > small {
+  color: #627267;
+}
+
+.backup-approvals .backup-approval-justification,
+.backup-restore-requests .backup-approval-justification {
+  padding: 0.72rem 0.8rem;
+  border: 1px solid #e5ebe3;
+  border-left: 3px solid #99b39a;
+  border-radius: 0.45rem;
+  color: #405448 !important;
+  background: #f8faf7;
+  line-height: 1.55;
+}
+
+.backup-restore-requests .backup-record-card dl {
+  gap: 0.65rem 0.85rem;
+  margin-top: 0.1rem;
+  padding: 0.72rem 0;
+  border-top: 1px solid #e4eae2;
+  border-bottom: 1px solid #e4eae2;
+}
+
+.backup-restore-requests .backup-record-card dt {
+  color: #728076;
+  font-weight: 620;
+}
+
+.backup-restore-requests .backup-record-card dd {
+  color: #304537;
+  font-size: 0.75rem;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.backup-restore-requests .backup-record-card > .backup-record-edit {
+  align-self: flex-start;
+}
+
+.backup-restore-requests .backup-record-card .backup-form-field {
+  gap: 0.4rem;
+}
+
+.backup-restore-requests .backup-database-record-recovery {
+  gap: 0.7rem;
+  padding: 0.85rem;
+  border-color: #dce6dc;
+  border-radius: 0.72rem;
+  background: #f7faf6;
+}
+
+.backup-restore-requests .backup-database-record-recovery .backup-approval-actions {
+  margin-top: 0;
+}
+
+.backup-approval-actions button,
+.backup-record-edit {
+  transition:
+    border-color 140ms ease,
+    color 140ms ease,
+    background-color 140ms ease,
+    box-shadow 140ms ease;
+}
+
+.backup-approval-actions button:hover:not(:disabled),
+.backup-record-edit:hover:not(:disabled) {
+  border-color: #aabbaa;
+  background-color: #f0f5ef;
+}
+
+.backup-approval-actions .backup-approval-approve:hover:not(:disabled),
+.backup-record-edit--primary:hover:not(:disabled) {
+  border-color: #1c5634 !important;
+  background: #1c5634 !important;
+  box-shadow: 0 3px 8px rgb(27 82 49 / 15%);
+}
+
+.backup-approval-actions .backup-approval-reject:hover:not(:disabled) {
+  border-color: #d8b8b1;
+  color: #793a32;
+  background: #fff7f5;
+}
+
+.backup-policy-editor .backup-editor-header,
+.backup-policy-editor .backup-editor-footer {
+  padding-inline: 1.35rem;
+}
+
+.backup-policy-editor .backup-editor-body {
+  display: grid;
+  align-content: start;
+  gap: 0.1rem;
+  padding: 1rem 1.2rem 1.4rem;
+  scrollbar-width: thin;
+  scrollbar-color: #bdc9bd transparent;
+}
+
+.backup-policy-editor .backup-form-section {
+  gap: 0.9rem;
+  padding: 1.05rem;
+  border-color: #dfe7dd;
+  border-radius: 0.78rem;
+  box-shadow: 0 2px 8px rgb(31 57 38 / 3%);
+}
+
+.backup-policy-editor .backup-form-section legend {
+  padding-inline: 0.45rem;
+  font-size: 0.86rem;
+}
+
+.backup-policy-editor .backup-check-row {
+  min-height: 2.7rem;
+  padding: 0.6rem 0.7rem;
+  border: 1px solid #e1e8df;
+  border-radius: 0.58rem;
+  background: #fbfcfa;
+}
+
+.backup-policy-editor .backup-source-check {
+  min-height: 3.3rem;
+  padding: 0.7rem 0.75rem;
+  transition:
+    border-color 140ms ease,
+    background-color 140ms ease;
+}
+
+.backup-policy-editor .backup-source-check:has(input:checked) {
+  border-color: #a9c4ac;
+  background: #f1f7f0;
+}
+
+.backup-policy-editor .backup-editor-footer {
+  min-height: 4.15rem;
+  align-items: center;
+}
+
+@media (max-width: 560px) {
+  .backup-policy-editor .backup-editor-header,
+  .backup-policy-editor .backup-editor-body,
+  .backup-policy-editor .backup-editor-footer {
+    padding-inline: 0.9rem;
+  }
+
+  .backup-approvals .backup-approval-actions,
+  .backup-restore-requests .backup-approval-actions {
+    justify-content: stretch;
+  }
+
+  .backup-approvals .backup-approval-actions button,
+  .backup-restore-requests .backup-approval-actions button {
+    flex: 1 1 auto;
+  }
+
+  .backup-restore-requests .backup-record-card dl {
+    grid-template-columns: 1fr;
+  }
+}

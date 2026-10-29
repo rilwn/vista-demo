@@ -109,7 +109,7 @@ describe('POS application', () => {
     await screen.findByRole('heading', { name: 'New sale' });
     fireEvent.click(screen.getByRole('link', { name: 'Reports' }));
     fireEvent.click(await screen.findByText('Saved reports & export fields'));
-    await screen.findByRole('option', { name: 'Location review 2026' });
+    await screen.findByRole('option', { name: 'Location review 2026', hidden: true });
     fireEvent.change(screen.getByLabelText('My saved reports'), {
       target: { value: 'a2f6ec25-c68a-4eba-8904-c8d925ba08ae' },
     });

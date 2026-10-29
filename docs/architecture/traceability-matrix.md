@@ -1,5 +1,33 @@
 # Requirement Traceability Matrix
 
+Security UI, 29 October 2026 (AGENTS §§6.8, 17, 19–20): employee access,
+account creation, role creation/editing and recovery handoff use viewport-owned
+right panels with separate scrolling bodies and full-width fixed action bars.
+Focus is contained and restored; the background is inert while a panel is open.
+Role/module search preserves selections, including after failed saves. Narrow
+permission layouts show labeled actions without horizontal scrolling. Existing
+administrative MFA restrictions and backend commands remain unchanged. English
+and Bulgarian labels include recovery forms, statuses and language-switching
+success notices. Evidence: eight focused Security component tests, the existing
+Operations workflow tests, three isolated Security browser journeys, and eight
+real authentication/recovery regression journeys across the three apps.
+Desktop/phone screenshots are reviewed; manual checks begin in `TESTME.md`.
+No backend, API-contract or database changes are included in this UI pass.
+
+Business structure UI, 29 October 2026 (AGENTS §§17, 19–20): all five create
+and edit flows use a separate right-side panel instead of an inline form in
+the hierarchy. The panel has a fixed header/footer, internally scrolling
+content, keyboard focus containment and return, Escape/cancel, inert background,
+and English/Bulgarian labels. Location resources expand on request; register
+and operator rows no longer compete with the company/location hierarchy.
+Known location-type codes have readable localized labels. Shared searchable
+choices stay inside their parent dialog, expose only the visible combobox,
+reopen on click, and close before the panel on Escape. API commands,
+authorization, contracts and database behavior are unchanged. Evidence:
+`OrganizationPage.test.tsx`, existing organization workflow tests, and
+`tests/e2e/organization.spec.ts`, including desktop and Bulgarian phone
+screenshots. Manual checks are in `TESTME.md`.
+
 EUR migration compatibility, 26 October 2026 (AGENTS §§4.3–4.4, 15.2, 16,
 19): the migration runner recognizes only the exact original/corrected `0069`
 checksum pair. It verifies completed conversion and normalized EUR rates before

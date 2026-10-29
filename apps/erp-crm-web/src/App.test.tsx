@@ -3792,12 +3792,17 @@ describe('ERP and CRM authenticated workspace', () => {
       }),
     );
     const dialog = await screen.findByRole('dialog', { name: messages.operations.details });
+    expect(within(dialog).getByText(messages.operations.eventReference)).toBeTruthy();
     expect(within(dialog).getByText(messages.operations.inAppAlert)).toBeTruthy();
     expect(within(dialog).queryByText(integrationEvent.id)).toBeNull();
     expect(within(dialog).queryByText(integrationEvent.correlationId)).toBeNull();
     expect(within(dialog).getByRole('button', { name: 'Copy event ID' })).toBeTruthy();
     expect(within(dialog).getByRole('button', { name: 'Copy request ID' })).toBeTruthy();
+    expect(dialog.querySelector('.admin-drawer-footer')).toBeTruthy();
     fireEvent.click(within(dialog).getByRole('button', { name: messages.operations.retry }));
+    expect(
+      await within(dialog).findByRole('button', { name: messages.operations.confirmRetry }),
+    ).toBeTruthy();
     fireEvent.click(within(dialog).getByRole('button', { name: messages.operations.confirmRetry }));
 
     await waitFor(() => {
@@ -4774,7 +4779,7 @@ describe('ERP and CRM authenticated workspace', () => {
     });
     fireEvent.click(within(exportDialog).getByRole('button', { name: 'Save as new report' }));
     expect(
-      await within(exportDialog).findByRole('option', { name: 'Supplier totals' }),
+      await within(exportDialog).findByRole('option', { name: 'Supplier totals', hidden: true }),
     ).toBeTruthy();
     expect(savedReports[0]?.columns).toEqual(['partnerName', 'grossEurTotal']);
     fireEvent.click(within(exportDialog).getByRole('button', { name: 'Prepare export' }));
@@ -4793,7 +4798,7 @@ describe('ERP and CRM authenticated workspace', () => {
     fireEvent.click(within(exportDialog).getByRole('button', { name: 'Close' }));
     fireEvent.click(screen.getByRole('button', { name: 'Export report' }));
     const reopened = await screen.findByRole('dialog', { name: 'Export report' });
-    await within(reopened).findByRole('option', { name: 'Supplier totals' });
+    await within(reopened).findByRole('option', { name: 'Supplier totals', hidden: true });
     fireEvent.change(within(reopened).getByLabelText('My saved reports'), {
       target: { value: savedReports[0]!.id },
     });
@@ -5151,9 +5156,12 @@ describe('ERP and CRM authenticated workspace', () => {
 
     preview = await screen.findByRole('dialog', { name: 'Q-2026-000001' });
     expect(within(preview).getAllByText('HO-2026-000001')).toHaveLength(2);
-    fireEvent.change(within(preview).getByRole('combobox', { name: /^Receiving location/u }), {
-      target: { value: customerLocationId },
-    });
+    fireEvent.change(
+      within(preview).getByLabelText(/^Receiving location/u, { selector: 'select' }),
+      {
+        target: { value: customerLocationId },
+      },
+    );
     fireEvent.change(within(preview).getByLabelText('Customer representative'), {
       target: { value: 'Elena Customer' },
     });
@@ -8365,7 +8373,7 @@ describe('ERP and CRM authenticated workspace', () => {
     fireEvent.click(screen.getByRole('button', { name: /Export report/u }));
     const dialog = await screen.findByRole('dialog', { name: 'Export CRM report' });
     expect(
-      within(dialog).getByRole('option', { name: 'Customer value and retention' }),
+      within(dialog).getByRole('option', { name: 'Customer value and retention', hidden: true }),
     ).toBeTruthy();
     expect(within(dialog).getByText('Ready')).toBeTruthy();
     const body = dialog.querySelector('.report-export-drawer-body');

@@ -413,7 +413,10 @@ export function BackupRecords({
 
   return (
     <>
-      <section className="backup-records" aria-live="polite">
+      <section
+        className={`backup-records${screen === 'policies' ? ' backup-policy-records' : ''}`}
+        aria-live="polite"
+      >
         <div className="backup-record-toolbar">
           <div>
             <strong>
@@ -674,7 +677,7 @@ export function BackupRecords({
               screen === 'sources' ? translate('Protected source') : translate('Backup policy')
             }
             aria-modal="true"
-            className="backup-editor"
+            className={`backup-editor${screen === 'policies' ? ' backup-policy-editor' : ''}`}
             onSubmit={(event) => void save(event)}
             role="dialog"
           >

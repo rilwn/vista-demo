@@ -32,12 +32,14 @@ import { ApiClientError } from '../api/client';
 import { useAuth } from '../auth/AuthProvider';
 import { Icon } from '../components/Icon';
 import { TechnicalIdentifier } from '../components/TechnicalIdentifier';
+import { AdminDrawer } from '../components/AdminDrawer';
 import {
   formatOperationsDate,
   getOperationsLocale,
   useLocalization,
 } from '../i18n/LocalizationProvider';
 import { securityText as text } from '../i18n/securityMessages';
+import './security-panels.css';
 
 type SecurityView = 'accounts' | 'audit' | 'roles' | 'sessions';
 type Composer = 'account' | 'role' | null;
@@ -75,14 +77,17 @@ export function SecurityAdministrationPage() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [revision, setRevision] = useState(0);
-  const [notice, setNotice] = useState('');
+  const [notice, setNotice] = useState<
+    'sessionRevoked' | 'accountCreated' | 'roleCreated' | 'accessUpdated' | 'roleUpdated' | ''
+  >('');
+  const loadedForToken = useRef('');
   const reload = useCallback(() => setRevision((value) => value + 1), []);
   const securityTabs = useActiveItemVisibility<HTMLDivElement>(view);
 
   useEffect(() => {
     if (!token) return;
     let active = true;
-    setLoading(true);
+    setLoading(loadedForToken.current !== token);
     setLoadError(false);
     void Promise.all([
       listSecurityAccounts(token),
@@ -93,6 +98,7 @@ export function SecurityAdministrationPage() {
     ])
       .then(([accountPage, nextRoles, nextSessions, auditPage, nextIntegrity]) => {
         if (!active) return;
+        loadedForToken.current = token;
         setAccounts(accountPage.items);
         setRoles(nextRoles);
         setSessions(nextSessions);
@@ -154,7 +160,7 @@ export function SecurityAdministrationPage() {
 
       {notice ? (
         <Toast onDismiss={() => setNotice('')} tone="success">
-          {notice}
+          {text[notice]}
         </Toast>
       ) : null}
 
@@ -213,7 +219,7 @@ export function SecurityAdministrationPage() {
               canApprove={canApprove}
               currentSessionId={session?.context.sessionId ?? ''}
               onRevoked={() => {
-                setNotice(text.sessionRevoked);
+                setNotice('sessionRevoked');
                 reload();
               }}
               sessions={sessions}
@@ -229,7 +235,7 @@ export function SecurityAdministrationPage() {
           onClose={() => setComposer(null)}
           onCreated={() => {
             setComposer(null);
-            setNotice(text.accountCreated);
+            setNotice('accountCreated');
             reload();
           }}
           token={token}
@@ -243,7 +249,7 @@ export function SecurityAdministrationPage() {
           onClose={() => setComposer(null)}
           onCreated={() => {
             setComposer(null);
-            setNotice(text.roleCreated);
+            setNotice('roleCreated');
             reload();
           }}
           token={token}
@@ -262,7 +268,7 @@ export function SecurityAdministrationPage() {
           }}
           onUpdated={() => {
             setSelected(null);
-            setNotice(text.accessUpdated);
+            setNotice('accessUpdated');
             reload();
           }}
           roles={roles}
@@ -277,7 +283,7 @@ export function SecurityAdministrationPage() {
           onClose={() => setSelectedRole(null)}
           onUpdated={() => {
             setSelectedRole(null);
-            setNotice(text.roleUpdated);
+            setNotice('roleUpdated');
             reload();
           }}
           role={selectedRole}
@@ -360,24 +366,24 @@ function AccountsView({
               <tbody>
                 {visible.map((account) => (
                   <tr key={account.accountId}>
-                    <td data-label="Employee">
+                    <td data-label={text.employee}>
                       <strong>{account.displayName}</strong>
                       <span>
                         {account.email} · {account.employeeNumber}
                       </span>
                     </td>
-                    <td data-label="Status">
+                    <td data-label={text.status}>
                       <StatusLabel status={account.status} />
                     </td>
-                    <td data-label="Access">
+                    <td data-label={text.access}>
                       {account.roles.length
                         ? account.roles.map((role) => friendlyRoleText(role.name)).join(', ')
                         : text.noRole}
                     </td>
-                    <td data-label="Two-factor">
+                    <td data-label={text.twoFactor}>
                       {account.twoFactorEnrolled ? text.setUp : text.notSetUp}
                     </td>
-                    <td data-label="Sessions">{account.activeSessionCount}</td>
+                    <td data-label={text.sessions}>{account.activeSessionCount}</td>
                     <td className="security-account-row-action">
                       {canApprove ? (
                         <Button onClick={() => onSelect(account)} variant="quiet">
@@ -408,11 +414,18 @@ function RolesView({
   onSelect: (role: SecurityRole) => void;
   roles: SecurityRole[];
 }) {
+  const [query, setQuery] = useState('');
   const [page, setPage] = useState(1);
   const pageSize = 8;
-  const totalPages = Math.max(Math.ceil(roles.length / pageSize), 1);
-  const visible = roles.slice((page - 1) * pageSize, page * pageSize);
+  const filtered = roles.filter((role) =>
+    [friendlyRoleText(role.name), friendlyRoleDescription(role)].some((value) =>
+      value.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()),
+    ),
+  );
+  const totalPages = Math.max(Math.ceil(filtered.length / pageSize), 1);
+  const visible = filtered.slice((page - 1) * pageSize, page * pageSize);
 
+  useEffect(() => setPage(1), [query]);
   useEffect(() => setPage((value) => Math.min(value, totalPages)), [totalPages]);
 
   if (!roles.length) return <SecurityEmpty title={text.noRoles} detail={text.noRolesHint} />;
@@ -430,6 +443,19 @@ function RolesView({
           {roles.length} {text.roles.toLocaleLowerCase()}
         </strong>
       </div>
+      <div className="security-role-directory-search">
+        <TextField
+          id="security-role-directory-search"
+          label={text.findRole}
+          placeholder={text.searchRoles}
+          type="search"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+        />
+      </div>
+      {!visible.length ? (
+        <SecurityEmpty title={text.noMatchingRoles} detail={text.roleSearchHint} />
+      ) : null}
       {visible.map((role) => (
         <article key={role.id}>
           <span className="security-role-mark" aria-hidden="true">
@@ -491,7 +517,7 @@ function SessionsView({
       await revokeSecuritySession(token, id);
       onRevoked();
     } catch {
-      setError(text.sessionRevoked);
+      setError(text.sessionRevokeError);
     } finally {
       setBusyId('');
     }
@@ -635,51 +661,55 @@ function AccountComposer({
   return (
     <Drawer
       title={text.addEmployee}
-      subtitle="Create the employee account now; assign access afterward."
+      subtitle={text.createAccountHint}
       onClose={onClose}
-    >
-      <form className="security-admin-form" onSubmit={(event) => void submit(event)}>
-        {error ? <InlineAlert tone="error">{error}</InlineAlert> : null}
-        <TextField
-          id="security-employee-name"
-          label={text.employee}
-          onChange={(e) => setDraft({ ...draft, displayName: e.target.value })}
-          required
-          value={draft.displayName}
-        />
-        <TextField
-          id="security-employee-number"
-          label="Employee number"
-          onChange={(e) => setDraft({ ...draft, employeeNumber: e.target.value })}
-          required
-          value={draft.employeeNumber}
-        />
-        <TextField
-          id="security-employee-email"
-          label="Work email"
-          onChange={(e) => setDraft({ ...draft, email: e.target.value })}
-          required
-          type="email"
-          value={draft.email}
-        />
-        <TextField
-          hint="Use a temporary password that meets your company password rules."
-          id="security-employee-password"
-          label="Initial password"
-          onChange={(e) => setDraft({ ...draft, initialPassword: e.target.value })}
-          required
-          type="password"
-          value={draft.initialPassword}
-        />
-        <div className="security-drawer-actions">
-          <Button onClick={onClose} variant="quiet">
+      busy={busy}
+      onSubmit={(event) => void submit(event)}
+      footer={
+        <>
+          <Button disabled={busy} onClick={onClose} variant="secondary">
             {text.cancel}
           </Button>
           <Button busy={busy} busyLabel={text.createAccount} type="submit">
             {text.addEmployee}
           </Button>
-        </div>
-      </form>
+        </>
+      }
+    >
+      {error ? <InlineAlert tone="error">{error}</InlineAlert> : null}
+      <TextField
+        id="security-employee-name"
+        label={text.employee}
+        onChange={(e) => setDraft({ ...draft, displayName: e.target.value })}
+        required
+        value={draft.displayName}
+      />
+      <TextField
+        id="security-employee-number"
+        label={text.employeeNumber}
+        onChange={(e) => setDraft({ ...draft, employeeNumber: e.target.value })}
+        required
+        value={draft.employeeNumber}
+      />
+      <TextField
+        id="security-employee-email"
+        label={text.workEmail}
+        onChange={(e) => setDraft({ ...draft, email: e.target.value })}
+        required
+        type="email"
+        value={draft.email}
+      />
+      <TextField
+        hint={text.temporaryPasswordHint}
+        id="security-employee-password"
+        label={text.initialPassword}
+        showPasswordLabel={text.showPassword}
+        hidePasswordLabel={text.hidePassword}
+        onChange={(e) => setDraft({ ...draft, initialPassword: e.target.value })}
+        required
+        type="password"
+        value={draft.initialPassword}
+      />
     </Drawer>
   );
 }
@@ -735,56 +765,63 @@ function RoleComposer({
     }
   }
   return (
-    <Drawer title={text.addRole} subtitle={text.createRoleHint} onClose={onClose} wide>
-      <form className="security-admin-form" onSubmit={(event) => void submit(event)}>
-        {error ? <InlineAlert tone="error">{error}</InlineAlert> : null}
-        <div className="security-form-pair">
-          <TextField
-            id="security-role-name"
-            label={text.roleName}
-            onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-            required
-            value={draft.name}
-          />
-          <TextField
-            hint={text.roleCodeHint}
-            id="security-role-code"
-            label={text.roleCode}
-            onChange={(e) => setDraft({ ...draft, code: e.target.value.toLowerCase() })}
-            pattern="[a-z][a-z0-9._-]{2,99}"
-            required
-            value={draft.code}
-          />
-        </div>
-        <TextField
-          id="security-role-description"
-          label={text.description}
-          onChange={(e) => setDraft({ ...draft, description: e.target.value })}
-          value={draft.description ?? ''}
-        />
-        <label className="security-admin-toggle">
-          <input
-            checked={draft.isAdministrative}
-            disabled={!administrativeSession}
-            onChange={(e) => setDraft({ ...draft, isAdministrative: e.target.checked })}
-            type="checkbox"
-          />
-          <span>
-            <strong>{text.adminRole}</strong>
-            <small>{text.adminRoleHint}</small>
-          </span>
-        </label>
-        <PermissionMatrix selected={selected} onToggle={toggle} />
-        <PermissionDependencyNotice selected={selected} />
-        <div className="security-drawer-actions">
-          <Button onClick={onClose} variant="quiet">
+    <Drawer
+      title={text.addRole}
+      subtitle={text.createRoleHint}
+      onClose={onClose}
+      busy={busy}
+      onSubmit={(event) => void submit(event)}
+      footer={
+        <>
+          <Button disabled={busy} onClick={onClose} variant="secondary">
             {text.cancel}
           </Button>
           <Button busy={busy} busyLabel={text.createRole} type="submit">
             {text.addRole}
           </Button>
-        </div>
-      </form>
+        </>
+      }
+      wide
+    >
+      {error ? <InlineAlert tone="error">{error}</InlineAlert> : null}
+      <div className="security-form-pair">
+        <TextField
+          id="security-role-name"
+          label={text.roleName}
+          onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+          required
+          value={draft.name}
+        />
+        <TextField
+          hint={text.roleCodeHint}
+          id="security-role-code"
+          label={text.roleCode}
+          onChange={(e) => setDraft({ ...draft, code: e.target.value.toLowerCase() })}
+          pattern="[a-z][a-z0-9._-]{2,99}"
+          required
+          value={draft.code}
+        />
+      </div>
+      <TextField
+        id="security-role-description"
+        label={text.description}
+        onChange={(e) => setDraft({ ...draft, description: e.target.value })}
+        value={draft.description ?? ''}
+      />
+      <label className="security-admin-toggle">
+        <input
+          checked={draft.isAdministrative}
+          disabled={!administrativeSession || busy}
+          onChange={(e) => setDraft({ ...draft, isAdministrative: e.target.checked })}
+          type="checkbox"
+        />
+        <span>
+          <strong>{text.adminRole}</strong>
+          <small>{text.adminRoleHint}</small>
+        </span>
+      </label>
+      <PermissionMatrix disabled={busy} selected={selected} onToggle={toggle} />
+      <PermissionDependencyNotice selected={selected} />
     </Drawer>
   );
 }
@@ -859,49 +896,50 @@ function RoleEditorDrawer({
       title={text.editRoleTitle(friendlyRoleText(role.name))}
       subtitle={text.editRoleHint}
       onClose={onClose}
-      wide
-    >
-      <form
-        className="security-admin-form security-role-editor"
-        onSubmit={(event) => void submit(event)}
-      >
-        {error ? <InlineAlert tone="error">{error}</InlineAlert> : null}
-        {role.isAdministrative ? (
-          <section className="security-role-protection">
-            <Icon name="shield" size={18} />
-            <span>
-              <strong>{text.administrativeRole}</strong>
-              <small>{text.administrativeRoleHint}</small>
-            </span>
-          </section>
-        ) : null}
-        {!editAllowed ? (
-          <InlineAlert tone="warning">{text.administrativeRoleRequired}</InlineAlert>
-        ) : null}
-        <TextField
-          id="security-role-edit-name"
-          label={text.roleName}
-          onChange={(event) => setDraft({ ...draft, name: event.target.value })}
-          required
-          value={draft.name}
-        />
-        <TextField
-          id="security-role-edit-description"
-          label={text.description}
-          onChange={(event) => setDraft({ ...draft, description: event.target.value })}
-          value={draft.description ?? ''}
-        />
-        <PermissionMatrix disabled={!editAllowed} selected={selected} onToggle={toggle} />
-        <PermissionDependencyNotice selected={selected} />
-        <div className="security-drawer-actions">
-          <Button onClick={onClose} variant="quiet">
+      busy={busy}
+      onSubmit={(event) => void submit(event)}
+      footer={
+        <>
+          <Button disabled={busy} onClick={onClose} variant="secondary">
             {text.cancel}
           </Button>
           <Button busy={busy} disabled={!editAllowed} busyLabel={text.saveRole} type="submit">
             {text.saveAccess}
           </Button>
-        </div>
-      </form>
+        </>
+      }
+      wide
+    >
+      {error ? <InlineAlert tone="error">{error}</InlineAlert> : null}
+      {role.isAdministrative ? (
+        <section className="security-role-protection">
+          <Icon name="shield" size={18} />
+          <span>
+            <strong>{text.administrativeRole}</strong>
+            <small>{text.administrativeRoleHint}</small>
+          </span>
+        </section>
+      ) : null}
+      {!editAllowed ? (
+        <InlineAlert tone="warning">{text.administrativeRoleRequired}</InlineAlert>
+      ) : null}
+      <TextField
+        id="security-role-edit-name"
+        disabled={!editAllowed || busy}
+        label={text.roleName}
+        onChange={(event) => setDraft({ ...draft, name: event.target.value })}
+        required
+        value={draft.name}
+      />
+      <TextField
+        id="security-role-edit-description"
+        disabled={!editAllowed || busy}
+        label={text.description}
+        onChange={(event) => setDraft({ ...draft, description: event.target.value })}
+        value={draft.description ?? ''}
+      />
+      <PermissionMatrix disabled={!editAllowed || busy} selected={selected} onToggle={toggle} />
+      <PermissionDependencyNotice selected={selected} />
     </Drawer>
   );
 }
@@ -915,35 +953,57 @@ function PermissionMatrix({
   onToggle: (module: string, action: string) => void;
   selected: string[];
 }) {
+  const [query, setQuery] = useState('');
+  const visibleModules = modules.filter((module) =>
+    shortModule(module).toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()),
+  );
   return (
     <fieldset className="security-permission-matrix" disabled={disabled}>
       <legend>{text.permissionsTitle}</legend>
       <p>{text.permissionsHint}</p>
-      <div className="security-permission-head">
-        <span>{text.module}</span>
-        {actions.map((action) => (
-          <span key={action}>{permissionActionLabel(action)}</span>
-        ))}
+      <div className="security-choice-toolbar">
+        <TextField
+          id="security-permission-search"
+          label={text.findModule}
+          type="search"
+          placeholder={text.searchModules}
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+        />
+        <span className="security-selection-count" role="status">
+          {text.selectedPermissionCount(selected.length)}
+        </span>
       </div>
-      {modules.map((module) => (
-        <div className="security-permission-row" key={module}>
-          <strong>{shortModule(module)}</strong>
-          {actions.map((action) => {
-            const key = `${module}:${action}`;
-            return (
-              <label key={key}>
-                <input
-                  aria-label={`${shortModule(module)} ${permissionActionLabel(action)}`}
-                  checked={selected.includes(key)}
-                  onChange={() => onToggle(module, action)}
-                  type="checkbox"
-                />
-                <span>{permissionActionLabel(action)}</span>
-              </label>
-            );
-          })}
+      <div className="security-permission-list">
+        <div className="security-permission-head">
+          <span>{text.module}</span>
+          {actions.map((action) => (
+            <span key={action}>{permissionActionLabel(action)}</span>
+          ))}
         </div>
-      ))}
+        {visibleModules.map((module) => (
+          <div className="security-permission-row" key={module}>
+            <strong>{shortModule(module)}</strong>
+            {actions.map((action) => {
+              const key = `${module}:${action}`;
+              return (
+                <label key={key}>
+                  <input
+                    aria-label={`${shortModule(module)} ${permissionActionLabel(action)}`}
+                    checked={selected.includes(key)}
+                    onChange={() => onToggle(module, action)}
+                    type="checkbox"
+                  />
+                  <span>{permissionActionLabel(action)}</span>
+                </label>
+              );
+            })}
+          </div>
+        ))}
+        {!visibleModules.length ? (
+          <p className="security-filter-empty">{text.noMatchingModules}</p>
+        ) : null}
+      </div>
     </fieldset>
   );
 }
@@ -981,6 +1041,7 @@ function AccountAccessDrawer({
   token: string;
 }) {
   const [selected, setSelected] = useState(account.roles.map((role) => role.id));
+  const [roleQuery, setRoleQuery] = useState('');
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
   const attempts = useRef(new Map<string, string>());
@@ -1022,9 +1083,32 @@ function AccountAccessDrawer({
   return (
     <Drawer
       ariaLabel={account.displayName}
-      title={`Manage ${account.displayName}`}
+      title={text.employeeAccess}
       subtitle={account.email}
       onClose={onClose}
+      busy={Boolean(busy)}
+      footer={
+        <>
+          <Button disabled={Boolean(busy)} onClick={onClose} variant="secondary">
+            {text.close}
+          </Button>
+          {canApprove ? (
+            <Button
+              busy={busy === 'roles'}
+              disabled={
+                Boolean(busy) ||
+                sameSet(
+                  selected,
+                  account.roles.map((role) => role.id),
+                )
+              }
+              onClick={() => void saveRoles()}
+            >
+              {text.saveRoles}
+            </Button>
+          ) : null}
+        </>
+      }
     >
       <section className="security-account-detail">
         <span className="security-account-avatar" aria-hidden="true">
@@ -1062,62 +1146,76 @@ function AccountAccessDrawer({
               <strong>{text.recover}</strong>
               <span>{text.recoverHint}</span>
             </div>
-            <Button onClick={() => onIssueRecovery(account)} variant="secondary">
+            <Button
+              disabled={Boolean(busy)}
+              onClick={() => onIssueRecovery(account)}
+              variant="secondary"
+            >
               {text.issueCode}
             </Button>
           </div>
         ) : null}
       </section>
-      <fieldset className="security-role-assignment" disabled={!canApprove}>
+      <fieldset className="security-role-assignment" disabled={!canApprove || Boolean(busy)}>
         <legend>{text.assignedRoles}</legend>
         <p>{text.assignedRolesHint}</p>
+        <div className="security-choice-toolbar">
+          <TextField
+            id="security-assignment-search"
+            label={text.findRole}
+            type="search"
+            placeholder={text.searchRoles}
+            value={roleQuery}
+            onChange={(event) => setRoleQuery(event.target.value)}
+          />
+          <span className="security-selection-count" role="status">
+            {text.selectedRoleCount(selected.length)}
+          </span>
+        </div>
         {roles.length ? (
           <div className="security-role-choices">
-            {roles.map((role) => (
-              <label key={role.id}>
-                <input
-                  checked={selected.includes(role.id)}
-                  onChange={() =>
-                    setSelected((items) =>
-                      items.includes(role.id)
-                        ? items.filter((id) => id !== role.id)
-                        : [...items, role.id],
-                    )
-                  }
-                  type="checkbox"
-                />
-                <span>
-                  <strong>{friendlyRoleText(role.name)}</strong>
-                  <small>
-                    {role.isAdministrative
-                      ? text.administrator
-                      : `${role.permissions.length} ${text.permissions}`}
-                  </small>
-                </span>
-              </label>
-            ))}
+            {roles
+              .filter((role) =>
+                friendlyRoleText(role.name)
+                  .toLocaleLowerCase()
+                  .includes(roleQuery.trim().toLocaleLowerCase()),
+              )
+              .map((role) => (
+                <label key={role.id}>
+                  <input
+                    checked={selected.includes(role.id)}
+                    onChange={() =>
+                      setSelected((items) =>
+                        items.includes(role.id)
+                          ? items.filter((id) => id !== role.id)
+                          : [...items, role.id],
+                      )
+                    }
+                    type="checkbox"
+                  />
+                  <span>
+                    <strong>{friendlyRoleText(role.name)}</strong>
+                    <small>
+                      {role.isAdministrative
+                        ? text.administrator
+                        : `${role.permissions.length} ${text.permissions}`}
+                    </small>
+                  </span>
+                </label>
+              ))}
           </div>
         ) : (
           <p>{text.noRoles}</p>
         )}
-      </fieldset>
-      <div className="security-drawer-actions">
-        <Button onClick={onClose} variant="quiet">
-          {text.close}
-        </Button>
-        {canApprove ? (
-          <Button
-            busy={busy === 'roles'}
-            disabled={sameSet(
-              selected,
-              account.roles.map((role) => role.id),
-            )}
-            onClick={() => void saveRoles()}
-          >
-            {text.saveRoles}
-          </Button>
+        {roles.length &&
+        !roles.some((role) =>
+          friendlyRoleText(role.name)
+            .toLocaleLowerCase()
+            .includes(roleQuery.trim().toLocaleLowerCase()),
+        ) ? (
+          <p className="security-filter-empty">{text.noMatchingRoles}</p>
         ) : null}
-      </div>
+      </fieldset>
       {canApprove ? (
         <section className="security-account-status-actions">
           <div>
@@ -1127,6 +1225,7 @@ function AccountAccessDrawer({
           {account.status === 'disabled' ? (
             <Button
               busy={busy === 'active'}
+              disabled={Boolean(busy)}
               onClick={() => void changeStatus('active')}
               variant="secondary"
             >
@@ -1135,7 +1234,7 @@ function AccountAccessDrawer({
           ) : (
             <Button
               busy={busy === 'disabled'}
-              disabled={account.accountId === currentAccountId}
+              disabled={Boolean(busy) || account.accountId === currentAccountId}
               onClick={() => void changeStatus('disabled')}
               variant="danger"
             >
@@ -1157,7 +1256,7 @@ function RecoveryHandoffDrawer({
   onClose: () => void;
   token: string;
 }) {
-  const [reason, setReason] = useState('Identity verified in person.');
+  const [reason, setReason] = useState(text.identityVerified);
   const [handoff, setHandoff] = useState<AccountRecoveryHandoff | null>(null);
   const attempt = useRef<{ reason: string; key: string } | null>(null);
   const [busy, setBusy] = useState(false);
@@ -1187,39 +1286,48 @@ function RecoveryHandoffDrawer({
   return (
     <Drawer
       onClose={onClose}
-      subtitle={handoff ? 'Share this code through an approved channel.' : 'Verify identity first.'}
-      title={handoff ? 'Recovery handoff issued' : `Recover ${account.displayName}'s access`}
+      busy={busy}
+      subtitle={handoff ? text.shareRecoveryCode : text.verifyIdentityFirst}
+      title={handoff ? text.recoveryIssuedTitle : text.recoveryTitle(account.displayName)}
+      onSubmit={handoff ? undefined : (event) => void issue(event)}
+      footer={
+        handoff ? (
+          <Button onClick={onClose}>{text.closeHandoff}</Button>
+        ) : (
+          <>
+            <Button disabled={busy} onClick={onClose} variant="secondary">
+              {text.cancel}
+            </Button>
+            <Button busy={busy} busyLabel={text.issuingCode} type="submit">
+              {text.issueRecoveryCode}
+            </Button>
+          </>
+        )
+      }
     >
       {handoff ? (
         <section className="security-recovery-issued" aria-live="polite">
-          <InlineAlert title="Show this code once" tone="warning">
-            The code is valid until {formatDate(handoff.expiresAt)}. It will not be shown again
-            after this panel is closed.
+          <InlineAlert title={text.recoveryCodeOnce} tone="warning">
+            {text.recoveryExpiry(formatDate(handoff.expiresAt))}
           </InlineAlert>
           <div className="security-recovery-recipient">
-            <span>Employee</span>
+            <span>{text.employee}</span>
             <strong>{handoff.email}</strong>
           </div>
           <div className="security-recovery-code">
-            <span>One-time recovery code</span>
+            <span>{text.oneTimeCode}</span>
             <code>{handoff.recoveryCode}</code>
-          </div>
-          <div className="security-drawer-actions">
-            <Button onClick={onClose}>Close handoff</Button>
           </div>
         </section>
       ) : (
-        <form
-          className="security-admin-form security-recovery-form"
-          onSubmit={(event) => void issue(event)}
-        >
+        <>
           {error ? <InlineAlert tone="error">{error}</InlineAlert> : null}
           <div className="security-recovery-recipient">
-            <span>Employee</span>
+            <span>{text.employee}</span>
             <strong>{account.email}</strong>
           </div>
           <div className="vista-field">
-            <label htmlFor="recovery-handoff-reason">Identity verification note</label>
+            <label htmlFor="recovery-handoff-reason">{text.recoveryNote}</label>
             <div className="vista-field-control">
               <textarea
                 className="vista-field-input security-recovery-note"
@@ -1232,20 +1340,9 @@ function RecoveryHandoffDrawer({
                 value={reason}
               />
             </div>
-            <p className="vista-field-message">
-              Record how the employee’s identity was verified. Do not enter a password or recovery
-              code here.
-            </p>
+            <p className="vista-field-message">{text.recoveryNoteHint}</p>
           </div>
-          <div className="security-drawer-actions">
-            <Button disabled={busy} onClick={onClose} variant="quiet">
-              Cancel
-            </Button>
-            <Button busy={busy} busyLabel="Issuing code" type="submit">
-              Issue recovery code
-            </Button>
-          </div>
-        </form>
+        </>
       )}
     </Drawer>
   );
@@ -1258,6 +1355,9 @@ function Drawer({
   subtitle,
   title,
   wide = false,
+  busy = false,
+  footer,
+  onSubmit,
 }: {
   ariaLabel?: string;
   children: React.ReactNode;
@@ -1265,54 +1365,35 @@ function Drawer({
   subtitle?: string;
   title: string;
   wide?: boolean;
+  busy?: boolean;
+  footer?: React.ReactNode;
+  onSubmit?: ((event: FormEvent<HTMLFormElement>) => void) | undefined;
 }) {
   return (
-    <div className="security-drawer-layer" role="presentation">
-      <button
-        aria-label={text.closePanel}
-        className="security-drawer-scrim"
-        onClick={onClose}
-        type="button"
-      />
-      <aside
-        aria-label={ariaLabel ?? title}
-        aria-modal="true"
-        className={`security-drawer${wide ? ' is-wide' : ''}`}
-        role="dialog"
-      >
-        <header className="panel-drawer-header">
-          <button
-            aria-label={text.backSecurity}
-            className="panel-back-button"
-            onClick={onClose}
-            type="button"
-          >
-            <Icon name="arrow" size={17} />
-            {text.back}
-          </button>
-          <button
-            aria-label={text.closePanel}
-            className="panel-close-button"
-            onClick={onClose}
-            type="button"
-          >
-            <Icon name="close" />
-          </button>
-          <div>
-            <h2>{title}</h2>
-            {subtitle ? <p>{subtitle}</p> : null}
-          </div>
-        </header>
-        <div className="security-drawer-body">{children}</div>
-      </aside>
-    </div>
+    <AdminDrawer
+      ariaLabel={ariaLabel}
+      title={title}
+      subtitle={subtitle}
+      eyebrow={text.title}
+      backLabel={text.backSecurity}
+      backText={text.back}
+      closeLabel={text.closePanel}
+      className="security-panel"
+      busy={busy}
+      onClose={onClose}
+      footer={footer}
+      onSubmit={onSubmit}
+      wide={wide}
+    >
+      {children}
+    </AdminDrawer>
   );
 }
 
 function StatusLabel({ status }: { status: SecurityAccount['status'] }) {
   return (
     <span className={`security-status security-status--${status}`}>
-      {status === 'active' ? text.active : status === 'disabled' ? text.disable : 'Locked'}
+      {status === 'active' ? text.active : status === 'disabled' ? text.disabled : text.locked}
     </span>
   );
 }
@@ -1422,7 +1503,7 @@ function friendlyRoleDescription(role: SecurityRole): string {
   }
   if (/development fixture role/iu.test(role.description ?? ''))
     return summarizeRolePermissions(role.permissions);
-  return role.description ? friendlyRoleText(role.description) : 'No description';
+  return role.description ? friendlyRoleText(role.description) : text.noDescription;
 }
 function summarizeRolePermissions(permissions: SecurityRole['permissions']): string {
   const grouped = new Map<string, Set<string>>();

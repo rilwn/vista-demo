@@ -24,6 +24,20 @@ export function WorkspaceLayout({ children }: PropsWithChildren) {
   useEffect(() => {
     const dismissPanel = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return;
+      if (
+        event.target instanceof Element &&
+        event.target.matches('.vista-search-select[aria-expanded="true"]')
+      ) {
+        const toggle = event.target
+          .closest('.vista-search-select-shell')
+          ?.querySelector<HTMLButtonElement>('.vista-search-select-toggle');
+        if (toggle) {
+          event.preventDefault();
+          event.stopImmediatePropagation();
+          toggle.click();
+          return;
+        }
+      }
       const panels = document.querySelectorAll<HTMLElement>('[role="dialog"]');
       const panel = panels.item(panels.length - 1);
       if (!panel) return;

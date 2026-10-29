@@ -210,7 +210,7 @@ describe('backup-control application shell', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Jobs & restore points' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Request restore' }));
     expect(await screen.findByRole('heading', { name: 'Request file-store restore' })).toBeTruthy();
-    fireEvent.change(screen.getByRole('combobox', { name: /Restore scope/u }), {
+    fireEvent.change(screen.getByLabelText(/Restore scope/u, { selector: 'select' }), {
       target: { value: 'complete' },
     });
     fireEvent.change(screen.getByRole('textbox', { name: 'Reason for restore *' }), {
@@ -248,15 +248,18 @@ describe('backup-control application shell', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Jobs & restore points' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Request restore' }));
     expect(await screen.findByRole('heading', { name: 'Request file-store restore' })).toBeTruthy();
-    fireEvent.change(screen.getByRole('combobox', { name: /Restore scope/u }), {
+    fireEvent.change(screen.getByLabelText(/Restore scope/u, { selector: 'select' }), {
       target: { value: 'file' },
     });
     expect(document.querySelector('#backup-restore-file-search')).toBeTruthy();
     fireEvent.change(screen.getByLabelText(/Search files in restore point/u), {
       target: { value: 'demo-evidence' },
     });
-    await screen.findByRole('option', { name: 'partners/demo-evidence.pdf · 32 bytes' });
-    fireEvent.change(screen.getByRole('combobox', { name: /File to restore/u }), {
+    await screen.findByRole('option', {
+      name: 'partners/demo-evidence.pdf · 32 bytes',
+      hidden: true,
+    });
+    fireEvent.change(screen.getByLabelText(/File to restore/u, { selector: 'select' }), {
       target: { value: 'partners/demo-evidence.pdf' },
     });
     fireEvent.change(screen.getByRole('textbox', { name: 'Reason for restore *' }), {
@@ -683,7 +686,7 @@ describe('backup-control application shell', () => {
 
     expect(await screen.findByRole('heading', { name: 'Request email recovery' })).toBeTruthy();
     expect(screen.getByText(/does not add them back to the live mailbox/u)).toBeTruthy();
-    fireEvent.change(screen.getByRole('combobox', { name: /Restore scope/u }), {
+    fireEvent.change(screen.getByLabelText(/Restore scope/u, { selector: 'select' }), {
       target: { value: 'file' },
     });
     fireEvent.change(screen.getByLabelText(/Search messages in restore point/u), {
@@ -691,8 +694,9 @@ describe('backup-control application shell', () => {
     });
     await screen.findByRole('option', {
       name: '2026-10-01 · sender@example.invalid · Backup evidence · 104 bytes',
+      hidden: true,
     });
-    fireEvent.change(screen.getByRole('combobox', { name: /Email message to restore/u }), {
+    fireEvent.change(screen.getByLabelText(/Email message to restore/u, { selector: 'select' }), {
       target: { value: 'mailboxes/INBOX/uidvalidity-9001/17.eml' },
     });
     fireEvent.change(screen.getByRole('textbox', { name: 'Reason for restore *' }), {

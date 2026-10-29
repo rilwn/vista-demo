@@ -131,6 +131,8 @@ export function RecoveryPage() {
                   hint={t('recovery.codeHint')}
                   id="recovery-code"
                   label={t('recovery.code')}
+                  showPasswordLabel={t('login.show')}
+                  hidePasswordLabel={t('login.hide')}
                   maxLength={64}
                   onChange={(event) => setRecoveryCode(event.target.value.trim())}
                   required
@@ -142,6 +144,8 @@ export function RecoveryPage() {
                   hint={t('recovery.passwordHint')}
                   id="recovery-password"
                   label={t('recovery.newPassword')}
+                  showPasswordLabel={t('login.show')}
+                  hidePasswordLabel={t('login.hide')}
                   maxLength={128}
                   onChange={(event) => setNewPassword(event.target.value)}
                   required
@@ -152,6 +156,8 @@ export function RecoveryPage() {
                   autoComplete="new-password"
                   id="recovery-password-confirm"
                   label={t('recovery.confirmPassword')}
+                  showPasswordLabel={t('login.show')}
+                  hidePasswordLabel={t('login.hide')}
                   maxLength={128}
                   onChange={(event) => setConfirmPassword(event.target.value)}
                   required

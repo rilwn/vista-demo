@@ -1,0 +1,131 @@
+.admin-drawer {
+  position: absolute;
+  inset: 0 0 0 auto;
+  width: min(40rem, 100%);
+  height: 100%;
+  height: 100dvh;
+  overflow: hidden;
+  background: var(--vista-surface);
+  color: var(--vista-ink);
+  box-shadow: -16px 0 48px rgb(14 33 29 / 16%);
+}
+.admin-drawer.is-wide {
+  width: min(52rem, 100%);
+}
+.admin-drawer-layout {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  margin: 0;
+}
+.admin-drawer-header {
+  flex: 0 0 auto;
+  padding: 1rem 1.25rem 1.15rem;
+  border-bottom: 1px solid var(--vista-line);
+}
+.admin-drawer-navigation {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+.admin-drawer-navigation :is(.panel-back-button, .panel-close-button) {
+  position: static;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.25rem;
+  width: auto;
+  gap: 0.4rem;
+  padding: 0.4rem 0.55rem;
+  border: 0;
+  border-radius: 0.6rem;
+  background: transparent;
+  color: var(--vista-muted);
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+.admin-drawer-navigation .panel-close-button {
+  width: 2.25rem;
+  height: 2.25rem;
+  padding: 0;
+  border: 1px solid var(--vista-line);
+}
+.admin-drawer-navigation button:hover:not(:disabled) {
+  color: var(--vista-forest-dark);
+  background: var(--vista-surface-muted);
+}
+.admin-drawer-navigation button:focus-visible {
+  outline: 2px solid var(--vista-forest);
+  outline-offset: 2px;
+}
+.admin-drawer-header .page-eyebrow {
+  margin: 0 0 0.3rem;
+  font-size: 0.65rem;
+}
+.admin-drawer-header h2 {
+  margin: 0;
+  font-size: 1.2rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+.admin-drawer-subtitle {
+  margin: 0.35rem 0 0;
+  color: var(--vista-muted);
+  font-size: 0.77rem;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.admin-drawer-body {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1.2rem;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 1.25rem;
+  scrollbar-width: thin;
+  scrollbar-color: var(--vista-line-strong) transparent;
+}
+.admin-drawer-body > * {
+  flex-shrink: 0;
+  min-width: 0;
+  max-width: 100%;
+}
+.admin-drawer-body > .vista-alert {
+  margin: 0;
+}
+.admin-drawer-footer {
+  flex: 0 0 auto;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  width: 100%;
+  padding: 0.9rem 1.25rem max(0.9rem, env(safe-area-inset-bottom));
+  border-top: 1px solid var(--vista-line);
+  background: var(--vista-surface);
+}
+.admin-drawer-layer > .security-drawer-scrim:disabled {
+  opacity: 1;
+}
+@media (max-width: 680px) {
+  .admin-drawer-header {
+    padding: 0.85rem 1rem 1rem;
+  }
+  .admin-drawer-body {
+    padding: 1rem;
+  }
+  .admin-drawer-footer {
+    padding-inline: 1rem;
+  }
+}

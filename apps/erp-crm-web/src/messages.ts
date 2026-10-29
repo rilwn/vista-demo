@@ -219,6 +219,7 @@ export const messages = {
     empty: 'No activity matches this view',
     emptyHint: 'Choose another status or check again later.',
     event: 'Activity',
+    eventReference: 'Event reference',
     eyebrow: 'Administration',
     failedSteps: 'Failed steps',
     filter: 'Show',
@@ -335,6 +336,8 @@ export const messages = {
     passwordError: 'The password could not be updated. Review the details and try again.',
     passwordMismatch: 'The new passwords do not match.',
     passwordPolicyInvalid: 'Choose a password that meets every requirement shown above.',
+    showPassword: 'Show password',
+    hidePassword: 'Hide password',
     passwordPolicyTitle: 'Your password must include',
     passwordRequirementHistory: (count: number) =>
       `A password not used in your last ${count} ${count === 1 ? 'change' : 'changes'}`,

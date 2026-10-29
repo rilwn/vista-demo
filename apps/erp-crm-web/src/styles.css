@@ -31382,6 +31382,121 @@ body .login-page .recovery-status-mark {
   grid-auto-rows: max-content;
 }
 
+.system-activity-drawer .admin-drawer-body.system-activity-detail {
+  display: grid;
+  align-content: start;
+  gap: 0.9rem;
+}
+
+.system-activity-event-reference {
+  display: grid;
+  gap: 0.25rem;
+  padding: 0.75rem 0.85rem;
+  border: 1px solid var(--vista-line);
+  border-radius: 0.72rem;
+  background: color-mix(in srgb, var(--vista-surface-muted) 42%, var(--vista-surface));
+}
+
+.system-activity-event-reference > span {
+  color: var(--vista-muted);
+  font-size: 0.65rem;
+  font-weight: 700;
+}
+
+.system-activity-drawer .system-activity-detail-heading {
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.65rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--vista-line);
+}
+
+.system-activity-drawer .system-activity-detail-heading > span:last-child {
+  margin-left: auto;
+  text-align: right;
+}
+
+.system-activity-drawer .system-activity-facts {
+  border-color: var(--vista-line);
+  border-radius: 0.75rem;
+}
+
+.system-activity-drawer .system-activity-facts div,
+.system-activity-drawer .system-activity-facts div:nth-child(odd),
+.system-activity-drawer .system-activity-facts div:nth-last-child(-n + 2) {
+  border-color: var(--vista-line);
+}
+
+.system-activity-drawer .system-activity-facts dt {
+  color: var(--vista-muted);
+}
+
+.system-activity-section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.25rem;
+}
+
+.system-activity-section-heading h3 {
+  margin: 0;
+}
+
+.system-activity-section-heading > span {
+  display: inline-grid;
+  min-width: 1.6rem;
+  min-height: 1.6rem;
+  place-items: center;
+  padding: 0 0.35rem;
+  border: 1px solid var(--vista-line);
+  border-radius: 999px;
+  color: var(--vista-muted);
+  background: var(--vista-surface-muted);
+  font-size: 0.67rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.system-activity-drawer .system-activity-deliveries article {
+  min-width: 0;
+  padding: 0.72rem 0.1rem;
+  border-color: var(--vista-line);
+}
+
+.system-activity-drawer .system-activity-deliveries article > div {
+  min-width: 0;
+}
+
+.system-activity-drawer .system-activity-deliveries strong {
+  color: var(--vista-ink);
+}
+
+.system-activity-drawer .system-activity-deliveries span {
+  width: fit-content;
+  padding: 0.18rem 0.42rem;
+  border: 1px solid var(--vista-line);
+  border-radius: 999px;
+  background: var(--vista-surface-muted);
+  font-size: 0.63rem;
+  font-weight: 700;
+}
+
+.system-activity-drawer .system-activity-deliveries small {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.system-activity-drawer .system-activity-recovery {
+  border-color: #ead7b5;
+  color: #65491f;
+  background: #fff9ec;
+}
+
+.system-activity-drawer .admin-drawer-footer .vista-button {
+  min-width: 8rem;
+}
+
 .system-activity-toolbar {
   padding: 0.78rem 0.9rem;
   background: color-mix(in srgb, var(--vista-surface-muted) 45%, var(--vista-surface));
@@ -31686,6 +31801,26 @@ body .login-page .recovery-status-mark {
 
   .security-admin-pagination {
     justify-content: center;
+  }
+
+  .system-activity-drawer .system-activity-facts {
+    grid-template-columns: 1fr;
+  }
+
+  .system-activity-drawer .system-activity-facts div,
+  .system-activity-drawer .system-activity-facts div:nth-child(odd),
+  .system-activity-drawer .system-activity-facts div:nth-last-child(-n + 2) {
+    border-right: 0;
+    border-bottom: 1px solid var(--vista-line);
+  }
+
+  .system-activity-drawer .system-activity-facts div:last-child {
+    border-bottom: 0;
+  }
+
+  .system-activity-drawer .system-activity-detail-heading > span:last-child {
+    margin-left: 0;
+    text-align: left;
   }
 }
 
