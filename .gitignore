@@ -29,3 +29,6 @@ infrastructure/docker/data/
 *.sqlite
 *.sqlite-journal
 *.sqlite-wal
+
+# Local client operating manual (keep out of source control)
+/docs/user-guides/vista-working-and-demo-guide.docx
