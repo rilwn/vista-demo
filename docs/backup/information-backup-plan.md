@@ -45,6 +45,11 @@ not establish coverage of Vista's live sources or physical recovery hardware.
 Do not claim protection for an asset until its approved source is configured,
 a run is verified, and its isolated recovery has been exercised.
 
+The on-premises first tier uses a dedicated private bucket on the same MinIO
+server, with scoped credentials distinct from managed file access. It is not
+an independent copy. See the [site readiness audit](on-premises-readiness.md)
+and [deployment runbook](../deployment/on-premises-runbook.md).
+
 ## Source inventory
 
 Start with the deployed Vista database and approved object storage as **Critical**.

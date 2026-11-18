@@ -12,6 +12,7 @@ apps/api/openapi.json
 .env.*
 !.env.example
 !.env.coolify.example
+!.env.onprem.example
 *.pem
 *.key
 

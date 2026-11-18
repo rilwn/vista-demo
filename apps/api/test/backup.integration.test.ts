@@ -1018,6 +1018,9 @@ describe.skipIf(!runDatabaseTests)('backup source and policy management', () => 
       new URL('../src/database/migrations', import.meta.url),
     );
     await expect(migrateDown(databasePool, migrationDirectory)).resolves.toBe(
+      '0121_identity_directory_sessions',
+    );
+    await expect(migrateDown(databasePool, migrationDirectory)).resolves.toBe(
       '0120_backup_database_engine',
     );
     await expect(migrateDown(databasePool, migrationDirectory)).resolves.toBe(
@@ -1077,6 +1080,7 @@ describe.skipIf(!runDatabaseTests)('backup source and policy management', () => 
       '0118_backup_email_source',
       '0119_backup_webdav_cloud_source',
       '0120_backup_database_engine',
+      '0121_identity_directory_sessions',
     ]);
     expect((await backup.drTests()).items).toContainEqual(drResult);
 
@@ -1192,6 +1196,9 @@ describe.skipIf(!runDatabaseTests)('backup source and policy management', () => 
       new URL('../src/database/migrations', import.meta.url),
     );
     await expect(migrateDown(databasePool, migrationDirectory)).resolves.toBe(
+      '0121_identity_directory_sessions',
+    );
+    await expect(migrateDown(databasePool, migrationDirectory)).resolves.toBe(
       '0120_backup_database_engine',
     );
     await expect(migrateDown(databasePool, migrationDirectory)).resolves.toBe(
@@ -1247,6 +1254,7 @@ describe.skipIf(!runDatabaseTests)('backup source and policy management', () => 
       '0118_backup_email_source',
       '0119_backup_webdav_cloud_source',
       '0120_backup_database_engine',
+      '0121_identity_directory_sessions',
     ]);
     await expect(
       backup.recordPlanReview(
@@ -2709,6 +2717,9 @@ describe.skipIf(!runDatabaseTests)('backup source and policy management', () => 
       new URL('../src/database/migrations', import.meta.url),
     );
     await expect(migrateDown(databasePool, migrationDirectory)).resolves.toBe(
+      '0121_identity_directory_sessions',
+    );
+    await expect(migrateDown(databasePool, migrationDirectory)).resolves.toBe(
       '0120_backup_database_engine',
     );
     await expect(migrateDown(databasePool, migrationDirectory)).resolves.toBe(
@@ -2724,6 +2735,7 @@ describe.skipIf(!runDatabaseTests)('backup source and policy management', () => 
       '0118_backup_email_source',
       '0119_backup_webdav_cloud_source',
       '0120_backup_database_engine',
+      '0121_identity_directory_sessions',
     ]);
 
     const deletionRequest = await backupWithArtifactStorage.requestArtifactDeletion(
@@ -3113,6 +3125,9 @@ describe.skipIf(!runDatabaseTests)('backup source and policy management', () => 
     );
     expect(restoredFiles.has(`${differentialTargetPrefix}reports/diff-one.csv`)).toBe(false);
     await expect(migrateDown(databasePool, migrationDirectory)).resolves.toBe(
+      '0121_identity_directory_sessions',
+    );
+    await expect(migrateDown(databasePool, migrationDirectory)).resolves.toBe(
       '0120_backup_database_engine',
     );
     await expect(migrateDown(databasePool, migrationDirectory)).resolves.toBe(
@@ -3128,6 +3143,7 @@ describe.skipIf(!runDatabaseTests)('backup source and policy management', () => 
       '0118_backup_email_source',
       '0119_backup_webdav_cloud_source',
       '0120_backup_database_engine',
+      '0121_identity_directory_sessions',
     ]);
   }, 30_000);
 
@@ -4127,6 +4143,9 @@ describe.skipIf(!runDatabaseTests)('independent backup-copy lifecycle', () => {
       new URL('../src/database/migrations', import.meta.url),
     );
     await expect(migrateDown(databasePool, migrationDirectory)).resolves.toBe(
+      '0121_identity_directory_sessions',
+    );
+    await expect(migrateDown(databasePool, migrationDirectory)).resolves.toBe(
       '0120_backup_database_engine',
     );
     await expect(migrateDown(databasePool, migrationDirectory)).resolves.toBe(
@@ -4195,6 +4214,7 @@ describe.skipIf(!runDatabaseTests)('independent backup-copy lifecycle', () => {
       '0118_backup_email_source',
       '0119_backup_webdav_cloud_source',
       '0120_backup_database_engine',
+      '0121_identity_directory_sessions',
     ]);
     const run = await database.getPool().query<{
       source_bucket_snapshot: string | null;
@@ -4291,6 +4311,9 @@ describe.skipIf(!runDatabaseTests)('independent backup-copy lifecycle', () => {
         retryAllowed: true,
       }),
     ).resolves.toMatchObject({ status: 'verified' });
+    await expect(migrateDown(databasePool, migrationDirectory)).resolves.toBe(
+      '0121_identity_directory_sessions',
+    );
     await expect(migrateDown(databasePool, migrationDirectory)).resolves.toBe(
       '0120_backup_database_engine',
     );

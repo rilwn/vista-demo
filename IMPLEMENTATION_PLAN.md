@@ -36,6 +36,10 @@ to deployment/hardware/site testing rather than represented as completed code.
 - Vista's final protected-source inventory, physical backup server/tape target,
   independent/air-gapped storage verification, and witnessed replacement-
   hardware restore with measured RPO/RTO and signed protocol.
+- Reconcile the live on-prem Compose and Caddy files, commission scoped MinIO
+  storage and TLS SMTP, verify the first database and file-store backups, and
+  rehearse isolated restores following the [on-prem runbook](docs/deployment/on-premises-runbook.md).
+  The same-host bucket does not close the independent-copy or hardware gates.
 - Hosted security and regression retest, Vista-owned repository/access
   handover, and staff training.
 

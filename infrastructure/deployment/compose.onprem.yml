@@ -1,0 +1,94 @@
+# Reference override. Reconcile with the live site's untracked override before use.
+services:
+  postgres:
+    restart: unless-stopped
+  redis:
+    restart: unless-stopped
+  minio:
+    restart: unless-stopped
+  minio-init:
+    profiles: [local-bootstrap]
+  mailpit:
+    profiles: [rehearsal-mail]
+  api:
+    restart: unless-stopped
+    environment:
+      API_TRUST_PROXY_HOPS: '2'
+      VISTA_DEPLOYMENT_STAGE: ${VISTA_DEPLOYMENT_STAGE:?Set the on-prem deployment stage}
+      CORS_ORIGINS: https://${ONPREM_OPERATIONS_HOST:?Set Operations hostname},https://${ONPREM_POS_HOST:?Set POS hostname},https://${ONPREM_RECOVERY_HOST:?Set Recovery hostname}
+      S3_ENDPOINT: ${ONPREM_S3_ENDPOINT:-http://minio:9000}
+      S3_ACCESS_KEY_ID: ${ONPREM_FILES_S3_ACCESS_KEY_ID:?Set the scoped managed-file access key}
+      S3_SECRET_ACCESS_KEY: ${ONPREM_FILES_S3_SECRET_ACCESS_KEY:?Set the scoped managed-file secret}
+      BACKUP_S3_BUCKET: ${BACKUP_S3_BUCKET:-vista-backups}
+      BACKUP_S3_ACCESS_KEY_ID: ${BACKUP_S3_ACCESS_KEY_ID:?Set the scoped backup access key}
+      BACKUP_S3_SECRET_ACCESS_KEY: ${BACKUP_S3_SECRET_ACCESS_KEY:?Set the scoped backup secret}
+      BACKUP_ENCRYPTION_KEY: ${BACKUP_ENCRYPTION_KEY:?Set and escrow the backup encryption key}
+      BACKUP_PRIMARY_DATABASE_SOURCE_CODE: ${BACKUP_PRIMARY_DATABASE_SOURCE_CODE:-VISTA-DB-01}
+      BACKUP_PRIMARY_OBJECT_STORAGE_SOURCE_CODE: ${BACKUP_PRIMARY_OBJECT_STORAGE_SOURCE_CODE:-VISTA-FILES-01}
+      BACKUP_DATABASE_SOURCE_URLS_JSON: ${BACKUP_DATABASE_SOURCE_URLS_JSON:-}
+      BACKUP_OBJECT_STORAGE_SOURCE_CONFIGS_JSON: ${BACKUP_OBJECT_STORAGE_SOURCE_CONFIGS_JSON:-}
+      BACKUP_EMAIL_SOURCE_CONFIGS_JSON: ${BACKUP_EMAIL_SOURCE_CONFIGS_JSON:-}
+      BACKUP_WEBDAV_SOURCE_CONFIGS_JSON: ${BACKUP_WEBDAV_SOURCE_CONFIGS_JSON:-}
+      BACKUP_RESTORE_DATABASE_URL: ${BACKUP_RESTORE_DATABASE_URL:-}
+      BACKUP_REPLICA_REQUIRED: ${BACKUP_REPLICA_REQUIRED:-false}
+      BACKUP_REPLICA_S3_ENDPOINT: ${BACKUP_REPLICA_S3_ENDPOINT:-}
+      BACKUP_REPLICA_S3_BUCKET: ${BACKUP_REPLICA_S3_BUCKET:-}
+      BACKUP_REPLICA_S3_ACCESS_KEY_ID: ${BACKUP_REPLICA_S3_ACCESS_KEY_ID:-}
+      BACKUP_REPLICA_S3_SECRET_ACCESS_KEY: ${BACKUP_REPLICA_S3_SECRET_ACCESS_KEY:-}
+      BACKUP_REPLICA_S3_REGION: ${BACKUP_REPLICA_S3_REGION:-us-east-1}
+      BACKUP_REPLICA_S3_FORCE_PATH_STYLE: ${BACKUP_REPLICA_S3_FORCE_PATH_STYLE:-true}
+      BACKUP_REPLICA_TARGET_CODE: ${BACKUP_REPLICA_TARGET_CODE:-independent-vault}
+      SMTP_HOST: ${SMTP_HOST:?Set a real SMTP relay}
+      SMTP_PORT: ${SMTP_PORT:?Set the SMTP port}
+      SMTP_FROM: ${SMTP_FROM:?Set an authorised sender address}
+      SMTP_TLS_MODE: ${SMTP_TLS_MODE:?Set the SMTP TLS mode}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMS_PROVIDER: ${SMS_PROVIDER:-disabled}
+      BACKUP_ALERT_SMS_RECIPIENTS: ${BACKUP_ALERT_SMS_RECIPIENTS:-}
+      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID:-}
+      TWILIO_API_KEY_SID: ${TWILIO_API_KEY_SID:-}
+      TWILIO_API_KEY_SECRET: ${TWILIO_API_KEY_SECRET:-}
+      TWILIO_FROM_NUMBER: ${TWILIO_FROM_NUMBER:-}
+      TWILIO_MESSAGING_SERVICE_SID: ${TWILIO_MESSAGING_SERVICE_SID:-}
+      POS_FISCAL_SIMULATOR_ENABLED: 'false'
+  operations:
+    restart: unless-stopped
+    ports: !reset []
+    build:
+      args:
+        VITE_POS_APP_URL: https://${ONPREM_POS_HOST:?Set POS hostname}
+  pos:
+    restart: unless-stopped
+    ports: !reset []
+  recovery:
+    restart: unless-stopped
+    ports: !reset []
+  edge-proxy:
+    # Pin the site's reviewed Caddy image, preferably by digest.
+    image: ${ONPREM_CADDY_IMAGE:?Set the reviewed Caddy image reference}
+    restart: unless-stopped
+    environment:
+      ONPREM_OPERATIONS_HOST: ${ONPREM_OPERATIONS_HOST:?Set Operations hostname}
+      ONPREM_POS_HOST: ${ONPREM_POS_HOST:?Set POS hostname}
+      ONPREM_RECOVERY_HOST: ${ONPREM_RECOVERY_HOST:?Set Recovery hostname}
+    ports:
+      - '${ONPREM_BIND_IP:?Set the VPN or approved private IPv4 address}:80:80'
+      - '${ONPREM_BIND_IP:?Set the VPN or approved private IPv4 address}:443:443'
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - edge-caddy-data:/data
+      - edge-caddy-config:/config
+    depends_on:
+      operations: { condition: service_started }
+      pos: { condition: service_started }
+      recovery: { condition: service_started }
+    security_opt: [no-new-privileges:true]
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+volumes:
+  edge-caddy-data:
+  edge-caddy-config:

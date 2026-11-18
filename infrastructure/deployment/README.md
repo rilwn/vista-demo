@@ -117,3 +117,10 @@ For POS demonstrations without the certified fiscal device, set
 this mode are simulated and are not valid fiscal documents. The API refuses this
 setting outside staging; keep it `false` in production. Do not change
 `NODE_ENV=production` or label an unconnected device as hardware to enable POS.
+
+## On-premises deployment
+
+For the privately hosted Vista installation, use the
+[on-premises operations runbook](../../docs/deployment/on-premises-runbook.md).
+The on-premises override is a reference for reconciling the site configuration;
+it is not a replacement for the existing server files or the Coolify setup.

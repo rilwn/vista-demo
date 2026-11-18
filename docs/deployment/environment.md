@@ -47,6 +47,17 @@ environment and injected by an approved secret manager; never commit `.env`.
 | `INITIAL_ADMIN_*`                                          | One-time initial-administrator provisioning command only      | no; set only for that controlled command     |
 | `FEATURE_*`                                                | explicit optional capability gates                            | yes; disabled unless approved                |
 
+For on-premises Recovery, `BACKUP_S3_BUCKET` defaults to `vista-backups` and
+must differ from `S3_BUCKET`. Set `BACKUP_S3_ACCESS_KEY_ID` and
+`BACKUP_S3_SECRET_ACCESS_KEY` together to a dedicated primary-backup identity
+on the same S3 endpoint. With neither set, existing development and staging
+deployments continue to use the managed storage credentials. The on-premises
+override requires the distinct pair and a 64-hex-character
+`BACKUP_ENCRYPTION_KEY`; `BACKUP_RESTORE_DATABASE_URL` must point to a separate
+restore target. See the [on-prem runbook](on-premises-runbook.md) for the
+independent replica, SMTP and optional SMS setup, and the
+[backup plan](../backup/information-backup-plan.md) for source mappings.
+
 `Europe/Sofia` is the adopted business-timezone default. Change it only if Vista
 later operates this system in a different business timezone.
 

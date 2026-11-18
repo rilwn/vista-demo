@@ -28,6 +28,7 @@ export class ObjectStorageService implements OnApplicationShutdown {
   private readonly independentCopyRequired: boolean;
   private readonly independentTargetCode: string;
   private readonly client: S3Client;
+  private readonly backupClient: S3Client;
   private readonly timeoutMs: number;
 
   constructor(@Inject(APP_ENVIRONMENT) environment: AppEnvironment) {
@@ -46,6 +47,17 @@ export class ObjectStorageService implements OnApplicationShutdown {
       forcePathStyle: environment.S3_FORCE_PATH_STYLE,
       region: environment.S3_REGION,
     });
+    this.backupClient = environment.BACKUP_S3_ACCESS_KEY_ID
+      ? new S3Client({
+          credentials: {
+            accessKeyId: environment.BACKUP_S3_ACCESS_KEY_ID,
+            secretAccessKey: environment.BACKUP_S3_SECRET_ACCESS_KEY,
+          },
+          endpoint: environment.S3_ENDPOINT,
+          forcePathStyle: environment.S3_FORCE_PATH_STYLE,
+          region: environment.S3_REGION,
+        })
+      : this.client;
     this.independentClient = environment.BACKUP_REPLICA_S3_ENDPOINT
       ? new S3Client({
           credentials: {
@@ -96,7 +108,7 @@ export class ObjectStorageService implements OnApplicationShutdown {
   }
 
   async deleteBackupObject(key: string): Promise<void> {
-    await this.client.send(new DeleteObjectCommand({ Bucket: this.backupBucket, Key: key }));
+    await this.backupClient.send(new DeleteObjectCommand({ Bucket: this.backupBucket, Key: key }));
     if (this.independentClient) {
       await this.independentClient.send(
         new DeleteObjectCommand({ Bucket: this.independentBucket, Key: key }),
@@ -105,7 +117,7 @@ export class ObjectStorageService implements OnApplicationShutdown {
   }
 
   async createBackupUpload(key: string): Promise<string> {
-    const result = await this.client.send(
+    const result = await this.backupClient.send(
       new CreateMultipartUploadCommand({
         Bucket: this.backupBucket,
         ContentType: 'application/vnd.vista.encrypted-backup',
@@ -123,7 +135,7 @@ export class ObjectStorageService implements OnApplicationShutdown {
     partNumber: number;
     uploadId: string;
   }): Promise<string> {
-    const result = await this.client.send(
+    const result = await this.backupClient.send(
       new UploadPartCommand({
         Body: input.body,
         Bucket: this.backupBucket,
@@ -141,7 +153,7 @@ export class ObjectStorageService implements OnApplicationShutdown {
     parts: Array<{ ETag: string; PartNumber: number }>;
     uploadId: string;
   }): Promise<void> {
-    await this.client.send(
+    await this.backupClient.send(
       new CompleteMultipartUploadCommand({
         Bucket: this.backupBucket,
         Key: input.key,
@@ -152,7 +164,7 @@ export class ObjectStorageService implements OnApplicationShutdown {
   }
 
   async abortBackupUpload(input: { key: string; uploadId: string }): Promise<void> {
-    await this.client.send(
+    await this.backupClient.send(
       new AbortMultipartUploadCommand({
         Bucket: this.backupBucket,
         Key: input.key,
@@ -171,7 +183,7 @@ export class ObjectStorageService implements OnApplicationShutdown {
   }
 
   async getPrimaryBackupObjectStream(key: string): Promise<Readable> {
-    return this.readBackupObjectStream(this.client, this.backupBucket, key);
+    return this.readBackupObjectStream(this.backupClient, this.backupBucket, key);
   }
 
   async copyBackupObjectToIndependentStore(input: {
@@ -188,7 +200,7 @@ export class ObjectStorageService implements OnApplicationShutdown {
       expectedSha256: input.expectedSha256,
       expectedSizeBytes: input.expectedSizeBytes,
       key: input.key,
-      source: this.artifactStore(this.client, this.backupBucket),
+      source: this.artifactStore(this.backupClient, this.backupBucket),
     });
   }
 
@@ -283,7 +295,7 @@ export class ObjectStorageService implements OnApplicationShutdown {
     metadata?: Record<string, string>;
     size: number;
   }): Promise<void> {
-    await this.client.send(
+    await this.backupClient.send(
       new PutObjectCommand({
         Body: input.body,
         Bucket: this.backupBucket,
@@ -309,7 +321,7 @@ export class ObjectStorageService implements OnApplicationShutdown {
     ) {
       throw new Error('BACKUP_RESTORE_OBJECT_KEY_INVALID');
     }
-    const result = await this.client.send(
+    const result = await this.backupClient.send(
       new GetObjectCommand({ Bucket: this.backupBucket, Key: key }),
     );
     if (!result.Body || result.ContentLength === undefined) {
@@ -324,7 +336,7 @@ export class ObjectStorageService implements OnApplicationShutdown {
     }
     let continuationToken: string | undefined;
     do {
-      const page = await this.client.send(
+      const page = await this.backupClient.send(
         new ListObjectsV2Command({
           Bucket: this.backupBucket,
           ContinuationToken: continuationToken,
@@ -336,7 +348,7 @@ export class ObjectStorageService implements OnApplicationShutdown {
         object.Key ? [{ Key: object.Key }] : [],
       );
       if (keys.length) {
-        const result = await this.client.send(
+        const result = await this.backupClient.send(
           new DeleteObjectsCommand({
             Bucket: this.backupBucket,
             Delete: { Objects: keys, Quiet: true },
@@ -352,7 +364,7 @@ export class ObjectStorageService implements OnApplicationShutdown {
   }
 
   async ensureBackupBucket(): Promise<void> {
-    await this.client.send(new HeadBucketCommand({ Bucket: this.backupBucket }), {
+    await this.backupClient.send(new HeadBucketCommand({ Bucket: this.backupBucket }), {
       abortSignal: AbortSignal.timeout(this.timeoutMs),
     });
   }
@@ -367,6 +379,7 @@ export class ObjectStorageService implements OnApplicationShutdown {
 
   onApplicationShutdown(): void {
     this.client.destroy();
+    if (this.backupClient !== this.client) this.backupClient.destroy();
     this.independentClient?.destroy();
   }
 

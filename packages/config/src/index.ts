@@ -68,6 +68,8 @@ const environmentSchema = z
       .regex(/^[a-z0-9][a-z0-9-]*$/u)
       .default('independent-vault'),
     BACKUP_S3_BUCKET: z.string().min(3).default('vista-backups'),
+    BACKUP_S3_ACCESS_KEY_ID: z.string().trim().default(''),
+    BACKUP_S3_SECRET_ACCESS_KEY: z.string().default(''),
     BACKUP_DISPATCH_CRON: z.string().min(1).default('0 * * * * *'),
     BACKUP_ALERT_SMS_RECIPIENTS: z.string().default(''),
     BACKUP_RESTORE_DATABASE_URL: z
@@ -387,6 +389,33 @@ const environmentSchema = z
         });
       }
     }
+    if (environment.BACKUP_S3_BUCKET === environment.S3_BUCKET) {
+      context.addIssue({
+        code: 'custom',
+        message: 'The managed file bucket and backup destination bucket must be different',
+        path: ['BACKUP_S3_BUCKET'],
+      });
+    }
+    if (
+      Boolean(environment.BACKUP_S3_ACCESS_KEY_ID) !==
+      Boolean(environment.BACKUP_S3_SECRET_ACCESS_KEY)
+    ) {
+      context.addIssue({
+        code: 'custom',
+        message: 'Backup storage credentials must include both access key and secret key',
+        path: ['BACKUP_S3_ACCESS_KEY_ID'],
+      });
+    } else if (
+      environment.BACKUP_S3_ACCESS_KEY_ID &&
+      (environment.BACKUP_S3_ACCESS_KEY_ID === environment.S3_ACCESS_KEY_ID ||
+        environment.BACKUP_S3_SECRET_ACCESS_KEY === environment.S3_SECRET_ACCESS_KEY)
+    ) {
+      context.addIssue({
+        code: 'custom',
+        message: 'Dedicated backup storage credentials must differ from managed file credentials',
+        path: ['BACKUP_S3_ACCESS_KEY_ID'],
+      });
+    }
     const replicaValues = [
       environment.BACKUP_REPLICA_S3_ENDPOINT,
       environment.BACKUP_REPLICA_S3_ACCESS_KEY_ID,
@@ -416,8 +445,8 @@ const environmentSchema = z
         path: ['BACKUP_REPLICA_S3_ENDPOINT'],
       });
     }
+    let replicaUrl: URL | undefined;
     if (replicaConfigured) {
-      let replicaUrl: URL | undefined;
       try {
         replicaUrl = new URL(environment.BACKUP_REPLICA_S3_ENDPOINT);
       } catch {
@@ -447,7 +476,9 @@ const environmentSchema = z
       }
       if (
         environment.BACKUP_REPLICA_S3_ACCESS_KEY_ID === environment.S3_ACCESS_KEY_ID ||
-        environment.BACKUP_REPLICA_S3_SECRET_ACCESS_KEY === environment.S3_SECRET_ACCESS_KEY
+        environment.BACKUP_REPLICA_S3_SECRET_ACCESS_KEY === environment.S3_SECRET_ACCESS_KEY ||
+        environment.BACKUP_REPLICA_S3_ACCESS_KEY_ID === environment.BACKUP_S3_ACCESS_KEY_ID ||
+        environment.BACKUP_REPLICA_S3_SECRET_ACCESS_KEY === environment.BACKUP_S3_SECRET_ACCESS_KEY
       ) {
         context.addIssue({
           code: 'custom',
@@ -483,8 +514,11 @@ const environmentSchema = z
         });
       }
       if (
-        sourceUrl?.origin === new URL(environment.S3_ENDPOINT).origin &&
-        source.bucket === environment.BACKUP_S3_BUCKET
+        (sourceUrl?.hostname === new URL(environment.S3_ENDPOINT).hostname &&
+          source.bucket === environment.BACKUP_S3_BUCKET) ||
+        (replicaUrl &&
+          sourceUrl?.hostname === replicaUrl.hostname &&
+          source.bucket === environment.BACKUP_REPLICA_S3_BUCKET)
       ) {
         context.addIssue({
           code: 'custom',

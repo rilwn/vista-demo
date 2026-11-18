@@ -72,6 +72,78 @@ function environment(): AppEnvironment {
 describe('ObjectStorageService independent backup copy', () => {
   afterEach(() => vi.restoreAllMocks());
 
+  it('uses the bucket-scoped primary backup credentials for backup and restore operations', async () => {
+    const calls: Array<[string, string, string]> = [];
+    const send = async function (this: S3Client, { input }: CommandInput) {
+      const credentials = await this.config.credentials();
+      calls.push([
+        inputString(input, 'Bucket'),
+        credentials.accessKeyId,
+        (await this.config.endpoint?.())?.hostname ?? '',
+      ]);
+      return {
+        Body: Readable.from([Buffer.from('fixture')]),
+        ContentLength: 7,
+        UploadId: 'upload',
+        ETag: 'etag',
+        Contents: [{ Key: 'restores/0123456789abcdef0123456789abcdef/attempt-1/file' }],
+      };
+    };
+    vi.spyOn(S3Client.prototype, 'send').mockImplementation(send as never);
+    const storage = new ObjectStorageService({
+      ...environment(),
+      BACKUP_S3_ACCESS_KEY_ID: 'backup-writer',
+      BACKUP_S3_SECRET_ACCESS_KEY: 'backup-secret',
+    });
+    const key = 'database/critical/run.dump.enc';
+    const prefix = 'restores/0123456789abcdef0123456789abcdef/attempt-1/';
+    try {
+      await storage.ping();
+      const source = await storage.getFileObjectStream('managed-file');
+      await storage.ensureBackupBucket();
+      await storage.createBackupUpload(key);
+      await storage.uploadBackupPart({
+        body: Buffer.from('fixture'),
+        key,
+        partNumber: 1,
+        uploadId: 'upload',
+      });
+      await storage.completeBackupUpload({
+        key,
+        parts: [{ ETag: 'etag', PartNumber: 1 }],
+        uploadId: 'upload',
+      });
+      await storage.abortBackupUpload({ key, uploadId: 'upload' });
+      const artifact = await storage.getPrimaryBackupObjectStream(key);
+      await storage.putRestoredFileObject({ body: source.body, key: prefix + 'file', size: 7 });
+      const restored = await storage.getRestoredFileObjectStream(prefix + 'file');
+      await storage.deleteRestoredFilePrefix(prefix);
+      await storage.deleteBackupObject(key);
+      for (const body of [source.body, artifact, restored.body]) body.destroy();
+      expect(calls.slice(0, 2)).toEqual(
+        Array.from({ length: 2 }, () => [
+          'vista-files',
+          'primary-access',
+          'primary.example.invalid',
+        ]),
+      );
+      expect(calls.slice(2, -1)).toEqual(
+        Array.from({ length: 11 }, () => [
+          'primary-backups',
+          'backup-writer',
+          'primary.example.invalid',
+        ]),
+      );
+      expect(calls.at(-1)).toEqual([
+        'replica-backups',
+        'replica-access',
+        'replica.example.invalid',
+      ]);
+    } finally {
+      storage.onApplicationShutdown();
+    }
+  });
+
   it('copies encrypted artifact bytes between distinct configured storage buckets and verifies the copy', async () => {
     const objects = new Map<string, FakeObject>();
     const uploads = new Map<string, FakeUpload>();

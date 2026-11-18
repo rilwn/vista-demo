@@ -10,6 +10,11 @@ function requiredEnvironment(name: string): string {
 }
 
 async function run(): Promise<void> {
+  const sourceBucket = requiredEnvironment('S3_BUCKET');
+  const backupBucket = process.env['BACKUP_S3_BUCKET'] || 'vista-backups';
+  if (sourceBucket === backupBucket) {
+    throw new Error('The managed file bucket and backup destination bucket must be different');
+  }
   const client = new S3Client({
     credentials: {
       accessKeyId: requiredEnvironment('S3_ACCESS_KEY_ID'),
@@ -23,13 +28,13 @@ async function run(): Promise<void> {
   try {
     await ensurePrivateBucket(
       client,
-      requiredEnvironment('S3_BUCKET'),
+      sourceBucket,
       process.env['S3_REGION'] || 'us-east-1',
       Number(process.env['DEPENDENCY_HEALTH_TIMEOUT_MS'] || 5_000),
     );
     await ensurePrivateBucket(
       client,
-      process.env['BACKUP_S3_BUCKET'] || 'vista-backups',
+      backupBucket,
       process.env['S3_REGION'] || 'us-east-1',
       Number(process.env['DEPENDENCY_HEALTH_TIMEOUT_MS'] || 5_000),
     );

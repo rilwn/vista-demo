@@ -492,6 +492,33 @@ describe('parseEnvironment', () => {
     ).toThrow('POS_FISCAL_SIMULATOR_ENABLED');
   });
 
+  it('keeps the managed file bucket separate and validates dedicated backup credentials', () => {
+    const backupCredentials = {
+      BACKUP_S3_ACCESS_KEY_ID: 'backup-writer',
+      BACKUP_S3_SECRET_ACCESS_KEY: 'backup-writer-secret',
+    };
+    expect(parseEnvironment(validEnvironment).BACKUP_S3_ACCESS_KEY_ID).toBe('');
+    expect(parseEnvironment({ ...validEnvironment, ...backupCredentials })).toMatchObject(
+      backupCredentials,
+    );
+    expect(() =>
+      parseEnvironment({ ...validEnvironment, BACKUP_S3_BUCKET: validEnvironment.S3_BUCKET }),
+    ).toThrow('bucket must be different');
+    expect(() =>
+      parseEnvironment({
+        ...validEnvironment,
+        BACKUP_S3_ACCESS_KEY_ID: backupCredentials.BACKUP_S3_ACCESS_KEY_ID,
+      }),
+    ).toThrow('both access key and secret key');
+    expect(() =>
+      parseEnvironment({
+        ...validEnvironment,
+        ...backupCredentials,
+        BACKUP_S3_SECRET_ACCESS_KEY: validEnvironment.S3_SECRET_ACCESS_KEY,
+      }),
+    ).toThrow('must differ from managed file credentials');
+  });
+
   it('accepts an independent copy target only with distinct endpoint, bucket, and credentials', () => {
     const target = {
       BACKUP_REPLICA_REQUIRED: 'true',
@@ -533,9 +560,45 @@ describe('parseEnvironment', () => {
     expect(() =>
       parseEnvironment({
         ...validEnvironment,
+        ...target,
+        BACKUP_S3_ACCESS_KEY_ID: target.BACKUP_REPLICA_S3_ACCESS_KEY_ID,
+        BACKUP_S3_SECRET_ACCESS_KEY: 'different-secret',
+      }),
+    ).toThrow('credentials separate');
+    expect(() =>
+      parseEnvironment({
+        ...validEnvironment,
         BACKUP_REPLICA_REQUIRED: 'true',
       }),
     ).toThrow('complete secondary storage target');
+  });
+
+  it('rejects primary and replica destination buckets as external protected sources', () => {
+    const replica = {
+      BACKUP_REPLICA_S3_ACCESS_KEY_ID: 'vault-writer',
+      BACKUP_REPLICA_S3_BUCKET: 'vista-independent-backups',
+      BACKUP_REPLICA_S3_ENDPOINT: 'https://vault.example.invalid',
+      BACKUP_REPLICA_S3_SECRET_ACCESS_KEY: 'separate-vault-secret',
+    };
+    for (const [endpoint, bucket] of [
+      ['https://localhost:9443', 'vista-backups'],
+      [replica.BACKUP_REPLICA_S3_ENDPOINT, replica.BACKUP_REPLICA_S3_BUCKET],
+    ]) {
+      expect(() =>
+        parseEnvironment({
+          ...validEnvironment,
+          ...replica,
+          BACKUP_OBJECT_STORAGE_SOURCE_CONFIGS_JSON: JSON.stringify({
+            'FORBIDDEN-SOURCE': {
+              accessKeyId: 'archive-reader',
+              bucket,
+              endpoint,
+              secretAccessKey: 'read-only-source-secret',
+            },
+          }),
+        }),
+      ).toThrow('cannot be the backup destination bucket');
+    }
   });
 
   it('requires an HTTPS independent backup target for production deployment', () => {

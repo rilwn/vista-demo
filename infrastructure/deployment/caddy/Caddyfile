@@ -1,0 +1,23 @@
+{
+	skip_install_trust
+}
+
+(vista_private_https) {
+	tls internal
+	header Strict-Transport-Security "max-age=31536000"
+}
+
+{$ONPREM_OPERATIONS_HOST} {
+	import vista_private_https
+	reverse_proxy operations:8080
+}
+
+{$ONPREM_POS_HOST} {
+	import vista_private_https
+	reverse_proxy pos:8080
+}
+
+{$ONPREM_RECOVERY_HOST} {
+	import vista_private_https
+	reverse_proxy recovery:8080
+}
