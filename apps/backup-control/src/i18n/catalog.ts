@@ -1,4 +1,7 @@
 export const bulgarianText: Readonly<Record<string, string>> = {
+  'Approval rules': 'Правила за одобрение',
+  'A second authorised person must approve critical changes and restores that overwrite data.':
+    'Второ упълномощено лице трябва да одобри критичните промени и възстановяванията, при които се презаписват данни.',
   'Checking status': 'Проверка на състоянието',
   'No active schedules': 'Няма активни графици',
   'active schedule': 'активен график',

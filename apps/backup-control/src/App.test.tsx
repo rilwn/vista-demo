@@ -30,10 +30,31 @@ describe('backup-control application shell', () => {
     );
 
     expect(await screen.findByRole('heading', { name: 'Backup operations' })).toBeTruthy();
-    expect(await screen.findByText('1 active schedule')).toBeTruthy();
+    const policies = screen.getByRole('link', { name: 'Policies & schedules' });
+    await waitFor(() => expect(policies.title).toBe('1 active schedule'));
+    expect(policies.textContent).toBe('Policies & schedules');
     expect(screen.getByRole('button', { name: 'Plan review due' })).toBeTruthy();
     expect(screen.getByText('Source inventory')).toBeTruthy();
     expect(screen.queryByText('No records yet')).toBeNull();
+    fireEvent.click(policies);
+    expect(
+      await within(screen.getByText('Backup policies').parentElement!).findByText(
+        '1 active schedule',
+      ),
+    ).toBeTruthy();
+  });
+
+  it('keeps approval guidance behind a disclosure without changing the current page', async () => {
+    render(<App />);
+    const summary = await screen.findByText('Approval rules', { selector: 'summary' });
+    const details = summary.closest('details');
+    expect(details?.open).toBe(false);
+    fireEvent.click(summary);
+    expect(details?.open).toBe(true);
+    expect(details?.textContent).toContain('A second authorised person must approve');
+    fireEvent.click(summary);
+    expect(details?.open).toBe(false);
+    expect(window.location.pathname).toBe('/');
   });
 
   it('does not open Recovery for a backup role with a password-only session', async () => {

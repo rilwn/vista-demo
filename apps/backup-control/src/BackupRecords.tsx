@@ -27,6 +27,7 @@ import { useLocalization } from './i18n/LocalizationProvider';
 type Screen = 'sources' | 'policies';
 
 interface BackupRecordsProps {
+  scheduleDescription: string;
   onChanged: () => void;
   canEdit: boolean;
   editorOpen: boolean;
@@ -115,6 +116,7 @@ const emptyPolicy: PolicyForm = {
 };
 
 export function BackupRecords({
+  scheduleDescription,
   onChanged,
   canEdit,
   editorOpen,
@@ -429,7 +431,9 @@ export function BackupRecords({
               {screen === 'sources' ? translate('Protected sources') : translate('Backup policies')}
             </strong>
             <span>
-              {screen === 'sources' ? sources.length : policies.length} {translate('records')}
+              {screen === 'policies'
+                ? scheduleDescription
+                : `${sources.length} ${translate('records')}`}
             </span>
           </div>
         </div>

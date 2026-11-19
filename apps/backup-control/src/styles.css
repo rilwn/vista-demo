@@ -118,28 +118,6 @@
   color: #8ca494;
   font-size: 0.69rem;
 }
-.backup-posture {
-  display: flex;
-  align-items: center;
-  gap: 0.55rem;
-  margin: 1rem 0.4rem;
-  padding: 0.65rem;
-  border: 1px solid rgb(255 255 255 / 0.1);
-  border-radius: 0.5rem;
-  background: rgb(255 255 255 / 0.04);
-}
-.backup-posture div {
-  display: grid;
-  gap: 0.1rem;
-}
-.backup-posture small {
-  color: #91a799;
-  font-size: 0.67rem;
-}
-.backup-posture strong {
-  color: #f1f5ee;
-  font-size: 0.76rem;
-}
 .backup-risk-dot {
   display: inline-block;
   width: 0.44rem;
@@ -199,14 +177,6 @@
   color: #eff8ed;
   background: rgb(178 211 158 / 0.13);
   box-shadow: inset 2px 0 #afd58f;
-}
-.backup-sidebar-note {
-  margin: auto 0.4rem 0.25rem;
-  padding-top: 1rem;
-  border-top: 1px solid rgb(255 255 255 / 0.09);
-  color: #80978a;
-  font-size: 0.69rem;
-  line-height: 1.55;
 }
 .backup-main {
   min-width: 0;
@@ -965,10 +935,6 @@
   .backup-sidebar nav a {
     width: max-content;
     flex: 0 0 auto;
-  }
-  .backup-sidebar-note,
-  .backup-posture {
-    display: none;
   }
   .backup-readiness-strip {
     grid-template-columns: 1fr;

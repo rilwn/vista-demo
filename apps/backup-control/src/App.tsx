@@ -305,6 +305,11 @@ function BackupConsole({
   }
   const known = summary && summary !== 'unavailable' ? summary : undefined;
   const fallback = translate(summary === 'unavailable' ? 'Status unavailable' : 'Checking status');
+  const scheduleDescription = !known
+    ? fallback
+    : known.active
+      ? `${known.active} ${translate(known.active === 1 ? 'active schedule' : 'active schedules')}`
+      : translate('No active schedules');
 
   return (
     <div className="backup-console">
@@ -318,25 +323,11 @@ function BackupConsole({
             <small>Backup & recovery</small>
           </div>
         </div>
-        <div className="backup-posture">
-          <span
-            className="backup-risk-dot"
-            data-tone={!known ? 'unknown' : known.active ? 'ok' : 'warning'}
-          />
-          <div>
-            <small>System status</small>
-            <strong>
-              {known
-                ? known.active
-                  ? `${known.active} ${translate(known.active === 1 ? 'active schedule' : 'active schedules')}`
-                  : translate('No active schedules')
-                : fallback}
-            </strong>
-          </div>
-        </div>
         <nav aria-label="Backup control navigation" ref={navigation}>
           {screenOrder.map((item) => (
             <a
+              aria-describedby={item === 'policies' ? 'recovery-schedule-count' : undefined}
+              title={item === 'policies' ? scheduleDescription : undefined}
               aria-current={screen === item ? 'page' : undefined}
               className={screen === item ? 'is-active' : undefined}
               key={item}
@@ -361,10 +352,21 @@ function BackupConsole({
             </a>
           ))}
         </nav>
-        <p className="backup-sidebar-note">
-          Critical changes and destructive restores require approval from a second authorised
-          person.
-        </p>
+        <span id="recovery-schedule-count" hidden>
+          {scheduleDescription}
+        </span>
+        <details className="backup-approval-note">
+          <summary>
+            <BackupIcon name="shield" />
+            {translate('Approval rules')}
+            <BackupIcon name="chevron" />
+          </summary>
+          <p>
+            {translate(
+              'A second authorised person must approve critical changes and restores that overwrite data.',
+            )}
+          </p>
+        </details>
       </aside>
       <main className="backup-main">
         <header className="backup-topbar">
@@ -453,6 +455,7 @@ function BackupConsole({
           <section className="backup-list-shell backup-list-shell--records">
             <BackupRecords
               key={screen}
+              scheduleDescription={scheduleDescription}
               onChanged={refreshStatus}
               canEdit={hasBackupPermission(context, 'edit')}
               editorOpen={editorOpen}
@@ -627,6 +630,8 @@ function signInError(error: unknown, locale: 'bg' | 'en' = 'en'): string {
 }
 
 type BackupIconName =
+  | 'shield'
+  | 'chevron'
   | 'approvals'
   | 'audit'
   | 'brand'
@@ -663,6 +668,10 @@ function BackupIcon({ name }: { name: BackupIconName }) {
 }
 
 const backupIconPaths: Record<BackupIconName, React.ReactNode> = {
+  shield: (
+    <path d="M12 3 4.5 6v5c0 4.2 2.6 7.7 7.5 10 4.9-2.3 7.5-5.8 7.5-10V6L12 3Zm-3 9 2 2 4-4" />
+  ),
+  chevron: <path d="m7 10 5 5 5-5" />,
   approvals: <path d="M5 4h14v16H5zM8 9h8m-8 4h5m-5 4h3M15 16l2 2 4-5" />,
   audit: <path d="M12 3a8 8 0 1 0 8 8M12 7v5l3 2M17 3v4h4" />,
   brand: <path d="M4.5 6.5 10.5 19 19.5 5m-10 1.5 4 8.5 6-10" />,
