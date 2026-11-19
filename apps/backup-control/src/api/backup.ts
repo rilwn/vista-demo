@@ -27,6 +27,7 @@ import type {
   RequestBackupRetentionReductionRequest,
   RequestBackupRestoreRequest,
   RequestBackupArtifactDeletionRequest,
+  ManagedFile,
   PlanBackupDrTestRequest,
   RecordBackupDrTestRequest,
   RecordBackupPlanReviewRequest,
@@ -122,9 +123,11 @@ export async function uploadBackupDrTestProtocol(
       payload?.error?.correlationId,
     );
   }
-  const payload = (await response.json()) as { data?: { id?: unknown; status?: unknown } };
-  const id = payload.data?.id;
-  const status = payload.data?.status;
+  // The managed-files endpoint returns the file record directly on HTTP 201.
+  const payload = (await response.json().catch(() => undefined)) as
+    Partial<Pick<ManagedFile, 'id' | 'status'>> | null | undefined;
+  const id = payload?.id;
+  const status = payload?.status;
   if (typeof id !== 'string' || typeof status !== 'string') {
     throw new ApiClientError(
       'The signed protocol upload response was incomplete.',

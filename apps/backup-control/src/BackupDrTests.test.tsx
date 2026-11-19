@@ -8,7 +8,7 @@ import { LocalizationProvider } from './i18n/LocalizationProvider';
 
 const originalWindowUrl = window.URL;
 
-vi.mock('./api/backup', () => ({
+vi.mock('./api/backup', async (importOriginal) => ({
   loadBackupDrTests: vi.fn(),
   loadBackupRestoreRequests: vi.fn(),
   loadBackupRuns: vi.fn(),
@@ -16,7 +16,7 @@ vi.mock('./api/backup', () => ({
   recordBackupDrTest: vi.fn(),
   requestBackupRestore: vi.fn(),
   downloadBackupDrTestProtocol: vi.fn(),
-  uploadBackupDrTestProtocol: vi.fn(),
+  uploadBackupDrTestProtocol: (await importOriginal<typeof backupApi>()).uploadBackupDrTestProtocol,
 }));
 
 const run: BackupExecutionRun = {
@@ -123,10 +123,6 @@ describe('disaster-recovery test register', () => {
       resultSummary: 'Database and selected customer records were restored and checked.',
       status: 'recorded',
     });
-    vi.mocked(backupApi.uploadBackupDrTestProtocol).mockResolvedValue({
-      id: '68878d2b-87b7-4d57-b6b0-9b12f794c0a1',
-      status: 'available',
-    });
     vi.mocked(backupApi.downloadBackupDrTestProtocol).mockResolvedValue(
       new Blob(['signed protocol'], { type: 'application/pdf' }),
     );
@@ -169,6 +165,12 @@ describe('disaster-recovery test register', () => {
   });
 
   it('records measured recovery results only with the attached signed protocol', async () => {
+    const upload = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(
+        Response.json({ id: recordedTest.evidenceFileId, status: 'available' }, { status: 201 }),
+      );
+    vi.stubGlobal('fetch', upload);
     vi.mocked(backupApi.loadBackupDrTests).mockResolvedValueOnce({
       items: [testRecord],
       total: 1,
@@ -196,6 +198,8 @@ describe('disaster-recovery test register', () => {
     );
 
     fireEvent.click(await screen.findByRole('button', { name: 'Record test result' }));
+    fireEvent.change(screen.getByLabelText(/Measured RPO/), { target: { value: '20' } });
+    fireEvent.change(screen.getByLabelText(/Measured RTO/), { target: { value: '90' } });
     fireEvent.change(screen.getByLabelText('Result summary *'), {
       target: { value: 'Database and selected customer records were restored and checked.' },
     });
@@ -212,18 +216,24 @@ describe('disaster-recovery test register', () => {
     expect((await screen.findByRole('status')).textContent).toContain(
       'The test result and signed protocol were recorded.',
     );
-    expect(backupApi.uploadBackupDrTestProtocol).toHaveBeenCalledWith(
-      'session',
-      testRecord.id,
-      expect.objectContaining({ name: 'restore-test.pdf', type: 'application/pdf' }),
-      'test-idempotency-key',
+    expect(upload).toHaveBeenCalledOnce();
+    expect(upload).toHaveBeenCalledWith(
+      expect.stringMatching(/\/api\/v1\/files$/),
+      expect.objectContaining({
+        headers: { Authorization: 'Bearer session', 'Idempotency-Key': 'test-idempotency-key' },
+        method: 'POST',
+      }),
     );
+    const body = upload.mock.calls[0]?.[1]?.body as FormData;
+    expect(body.get('parentId')).toBe(testRecord.id);
+    expect(body.get('parentType')).toBe('backup_dr_test');
+    expect(body.get('file')).toMatchObject({ name: 'restore-test.pdf', type: 'application/pdf' });
     expect(backupApi.recordBackupDrTest).toHaveBeenCalledWith(
       'session',
       testRecord.id,
       expect.objectContaining({
-        actualRpoMinutes: 60,
-        actualRtoMinutes: 240,
+        actualRpoMinutes: 20,
+        actualRtoMinutes: 90,
         evidenceFileId: '68878d2b-87b7-4d57-b6b0-9b12f794c0a1',
         protocolSignedBy: 'Mila Backup',
         restoreRequestId: restore.id,
