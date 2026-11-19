@@ -10,6 +10,7 @@ afterEach(cleanup);
 
 describe('backup-control application shell', () => {
   beforeEach(() => {
+    window.history.replaceState(null, '', '/');
     sessionStorage.clear();
     localStorage.setItem('vista.recovery.locale', 'en');
     storeSession(backupContext);
@@ -29,9 +30,10 @@ describe('backup-control application shell', () => {
     );
 
     expect(await screen.findByRole('heading', { name: 'Backup operations' })).toBeTruthy();
-    expect(screen.getByText(messages.status)).toBeTruthy();
+    expect(await screen.findByText('1 active schedule')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Plan review due' })).toBeTruthy();
     expect(screen.getByText('Source inventory')).toBeTruthy();
-    expect(screen.getByText('No records yet')).toBeTruthy();
+    expect(screen.queryByText('No records yet')).toBeNull();
   });
 
   it('does not open Recovery for a backup role with a password-only session', async () => {
@@ -60,9 +62,42 @@ describe('backup-control application shell', () => {
       ['Sources & inventory', 'Sources & data inventory'],
       ['Overview', 'Backup operations'],
     ] as const) {
-      fireEvent.click(screen.getByRole('button', { name: navigationLabel }));
+      const link = screen.getByRole('link', { name: navigationLabel });
+      fireEvent.click(link);
+      expect(window.location.pathname).toBe(link.getAttribute('href'));
       expect(screen.getByRole('heading', { name: heading })).toBeTruthy();
     }
+  });
+
+  it('restores deep links and syncs history traversal with the sidebar and area picker', async () => {
+    window.history.replaceState(null, '', '/jobs');
+    const mounted = render(<App />);
+    await screen.findByRole('heading', { name: 'Jobs & restore points' });
+    fireEvent.change(screen.getByLabelText(messages.chooseArea), { target: { value: 'policies' } });
+    expect(window.location.pathname).toBe('/policies');
+    window.history.back();
+    await screen.findByRole('heading', { name: 'Jobs & restore points' });
+    expect(
+      screen.getByRole('link', { name: 'Jobs & restore points' }).getAttribute('aria-current'),
+    ).toBe('page');
+    expect(screen.getByLabelText<HTMLSelectElement>(messages.chooseArea).value).toBe('jobs');
+    window.history.forward();
+    await screen.findByRole('heading', { name: 'Policies & schedules' });
+    mounted.unmount();
+    render(<App />);
+    await screen.findByRole('heading', { name: 'Policies & schedules' });
+  });
+
+  it('does not report zero schedules or incomplete setup when the status request fails', async () => {
+    const mock = createFetchMock(backupContext);
+    vi.stubGlobal('fetch', (input: RequestInfo | URL, init?: RequestInit) =>
+      requestUrl(input).endsWith('/backup/plan-reviews')
+        ? jsonResponse({}, 503)
+        : mock(input, init),
+    );
+    render(<App />);
+    await screen.findByRole('button', { name: 'Status unavailable' });
+    expect(screen.queryByText('No active schedules')).toBeNull();
   });
 
   it('records the annual backup-plan review only for an approver', async () => {
@@ -79,7 +114,7 @@ describe('backup-control application shell', () => {
     vi.stubGlobal('fetch', fetchMock);
     render(<App />);
     await screen.findByRole('heading', { name: 'Backup operations' });
-    fireEvent.click(screen.getByRole('button', { name: 'Plan review' }));
+    fireEvent.click(screen.getByRole('link', { name: 'Plan review' }));
 
     expect(await screen.findByRole('heading', { name: 'Backup plan review' })).toBeTruthy();
     expect(await screen.findByText('Vista database')).toBeTruthy();
@@ -109,7 +144,7 @@ describe('backup-control application shell', () => {
     vi.stubGlobal('fetch', fetchMock);
     render(<App />);
     await screen.findByRole('heading', { name: 'Backup operations' });
-    fireEvent.click(screen.getByRole('button', { name: 'Jobs & restore points' }));
+    fireEvent.click(screen.getByRole('link', { name: 'Jobs & restore points' }));
 
     expect(await screen.findByRole('heading', { name: 'No backup runs yet' })).toBeTruthy();
     expect(
@@ -137,7 +172,7 @@ describe('backup-control application shell', () => {
     vi.stubGlobal('fetch', fetchMock);
     render(<App />);
     await screen.findByRole('heading', { name: 'Backup operations' });
-    fireEvent.click(screen.getByRole('button', { name: 'Jobs & restore points' }));
+    fireEvent.click(screen.getByRole('link', { name: 'Jobs & restore points' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Request removal' }));
     expect(
       await screen.findByRole('heading', { name: 'Request restore-point removal' }),
@@ -172,7 +207,7 @@ describe('backup-control application shell', () => {
     vi.stubGlobal('fetch', fetchMock);
     render(<App />);
     await screen.findByRole('heading', { name: 'Backup operations' });
-    fireEvent.click(screen.getByRole('button', { name: 'Jobs & restore points' }));
+    fireEvent.click(screen.getByRole('link', { name: 'Jobs & restore points' }));
     expect(await screen.findByText('PostgreSQL archive compression')).toBeTruthy();
     expect(screen.getByText('Original data size')).toBeTruthy();
     fireEvent.click(await screen.findByRole('button', { name: 'Request restore' }));
@@ -207,7 +242,7 @@ describe('backup-control application shell', () => {
     vi.stubGlobal('fetch', fetchMock);
     render(<App />);
     await screen.findByRole('heading', { name: 'Backup operations' });
-    fireEvent.click(screen.getByRole('button', { name: 'Jobs & restore points' }));
+    fireEvent.click(screen.getByRole('link', { name: 'Jobs & restore points' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Request restore' }));
     expect(await screen.findByRole('heading', { name: 'Request file-store restore' })).toBeTruthy();
     fireEvent.change(screen.getByLabelText(/Restore scope/u, { selector: 'select' }), {
@@ -227,7 +262,7 @@ describe('backup-control application shell', () => {
     expect(parseJsonBody(requestWrite?.[1]?.body)).toEqual({
       reason: 'Recover the complete file-store snapshot in isolation.',
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Restores & approvals' }));
+    fireEvent.click(screen.getByRole('link', { name: 'Restores & approvals' }));
     expect(await screen.findByText('Complete file-store snapshot')).toBeTruthy();
   });
 
@@ -245,7 +280,7 @@ describe('backup-control application shell', () => {
     vi.stubGlobal('fetch', fetchMock);
     render(<App />);
     await screen.findByRole('heading', { name: 'Backup operations' });
-    fireEvent.click(screen.getByRole('button', { name: 'Jobs & restore points' }));
+    fireEvent.click(screen.getByRole('link', { name: 'Jobs & restore points' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Request restore' }));
     expect(await screen.findByRole('heading', { name: 'Request file-store restore' })).toBeTruthy();
     fireEvent.change(screen.getByLabelText(/Restore scope/u, { selector: 'select' }), {
@@ -277,7 +312,7 @@ describe('backup-control application shell', () => {
       objectKey: 'partners/demo-evidence.pdf',
       reason: 'Recover one customer evidence file in an isolated location.',
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Restores & approvals' }));
+    fireEvent.click(screen.getByRole('link', { name: 'Restores & approvals' }));
     expect(await screen.findByText('File selected for recovery:')).toBeTruthy();
     expect(screen.getByText('partners/demo-evidence.pdf')).toBeTruthy();
     expect(fetchMock).toHaveBeenCalledWith(
@@ -299,7 +334,7 @@ describe('backup-control application shell', () => {
     vi.stubGlobal('fetch', createFetchMock(context, false, false, false, true));
     render(<App />);
     await screen.findByRole('heading', { name: 'Backup operations' });
-    fireEvent.click(screen.getByRole('button', { name: 'DR tests' }));
+    fireEvent.click(screen.getByRole('link', { name: 'DR tests' }));
 
     fireEvent.click(await screen.findByRole('button', { name: 'Plan DR test' }));
 
@@ -323,7 +358,7 @@ describe('backup-control application shell', () => {
     vi.stubGlobal('fetch', fetchMock);
     render(<App />);
     await screen.findByRole('heading', { name: 'Backup operations' });
-    fireEvent.click(screen.getByRole('button', { name: 'Restores & approvals' }));
+    fireEvent.click(screen.getByRole('link', { name: 'Restores & approvals' }));
     expect(
       await screen.findByText('Restore this verified backup in isolation for release testing.'),
     ).toBeTruthy();
@@ -367,7 +402,7 @@ describe('backup-control application shell', () => {
     const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
     render(<App />);
     await screen.findByRole('heading', { name: 'Backup operations' });
-    fireEvent.click(screen.getByRole('button', { name: 'Restores & approvals' }));
+    fireEvent.click(screen.getByRole('link', { name: 'Restores & approvals' }));
 
     fireEvent.click(await screen.findByRole('button', { name: 'Download recovered file' }));
 
@@ -413,7 +448,7 @@ describe('backup-control application shell', () => {
     const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
     render(<App />);
     await screen.findByRole('heading', { name: 'Backup operations' });
-    fireEvent.click(screen.getByRole('button', { name: 'Restores & approvals' }));
+    fireEvent.click(screen.getByRole('link', { name: 'Restores & approvals' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Recover one database record' }));
 
     fireEvent.change(await screen.findByRole('combobox', { name: 'Database table' }), {
@@ -457,9 +492,9 @@ describe('backup-control application shell', () => {
     fireEvent.change(screen.getByLabelText(messages.chooseArea), { target: { value: 'policies' } });
     expect(screen.getByRole('heading', { name: 'Policies & schedules' })).toBeTruthy();
     expect(
-      screen.getByRole('button', { name: 'Policies & schedules' }).getAttribute('aria-current'),
+      screen.getByRole('link', { name: 'Policies & schedules' }).getAttribute('aria-current'),
     ).toBe('page');
-    fireEvent.click(screen.getByRole('button', { name: 'Sources & inventory' }));
+    fireEvent.click(screen.getByRole('link', { name: 'Sources & inventory' }));
     expect(screen.getByLabelText<HTMLSelectElement>(messages.chooseArea).value).toBe('sources');
     expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Add source' }).disabled).toBe(
       true,
@@ -481,7 +516,7 @@ describe('backup-control application shell', () => {
     vi.stubGlobal('fetch', fetchMock);
     render(<App />);
     await screen.findByRole('heading', { name: 'Backup operations' });
-    fireEvent.click(screen.getByRole('button', { name: 'Sources & inventory' }));
+    fireEvent.click(screen.getByRole('link', { name: 'Sources & inventory' }));
     await screen.findByRole('heading', { name: 'No protected sources yet' });
     fireEvent.click(screen.getByRole('button', { name: 'Add source' }));
     fireEvent.change(screen.getByLabelText('Source code *'), { target: { value: 'VISTA-DB' } });
@@ -513,7 +548,7 @@ describe('backup-control application shell', () => {
     vi.stubGlobal('fetch', fetchMock);
     render(<App />);
     await screen.findByRole('heading', { name: 'Backup operations' });
-    fireEvent.click(screen.getByRole('button', { name: 'Sources & inventory' }));
+    fireEvent.click(screen.getByRole('link', { name: 'Sources & inventory' }));
     await screen.findByRole('heading', { name: 'No protected sources yet' });
     fireEvent.click(screen.getByRole('button', { name: 'Add source' }));
     fireEvent.change(screen.getByLabelText('Source code *'), {
@@ -565,7 +600,7 @@ describe('backup-control application shell', () => {
     vi.stubGlobal('fetch', fetchMock);
     render(<App />);
     await screen.findByRole('heading', { name: 'Backup operations' });
-    fireEvent.click(screen.getByRole('button', { name: 'Sources & inventory' }));
+    fireEvent.click(screen.getByRole('link', { name: 'Sources & inventory' }));
     await screen.findByRole('heading', { name: 'No protected sources yet' });
     fireEvent.click(screen.getByRole('button', { name: 'Add source' }));
     fireEvent.change(screen.getByLabelText('Source code *'), {
@@ -615,7 +650,7 @@ describe('backup-control application shell', () => {
     vi.stubGlobal('fetch', fetchMock);
     render(<App />);
     await screen.findByRole('heading', { name: 'Backup operations' });
-    fireEvent.click(screen.getByRole('button', { name: 'Sources & inventory' }));
+    fireEvent.click(screen.getByRole('link', { name: 'Sources & inventory' }));
     await screen.findByRole('heading', { name: 'No protected sources yet' });
     fireEvent.click(screen.getByRole('button', { name: 'Add source' }));
     fireEvent.change(screen.getByLabelText('Source code *'), {
@@ -681,7 +716,7 @@ describe('backup-control application shell', () => {
     vi.stubGlobal('fetch', fetchMock);
     render(<App />);
     await screen.findByRole('heading', { name: 'Backup operations' });
-    fireEvent.click(screen.getByRole('button', { name: 'Jobs & restore points' }));
+    fireEvent.click(screen.getByRole('link', { name: 'Jobs & restore points' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Request restore' }));
 
     expect(await screen.findByRole('heading', { name: 'Request email recovery' })).toBeTruthy();
@@ -731,7 +766,7 @@ describe('backup-control application shell', () => {
     vi.stubGlobal('fetch', fetchMock);
     render(<App />);
     await screen.findByRole('heading', { name: 'Backup operations' });
-    fireEvent.click(screen.getByRole('button', { name: 'Policies & schedules' }));
+    fireEvent.click(screen.getByRole('link', { name: 'Policies & schedules' }));
     await screen.findByRole('heading', { name: 'No backup policies yet' });
     fireEvent.click(screen.getByRole('button', { name: 'Create policy' }));
     expect(await screen.findByText('Vista database')).toBeTruthy();
@@ -789,7 +824,7 @@ describe('backup-control application shell', () => {
     vi.stubGlobal('fetch', fetchMock);
     render(<App />);
     await screen.findByRole('heading', { name: 'Backup operations' });
-    fireEvent.click(screen.getByRole('button', { name: 'Policy approvals' }));
+    fireEvent.click(screen.getByRole('link', { name: 'Policy approvals' }));
     expect(
       await screen.findByText('Protect the database on the approved hourly schedule.'),
     ).toBeTruthy();
@@ -832,7 +867,7 @@ describe('backup-control application shell', () => {
     vi.stubGlobal('fetch', fetchMock);
     render(<App />);
     await screen.findByRole('heading', { name: 'Backup operations' });
-    fireEvent.click(screen.getByRole('button', { name: 'Policy approvals' }));
+    fireEvent.click(screen.getByRole('link', { name: 'Policy approvals' }));
     expect(
       await screen.findByText('Remove the superseded test restore point after review.'),
     ).toBeTruthy();
@@ -865,7 +900,7 @@ describe('backup-control application shell', () => {
     vi.stubGlobal('fetch', fetchMock);
     render(<App />);
     await screen.findByRole('heading', { name: 'Backup operations' });
-    fireEvent.click(screen.getByRole('button', { name: 'Policy approvals' }));
+    fireEvent.click(screen.getByRole('link', { name: 'Policy approvals' }));
     expect(await screen.findByText('Pause backup schedule')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
     expect(
@@ -888,7 +923,7 @@ describe('backup-control application shell', () => {
     vi.stubGlobal('fetch', fetchMock);
     render(<App />);
     await screen.findByRole('heading', { name: 'Backup operations' });
-    fireEvent.click(screen.getByRole('button', { name: 'Policies & schedules' }));
+    fireEvent.click(screen.getByRole('link', { name: 'Policies & schedules' }));
 
     fireEvent.click(await screen.findByRole('button', { name: 'Activate schedule' }));
 
@@ -917,7 +952,7 @@ describe('backup-control application shell', () => {
       </LocalizationProvider>,
     );
     await screen.findByRole('heading', { name: 'Backup operations' });
-    fireEvent.click(screen.getByRole('button', { name: 'Policies & schedules' }));
+    fireEvent.click(screen.getByRole('link', { name: 'Policies & schedules' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Activate schedule' }));
     expect(await screen.findByText('The approved backup schedule is active.')).toBeTruthy();
 
@@ -978,7 +1013,7 @@ describe('backup-control application shell', () => {
     vi.stubGlobal('fetch', fetchMock);
     render(<App />);
     await screen.findByRole('heading', { name: 'Backup operations' });
-    fireEvent.click(screen.getByRole('button', { name: 'Policies & schedules' }));
+    fireEvent.click(screen.getByRole('link', { name: 'Policies & schedules' }));
 
     fireEvent.click(await screen.findByRole('button', { name: 'Resume schedule' }));
 
@@ -1015,7 +1050,7 @@ describe('backup-control application shell', () => {
     vi.stubGlobal('fetch', fetchMock);
     render(<App />);
     await screen.findByRole('heading', { name: 'Backup operations' });
-    fireEvent.click(screen.getByRole('button', { name: 'Policies & schedules' }));
+    fireEvent.click(screen.getByRole('link', { name: 'Policies & schedules' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Request lower retention' }));
 
     fireEvent.change(screen.getByRole('spinbutton', { name: /New daily copies/u }), {
@@ -1047,7 +1082,7 @@ describe('backup-control application shell', () => {
   it('retains sign-out after changing the selected area', async () => {
     render(<App />);
     await screen.findByRole('heading', { name: 'Backup operations' });
-    fireEvent.click(screen.getByRole('button', { name: 'DR tests' }));
+    fireEvent.click(screen.getByRole('link', { name: 'DR tests' }));
     expect(screen.getByRole('heading', { name: 'Disaster recovery tests' })).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: 'Sign out' }));

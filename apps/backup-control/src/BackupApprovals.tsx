@@ -12,10 +12,12 @@ import { bg } from './i18n/catalog';
 import { useLocalization } from './i18n/LocalizationProvider';
 
 export function BackupApprovals({
+  onChanged,
   canApprove,
   currentAccountId,
   sessionToken,
 }: {
+  onChanged: () => void;
   canApprove: boolean;
   currentAccountId: string;
   sessionToken: string;
@@ -91,6 +93,7 @@ export function BackupApprovals({
     setNotice('');
     try {
       await decideBackupPolicyApproval(sessionToken, request.id, { decision }, crypto.randomUUID());
+      onChanged();
       setNotice(
         request.action === 'disable_job'
           ? decision === 'approve'
@@ -247,7 +250,7 @@ export function BackupApprovals({
               {canApprove && request.requestedBy !== currentAccountId ? (
                 <div className="backup-approval-actions">
                   <button
-                    className="backup-approval-reject"
+                    className="backup-record-edit"
                     disabled={busyId === request.id}
                     onClick={() => void decideDeletion(request, 'reject')}
                     type="button"
@@ -255,7 +258,7 @@ export function BackupApprovals({
                     {translate('Decline')}
                   </button>
                   <button
-                    className="backup-approval-approve"
+                    className="backup-record-remove"
                     disabled={busyId === request.id}
                     onClick={() => void decideDeletion(request, 'approve')}
                     type="button"

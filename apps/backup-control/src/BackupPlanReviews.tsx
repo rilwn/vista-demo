@@ -7,9 +7,11 @@ import { bg } from './i18n/catalog';
 import { useLocalization } from './i18n/LocalizationProvider';
 
 export function BackupPlanReviews({
+  onChanged,
   canApprove,
   sessionToken,
 }: {
+  onChanged: () => void;
   canApprove: boolean;
   sessionToken: string;
 }) {
@@ -66,6 +68,7 @@ export function BackupPlanReviews({
         'Backup plan review recorded. The signed record is now available in the review history.',
       );
       setOpen(false);
+      onChanged();
       setSummary('');
       setCorrectiveActions('');
       setOutcome('approved');

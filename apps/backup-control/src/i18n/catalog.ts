@@ -1,4 +1,10 @@
 export const bulgarianText: Readonly<Record<string, string>> = {
+  'Checking status': 'Проверка на състоянието',
+  'No active schedules': 'Няма активни графици',
+  'active schedule': 'активен график',
+  'active schedules': 'активни графика',
+  'Plan review due': 'Планът изисква преглед',
+  'Plan review current': 'Прегледът на плана е актуален',
   'Backup and recovery': 'Архивиране и възстановяване',
   'Use your assigned recovery account.': 'Използвайте назначения Ви профил за възстановяване.',
   'Need help? Contact your Vista Service administrator.':

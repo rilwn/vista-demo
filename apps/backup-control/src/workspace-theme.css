@@ -81,7 +81,8 @@
   background: #c4cec4;
   border-radius: 4px;
 }
-.backup-sidebar nav button {
+.backup-sidebar nav a {
+  text-decoration: none;
   flex: 0 0 auto;
   min-height: 2.75rem;
   padding: 0.375rem 0.65rem;
@@ -103,22 +104,22 @@
   background: linear-gradient(150deg, #fff, #f0f4ed);
   box-shadow: 0 1px 2px rgb(31 57 38 / 4%);
 }
-.backup-sidebar nav button:hover {
+.backup-sidebar nav a:hover {
   color: #233f2d;
   border-color: #e0e7dc;
   background: #edf1eb;
 }
-.backup-sidebar nav button.is-active {
+.backup-sidebar nav a.is-active {
   color: #204b31;
   border-color: #cbdac5;
   background: #e4eddf;
   box-shadow: inset 3px 0 #648657;
 }
-.backup-sidebar nav button:hover .backup-menu-icon {
+.backup-sidebar nav a:hover .backup-menu-icon {
   border-color: #bfceba;
   background: #fff;
 }
-.backup-sidebar nav button.is-active .backup-menu-icon {
+.backup-sidebar nav a.is-active .backup-menu-icon {
   color: #376740;
   border-color: #b8cbb0;
   background: #f6faf2;
@@ -187,7 +188,7 @@
   line-height: 1.25;
   letter-spacing: -0.025em;
 }
-.backup-page-heading span {
+.backup-page-heading > div > span {
   margin-top: 0.35rem;
   font-size: 0.8rem;
 }
@@ -216,7 +217,7 @@
     overflow-x: auto;
     padding: 0.6rem;
   }
-  .backup-sidebar nav button {
+  .backup-sidebar nav a {
     white-space: nowrap;
   }
   .backup-main {
@@ -308,11 +309,18 @@
 }
 
 .backup-setup-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  cursor: pointer;
   min-height: 2.55rem;
   padding: 0.45rem 0.7rem;
   border-radius: 0.7rem;
   color: #58685e;
   white-space: nowrap;
+}
+.backup-setup-status:hover {
+  background: #f3f6f3;
 }
 
 .backup-account-control {

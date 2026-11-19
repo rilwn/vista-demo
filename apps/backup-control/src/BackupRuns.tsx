@@ -515,7 +515,7 @@ export function BackupRuns({
               >
                 {translate('Cancel')}
               </button>
-              <button className="backup-editor-save" disabled={deletionBusy} type="submit">
+              <button className="backup-record-remove" disabled={deletionBusy} type="submit">
                 {translate(deletionBusy ? 'Sending' : 'Send removal request')}
               </button>
             </footer>
@@ -546,28 +546,32 @@ function RunCard({
   const deletionInProgress = ['pending_approval', 'approved', 'running'].includes(
     run.artifactDeletionStatus ?? '',
   );
+  const label = (value: string) =>
+    locale === 'bg'
+      ? translate(value)
+      : value.charAt(0).toUpperCase() + value.slice(1).replaceAll('_', ' ');
   return (
     <article className="backup-record-card">
       <div className="backup-record-card-heading">
-        <span className="backup-record-type">{translate(run.backupType)}</span>
+        <span className="backup-record-type">{label(run.backupType)}</span>
         <span className={`backup-policy-state backup-policy-state--${run.status}`}>
-          {translate(run.status)}
+          {label(run.status)}
         </span>
       </div>
       <strong>{run.policyName}</strong>
       <small>
         {run.policyCode} · {translate('Scheduled')} {formatDate(run.scheduledFor, locale)}
       </small>
-      <small>{translate(run.sourceType)}</small>
+      <small>{label(run.sourceType)}</small>
       <dl className="backup-run-details">
         <div>
           <dt>{translate('Verification')}</dt>
-          <dd>{translate(run.verificationStatus)}</dd>
+          <dd>{label(run.verificationStatus)}</dd>
         </div>
         <div>
           <dt>{translate('Independent copy')}</dt>
           <dd>
-            {translate(run.independentCopyStatus)}
+            {label(run.independentCopyStatus)}
             {run.independentCopyTargetCode ? <small>{run.independentCopyTargetCode}</small> : null}
           </dd>
         </div>
@@ -629,10 +633,12 @@ function RunCard({
         </p>
       )}
       {run.artifactAvailable &&
+        !deletionInProgress &&
+        (canRequestDeletion || (canRequestRestore && run.restoreAvailable)) &&
         run.status === 'verified' &&
         run.verificationStatus === 'verified' && (
           <div className="backup-run-actions">
-            {canRequestRestore && run.restoreAvailable && !deletionInProgress && (
+            {canRequestRestore && run.restoreAvailable && (
               <button
                 className="backup-record-edit"
                 onClick={() => onRequestRestore(run)}
@@ -641,7 +647,7 @@ function RunCard({
                 {translate('Request restore')}
               </button>
             )}
-            {canRequestDeletion && !deletionInProgress && (
+            {canRequestDeletion && (
               <button
                 className="backup-record-remove"
                 onClick={() => onRequestDeletion(run)}

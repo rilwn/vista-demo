@@ -27,6 +27,7 @@ import { useLocalization } from './i18n/LocalizationProvider';
 type Screen = 'sources' | 'policies';
 
 interface BackupRecordsProps {
+  onChanged: () => void;
   canEdit: boolean;
   editorOpen: boolean;
   onEditorOpenChange: (open: boolean) => void;
@@ -114,6 +115,7 @@ const emptyPolicy: PolicyForm = {
 };
 
 export function BackupRecords({
+  onChanged,
   canEdit,
   editorOpen,
   onEditorOpenChange,
@@ -285,6 +287,7 @@ export function BackupRecords({
       }
       onEditorOpenChange(false);
       onRecordEdit(undefined);
+      onChanged();
     } catch (caught) {
       setError(
         caught instanceof ApiClientError ? caught.message : 'The record could not be saved.',
@@ -339,6 +342,7 @@ export function BackupRecords({
             : 'Policy approval requested. A different authorised person must review it.',
       );
       setApprovalPolicy(undefined);
+      onChanged();
       setApprovalJustification('');
       setProposedDailyCopies('');
       setProposedMonthlyCopies('');
@@ -367,6 +371,7 @@ export function BackupRecords({
       );
       setPolicies((current) => upsert(current, updated));
       setNotice('The approved backup schedule is active.');
+      onChanged();
     } catch (caught) {
       setError(
         caught instanceof ApiClientError ? caught.message : 'The schedule could not be activated.',
@@ -389,6 +394,7 @@ export function BackupRecords({
       );
       setPolicies((current) => upsert(current, updated));
       setNotice('The backup schedule has resumed.');
+      onChanged();
     } catch (caught) {
       setError(
         caught instanceof ApiClientError ? caught.message : 'The schedule could not be resumed.',

@@ -18,6 +18,7 @@ import { BackupPlanReviews } from './BackupPlanReviews';
 import { BackupOverviewReadiness } from './BackupOverviewReadiness';
 import { BackupApprovals } from './BackupApprovals';
 import { BackupRestores } from './BackupRestores';
+import { loadBackupPlanReviews } from './api/backup';
 import {
   ApiClientError,
   authenticate,
@@ -78,7 +79,7 @@ const screens: Record<
   overview: {
     title: 'Backup operations',
     label: 'Overview',
-    action: 'Review readiness',
+    action: '',
     description:
       'Review protected systems, backup schedules, restore readiness, and items that need attention.',
   },
@@ -122,6 +123,15 @@ const screenOrder: BackupScreen[] = [
   'plan-review',
   'audit',
 ];
+
+function screenPath(screen: BackupScreen) {
+  return screen === 'overview' ? '/' : `/${screen}`;
+}
+
+function locationScreen(): BackupScreen {
+  const path = window.location.pathname.replace(/\/+$/u, '') || '/';
+  return screenOrder.find((item) => screenPath(item) === path) ?? 'overview';
+}
 
 export function App() {
   return (
@@ -234,13 +244,67 @@ function BackupConsole({
   onSignOut: () => Promise<void>;
   sessionToken: string;
 }) {
-  const [screen, setScreen] = useState<BackupScreen>('overview');
+  const [screen, setScreen] = useState<BackupScreen>(locationScreen);
   const [editorOpen, setEditorOpen] = useState(false);
   const [drTestPlanOpen, setDrTestPlanOpen] = useState(false);
   const [recordToEdit, setRecordToEdit] = useState<BackupPolicy | BackupProtectedSource>();
   const { locale } = useLocalization();
   const active = screens[screen];
   const navigation = useActiveItemVisibility<HTMLElement>(screen);
+  const translate = (value: string) => (locale === 'bg' ? bg(value) : value);
+  const [summary, setSummary] = useState<{ active: number; reviewDue: boolean } | 'unavailable'>();
+  const [revision, setRevision] = useState(0);
+  const refreshStatus = useCallback(() => setRevision((value) => value + 1), []);
+  useEffect(() => {
+    let current = true;
+    void loadBackupPlanReviews(sessionToken)
+      .then((page) => {
+        if (current)
+          setSummary({
+            active: page.currentPlanSnapshot.policies.filter((policy) => policy.status === 'active')
+              .length,
+            reviewDue: page.reviewRequired,
+          });
+      })
+      .catch(() => {
+        if (current) setSummary('unavailable');
+      });
+    window.addEventListener('focus', refreshStatus);
+    return () => {
+      current = false;
+      window.removeEventListener('focus', refreshStatus);
+    };
+  }, [screen, sessionToken, revision, refreshStatus]);
+
+  const showScreen = useCallback((next: BackupScreen) => {
+    setEditorOpen(false);
+    setDrTestPlanOpen(false);
+    setRecordToEdit(undefined);
+    setScreen(next);
+  }, []);
+  useEffect(() => {
+    const sync = () => {
+      const next = locationScreen();
+      if (window.location.pathname !== screenPath(next)) {
+        window.history.replaceState(
+          null,
+          '',
+          screenPath(next) + window.location.search + window.location.hash,
+        );
+      }
+      showScreen(next);
+    };
+    sync();
+    window.addEventListener('popstate', sync);
+    return () => window.removeEventListener('popstate', sync);
+  }, [showScreen]);
+  function navigate(next: BackupScreen) {
+    if (screen === next) return;
+    window.history.pushState(null, '', screenPath(next));
+    showScreen(next);
+  }
+  const known = summary && summary !== 'unavailable' ? summary : undefined;
+  const fallback = translate(summary === 'unavailable' ? 'Status unavailable' : 'Checking status');
 
   return (
     <div className="backup-console">
@@ -255,28 +319,46 @@ function BackupConsole({
           </div>
         </div>
         <div className="backup-posture">
-          <span className="backup-risk-dot" />
+          <span
+            className="backup-risk-dot"
+            data-tone={!known ? 'unknown' : known.active ? 'ok' : 'warning'}
+          />
           <div>
             <small>System status</small>
-            <strong>{messages.status}</strong>
+            <strong>
+              {known
+                ? known.active
+                  ? `${known.active} ${translate(known.active === 1 ? 'active schedule' : 'active schedules')}`
+                  : translate('No active schedules')
+                : fallback}
+            </strong>
           </div>
         </div>
         <nav aria-label="Backup control navigation" ref={navigation}>
           {screenOrder.map((item) => (
-            <button
+            <a
               aria-current={screen === item ? 'page' : undefined}
               className={screen === item ? 'is-active' : undefined}
               key={item}
-              onClick={() => {
-                setScreen(item);
+              href={screenPath(item)}
+              onClick={(event) => {
+                if (
+                  event.button ||
+                  event.metaKey ||
+                  event.ctrlKey ||
+                  event.shiftKey ||
+                  event.altKey
+                )
+                  return;
+                event.preventDefault();
+                navigate(item);
               }}
-              type="button"
             >
               <span className="backup-menu-icon" aria-hidden="true">
                 <BackupIcon name={screenIcon(item)} />
               </span>
               {locale === 'bg' ? bg(screens[item].label) : screens[item].label}
-            </button>
+            </a>
           ))}
         </nav>
         <p className="backup-sidebar-note">
@@ -286,12 +368,12 @@ function BackupConsole({
       </aside>
       <main className="backup-main">
         <header className="backup-topbar">
-          <label className="backup-area-picker">
+          <label className="backup-area-picker" key={`${screen}:${locale}`}>
             <span>{messages.chooseArea}</span>
             <select
               aria-label={messages.chooseArea}
               value={screen}
-              onChange={(event) => setScreen(event.target.value as BackupScreen)}
+              onChange={(event) => navigate(event.target.value as BackupScreen)}
             >
               {screenOrder.map((item) => (
                 <option key={item} value={item}>
@@ -303,9 +385,19 @@ function BackupConsole({
           <div className="backup-topbar-actions">
             <Help app="recovery" context={screen} locale={locale} />
             <LanguageSwitcher />
-            <span className="backup-setup-status">
-              <i className="backup-risk-dot" /> Setup incomplete
-            </span>
+            <button
+              type="button"
+              className="backup-setup-status"
+              onClick={() => navigate('plan-review')}
+            >
+              <i
+                className="backup-risk-dot"
+                data-tone={!known ? 'unknown' : known.reviewDue ? 'warning' : 'ok'}
+              />
+              {known
+                ? translate(known.reviewDue ? 'Plan review due' : 'Plan review current')
+                : fallback}
+            </button>
             <div className="backup-account-control">
               <span aria-hidden="true" className="backup-account-avatar">
                 {employeeName
@@ -332,7 +424,7 @@ function BackupConsole({
             <span>{locale === 'bg' ? bg(active.description) : active.description}</span>
           </div>
           {active.action && (
-            <button
+            <Button
               disabled={
                 (screen !== 'sources' && screen !== 'policies' && screen !== 'dr-tests') ||
                 !hasBackupPermission(context, 'create')
@@ -344,8 +436,8 @@ function BackupConsole({
               }}
               type="button"
             >
-              {active.action}
-            </button>
+              {locale === 'bg' ? bg(active.action) : active.action}
+            </Button>
           )}
         </section>
         {screen === 'overview' && <BackupOverviewReadiness sessionToken={sessionToken} />}
@@ -360,6 +452,8 @@ function BackupConsole({
         ) : screen === 'sources' || screen === 'policies' ? (
           <section className="backup-list-shell backup-list-shell--records">
             <BackupRecords
+              key={screen}
+              onChanged={refreshStatus}
               canEdit={hasBackupPermission(context, 'edit')}
               editorOpen={editorOpen}
               onEditorOpenChange={setEditorOpen}
@@ -372,6 +466,7 @@ function BackupConsole({
         ) : screen === 'approvals' ? (
           <section className="backup-list-shell backup-list-shell--records">
             <BackupApprovals
+              onChanged={refreshStatus}
               canApprove={hasBackupPermission(context, 'approve')}
               currentAccountId={context.accountId}
               sessionToken={sessionToken}
@@ -397,11 +492,12 @@ function BackupConsole({
         ) : screen === 'plan-review' ? (
           <section className="backup-list-shell backup-list-shell--records">
             <BackupPlanReviews
+              onChanged={refreshStatus}
               canApprove={hasBackupPermission(context, 'approve')}
               sessionToken={sessionToken}
             />
           </section>
-        ) : (
+        ) : screen === 'audit' ? (
           <section className="backup-list-shell">
             <div className="backup-list-controls">
               <label>
@@ -439,7 +535,7 @@ function BackupConsole({
               </div>
             </div>
           </section>
-        )}
+        ) : null}
       </main>
     </div>
   );

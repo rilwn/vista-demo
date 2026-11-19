@@ -11,7 +11,7 @@
 
 .backup-console button,
 .backup-console input {
-  font: inherit;
+  font-family: inherit;
 }
 
 .backup-application-state {
@@ -149,6 +149,24 @@
   background: #dfaa50;
   box-shadow: 0 0 0 3px rgb(223 170 80 / 0.15);
 }
+.backup-risk-dot[data-tone='ok'] {
+  background: #427951;
+  box-shadow: 0 0 0 3px rgb(66 121 81 / 14%);
+}
+.backup-risk-dot[data-tone='unknown'] {
+  background: #728077;
+  box-shadow: none;
+}
+.backup-run-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: auto;
+  padding-top: 0.7rem;
+  border-top: 1px solid #e4e9e3;
+}
 .backup-sidebar nav {
   display: grid;
   gap: 0.15rem;
@@ -157,7 +175,7 @@
 .backup-sidebar nav::-webkit-scrollbar {
   display: none;
 }
-.backup-sidebar nav button {
+.backup-sidebar nav a {
   display: flex;
   min-height: 2.58rem;
   align-items: center;
@@ -173,11 +191,11 @@
   cursor: pointer;
   scroll-snap-align: center;
 }
-.backup-sidebar nav button:hover {
+.backup-sidebar nav a:hover {
   color: #edf5ec;
   background: rgb(255 255 255 / 0.05);
 }
-.backup-sidebar nav button.is-active {
+.backup-sidebar nav a.is-active {
   color: #eff8ed;
   background: rgb(178 211 158 / 0.13);
   box-shadow: inset 2px 0 #afd58f;
@@ -281,7 +299,7 @@
   font-size: clamp(1.6rem, 3vw, 2.35rem);
   letter-spacing: -0.045em;
 }
-.backup-page-heading span {
+.backup-page-heading > div > span {
   display: block;
   max-width: 46rem;
   margin-top: 0.6rem;
@@ -289,23 +307,12 @@
   font-size: 0.86rem;
   line-height: 1.55;
 }
-.backup-page-heading button {
-  min-height: 2.65rem;
-  padding: 0.6rem 0.75rem;
-  border: 0;
-  border-radius: 0.45rem;
-  color: #fff;
-  background: #235e3b;
-  font-size: 0.78rem;
-  font-weight: 720;
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-.backup-page-heading button:disabled {
+.backup-console button:disabled {
   border: 1px solid #d2d8d1;
-  color: #68756d;
+  color: #536157;
   background: #e3e7e2;
+  opacity: 1;
+  box-shadow: none;
   cursor: not-allowed;
 }
 .backup-readiness-strip {
@@ -554,34 +561,51 @@
   margin-top: auto;
   padding-top: 0.25rem;
 }
-.backup-record-edit--primary,
-.backup-approval-approve {
-  border-color: #2b6542;
-  color: #fff;
-  background: #2b6542;
-}
-.backup-approval-actions button {
-  min-height: 2.1rem;
-  padding: 0.4rem 0.65rem;
-  border: 1px solid #d1dcd1;
-  border-radius: 0.48rem;
-  font: inherit;
-  font-size: 0.74rem;
-  font-weight: 700;
+/* Keep the label and surface together in cards, toolbars and drawer footers. */
+:is(
+  .backup-record-edit,
+  .backup-record-remove,
+  .backup-approval-approve,
+  .backup-approval-reject,
+  .backup-editor-save,
+  .backup-editor-cancel
+) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.25rem;
+  padding: 0.45rem 0.72rem;
+  border: 1px solid var(--action-border, #c8d3ca);
+  border-radius: 0.58rem;
+  color: var(--action-label, #294c35);
+  background: var(--action-surface, #fff);
+  font-weight: 650;
   cursor: pointer;
 }
-.backup-approval-actions button:disabled {
-  cursor: wait;
-  opacity: 0.6;
+:is(
+    .backup-record-edit,
+    .backup-record-remove,
+    .backup-approval-approve,
+    .backup-approval-reject,
+    .backup-editor-save,
+    .backup-editor-cancel
+  ):hover:not(:disabled) {
+  background: var(--action-hover, #edf3ee);
 }
+.backup-record-edit--primary,
+.backup-approval-approve,
+.backup-editor-save {
+  --action-label: #fff;
+  --action-surface: #193c2a;
+  --action-border: #193c2a;
+  --action-hover: #102f20;
+}
+.backup-record-remove,
 .backup-approval-reject {
-  color: #7a4037;
-  background: #fff;
-}
-.backup-approval-approve {
-  border-color: #2b6542 !important;
-  color: #fff !important;
-  background: #2b6542 !important;
+  --action-label: #812d28;
+  --action-surface: #fff8f7;
+  --action-border: #debcb7;
+  --action-hover: #f9e8e5;
 }
 .backup-policy-hint {
   margin: 0;
@@ -614,19 +638,6 @@
 }
 .backup-record-edit {
   align-self: flex-start;
-  min-height: 2.1rem;
-  padding: 0.4rem 0.65rem;
-  border: 1px solid #d1dcd1;
-  border-radius: 0.48rem;
-  color: #325d3e;
-  background: #f8faf7;
-  font-weight: 680;
-  cursor: pointer;
-}
-.backup-record-edit--primary {
-  border-color: #2b6542;
-  color: #fff;
-  background: #2b6542;
 }
 .backup-approval-editor .backup-form-section > p {
   margin: 0;
@@ -852,23 +863,6 @@
 .backup-editor-footer button {
   min-height: 2.5rem;
   padding: 0.55rem 0.8rem;
-  border-radius: 0.52rem;
-  font-weight: 710;
-  cursor: pointer;
-}
-.backup-editor-cancel {
-  border: 1px solid #d3ddd2;
-  color: #43584a;
-  background: #fff;
-}
-.backup-editor-save {
-  border: 1px solid #215b39;
-  color: #fff;
-  background: #215b39;
-}
-.backup-editor-save:disabled {
-  opacity: 0.65;
-  cursor: wait;
 }
 .backup-list-controls {
   display: flex;
@@ -905,7 +899,6 @@
   font-size: 0.73rem;
 }
 
-.backup-list-controls button:disabled,
 .backup-list-controls input:disabled {
   cursor: not-allowed;
   opacity: 0.62;
@@ -969,7 +962,7 @@
     overscroll-behavior-inline: contain;
     scroll-snap-type: inline proximity;
   }
-  .backup-sidebar nav button {
+  .backup-sidebar nav a {
     width: max-content;
     flex: 0 0 auto;
   }
@@ -1054,8 +1047,7 @@
     0 0 0 4px rgb(66 106 135 / 10%);
 }
 
-.backup-list-controls button,
-.backup-page-heading button {
+.backup-list-controls button {
   border-color: transparent;
   border-radius: 0.68rem;
   background: #eef2ef;
@@ -1066,8 +1058,7 @@
     transform 140ms ease;
 }
 
-.backup-list-controls button:hover:not(:disabled),
-.backup-page-heading button:hover:not(:disabled) {
+.backup-list-controls button:hover:not(:disabled) {
   background: #e4eae5;
   box-shadow: inset 0 0 0 1px #aebbb1;
   transform: translateY(-1px);
@@ -1408,34 +1399,6 @@
 
 .backup-restore-requests .backup-database-record-recovery .backup-approval-actions {
   margin-top: 0;
-}
-
-.backup-approval-actions button,
-.backup-record-edit {
-  transition:
-    border-color 140ms ease,
-    color 140ms ease,
-    background-color 140ms ease,
-    box-shadow 140ms ease;
-}
-
-.backup-approval-actions button:hover:not(:disabled),
-.backup-record-edit:hover:not(:disabled) {
-  border-color: #aabbaa;
-  background-color: #f0f5ef;
-}
-
-.backup-approval-actions .backup-approval-approve:hover:not(:disabled),
-.backup-record-edit--primary:hover:not(:disabled) {
-  border-color: #1c5634 !important;
-  background: #1c5634 !important;
-  box-shadow: 0 3px 8px rgb(27 82 49 / 15%);
-}
-
-.backup-approval-actions .backup-approval-reject:hover:not(:disabled) {
-  border-color: #d8b8b1;
-  color: #793a32;
-  background: #fff7f5;
 }
 
 .backup-policy-editor .backup-editor-header,
