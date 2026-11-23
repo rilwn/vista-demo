@@ -3,7 +3,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 
 import { ApiClientError } from './api/client';
 import { loadBackupPlanReviews, recordBackupPlanReview } from './api/backup';
-import { bg } from './i18n/catalog';
+import { bg, recoveryLabel } from './i18n/catalog';
 import { useLocalization } from './i18n/LocalizationProvider';
 
 export function BackupPlanReviews({
@@ -241,10 +241,10 @@ export function BackupPlanReviews({
                     {snapshot.protectedSources.map((source) => (
                       <li key={source.sourceCode}>
                         <span>
-                          <strong>{source.name}</strong>
+                          <strong translate="no">{source.name}</strong>
                           <small>
-                            {source.sourceCode} · {translate(source.sourceType)} ·{' '}
-                            {translate(source.classification)}
+                            {source.sourceCode} · {recoveryLabel(source.sourceType, locale)} ·{' '}
+                            {recoveryLabel(source.classification, locale)}
                           </small>
                           {(source.ownerName || source.stewardName) && (
                             <small>
@@ -257,7 +257,7 @@ export function BackupPlanReviews({
                         </span>
                         <span>
                           <strong>{source.location}</strong>
-                          <small>{translate(source.status)}</small>
+                          <small>{recoveryLabel(source.status, locale)}</small>
                         </span>
                       </li>
                     ))}
@@ -277,13 +277,15 @@ export function BackupPlanReviews({
                         <span>
                           <strong>{policy.policyCode}</strong>
                           <small>
-                            {translate(policy.backupType)} · {translate(policy.frequency)} ·{' '}
-                            {translate(policy.status)}
+                            {recoveryLabel(policy.backupType, locale)} ·{' '}
+                            {recoveryLabel(policy.frequency, locale)} ·{' '}
+                            {recoveryLabel(policy.status, locale)}
                           </small>
                         </span>
                         <span>
                           <strong>
-                            RPO {policy.rpoMinutes}m · RTO {policy.rtoMinutes}m
+                            RPO {policy.rpoMinutes} {translate('min')} · RTO {policy.rtoMinutes}{' '}
+                            {translate('min')}
                           </strong>
                           <small>
                             {policy.sourceCodes.length} {translate('sources covered')} ·{' '}

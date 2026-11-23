@@ -1,3 +1,4 @@
+import { workflowText } from '../i18n/legacyPageCatalog';
 import { Button, InlineAlert, Toast } from '@vista/ui';
 import type {
   CreateFinanceCashVoucherRequest,
@@ -330,12 +331,18 @@ function CashDailyReportView({
           <section aria-label="Daily cash totals" className="cash-report-summary">
             <CashMetric label="Opening balance" value={formatMoney(report.openingBalance)} />
             <CashMetric
-              label={`${report.receiptCount} receipt${report.receiptCount === 1 ? '' : 's'}`}
+              label={workflowText(
+                report.receiptCount === 1 ? '{count} receipt' : '{count} receipts',
+                { count: report.receiptCount },
+              )}
               tone="positive"
               value={formatMoney(report.receiptTotal)}
             />
             <CashMetric
-              label={`${report.paymentCount} payment${report.paymentCount === 1 ? '' : 's'}`}
+              label={workflowText(
+                report.paymentCount === 1 ? '{count} payment' : '{count} payments',
+                { count: report.paymentCount },
+              )}
               tone="negative"
               value={formatMoney(report.paymentTotal)}
             />

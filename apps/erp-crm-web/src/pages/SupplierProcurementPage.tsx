@@ -1,3 +1,4 @@
+import { workflowText } from '../i18n/legacyPageCatalog';
 import { Button, InlineAlert, Toast } from '@vista/ui';
 import { useActiveItemVisibility } from '@vista/ui/navigation';
 import type {
@@ -276,7 +277,10 @@ function SupplierList({
                 <dd>
                   {supplier.profile.paymentTermsDays === undefined
                     ? 'Not set'
-                    : `${supplier.profile.paymentTermsDays} days`}
+                    : workflowText(
+                        supplier.profile.paymentTermsDays === 1 ? '{count} day' : '{count} days',
+                        { count: supplier.profile.paymentTermsDays },
+                      )}
                 </dd>
               </div>
               <div>

@@ -6,6 +6,7 @@ import { installSearchableSelects } from './searchable-selects';
 
 afterEach(() => {
   document.body.replaceChildren();
+  document.documentElement.lang = 'en';
 });
 
 describe('searchable select enhancement', () => {
@@ -89,6 +90,43 @@ describe('searchable select enhancement', () => {
     search.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'Escape' }));
     expect(search.getAttribute('aria-expanded')).toBe('false');
     cleanup();
+  });
+
+  it('refreshes an open list, selection and validation when the language changes', async () => {
+    document.documentElement.lang = 'en';
+    document.body.innerHTML = `<label><span>Warehouse</span><select><option value="central">Central</option><option value="mobile">Mobile</option></select></label>`;
+    const cleanup = installSearchableSelects();
+    try {
+      const select = document.querySelector('select')!;
+      const input = document.querySelector<HTMLInputElement>('.vista-search-select')!;
+      const toggle = document.querySelector('.vista-search-select-toggle');
+      input.focus();
+      expect(input.getAttribute('aria-label')).toBe('Search Warehouse');
+      document.documentElement.lang = 'bg';
+      document.querySelector('label span')!.firstChild!.nodeValue = 'Склад';
+      select.options[0]!.firstChild!.nodeValue = 'Централен';
+      await vi.waitFor(() => {
+        expect(input.value).toBe('Централен');
+        expect(input.getAttribute('aria-label')).toBe('Търсене: Склад');
+        expect(toggle?.getAttribute('aria-label')).toBe('Покажи опциите');
+        expect(document.querySelector('.vista-search-select-option-label')?.textContent).toBe(
+          'Централен',
+        );
+      });
+      input.value = 'unknown';
+      input.dispatchEvent(new Event('input'));
+      expect(input.validationMessage).toBe('Изберете опция от списъка.');
+      expect(document.querySelector('.vista-search-select-empty')?.textContent).toBe(
+        'Няма съвпадения',
+      );
+      expect(select.value).toBe('central');
+      document.documentElement.lang = 'en';
+      await vi.waitFor(() =>
+        expect(input.validationMessage).toBe('Choose an option from the list.'),
+      );
+    } finally {
+      cleanup();
+    }
   });
 
   it('filters a multiple-choice list without changing selected values', () => {

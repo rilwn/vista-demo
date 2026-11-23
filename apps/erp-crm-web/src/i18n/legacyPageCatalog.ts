@@ -1,3 +1,6 @@
+import { workflowCopyBg } from './workflowCopy.bg';
+import { getOperationsLocale } from './LocalizationProvider';
+
 /** Reviewed translations for workflow pages that still contain legacy inline copy. */
 export const legacyBulgarianText: Readonly<Record<string, string>> = {
   Settled: 'Погасено',
@@ -1502,7 +1505,20 @@ const routeOverrides: Readonly<Record<string, Readonly<Record<string, string>>>>
   },
 };
 
+/** For complete workflow phrases with replaceable values, rather than translating data. */
+export function workflowText(text: string, values: Record<string, string | number>): string {
+  return (getOperationsLocale() === 'bg' ? translateLegacyText(text) : text).replace(
+    /\{(\w+)\}/gu,
+    (match, key: string) => String(values[key] ?? match),
+  );
+}
+
 export function translateLegacyText(text: string, pathname = window.location.pathname): string {
   const route = Object.keys(routeOverrides).find((prefix) => pathname.startsWith(prefix));
-  return (route ? routeOverrides[route]?.[text] : undefined) ?? legacyBulgarianText[text] ?? text;
+  return (
+    (route ? routeOverrides[route]?.[text] : undefined) ??
+    (Object.hasOwn(legacyBulgarianText, text) ? legacyBulgarianText[text] : undefined) ??
+    (Object.hasOwn(workflowCopyBg, text) ? workflowCopyBg[text] : undefined) ??
+    text
+  );
 }

@@ -1,3 +1,6 @@
+import { counterCopyBg } from './counterCopy.bg';
+import { getPosLocale } from './LocalizationProvider';
+
 export const bgText: Readonly<Record<string, string>> = {
   'Cashier terminal': 'Касиерски терминал',
   'Use your assigned cashier account.': 'Използвайте назначения Ви касиерски профил.',
@@ -497,5 +500,15 @@ export const bgText: Readonly<Record<string, string>> = {
 };
 
 export function bg(text: string): string {
-  return bgText[text] ?? text;
+  return (
+    (Object.hasOwn(bgText, text) ? bgText[text] : undefined) ??
+    (Object.hasOwn(counterCopyBg, text) ? counterCopyBg[text] : undefined) ??
+    text
+  );
+}
+/** Translate a complete message without translating the values inserted into it. */
+export function posText(text: string, values: Record<string, string | number>): string {
+  return (getPosLocale() === 'bg' ? bg(text) : text).replace(/\{(\w+)\}/gu, (match, key: string) =>
+    String(values[key] ?? match),
+  );
 }

@@ -16,6 +16,7 @@ import type { ReactNode } from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { PosSavedReports } from './PosSavedReports';
 import { getPosDateLocale } from './i18n/LocalizationProvider';
+import { posText } from './i18n/catalog';
 import { savedReportText, exportHistoryText as historyText } from './pos-saved-reports.messages';
 
 import {
@@ -552,7 +553,13 @@ function ReportTable({
         <span key="transactions">{row.saleCount + row.returnCount}</span>,
         <span key="average">{money(row.averageSaleEur)}</span>,
         <strong key="net">{money(row.netRevenueEur)}</strong>,
-        <span key="share">{row.revenueSharePercent.toFixed(2)}%</span>,
+        <span key="share">
+          {row.revenueSharePercent.toLocaleString(getPosDateLocale(), {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+          })}
+          %
+        </span>,
       ])}
     />
   );
@@ -796,7 +803,9 @@ export function RecentExports({
                 <strong>{report.name}</strong>
                 <small>
                   {dateTime(report.createdAt)}
-                  {report.rowCount === undefined ? '' : ` · ${report.rowCount} rows`}
+                  {report.rowCount === undefined
+                    ? ''
+                    : ` · ${posText(report.rowCount === 1 ? '{count} row' : '{count} rows', { count: report.rowCount })}`}
                 </small>
               </div>
               <span className={`pos-export-state is-${report.status}`}>
@@ -871,11 +880,11 @@ function localDate(date: Date): string {
 }
 
 function money(value: string | number): string {
-  return `${Number(value).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} EUR`;
+  return `${Number(value).toLocaleString(getPosDateLocale(), { minimumFractionDigits: 2, maximumFractionDigits: 2 })} EUR`;
 }
 
 function quantity(value: string): string {
-  return Number(value).toLocaleString('en-GB', { maximumFractionDigits: 4 });
+  return Number(value).toLocaleString(getPosDateLocale(), { maximumFractionDigits: 4 });
 }
 
 function dateTime(value: string): string {

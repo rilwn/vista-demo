@@ -1,3 +1,4 @@
+import { workflowText } from '../i18n/legacyPageCatalog';
 import { Button, InlineAlert, TextField, Toast } from '@vista/ui';
 import type {
   CreateProductRequest,
@@ -82,7 +83,9 @@ export function CatalogPage() {
           </p>
         </div>
         {canCreate ? (
-          <Button onClick={openCreateDrawer}>Add {tab === 'products' ? 'product' : 'unit'}</Button>
+          <Button onClick={openCreateDrawer}>
+            {workflowText(tab === 'products' ? 'Add product' : 'Add unit', {})}
+          </Button>
         ) : null}
       </header>
 
@@ -224,7 +227,7 @@ function ProductsPanel({
       {products.map((product) => (
         <article className="catalog-product-row" key={product.id}>
           <div>
-            <strong>{product.name}</strong>
+            <strong translate="no">{product.name}</strong>
             <small>{product.productCode}</small>
           </div>
           <div>
@@ -480,7 +483,7 @@ function ProductDrawer({
           label="Category"
           onChange={setCategoryId}
           options={categories.map((category) => ({
-            label: `${category.name} · ${trackingLabel(category.trackingMode)}`,
+            label: `${category.name} · ${workflowText(trackingLabel(category.trackingMode), {})}`,
             value: category.id,
           }))}
           value={categoryId}
@@ -519,7 +522,7 @@ function ProductDrawer({
           {barcodes.map((barcode, index) => (
             <div className="barcode-form-row" key={index}>
               <input
-                aria-label={`Barcode ${index + 1}`}
+                aria-label={workflowText('Barcode {number}', { number: index + 1 })}
                 maxLength={80}
                 onChange={(event) =>
                   setBarcodes((current) =>
@@ -532,7 +535,7 @@ function ProductDrawer({
                 value={barcode.barcode}
               />
               <select
-                aria-label={`Barcode ${index + 1} type`}
+                aria-label={workflowText('Barcode {number} type', { number: index + 1 })}
                 onChange={(event) =>
                   setBarcodes((current) =>
                     current.map((item, itemIndex) =>
@@ -552,7 +555,7 @@ function ProductDrawer({
               </select>
               {barcodes.length > 1 ? (
                 <button
-                  aria-label={`Remove barcode ${index + 1}`}
+                  aria-label={workflowText('Remove barcode {number}', { number: index + 1 })}
                   onClick={() =>
                     setBarcodes((current) => current.filter((_, itemIndex) => itemIndex !== index))
                   }

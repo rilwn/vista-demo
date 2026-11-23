@@ -15,6 +15,12 @@ function Fixture() {
           <h1>Supplier invoices</h1>
           <input placeholder="Search warranty cards" />
           <p>Alfa Market Demo Ltd.</p>
+          <p translate="no">Product catalog</p>
+          <h2>Product catalog</h2>
+          <p>Close thresholds</p>
+          <button>Prepare customer survey</button>
+          <button>Import a bank file</button>
+          <button>Export Service report</button>
           <span>Active drafts</span>
           <span>Invoices</span>
           <span>Proformas</span>
@@ -57,6 +63,12 @@ describe('LegacyTranslationBoundary', () => {
     expect(screen.getByRole('region', { name: 'Регистър на доставчиците' })).toBeTruthy();
     expect(screen.getByPlaceholderText('Търсене на гаранционни карти')).toBeTruthy();
     expect(screen.getByText('Alfa Market Demo Ltd.')).toBeTruthy();
+    expect(screen.getByText('Product catalog')).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Продуктов каталог' })).toBeTruthy();
+    expect(screen.getByText('Затваряне на праговете')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Подготовка на клиентска анкета' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Импорт на банков файл' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Експорт на сервизен отчет' })).toBeTruthy();
     for (const label of ['Активни чернови', 'Фактури', 'Проформи', 'Кредитни и дебитни известия'])
       expect(screen.getByText(label)).toBeTruthy();
     for (const label of [
@@ -85,6 +97,7 @@ describe('LegacyTranslationBoundary', () => {
     expect(await screen.findByRole('heading', { name: 'Supplier invoices' })).toBeTruthy();
     expect(screen.getByText('Active drafts')).toBeTruthy();
     expect(screen.getByText('Quotation sent')).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Product catalog' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Create' })).toBeTruthy();
   });
 });

@@ -1,3 +1,4 @@
+import { workflowText } from '../i18n/legacyPageCatalog';
 import { Button, InlineAlert, Toast } from '@vista/ui';
 import type {
   CreateFinanceBankStatementLineRequest,
@@ -691,13 +692,17 @@ function CreateBankStatementDrawer({
                     <strong>Transaction {index + 1}</strong>
                     <span>
                       {line.paymentReference
-                        ? `Reference: ${line.paymentReference}`
+                        ? workflowText('Reference: {reference}', {
+                            reference: line.paymentReference,
+                          })
                         : 'Enter this bank line separately'}
                     </span>
                   </div>
                   {lines.length > 1 ? (
                     <button
-                      aria-label={`Remove transaction ${index + 1}`}
+                      aria-label={workflowText('Remove transaction {number}', {
+                        number: index + 1,
+                      })}
                       onClick={() =>
                         setLines((current) => current.filter(({ key }) => key !== line.key))
                       }
@@ -710,7 +715,9 @@ function CreateBankStatementDrawer({
                 <div className="bank-form-grid">
                   <BankField label="Direction">
                     <select
-                      aria-label={`Transaction ${index + 1} direction`}
+                      aria-label={workflowText('Transaction {number} direction', {
+                        number: index + 1,
+                      })}
                       onChange={(event) =>
                         updateLine(line.key, {
                           direction: event.target.value as DraftLine['direction'],
@@ -724,7 +731,9 @@ function CreateBankStatementDrawer({
                   </BankField>
                   <BankField label="Amount">
                     <input
-                      aria-label={`Transaction ${index + 1} amount`}
+                      aria-label={workflowText('Transaction {number} amount', {
+                        number: index + 1,
+                      })}
                       min="0.0001"
                       onChange={(event) => updateLine(line.key, { amount: event.target.value })}
                       required
@@ -735,7 +744,9 @@ function CreateBankStatementDrawer({
                   </BankField>
                   <BankField label="Transaction date">
                     <input
-                      aria-label={`Transaction ${index + 1} transaction date`}
+                      aria-label={workflowText('Transaction {number} transaction date', {
+                        number: index + 1,
+                      })}
                       onChange={(event) =>
                         updateLine(line.key, { transactionDate: event.target.value })
                       }
@@ -746,7 +757,9 @@ function CreateBankStatementDrawer({
                   </BankField>
                   <BankField label="Value date">
                     <input
-                      aria-label={`Transaction ${index + 1} value date`}
+                      aria-label={workflowText('Transaction {number} value date', {
+                        number: index + 1,
+                      })}
                       onChange={(event) => updateLine(line.key, { valueDate: event.target.value })}
                       required
                       type="date"
@@ -755,7 +768,9 @@ function CreateBankStatementDrawer({
                   </BankField>
                   <BankField label="Counterparty" wide>
                     <input
-                      aria-label={`Transaction ${index + 1} counterparty`}
+                      aria-label={workflowText('Transaction {number} counterparty', {
+                        number: index + 1,
+                      })}
                       maxLength={255}
                       onChange={(event) =>
                         updateLine(line.key, { counterpartyName: event.target.value })
@@ -766,7 +781,9 @@ function CreateBankStatementDrawer({
                   </BankField>
                   <BankField label="Counterparty IBAN (optional)" wide>
                     <input
-                      aria-label={`Transaction ${index + 1} counterparty IBAN`}
+                      aria-label={workflowText('Transaction {number} counterparty IBAN', {
+                        number: index + 1,
+                      })}
                       maxLength={34}
                       onChange={(event) =>
                         updateLine(line.key, { counterpartyIban: event.target.value })
@@ -776,7 +793,9 @@ function CreateBankStatementDrawer({
                   </BankField>
                   <BankField label="Payment reference" wide>
                     <textarea
-                      aria-label={`Transaction ${index + 1} payment reference`}
+                      aria-label={workflowText('Transaction {number} payment reference', {
+                        number: index + 1,
+                      })}
                       maxLength={500}
                       onChange={(event) =>
                         updateLine(line.key, { paymentReference: event.target.value })
@@ -1087,7 +1106,9 @@ function BankMatchDrawer({
                     {candidate.targetType === 'pos_account'
                       ? bg
                         ? `POS продажба ${candidate.documentNumber}`
-                        : `POS sale ${candidate.documentNumber}`
+                        : workflowText('POS sale {reference}', {
+                            reference: candidate.documentNumber,
+                          })
                       : candidate.documentNumber}
                   </strong>
                   <span>

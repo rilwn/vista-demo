@@ -1,8 +1,12 @@
 import { toString } from 'qrcode';
 import { useEffect, useState } from 'react';
+import { translateLegacyText } from '../i18n/legacyPageCatalog';
+import { useLocalization } from '../i18n/LocalizationProvider';
 
 export function AuthenticatorQrCode({ provisioningUri }: { provisioningUri: string }) {
   const [imageSource, setImageSource] = useState('');
+  const { locale } = useLocalization();
+  const text = (value: string) => (locale === 'bg' ? translateLegacyText(value) : value);
 
   useEffect(() => {
     let current = true;
@@ -24,20 +28,22 @@ export function AuthenticatorQrCode({ provisioningUri }: { provisioningUri: stri
   }, [provisioningUri]);
 
   return (
-    <section className="authenticator-setup-qr" aria-label="Authenticator QR code">
+    <section className="authenticator-setup-qr" aria-label={text('Authenticator QR code')}>
       {imageSource ? (
         <img
-          alt="Scan this QR code with your authenticator app"
+          alt={text('Scan this QR code with your authenticator app')}
           height="176"
           src={imageSource}
           width="176"
         />
       ) : (
         <div aria-live="polite" className="authenticator-setup-qr-placeholder">
-          Preparing QR code…
+          {text('Preparing QR code…')}
         </div>
       )}
-      <p>Scan this code with your authenticator app, then enter the current six-digit code.</p>
+      <p>
+        {text('Scan this code with your authenticator app, then enter the current six-digit code.')}
+      </p>
     </section>
   );
 }

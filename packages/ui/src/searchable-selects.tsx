@@ -7,6 +7,25 @@ interface EnhancedSelect {
 
 let searchableSelectId = 0;
 
+function choiceCopy() {
+  const locale = document.documentElement.lang.toLowerCase().startsWith('bg') ? 'bg' : 'en';
+  return locale === 'bg'
+    ? {
+        show: 'Покажи опциите',
+        search: 'Търсене',
+        empty: 'Няма налични опции',
+        noMatch: 'Няма съвпадения',
+        choose: 'Изберете опция от списъка.',
+      }
+    : {
+        show: 'Show choices',
+        search: 'Search',
+        empty: 'No choices available',
+        noMatch: 'No matching choices',
+        choose: 'Choose an option from the list.',
+      };
+}
+
 /**
  * Adds an application-styled search surface to selects without changing the
  * form's underlying value or React change handling.
@@ -34,7 +53,15 @@ export function installSearchableSelects(root: ParentNode = document): () => voi
 
   function scheduleScan(records: MutationRecord[]) {
     const relevant = records.some((record) => {
-      if (record.type === 'attributes') return record.target instanceof HTMLSelectElement;
+      if (record.type === 'attributes') {
+        return (
+          record.target instanceof HTMLSelectElement ||
+          record.target instanceof HTMLOptionElement ||
+          record.target instanceof HTMLOptGroupElement
+        );
+      }
+      if (record.type === 'characterData')
+        return Boolean(record.target.parentElement?.closest('option, label'));
       if ((record.target as Element).closest?.('.vista-search-select-listbox')) return false;
       if (
         record.target instanceof HTMLSelectElement ||
@@ -55,14 +82,21 @@ export function installSearchableSelects(root: ParentNode = document): () => voi
   scan();
   const observer = new MutationObserver(scheduleScan);
   observer.observe(root, {
-    attributeFilter: ['aria-label', 'disabled', 'required'],
+    attributeFilter: ['aria-label', 'disabled', 'required', 'label'],
     attributes: true,
+    characterData: true,
     childList: true,
     subtree: true,
   });
+  const languageObserver = new MutationObserver(() => {
+    window.cancelAnimationFrame(refreshFrame);
+    refreshFrame = window.requestAnimationFrame(scan);
+  });
+  languageObserver.observe(document.documentElement, { attributeFilter: ['lang'] });
 
   return () => {
     observer.disconnect();
+    languageObserver.disconnect();
     window.cancelAnimationFrame(refreshFrame);
     enhanced.forEach((entry) => entry.cleanup());
     enhanced.clear();
@@ -71,12 +105,8 @@ export function installSearchableSelects(root: ParentNode = document): () => voi
 
 function enhanceMultiSelect(select: HTMLSelectElement): EnhancedSelect {
   const input = document.createElement('input');
-  const label =
-    select.getAttribute('aria-label') || select.labels?.[0]?.textContent?.trim() || 'options';
   input.className = 'vista-multi-select-search';
   input.type = 'search';
-  input.placeholder = `Search ${label.toLocaleLowerCase()}`;
-  input.setAttribute('aria-label', `Search ${label}`);
   select.classList.add('vista-searchable-multi-select');
   select.insertAdjacentElement('beforebegin', input);
 
@@ -88,6 +118,12 @@ function enhanceMultiSelect(select: HTMLSelectElement): EnhancedSelect {
   }
 
   function refresh() {
+    const label =
+      select.getAttribute('aria-label') ||
+      select.labels?.[0]?.querySelector('span')?.textContent?.trim();
+    const copy = choiceCopy();
+    input.placeholder = copy.search;
+    input.setAttribute('aria-label', label ? `${copy.search}: ${label}` : copy.search);
     input.disabled = select.disabled || select.options.length === 0;
     filter();
   }
@@ -124,6 +160,7 @@ function enhanceSelect(select: HTMLSelectElement): EnhancedSelect {
   let activeIndex = -1;
   let isOpen = false;
   let visibleOptions: HTMLOptionElement[] = [];
+  let previousSelectedLabel = '';
 
   shell.className = 'vista-search-select-shell';
   input.className = 'vista-search-select';
@@ -136,7 +173,6 @@ function enhanceSelect(select: HTMLSelectElement): EnhancedSelect {
   toggle.className = 'vista-search-select-toggle';
   toggle.type = 'button';
   toggle.tabIndex = -1;
-  toggle.setAttribute('aria-label', 'Show choices');
   toggle.setAttribute('aria-controls', listId);
   toggle.innerHTML = '<span aria-hidden="true"></span>';
   listbox.className = 'vista-search-select-listbox';
@@ -258,7 +294,8 @@ function enhanceSelect(select: HTMLSelectElement): EnhancedSelect {
     if (!visibleOptions.length) {
       const empty = document.createElement('p');
       empty.className = 'vista-search-select-empty';
-      empty.textContent = normalizedQuery ? 'No matching choices' : 'No choices available';
+      const copy = choiceCopy();
+      empty.textContent = normalizedQuery ? copy.noMatch : copy.empty;
       listbox.replaceChildren(empty);
       setActive(-1);
       return;
@@ -310,14 +347,28 @@ function enhanceSelect(select: HTMLSelectElement): EnhancedSelect {
   function refresh() {
     const choices = options();
     const label = fieldLabel();
-    input.setAttribute('aria-label', `Search ${label}`);
+    const copy = choiceCopy();
+    const isBulgarian = document.documentElement.lang.toLowerCase().startsWith('bg');
+    const searchLabel = isBulgarian
+      ? label === 'option'
+        ? copy.search
+        : `${copy.search}: ${label}`
+      : `${copy.search} ${label}`;
+    input.setAttribute('aria-label', searchLabel);
     input.placeholder = choices.length
-      ? `Search ${label.toLocaleLowerCase()}`
-      : 'No choices available';
+      ? isBulgarian
+        ? searchLabel
+        : searchLabel.toLocaleLowerCase().replace(/^search/, 'Search')
+      : copy.empty;
+    toggle.setAttribute('aria-label', copy.show);
+    if (input.validity.customError) input.setCustomValidity(copy.choose);
     input.disabled = select.disabled || choices.length === 0;
     toggle.disabled = input.disabled;
     input.required = select.required;
-    if (document.activeElement !== input) input.value = selectedLabel();
+    const selected = selectedLabel();
+    if (document.activeElement !== input || input.value === previousSelectedLabel)
+      input.value = selected;
+    previousSelectedLabel = selected;
     if (isOpen) {
       renderListbox(input.value === selectedLabel() ? '' : input.value);
       placeListbox();
@@ -329,7 +380,7 @@ function enhanceSelect(select: HTMLSelectElement): EnhancedSelect {
     const exactMatch = options().find(
       (option) => optionLabel(option).toLocaleLowerCase() === typed,
     );
-    input.setCustomValidity(exactMatch ? '' : 'Choose an option from the list.');
+    input.setCustomValidity(exactMatch ? '' : choiceCopy().choose);
     if (exactMatch) choose(exactMatch, false);
     openListbox(input.value);
   }

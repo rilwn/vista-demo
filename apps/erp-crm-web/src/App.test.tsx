@@ -2280,7 +2280,7 @@ describe('ERP and CRM authenticated workspace', () => {
       serialNumber: 'FDA-EXT-0001',
       status: 'active',
       version: 1,
-      warrantyEndsOn: '2027-01-15',
+      warrantyEndsOn: new Date(Date.now() + 365 * 86_400_000).toISOString().slice(0, 10),
       warrantyStartsOn: '2025-01-15',
     };
     const maintainedEquipment = {

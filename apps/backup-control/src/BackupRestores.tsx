@@ -9,7 +9,7 @@ import {
   loadBackupRestoreRequests,
   recoverBackupDatabaseRecord,
 } from './api/backup';
-import { bg } from './i18n/catalog';
+import { bg, recoveryLabel } from './i18n/catalog';
 import { useLocalization } from './i18n/LocalizationProvider';
 
 export function BackupRestores({
@@ -226,11 +226,11 @@ export function BackupRestores({
                 <div className="backup-record-card-heading">
                   <span className="backup-record-type">{translate('Restore request')}</span>
                   <span className={`backup-policy-state backup-policy-state--${request.status}`}>
-                    {translateRestoreStatus(request.status, translate)}
+                    {recoveryLabel(request.status, locale)}
                   </span>
                 </div>
-                <strong>{request.policyName}</strong>
-                <small>{translate(request.sourceType)}</small>
+                <strong translate="no">{request.policyName}</strong>
+                <small>{recoveryLabel(request.sourceType, locale)}</small>
                 <small>
                   {request.policyCode} · {translate('Restore point')}{' '}
                   {formatDate(request.scheduledFor, locale)}
@@ -457,11 +457,4 @@ function formatDate(value: string, locale: 'en' | 'bg'): string {
     timeStyle: 'short',
     timeZone: 'Europe/Sofia',
   }).format(new Date(value));
-}
-
-function translateRestoreStatus(
-  status: BackupRestoreRequest['status'],
-  translate: (value: string) => string,
-): string {
-  return status === 'approved' ? translate('Restore status: approved') : translate(status);
 }

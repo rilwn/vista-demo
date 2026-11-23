@@ -1,3 +1,4 @@
+import { workflowText } from '../i18n/legacyPageCatalog';
 import { Button, InlineAlert, Toast } from '@vista/ui';
 import type {
   CreateCrmReferralRequest,
@@ -834,7 +835,10 @@ function WarrantyCardDrawer({
               <h3>Warranty claims</h3>
               <p>
                 {related.length
-                  ? `${related.length} linked claim${related.length === 1 ? '' : 's'}.`
+                  ? workflowText(
+                      related.length === 1 ? '{count} linked claim.' : '{count} linked claims.',
+                      { count: related.length },
+                    )
                   : 'No claim has been recorded for this device.'}
               </p>
             </div>

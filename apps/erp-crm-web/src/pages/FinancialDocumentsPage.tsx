@@ -1053,7 +1053,7 @@ function CreateDocumentDrawer({
                   <div className="financial-line-card is-source-locked" key={line.key}>
                     <header>
                       <div>
-                        <strong>{line.description}</strong>
+                        <strong translate="no">{line.description}</strong>
                         <span>
                           {line.quantity} {line.unitCode} ×{' '}
                           {formatMoney(line.unitPrice, currencyCode)}
@@ -1865,7 +1865,7 @@ function LineSummary({ line }: { line: DraftLine }) {
   return (
     <div>
       <div>
-        <strong>{line.description}</strong>
+        <strong translate="no">{line.description}</strong>
         <span>
           {line.quantity} {line.unitCode} × {line.unitPrice}
         </span>

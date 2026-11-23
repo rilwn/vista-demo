@@ -47,6 +47,7 @@ import {
 import { Link } from '../routing/Router';
 import { CrmTabs } from './CrmTicketsPage';
 import { businessIdentifierIssueMessage } from '../i18n/businessIdentifierMessages';
+import { workflowText } from '../i18n/legacyPageCatalog';
 import {
   crmLeadHistoryLabel,
   crmLeadStatusLabel,
@@ -368,7 +369,11 @@ export function CrmPipelinePage() {
       {drawer?.kind === 'new_lead' ? (
         <NewLeadDrawer
           onBack={() => setDrawer(null)}
-          onSaved={(lead) => saved(`${lead.number} was added to the lead desk.`)}
+          onSaved={(lead) =>
+            saved(
+              workflowText('{reference} was added to the lead desk.', { reference: lead.number }),
+            )
+          }
           references={references}
           token={token}
         />
@@ -381,7 +386,9 @@ export function CrmPipelinePage() {
           onConvert={(lead) => setDrawer({ kind: 'convert', lead })}
           onQualified={(lead) => {
             setDrawer({ kind: 'lead', lead });
-            setNotice(`${lead.number} is ready for conversion.`);
+            setNotice(
+              workflowText('{reference} is ready for conversion.', { reference: lead.number }),
+            );
             void loadLeads();
           }}
           token={token}
@@ -394,8 +401,15 @@ export function CrmPipelinePage() {
           onSaved={(result) =>
             saved(
               result.opportunity
-                ? `${result.lead.number} became ${result.customer.name} with opportunity ${result.opportunity.number}.`
-                : `${result.lead.number} became customer ${result.customer.name}.`,
+                ? workflowText('{reference} became {customer} with opportunity {opportunity}.', {
+                    reference: result.lead.number,
+                    customer: result.customer.name,
+                    opportunity: result.opportunity.number,
+                  })
+                : workflowText('{reference} became customer {customer}.', {
+                    reference: result.lead.number,
+                    customer: result.customer.name,
+                  }),
             )
           }
           references={references}
@@ -405,7 +419,13 @@ export function CrmPipelinePage() {
       {drawer?.kind === 'new_opportunity' ? (
         <NewOpportunityDrawer
           onBack={() => setDrawer(null)}
-          onSaved={(opportunity) => saved(`${opportunity.number} was added to the pipeline.`)}
+          onSaved={(opportunity) =>
+            saved(
+              workflowText('{reference} was added to the pipeline.', {
+                reference: opportunity.number,
+              }),
+            )
+          }
           references={references}
           token={token}
         />
@@ -692,7 +712,7 @@ function PipelineBoard({
                       >
                         <button onClick={() => onOpen(opportunity)} type="button">
                           <span className="crm-opportunity-number">{opportunity.number}</span>
-                          <strong>{opportunity.title}</strong>
+                          <strong translate="no">{opportunity.title}</strong>
                           <small>{opportunity.customer.name}</small>
                           <span className="crm-opportunity-value">
                             {formatEur(opportunity.estimatedRevenueEur)}
@@ -712,7 +732,12 @@ function PipelineBoard({
                             <span>{initials(opportunity.owner.displayName)}</span>
                             <small>
                               {opportunity.quotations.length
-                                ? `${opportunity.quotations.length} quotation${opportunity.quotations.length === 1 ? '' : 's'}`
+                                ? workflowText(
+                                    opportunity.quotations.length === 1
+                                      ? '{count} quotation'
+                                      : '{count} quotations',
+                                    { count: opportunity.quotations.length },
+                                  )
                                 : 'No quotation'}
                             </small>
                             <Icon name="arrow" size={13} />
@@ -1132,7 +1157,7 @@ function ConvertLeadDrawer({
     <PipelineDrawer
       busy={busy}
       onBack={onBack}
-      subtitle={`${lead.number} · qualified lead`}
+      subtitle={workflowText('{reference} · qualified lead', { reference: lead.number })}
       title="Convert lead"
     >
       <form className="crm-timeline-drawer-form" onSubmit={(event) => void submit(event)}>
@@ -1580,7 +1605,13 @@ function OpportunityDrawer({
         <section className="crm-pipeline-preview-card">
           <header>
             <h3>Opportunity details</h3>
-            <p>{opportunity.description ?? 'No additional description was added.'}</p>
+            <p>
+              {opportunity.description ? (
+                <span translate="no">{opportunity.description}</span>
+              ) : (
+                'No additional description was added.'
+              )}
+            </p>
           </header>
           <dl>
             <Detail label="Customer" value={opportunity.customer.name} />

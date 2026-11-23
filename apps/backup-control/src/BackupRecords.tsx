@@ -21,7 +21,7 @@ import {
   saveBackupPolicy,
   saveBackupSource,
 } from './api/backup';
-import { bg } from './i18n/catalog';
+import { bg, recoveryLabel } from './i18n/catalog';
 import { useLocalization } from './i18n/LocalizationProvider';
 
 type Screen = 'sources' | 'policies';
@@ -433,7 +433,7 @@ export function BackupRecords({
             <span>
               {screen === 'policies'
                 ? scheduleDescription
-                : `${sources.length} ${translate('records')}`}
+                : `${sources.length} ${translate(sources.length === 1 ? 'record' : 'records')}`}
             </span>
           </div>
         </div>
@@ -457,14 +457,16 @@ export function BackupRecords({
               {sources.map((source) => (
                 <article className="backup-record-card" key={source.id}>
                   <div className="backup-record-card-heading">
-                    <span className="backup-record-type">{translate(source.sourceType)}</span>
+                    <span className="backup-record-type">
+                      {recoveryLabel(source.sourceType, locale)}
+                    </span>
                     <span
                       className={`backup-classification backup-classification--${source.dataClassification}`}
                     >
-                      {translate(source.dataClassification)}
+                      {recoveryLabel(source.dataClassification, locale)}
                     </span>
                   </div>
-                  <strong>{source.name}</strong>
+                  <strong translate="no">{source.name}</strong>
                   <small>
                     {source.sourceCode} · {source.location}
                   </small>
@@ -510,19 +512,23 @@ export function BackupRecords({
             {policies.map((policy) => (
               <article className="backup-record-card" key={policy.id}>
                 <div className="backup-record-card-heading">
-                  <span className="backup-record-type">{translate(policy.backupType)}</span>
+                  <span className="backup-record-type">
+                    {recoveryLabel(policy.backupType, locale)}
+                  </span>
                   <span className={`backup-policy-state backup-policy-state--${policy.status}`}>
-                    {translate(policy.status)}
+                    {recoveryLabel(policy.status, locale)}
                   </span>
                 </div>
-                <strong>{policy.name}</strong>
+                <strong translate="no">{policy.name}</strong>
                 <small>
-                  {policy.policyCode} · {translate(policy.frequency)} · {policy.rpoMinutes} /{' '}
-                  {policy.rtoMinutes} min RPO/RTO
+                  {policy.policyCode} · {recoveryLabel(policy.frequency, locale)} ·{' '}
+                  {policy.rpoMinutes} / {policy.rtoMinutes} {translate('min RPO/RTO')}
                 </small>
                 <div className="backup-policy-sources">
                   {policy.sources.map((source) => (
-                    <span key={source.id}>{source.name}</span>
+                    <span key={source.id} translate="no">
+                      {source.name}
+                    </span>
                   ))}
                 </div>
                 <p>
@@ -916,6 +922,7 @@ function SourceEditor({
   onChange: (form: SourceForm) => void;
   translate: (value: string) => string;
 }) {
+  const { locale } = useLocalization();
   const set = <K extends keyof SourceForm>(key: K, value: SourceForm[K]) =>
     onChange({ ...form, [key]: value });
   const usesMountedPath = [
@@ -956,7 +963,7 @@ function SourceEditor({
             >
               {sourceTypes.map((item) => (
                 <option key={item} value={item}>
-                  {translate(item)}
+                  {recoveryLabel(item, locale)}
                 </option>
               ))}
             </select>
@@ -970,7 +977,7 @@ function SourceEditor({
             >
               {(['critical', 'important', 'standard'] as const).map((item) => (
                 <option key={item} value={item}>
-                  {translate(item)}
+                  {recoveryLabel(item, locale)}
                 </option>
               ))}
             </select>
@@ -1147,6 +1154,7 @@ function PolicyEditor({
   sources: BackupProtectedSource[];
   translate: (value: string) => string;
 }) {
+  const { locale } = useLocalization();
   const set = <K extends keyof PolicyForm>(key: K, value: PolicyForm[K]) =>
     onChange({ ...form, [key]: value });
   const selected = new Set(form.sourceIds);
@@ -1189,7 +1197,7 @@ function PolicyEditor({
                 ] as const
               ).map((item) => (
                 <option key={item} value={item}>
-                  {translate(item)}
+                  {recoveryLabel(item, locale)}
                 </option>
               ))}
             </select>
@@ -1210,7 +1218,7 @@ function PolicyEditor({
             >
               {(['hourly', 'daily', 'weekly', 'monthly'] as const).map((item) => (
                 <option key={item} value={item}>
-                  {translate(item)}
+                  {recoveryLabel(item, locale)}
                 </option>
               ))}
             </select>
@@ -1329,9 +1337,9 @@ function PolicyEditor({
                     type="checkbox"
                   />
                   <span>
-                    <strong>{source.name}</strong>
+                    <strong translate="no">{source.name}</strong>
                     <small>
-                      {source.sourceCode} · {translate(source.dataClassification)}
+                      {source.sourceCode} · {recoveryLabel(source.dataClassification, locale)}
                     </small>
                   </span>
                 </label>

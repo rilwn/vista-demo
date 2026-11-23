@@ -8,7 +8,7 @@ import {
   requestBackupArtifactDeletion,
   requestBackupRestore,
 } from './api/backup';
-import { bg } from './i18n/catalog';
+import { bg, recoveryLabel } from './i18n/catalog';
 import { useLocalization } from './i18n/LocalizationProvider';
 
 export function BackupRuns({
@@ -374,7 +374,7 @@ export function BackupRuns({
                             placeholder={translate(
                               restoreRun.sourceType === 'email'
                                 ? 'Enter at least two characters from mailbox, sender, subject or message path'
-                                : 'Enter at least two characters from the file name or folder',
+                                : 'Search by file name or storage key',
                             )}
                             type="search"
                             value={restoreFileSearch}
@@ -382,6 +382,13 @@ export function BackupRuns({
                           <small>
                             {translate('Search checks the verified restore point before approval.')}
                           </small>
+                          {restoreRun.sourceType === 'object_storage' && (
+                            <small>
+                              {translate(
+                                'For Vista-managed files, enter the file ID if the name is not found.',
+                              )}
+                            </small>
+                          )}
                         </label>
                         <label className="backup-form-field" htmlFor="backup-restore-file-choice">
                           {translate(
@@ -398,7 +405,7 @@ export function BackupRuns({
                             <option value="">{translate('Select a file')}</option>
                             {restoreFileOptions.map((file) => (
                               <option key={file.key} value={file.key}>
-                                {file.label ?? file.key} · {formatBytes(file.sizeBytes, translate)}
+                                {file.label ?? file.key} · {formatBytes(file.sizeBytes, locale)}
                               </option>
                             ))}
                           </select>
@@ -546,10 +553,7 @@ function RunCard({
   const deletionInProgress = ['pending_approval', 'approved', 'running'].includes(
     run.artifactDeletionStatus ?? '',
   );
-  const label = (value: string) =>
-    locale === 'bg'
-      ? translate(value)
-      : value.charAt(0).toUpperCase() + value.slice(1).replaceAll('_', ' ');
+  const label = (value: string) => recoveryLabel(value, locale);
   return (
     <article className="backup-record-card">
       <div className="backup-record-card-heading">
@@ -558,7 +562,7 @@ function RunCard({
           {label(run.status)}
         </span>
       </div>
-      <strong>{run.policyName}</strong>
+      <strong translate="no">{run.policyName}</strong>
       <small>
         {run.policyCode} · {translate('Scheduled')} {formatDate(run.scheduledFor, locale)}
       </small>
@@ -577,7 +581,7 @@ function RunCard({
         </div>
         <div>
           <dt>{translate('Artifact size')}</dt>
-          <dd>{run.artifactSizeBytes ? formatBytes(run.artifactSizeBytes, translate) : '—'}</dd>
+          <dd>{run.artifactSizeBytes ? formatBytes(run.artifactSizeBytes, locale) : '—'}</dd>
         </div>
         <div>
           <dt>{translate('Compression')}</dt>
@@ -594,7 +598,7 @@ function RunCard({
         <div>
           <dt>{translate('Original data size')}</dt>
           <dd>
-            {run.uncompressedSizeBytes ? formatBytes(run.uncompressedSizeBytes, translate) : '—'}
+            {run.uncompressedSizeBytes ? formatBytes(run.uncompressedSizeBytes, locale) : '—'}
           </dd>
         </div>
         <div>
@@ -691,10 +695,11 @@ function formatDate(value: string, locale: 'en' | 'bg'): string {
   }).format(new Date(value));
 }
 
-function formatBytes(value: string, translate: (value: string) => string): string {
+function formatBytes(value: string, locale: 'en' | 'bg'): string {
   const bytes = Number(value);
   if (!Number.isFinite(bytes) || bytes < 0) return '—';
-  if (bytes < 1024) return `${bytes} ${translate('bytes')}`;
+  if (bytes < 1024)
+    return `${bytes} ${locale === 'bg' ? (bytes === 1 ? 'байт' : 'байта') : bytes === 1 ? 'byte' : 'bytes'}`;
   const units = ['KB', 'MB', 'GB', 'TB'];
   let size = bytes;
   let unit = -1;
@@ -702,5 +707,5 @@ function formatBytes(value: string, translate: (value: string) => string): strin
     size /= 1024;
     unit += 1;
   } while (size >= 1024 && unit < units.length - 1);
-  return `${new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 }).format(size)} ${units[unit]}`;
+  return `${new Intl.NumberFormat(locale === 'bg' ? 'bg-BG' : 'en-GB', { maximumFractionDigits: 1 }).format(size)} ${units[unit]}`;
 }

@@ -96,6 +96,7 @@ import {
 } from './offline-store';
 import { CheckoutHistory } from './CheckoutHistory';
 import { LanguageSwitcher } from './i18n/LanguageSwitcher';
+import { posText } from './i18n/catalog';
 import { getPosDateLocale, getPosLocale, useLocalization } from './i18n/LocalizationProvider';
 import { requestDatecsSerialTransport } from './fiscal/datecs-transport';
 import {
@@ -356,7 +357,11 @@ export function PosTerminal({
         <div className="pos-system-status" aria-label="Terminal system status">
           <span className={`pos-status-dot ${shift ? 'is-ready' : 'is-warning'}`} />
           <span>
-            {loading ? 'Checking terminal' : shift ? `${shift.shiftNumber} open` : 'Shift closed'}
+            {loading
+              ? 'Checking terminal'
+              : shift
+                ? posText('{shift} open', { shift: shift.shiftNumber })
+                : 'Shift closed'}
           </span>
           <button onClick={() => navigate('shifts')} type="button">
             {shift ? 'View shift' : 'Open shift'}
@@ -554,7 +559,9 @@ export function PosTerminal({
         </button>
         <span>
           <i className={shift ? 'is-ready' : 'is-warning'} />
-          {shift ? `${shift.warehouseName} connected` : 'Open a shift to use stock'}
+          {shift
+            ? posText('{warehouse} connected', { warehouse: shift.warehouseName })
+            : 'Open a shift to use stock'}
         </span>
         <span>
           <i className={simulator ? 'is-warning' : 'is-muted'} />
@@ -1714,8 +1721,8 @@ function SellScreen({
                     type="button"
                   >
                     <span>{item.productCode}</span>
-                    <strong>{item.name}</strong>
-                    <small>{grossUnitPrice(item).toFixed(2)} EUR</small>
+                    <strong translate="no">{item.name}</strong>
+                    <small>{money(grossUnitPrice(item))}</small>
                   </button>
                 ))}
               </div>
@@ -1737,8 +1744,18 @@ function SellScreen({
             <span>
               {shift
                 ? catalogFromCache
-                  ? `${catalog.length} products · last known availability`
-                  : `${catalog.length} products · live availability`
+                  ? posText(
+                      catalog.length === 1
+                        ? '{count} product · last known availability'
+                        : '{count} products · last known availability',
+                      { count: catalog.length },
+                    )
+                  : posText(
+                      catalog.length === 1
+                        ? '{count} product · live availability'
+                        : '{count} products · live availability',
+                      { count: catalog.length },
+                    )
                 : 'A shift is required'}
             </span>
           </div>
@@ -1772,13 +1789,13 @@ function SellScreen({
                 type="button"
               >
                 <span className="pos-product-code">{item.productCode}</span>
-                <strong>{item.name}</strong>
+                <strong translate="no">{item.name}</strong>
                 <small>
                   {trackingLabel(item)} · {quantity(item.availableQuantity)} {item.unitCode}{' '}
                   {catalogFromCache ? 'last known' : 'available'}
                 </small>
                 <span className="pos-product-price">
-                  {item.unitPrice ? `${grossUnitPrice(item).toFixed(2)} EUR` : 'Price unavailable'}
+                  {item.unitPrice ? money(grossUnitPrice(item)) : 'Price unavailable'}
                 </span>
               </button>
             ))}
@@ -2071,7 +2088,12 @@ function SellScreen({
                   <span>
                     <strong>
                       {customer.customer.loyalty
-                        ? `${customer.customer.loyalty.balance} reward points`
+                        ? posText(
+                            customer.customer.loyalty.balance === 1
+                              ? '{count} reward point'
+                              : '{count} reward points',
+                            { count: customer.customer.loyalty.balance },
+                          )
                         : 'Join Vista Rewards'}
                     </strong>
                     <small>
@@ -2366,11 +2388,16 @@ function SellScreen({
             onClick={() => void pay()}
             type="button"
           >
-            {paying ? 'Completing sale…' : `Complete sale · ${money(totals.gross)}`}
+            {paying
+              ? 'Completing sale…'
+              : posText('Complete sale · {amount}', { amount: money(totals.gross) })}
           </button>
           {!advanceInputError ? (
             <p className="pos-basket-disclaimer">
-              {blockingIssue ?? `${paymentLabel(paymentMode)} payment is ready.`}
+              {blockingIssue ??
+                posText('{method} payment is ready.', {
+                  method: posText(paymentLabel(paymentMode), {}),
+                })}
             </p>
           ) : null}
         </div>
@@ -2679,14 +2706,12 @@ function QuickAccessDialog({
                   <label className={checked ? 'is-selected' : undefined} key={item.id}>
                     <input checked={checked} onChange={() => toggle(item.id)} type="checkbox" />
                     <span>
-                      <strong>{item.name}</strong>
+                      <strong translate="no">{item.name}</strong>
                       <small>
                         {item.productCode} · {quantity(item.availableQuantity)} available
                       </small>
                     </span>
-                    <em>
-                      {item.unitPrice ? `${grossUnitPrice(item).toFixed(2)} EUR` : 'No price'}
-                    </em>
+                    <em>{item.unitPrice ? money(grossUnitPrice(item)) : 'No price'}</em>
                   </label>
                 );
               })}
@@ -2778,7 +2803,11 @@ function BasketRow({
           <strong>{line.item.name}</strong>
           <small>{line.item.productCode}</small>
         </div>
-        <button aria-label={`Remove ${line.item.name}`} onClick={onRemove} type="button">
+        <button
+          aria-label={posText('Remove {name}', { name: line.item.name })}
+          onClick={onRemove}
+          type="button"
+        >
           <PosIcon name="close" />
         </button>
       </div>
@@ -2820,7 +2849,7 @@ function BasketRow({
         ) : (
           <div className="pos-quantity-stepper">
             <button
-              aria-label={`Reduce ${line.item.name} quantity`}
+              aria-label={posText('Reduce {name} quantity', { name: line.item.name })}
               disabled={line.quantity <= 1}
               onClick={() => onChange({ ...line, quantity: line.quantity - 1 })}
               type="button"
@@ -2829,7 +2858,7 @@ function BasketRow({
             </button>
             <strong>{line.quantity}</strong>
             <button
-              aria-label={`Increase ${line.item.name} quantity`}
+              aria-label={posText('Increase {name} quantity', { name: line.item.name })}
               disabled={line.quantity >= maximum}
               onClick={() => onChange({ ...line, quantity: line.quantity + 1 })}
               type="button"
@@ -2969,8 +2998,12 @@ function CustomerPicker({
                   }}
                   type="button"
                 >
-                  <strong>{customer.name}</strong>
-                  <span>{customer.uic ? `UIC ${customer.uic}` : 'Customer account'}</span>
+                  <strong translate="no">{customer.name}</strong>
+                  <span>
+                    {customer.uic
+                      ? posText('UIC {code}', { code: customer.uic })
+                      : 'Customer account'}
+                  </span>
                 </button>
               ))}
               {!customers.length ? <p className="pos-dialog-state">No customer found.</p> : null}
@@ -3000,7 +3033,7 @@ function CustomerPicker({
                     type="radio"
                   />
                   <span>
-                    <strong>{item.name}</strong>
+                    <strong translate="no">{item.name}</strong>
                     <small>{item.city}</small>
                   </span>
                 </label>
@@ -3249,7 +3282,9 @@ function LoyaltyDialog({
         <header>
           <div>
             <p>Customer rewards</p>
-            <h2 id="loyalty-dialog-title">{customer.name}</h2>
+            <h2 id="loyalty-dialog-title" translate="no">
+              {customer.name}
+            </h2>
           </div>
           <button aria-label="Close rewards" onClick={onClose} type="button">
             <PosIcon name="close" />
@@ -5147,7 +5182,9 @@ function ReturnDialog({
                         : 'On-account return'
                       : locale === 'bg'
                         ? `${paymentLabel(refund.method)} · възстановяване`
-                        : `${paymentLabel(refund.method)} refund`}
+                        : posText('{method} refund', {
+                            method: posText(paymentLabel(refund.method), {}),
+                          })}
                   </span>
                   <strong>{money(refund.amount)}</strong>
                 </div>
@@ -5197,10 +5234,10 @@ function ReturnDialog({
                     : 'Check printer & finish return'
                   : locale === 'bg'
                     ? `Фискално връщане · ${money(total)}`
-                    : `Issue fiscal return · ${money(total)}`
+                    : posText('Issue fiscal return · {amount}', { amount: money(total) })
                 : locale === 'bg'
                   ? `Завършване на връщането · ${money(total)}`
-                  : `Complete return · ${money(total)}`}
+                  : posText('Complete return · {amount}', { amount: money(total) })}
           </button>
         </footer>
       </section>
@@ -5250,7 +5287,9 @@ function ReturnReceiptDialog({ item, onClose }: { item: PosReturn; onClose: () =
                       : 'On-account return'
                     : locale === 'bg'
                       ? `${paymentLabel(refund.method)} · възстановяване`
-                      : `${paymentLabel(refund.method)} refund`}
+                      : posText('{method} refund', {
+                          method: posText(paymentLabel(refund.method), {}),
+                        })}
                 </dt>
                 <dd>{money(Number(refund.amount))}</dd>
               </div>
@@ -5725,10 +5764,10 @@ function allocateRefunds(sale: PosSale, total: number) {
   return unallocated <= 0.00005 ? refunds : [];
 }
 function money(value: number) {
-  return `${value.toLocaleString('en-BG', { maximumFractionDigits: 2, minimumFractionDigits: 2 })} EUR`;
+  return `${value.toLocaleString(getPosDateLocale(), { maximumFractionDigits: 2, minimumFractionDigits: 2 })} EUR`;
 }
 function quantity(value: string) {
-  return Number(value).toLocaleString('en-BG', { maximumFractionDigits: 4 });
+  return Number(value).toLocaleString(getPosDateLocale(), { maximumFractionDigits: 4 });
 }
 function trackingLabel(item: PosCatalogItem) {
   return item.trackingMode === 'serial'

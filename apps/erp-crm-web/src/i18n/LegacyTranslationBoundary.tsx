@@ -52,6 +52,7 @@ export function LegacyTranslationBoundary({ children }: PropsWithChildren) {
 }
 
 function translateTextNode(node: Text, locale: 'bg' | 'en') {
+  if (node.parentElement?.closest('[translate="no"], textarea, [contenteditable="true"]')) return;
   const current = node.nodeValue ?? '';
   const stored = translatedText.get(node);
   if (stored === undefined) translatedText.set(node, current);
@@ -73,6 +74,7 @@ function translateTextNode(node: Text, locale: 'bg' | 'en') {
 }
 
 function translateElement(element: Element, locale: 'bg' | 'en') {
+  if (element.closest('[translate="no"]')) return;
   let originals = originalAttributes.get(element);
   if (!originals) {
     originals = new Map();

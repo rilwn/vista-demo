@@ -164,7 +164,7 @@ export function BackupApprovals({
                   {translate('Awaiting review')}
                 </span>
               </div>
-              <strong>{request.policyName}</strong>
+              <strong translate="no">{request.policyName}</strong>
               <small>
                 {request.policyCode} · {translate('Requested by')} {request.requestedByName}
               </small>
@@ -223,7 +223,7 @@ export function BackupApprovals({
                   {translate('Awaiting review')}
                 </span>
               </div>
-              <strong>{request.policyName}</strong>
+              <strong translate="no">{request.policyName}</strong>
               <small>
                 {request.policyCode} · {translate('Restore point')} ·{' '}
                 {new Intl.DateTimeFormat(locale === 'bg' ? 'bg-BG' : 'en-GB', {

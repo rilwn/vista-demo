@@ -96,6 +96,13 @@ security in Vista Operations. Backup fixture roles are separated: the operator
 can review, the administrator can maintain inventory and draft policies, and
 the security officer is reserved for independent approvals.
 
+### English and Bulgarian
+
+Use **EN / BG** on the sign-in screen or in the top bar of Operations, POS, or
+Recovery. Each app remembers the selection in that browser. Language changes
+affect interface text and regional formatting, not saved names, references, or
+document contents.
+
 ## Validation
 
 Run the complete repository check with:

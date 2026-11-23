@@ -1,4 +1,22 @@
 export const bulgarianText: Readonly<Record<string, string>> = {
+  'Protected source': 'Защитен източник',
+  'Add a protected source before creating a policy.':
+    'Добавете защитен източник, преди да създадете политика.',
+  'The copy was removed after independent approval. Its run history remains available.':
+    'Копието беше премахнато след независимо одобрение. Историята на изпълнението остава достъпна.',
+  'The signed protocol upload response was incomplete.':
+    'Услугата не потвърди качването на подписания протокол. Опитайте отново.',
+  'The service is unavailable': 'Услугата не е достъпна',
+  'The request failed': 'Заявката не беше изпълнена',
+  record: 'запис',
+  'min RPO/RTO': 'мин. RPO/RTO',
+  min: 'мин.',
+  inactive: 'Неактивен',
+  executed: 'Изпълнено',
+  cancelled: 'Отменено',
+  'Search by file name or storage key': 'Търсете по име на файл или ключ в хранилището',
+  'For Vista-managed files, enter the file ID if the name is not found.':
+    'За файлове, управлявани от Vista, въведете идентификатора на файла, ако търсенето по име не даде резултат.',
   'Approval rules': 'Правила за одобрение',
   'A second authorised person must approve critical changes and restores that overwrite data.':
     'Второ упълномощено лице трябва да одобри критичните промени и възстановяванията, при които се презаписват данни.',
@@ -52,7 +70,7 @@ export const bulgarianText: Readonly<Record<string, string>> = {
   'Backup policy approvals': 'Одобрения на политики за архивиране',
   'Review policy changes independently before they can be considered for activation.':
     'Преглеждайте промените по политиките независимо, преди да бъдат разгледани за активиране.',
-  'DR tests': 'DR тестове',
+  'DR tests': 'Тестове за възстановяване',
   'Plan review': 'Преглед на плана',
   'Backup plan review': 'Преглед на плана за архивиране',
   'Compare the protected inventory and backup policies with the approved Information Backup Plan, then record the review.':
@@ -718,5 +736,53 @@ export const bulgarianText: Readonly<Record<string, string>> = {
     'Друг упълномощен служител трябва да прегледа заявката за намаляване на срока.',
 };
 export function bg(text: string) {
-  return bulgarianText[text] ?? text;
+  return Object.hasOwn(bulgarianText, text) ? (bulgarianText[text] ?? text) : text;
+}
+
+const englishLabels: Readonly<Record<string, string>> = {
+  active: 'Active',
+  approved: 'Approved',
+  cancelled: 'Cancelled',
+  cloud_service: 'Cloud service',
+  completed: 'Completed',
+  critical: 'Critical',
+  daily: 'Daily',
+  database: 'Database',
+  database_snapshot: 'Database snapshot',
+  differential: 'Differential backup',
+  draft: 'Draft',
+  email: 'Email',
+  executed: 'Executed',
+  expired: 'Expired',
+  failed: 'Failed',
+  file: 'File',
+  file_share: 'Shared folder',
+  full: 'Full backup',
+  hourly: 'Hourly',
+  important: 'Important',
+  inactive: 'Inactive',
+  incremental: 'Incremental backup',
+  mobile_device: 'Mobile device',
+  monthly: 'Monthly',
+  not_configured: 'Not configured',
+  object_storage: 'Object storage',
+  other: 'Other',
+  paused: 'Paused',
+  pending: 'Pending',
+  pending_approval: 'Awaiting approval',
+  rejected: 'Declined',
+  running: 'Running',
+  server: 'Server',
+  standard: 'Standard',
+  stored: 'Stored',
+  system_image: 'System image',
+  verified: 'Verified',
+  weekly: 'Weekly',
+  workstation: 'Workstation',
+};
+
+/** Only for known enum values, never for names or identifiers supplied by users. */
+export function recoveryLabel(value: string, locale: 'bg' | 'en'): string {
+  if (locale === 'bg') return bg(value);
+  return Object.hasOwn(englishLabels, value) ? (englishLabels[value] ?? value) : value;
 }

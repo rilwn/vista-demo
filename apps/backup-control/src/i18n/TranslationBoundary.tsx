@@ -46,6 +46,7 @@ function preserve(value: string) {
   return translated === key ? value : value.replace(key, translated);
 }
 function translateText(node: Text, locale: 'bg' | 'en') {
+  if (node.parentElement?.closest('[translate="no"], textarea, [contenteditable="true"]')) return;
   const current = node.nodeValue ?? '';
   const stored = textOriginals.get(node);
   const expected = stored ? preserve(stored) : undefined;
@@ -56,6 +57,7 @@ function translateText(node: Text, locale: 'bg' | 'en') {
   if (current !== next) node.nodeValue = next;
 }
 function translateElement(element: Element, locale: 'bg' | 'en') {
+  if (element.closest('[translate="no"]')) return;
   let values = attributeOriginals.get(element);
   if (!values) {
     values = new Map();
